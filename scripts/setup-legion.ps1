@@ -47,7 +47,10 @@ $report = New-Object System.Collections.Generic.List[string]
 function Write-Report([string]$line) { Write-Host $line; $report.Add($line) }
 
 function Update-SessionPath {
-  $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
+  # Adds new Machine and User PATH entries without dropping per-shell entries (such as fnm's).
+  $current = @($env:Path -split ';' | Where-Object { $_ })
+  $fresh = @(([Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')) -split ';' | Where-Object { $_ })
+  $env:Path = (@($current) + @($fresh | Where-Object { $current -notcontains $_ })) -join ';'
 }
 
 # Finds an executable on PATH only (never a function or alias), so names cannot collide.

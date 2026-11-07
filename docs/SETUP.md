@@ -48,6 +48,19 @@ The Git steps create the repository on branch `master` if it doesn't exist, enab
 2. **Power:** on mains, Lenovo Vantage performance mode, for builds and benchmarks.
 3. **Disk:** keep at least 60 GB free (Rust targets for four engine variants, models, datasets).
 
+## Fixing discrepancies
+
+`scripts/fix-legion.ps1` fixes what the 8 November 2026 report found (Node.js 26 LTS, pnpm, LLVM on PATH, Visual Studio 2026 Build Tools, Python, CMake, Vulkan SDK, CUDA Toolkit). It asks before each step. Run it from a normal PowerShell window, then open a new window and run `setup-legion.ps1 -NoGit` to refresh the report.
+
+## Drivers (update by hand)
+
+| Driver | Where |
+| --- | --- |
+| NVIDIA GeForce (RTX 4070 Laptop) | NVIDIA app, or https://www.nvidia.com/en-us/drivers/ |
+| Intel UHD Graphics (14th Gen) | Intel Driver & Support Assistant: https://www.intel.com/content/www/us/en/support/detect.html (or Lenovo Vantage for the Lenovo-validated version) |
+
+Install drivers while online, before Phase 2: the Vulkan engine build depends on them.
+
 ## After a fresh clone
 
 ```powershell
