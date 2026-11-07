@@ -89,7 +89,7 @@ If a day slips, keep the order and push later phases back; never skip a gate. Lo
 ## 6. Running two sessions
 
 1. Main session (Track A) works in the repository folder on `main` and the phase branches.
-2. For Track B, create a worktree once Phase 0 is merged: `git worktree add ../stelmar-eval phase-5a-eval-groundwork`, open a second Claude Code session there and type `/run-phase 5a`.
+2. For Track B, create a worktree once Phase 0 is merged, from the repository folder: `git worktree add -b phase-5a-eval-groundwork ..\stelmar-eval master`. Open a second PowerShell window, `cd ..\stelmar-eval`, start `claude` there and type `/run-phase 5a`. Run `git config core.hooksPath .githooks` once inside the worktree if `git config core.hooksPath` prints nothing.
 3. Track B touches only `eval/`, `scripts/models/` and `models/README.md`, so the two sessions don't edit the same files. Merge Track B into `main` when its gate passes.
 
 ## 7. When the laptops arrive
