@@ -46,7 +46,9 @@ The Git steps create the repository on branch `master` if it doesn't exist, enab
 
 1. **GPU mode: Hybrid.** In Lenovo Vantage (or the BIOS), set the GPU working mode to Hybrid and reboot, so the Intel integrated GPU is visible. The Legion emulation profiles use it (`docs/LEGION-FIRST.md`).
 2. **Power:** on mains, Lenovo Vantage performance mode, for builds and benchmarks.
-3. **Disk:** keep at least 60 GB free (Rust targets for four engine variants, models, datasets).
+3. **Disk:** the repository lives on `D:\Projects\stelmar_voice_workbench` (NTFS or a Dev Drive). Keep about 100 GB free there: Rust build folders for four engine variants (15 to 25 GB), converted models (15 to 20 GB), original checkpoints during conversion (10 to 15 GB), evaluation datasets (5 to 10 GB), the Python environment (4 to 6 GB) and test recordings. Models, datasets, audio and build output are git-ignored.
+4. **Caches on D:** set `HF_HOME=D:\caches\huggingface` so model downloads don't fill C:. pnpm creates its own store on D: automatically (hard links need the store on the same drive as the project).
+5. **Antivirus:** on a normal NTFS drive, add a Microsoft Defender exclusion for the repository's `target` folder, or use a Dev Drive, whose performance mode speeds up Rust builds.
 
 ## Fixing discrepancies
 
