@@ -1,0 +1,37 @@
+# Phase 2: Engine processes, model registry and supervisor
+
+## Context
+Phases 0 and 1 are merged: the shell runs and recording is crash-safe. All speech recognition happens in separate `wb-engine` processes, never inside the app (decision D3). The room machines are undecided 16 GB laptops with unknown CPUs and integrated GPUs, so engines must be portable, safe to try, and able to use the GPU as well as the CPU (D13). Speakers switch between English and Hindi, so the engine works per chunk, not per session (D8). Read `docs/PLAN.md` sections 5, 7 and 11, and `models/README.md`. Until the laptops arrive (not before 17 November 2026), laptop gates run on the Legion under `emu-low` and `emu-mid` with the Intel UHD GPU, and are recorded in `docs/GATES.md` (`docs/LEGION-FIRST.md`).
+
+## Goal
+A `wb-engine` binary, built as `avx2`, `avx512`, `vulkan` and `cuda` variants, that transcribes work units and single files with per-chunk language detection among the session's languages, runs on the CPU or on an integrated or discrete GPU, measures its own speed and memory per device, and speaks a versioned JSON-lines protocol; a model registry with checksums; an engine supervisor in the app that starts, prioritises, watches and stops one or more engines.
+
+## Steps
+1. `crates/wb-protocol`: versioned serde types. Requests: `info`; `bench {model, lang, clip, mode, device, threads}`; `batch {session_dir or file, units, models_by_lang, languages, lang_log, settings, device, threads}`; `live {models_by_lang, languages, settings, device}`. Events: `ready`, `progress`, `segment` (with `lang`, `lang_prob`, `mixed`), `stats`, `warning`, `error`, `done`. JSON lines on stdout; logs on stderr.
+2. `crates/wb-engine` with whisper-rs 0.16 and Silero VAD v6.2.0 through `WhisperVadContext`:
+   - `info`: checks CPU features with `is_x86_feature_detected!` before any whisper call and exits with code 3 if the build's features (AVX2, FMA and F16C; AVX-512 for `avx512`) are missing; prints whisper system info and, for GPU builds, every device found, marking integrated GPUs and their shared memory.
+   - `batch`: reads work units through `parts.json` (or one WAV for evaluation) and resamples to 16 kHz mono with rubato. In sessions with more than one expected language it cuts sentence-sized chunks (about 3 to 15 seconds) at VAD pauses and runs language detection on each, restricted to the session's languages, following the operator's lock log; otherwise chunks go up to 30 seconds. It applies the PLAN section 5 rules (short chunks take their neighbours' language below 0.8; chunks within 0.2 are decoded both ways and the better average log-probability wins; never English when another expected language scores 0.5 or more), decodes with the language's model (it can hold two models), beam 5, temperature fallback, glossary prompt and same-language previous-text context, applies the guards from PLAN section 6, and emits `segment` events with audio-clock times. It writes no transcript files; the app is the single writer. A standalone mode `--file <wav> --models <lang=id,...> --langs <en,hi,ur> --out <jsonl>` serves `eval/` in Phase 5.
+   - `bench`: runs a model on a clip with the given settings, device and threads and reports RTF, load time and peak memory (`GetProcessMemoryInfo`, plus GPU memory where the backend reports it).
+   - `live`: reads 16 kHz mono f32 PCM from stdin and, for now, emits only VAD events (Phase 7 adds decoding).
+3. Build variants through `scripts/build-engines.ps1`: every build sets `GGML_NATIVE=OFF`; `avx2` sets `GGML_AVX=ON`, `GGML_AVX2=ON`, `GGML_FMA=ON` and `GGML_F16C=ON`; `avx512` adds `GGML_AVX512=ON`; `vulkan` and `cuda` use the `avx2` flags plus the whisper-rs features `vulkan` and `cuda`. Use separate target directories and name the outputs `wb-engine-<variant>-x86_64-pc-windows-msvc.exe` for Tauri `externalBin`. Write `docs/BUILD.md` (CUDA Toolkit, Vulkan SDK, CMake, LLVM/libclang, Visual Studio Build Tools).
+4. whisper.cpp version: record the version bundled by whisper-rs-sys. Integrated-GPU support through Vulkan improved in whisper.cpp 1.8.3; if the bundled version is older, vendor a newer whisper-rs-sys source and document why.
+5. CI check: disassemble the `avx2` build (`dumpbin /disasm`) and fail if any zmm register appears.
+6. Model registry: `models/manifest.json` in the shape of `models/manifest.example.json`; SHA-256 verification in the background at start-up; missing or corrupt models are marked and disabled; never download. `scripts/models/` (development time only) fetches small, medium, large-v3-turbo (and q5_0), large-v3 (and q5_0) and Silero VAD, and quantises small and medium to q8_0 and q5_0 with whisper.cpp's `quantize`.
+7. Engine supervisor in the app: start one or more engines with `std::process::Command`, `CREATE_NO_WINDOW`, a priority class (below normal for batch, normal for live), the device and thread count, and a Windows Job Object with kill-on-close; read events; watchdog (no event for 60 seconds while busy: kill and restart from the last committed unit); report failures with a Toast; never let an engine failure reach the recorder.
+8. System screen, models section: installed models with checksum Badges, sizes and roles, and the engine builds and devices found.
+
+## Verification
+- On both laptops (until they arrive: under `emu-low` and `emu-mid` on the Legion, PROVISIONAL; portability to other CPUs and the laptops' own GPU drivers DEFERRED), with only the built engines copied over (no development tools): `wb-engine-avx2 info` succeeds; `wb-engine-avx512 info` either succeeds or exits with code 3 and a clear message, matching the CPU; `wb-engine-vulkan info` lists the integrated GPU (or reports none, with the driver version).
+- `batch` transcribes 3 FLEURS test clips per language with medium in the right script (Devanagari for hi, Arabic script for ur), on the CPU and on the integrated GPU.
+- A code-switched English–Hindi clip comes back with per-chunk languages that match a hand label on at least 9 of 10 chunks, and no English chunk translated from Hindi.
+- A speed table from all three machines (until the laptops arrive: `emu-low`, `emu-mid` and `native`) for small, medium, large-v3-turbo q5_0 and large-v3 q5_0: CPU (threads stated) and GPU (integrated on the laptops, RTX on the Legion); RTF, peak memory and load time.
+- Kill the batch engine at 5 random points: the supervisor restarts it; no segment is lost or repeated (test log).
+- With every engine renamed away, the app still records and shows a clear message.
+- The CI instruction scan passes for the `avx2` build; everything runs with network adapters disabled.
+- `asr-quality-auditor`, `design-consistency-reviewer` (System models section, 1536x864 screenshot) and `offline-auditor` report PASS.
+
+## If Blocked
+- The CUDA build fails: check CUDA Toolkit and Build Tools versions against the bundled ggml; ship without the `cuda` variant for now (the `vulkan` build covers GPUs) and report.
+- Vulkan fails or crashes on an integrated GPU: record the GPU and driver version, mark that device unusable in `info`, and continue on the CPU; report it for the setup-week driver list.
+- whisper-rs lacks an API you need (for example language probabilities): use its `raw-api` feature behind a small safe wrapper.
+- `GGML_*` variables don't reach CMake: check the CMake cache in the target directory and report the whisper-rs-sys version before trying anything else.

@@ -1,0 +1,11 @@
+#!/bin/sh
+# Strips AI tool attribution from commit messages (AGENTS.md non-negotiable 8, CONTRIBUTING.md).
+# Enabled by: git config core.hooksPath .githooks  (scripts/setup-legion.ps1 does this)
+msg_file="$1"
+tmp_file="$msg_file.tmp"
+pattern='^[[:space:]]*co-authored-by:.*(claude|anthropic|copilot|devin|cursor|codex|gemini|chatgpt|openai|windsurf|aider)|^[[:space:]]*claude-session:|generated (with|by) .*(claude|copilot|devin|cursor|codex|gemini|chatgpt|ai assistant)|claude\.ai/code/session'
+grep -v -i -E "$pattern" "$msg_file" > "$tmp_file"
+mv "$tmp_file" "$msg_file"
+# Drop trailing blank lines left behind.
+sed -i -e ':a' -e '/^\n*$/{$d;N;ba' -e '}' "$msg_file" 2>/dev/null || true
+exit 0

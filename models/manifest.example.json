@@ -1,0 +1,251 @@
+{
+  "version": 2,
+  "_note": "Template. Phase 2 fills sha256 and bytes; Phase 5 sets validated_roles and replaces the placeholder defaults with the eval/REPORT.md winners, including whether English and Hindi chunks are routed to separate models or handled by one code-switching model. The system check only uses a model for a role listed in its validated_roles.",
+  "models": [
+    {
+      "id": "small",
+      "file": "ggml-small.bin",
+      "sha256": "<fill in after download>",
+      "bytes": 0,
+      "kind": "whisper",
+      "base": "small",
+      "quant": "f16",
+      "languages": [
+        "en"
+      ],
+      "candidate_roles": [
+        "near-live"
+      ],
+      "validated_roles": [],
+      "licence": "MIT",
+      "source": "https://huggingface.co/ggerganov/whisper.cpp"
+    },
+    {
+      "id": "hindi-small-q8_0",
+      "file": "ggml-whisper-hindi-small-q8_0.bin",
+      "sha256": "<fill in after conversion>",
+      "bytes": 0,
+      "kind": "whisper",
+      "base": "small",
+      "quant": "q8_0",
+      "languages": [
+        "hi"
+      ],
+      "candidate_roles": [
+        "near-live"
+      ],
+      "validated_roles": [],
+      "licence": "Apache-2.0",
+      "source": "https://huggingface.co/vasista22/whisper-hindi-small (convert-h5-to-ggml.py, then quantize)"
+    },
+    {
+      "id": "hindi-medium-q8_0",
+      "file": "ggml-whisper-hindi-medium-q8_0.bin",
+      "sha256": "<fill in after conversion>",
+      "bytes": 0,
+      "kind": "whisper",
+      "base": "medium",
+      "quant": "q8_0",
+      "languages": [
+        "hi"
+      ],
+      "candidate_roles": [
+        "rolling",
+        "night"
+      ],
+      "validated_roles": [],
+      "licence": "Apache-2.0",
+      "source": "https://huggingface.co/vasista22/whisper-hindi-medium (convert-h5-to-ggml.py, then quantize)"
+    },
+    {
+      "id": "indicwhisper-hi-q8_0",
+      "file": "ggml-indicwhisper-hi-q8_0.bin",
+      "sha256": "<fill in after conversion>",
+      "bytes": 0,
+      "kind": "whisper",
+      "base": "medium",
+      "quant": "q8_0",
+      "languages": [
+        "hi"
+      ],
+      "candidate_roles": [
+        "rolling",
+        "night"
+      ],
+      "validated_roles": [],
+      "licence": "MIT (confirm in Phase 5)",
+      "source": "https://github.com/AI4Bharat/vistaar"
+    },
+    {
+      "id": "vaani-hi-q8_0",
+      "file": "ggml-vaani-hindi-medium-q8_0.bin",
+      "sha256": "<fill in after conversion>",
+      "bytes": 0,
+      "kind": "whisper",
+      "base": "medium",
+      "quant": "q8_0",
+      "languages": [
+        "hi"
+      ],
+      "candidate_roles": [
+        "rolling",
+        "night"
+      ],
+      "validated_roles": [],
+      "licence": "Apache-2.0",
+      "source": "https://huggingface.co/ARTPARK-IISc/whisper-medium-vaani-hindi"
+    },
+    {
+      "id": "hinglish-q5_0",
+      "file": "ggml-whisper-hinglish-preview-q5_0.bin",
+      "sha256": "<fill in after conversion>",
+      "bytes": 0,
+      "kind": "whisper",
+      "base": "large-v3",
+      "quant": "q5_0",
+      "languages": [
+        "hi",
+        "en"
+      ],
+      "candidate_roles": [
+        "rolling",
+        "night",
+        "live"
+      ],
+      "validated_roles": [],
+      "licence": "Apache-2.0",
+      "source": "https://huggingface.co/Trelis/whisper-hinglish-preview (convert-h5-to-ggml.py, then quantize; keep the <|mixedcode|> token)"
+    },
+    {
+      "id": "indicwhisper-ur-q8_0",
+      "file": "ggml-indicwhisper-ur-q8_0.bin",
+      "sha256": "<fill in after conversion>",
+      "bytes": 0,
+      "kind": "whisper",
+      "base": "medium",
+      "quant": "q8_0",
+      "languages": [
+        "ur"
+      ],
+      "candidate_roles": [
+        "rolling",
+        "night"
+      ],
+      "validated_roles": [],
+      "licence": "MIT (confirm in Phase 5)",
+      "source": "https://github.com/AI4Bharat/vistaar"
+    },
+    {
+      "id": "large-v3-turbo-q5_0",
+      "file": "ggml-large-v3-turbo-q5_0.bin",
+      "sha256": "<fill in after download>",
+      "bytes": 0,
+      "kind": "whisper",
+      "base": "large-v3-turbo",
+      "quant": "q5_0",
+      "languages": [
+        "en"
+      ],
+      "candidate_roles": [
+        "rolling",
+        "live"
+      ],
+      "validated_roles": [],
+      "licence": "MIT",
+      "source": "https://huggingface.co/ggerganov/whisper.cpp"
+    },
+    {
+      "id": "large-v3-q5_0",
+      "file": "ggml-large-v3-q5_0.bin",
+      "sha256": "<fill in after download>",
+      "bytes": 0,
+      "kind": "whisper",
+      "base": "large-v3",
+      "quant": "q5_0",
+      "languages": [
+        "en",
+        "hi",
+        "ur"
+      ],
+      "candidate_roles": [
+        "night"
+      ],
+      "validated_roles": [],
+      "licence": "MIT",
+      "source": "https://huggingface.co/ggerganov/whisper.cpp"
+    },
+    {
+      "id": "large-v3",
+      "file": "ggml-large-v3.bin",
+      "sha256": "<fill in after download>",
+      "bytes": 0,
+      "kind": "whisper",
+      "base": "large-v3",
+      "quant": "f16",
+      "languages": [
+        "en",
+        "hi",
+        "ur"
+      ],
+      "candidate_roles": [
+        "live",
+        "night",
+        "translate"
+      ],
+      "validated_roles": [],
+      "licence": "MIT",
+      "source": "https://huggingface.co/ggerganov/whisper.cpp"
+    },
+    {
+      "id": "silero-v6.2.0",
+      "file": "ggml-silero-v6.2.0.bin",
+      "sha256": "<fill in after download>",
+      "bytes": 0,
+      "kind": "vad",
+      "base": "silero-vad",
+      "quant": "f32",
+      "languages": [],
+      "candidate_roles": [
+        "vad"
+      ],
+      "validated_roles": [
+        "vad"
+      ],
+      "licence": "MIT",
+      "source": "whisper.cpp models/download-vad-model.sh silero-v6.2.0"
+    }
+  ],
+  "defaults": {
+    "routing": {
+      "en+hi": "per-language",
+      "_options": [
+        "per-language",
+        "single-model"
+      ]
+    },
+    "near-live": {
+      "en": "small",
+      "hi": "hindi-small-q8_0",
+      "ur": null
+    },
+    "rolling": {
+      "en": "large-v3-turbo-q5_0",
+      "hi": "indicwhisper-hi-q8_0",
+      "ur": "indicwhisper-ur-q8_0",
+      "en+hi": null
+    },
+    "night": {
+      "en": "large-v3-q5_0",
+      "hi": "hinglish-q5_0",
+      "ur": "large-v3-q5_0",
+      "en+hi": "hinglish-q5_0"
+    },
+    "live": {
+      "en": "large-v3",
+      "hi": "large-v3",
+      "ur": "large-v3"
+    },
+    "translate": "large-v3",
+    "vad": "silero-v6.2.0"
+  }
+}

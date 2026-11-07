@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Start Session · STELMAR Voice Workbench (reference mockup)</title>
+<link rel="stylesheet" href="mockup.css">
+</head><body>
+<div class="app">
+  <header class="bar">
+    <img class="logo" src="../brand/logo-lockup-header.png" alt="STELMAR · BML Munjal University">
+    <span class="prod">Voice Workbench</span>
+    <nav class="nav"><a href="#" class="on">Sessions</a><a href="#">Record</a><a href="#">Queue</a><a href="#">Review</a><a href="#">System</a><a href="#">Settings</a></nav>
+    <div class="right">
+      <span class="badge b-success"><span class="d"></span>Offline</span>
+      <span class="mono">Core i5-1235U · Iris Xe</span>
+    </div>
+  </header>
+
+  <section class="head">
+    <div>
+      <div class="over"><span class="dot"></span>Programme · Day 1 · Seminar Hall B</div>
+      <h1>Sessions</h1>
+      <div class="meta"><span class="mono">08 FEB 2027</span><span>2 sessions to record in this room</span></div>
+    </div>
+  </section>
+  <div class="main" style="grid-template-columns:1fr">
+    <section class="pane">
+      <div class="sess"><div class="tm">12:00<span>13:30</span></div><div><span class="badge b-neutral">Session</span><div class="ti">Parallel Track Sessions I</div><div class="rm">Seminar Hall B</div></div><span class="badge b-neutral">Not Started</span></div>
+      <div class="sess"><div class="tm">14:30<span>16:00</span></div><div><span class="badge b-neutral">Session</span><div class="ti">Parallel Track Sessions II</div><div class="rm">Seminar Hall B</div></div><span class="badge b-neutral">Not Started</span></div>
+    </section>
+  </div>
+  <footer class="status">
+    <span class="on"><i></i>Offline · no network connections</span>
+    <span>System check: Record + post-process · CPU + Iris Xe</span>
+  </footer>
+</div>
+<div class="scrim">
+  <div class="dlg" role="dialog" aria-label="Start recording">
+    <div class="over"><span class="dot"></span>Start recording · Seminar Hall B</div>
+    <h2>Parallel Track Sessions I</h2>
+    <div class="meta"><span class="mono">08 FEB 2027 · 12:00–13:30 IST</span></div>
+    <div class="lab">Languages expected</div>
+    <div class="checks">
+      <span class="chk on"><span class="bx"><svg class="ic" aria-hidden="true"
+ 
+  xmlns="http://www.w3.org/2000/svg"
+ 
+ 
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M20 6 9 17l-5-5" />
+</svg></span>English</span>
+      <span class="chk on"><span class="bx"><svg class="ic" aria-hidden="true"
+ 
+  xmlns="http://www.w3.org/2000/svg"
+ 
+ 
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M20 6 9 17l-5-5" />
+</svg></span>Hindi</span>
+      <span class="chk"><span class="bx"></span>Urdu</span>
+    </div>
+    <div class="help">Detected sentence by sentence among the ticked languages, including switches mid-talk. Tick one language to lock it.</div>
+    <div class="lab">Mode</div>
+    <div class="opts">
+      <div class="opt sel"><b><span class="rd"></span>Record + post-process<span class="badge b-neutral">Default</span></b>Transcribed on this machine while recording continues. Ready about 7 minutes after Stop.</div>
+      <div class="opt dis"><b><span class="rd"></span>Live captions + post-process</b>Not offered on this machine: the system check measured the small models too slow for live text.</div>
+    </div>
+    <div class="lab">Post-processing</div>
+    <div class="kv">
+      <span>Devices</span><b>CPU + Intel Iris Xe (hybrid)</b>
+      <span>Models</span><b class="mono">large-v3-turbo (en) · indicwhisper-hi (hi)</b>
+    </div>
+    <div class="acts">
+      <button class="btn btn-secondary">Cancel</button>
+      <button class="btn btn-primary"><svg class="ic" aria-hidden="true"
+ 
+  xmlns="http://www.w3.org/2000/svg"
+ 
+ 
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <circle cx="12" cy="12" r="10" />
+</svg>Start Recording</button>
+    </div>
+  </div>
+</div>
+</body></html>

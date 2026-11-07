@@ -1,0 +1,9 @@
+* text=auto
+*.ps1 text eol=crlf
+*.sh text eol=lf
+.githooks/* text eol=lf
+*.png binary
+*.webp binary
+*.woff2 binary
+*.wav binary
+*.bin binary

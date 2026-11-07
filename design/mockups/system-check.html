@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>System check · STELMAR Voice Workbench (reference mockup)</title>
+<link rel="stylesheet" href="mockup.css">
+</head><body>
+<div class="app">
+  <header class="bar">
+    <img class="logo" src="../brand/logo-lockup-header.png" alt="STELMAR · BML Munjal University">
+    <span class="prod">Voice Workbench</span>
+    <nav class="nav"><a href="#">Sessions</a><a href="#">Record</a><a href="#">Queue</a><a href="#">Review</a><a href="#" class="on">System</a><a href="#">Settings</a></nav>
+    <div class="right">
+      <span class="badge b-success"><span class="d"></span>Offline</span>
+      <span class="mono">Core i5-1235U · Iris Xe</span>
+    </div>
+  </header>
+
+  <section class="head">
+    <div>
+      <div class="over"><span class="dot"></span>First launch · System check</div>
+      <h1>Record Now, Transcribe in the Background</h1>
+      <div class="meta"><span class="mono">06 FEB 2027 · 16:42 IST</span><span>Quick check took <span class="mono">5 min 12 s</span></span><span class="badge b-neutral">Tier C</span></div>
+    </div>
+    <div class="ctl">
+      <button class="btn btn-secondary"><svg class="ic" aria-hidden="true"
+ 
+  xmlns="http://www.w3.org/2000/svg"
+ 
+ 
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+  <path d="M21 3v5h-5" />
+  <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+  <path d="M8 16H3v5" />
+</svg>Run Full Check</button>
+      <button class="btn btn-primary">Continue</button>
+    </div>
+  </section>
+
+  <div class="main">
+    <section class="pane">
+      <div class="sec" style="margin-top:4px">
+        <div class="over"><span class="dot"></span>Hardware</div>
+        <table class="tbl">
+          <tr><th>Part</th><th>Found</th><th>Result</th></tr>
+          <tr><td><b>Processor</b></td><td>Intel Core i5-1235U · 10 cores, 12 threads · AVX2 yes, AVX-512 no</td><td><span class="badge b-success">OK</span></td></tr>
+          <tr><td><b>Memory</b></td><td><span class="mono">16 GB · 9.6 GB free</span></td><td><span class="badge b-success">OK</span></td></tr>
+          <tr><td><b>Graphics</b></td><td>Intel Iris Xe (Vulkan) · shared memory · faster together with the CPU</td><td><span class="badge b-success">Hybrid</span></td></tr>
+          <tr><td><b>Storage and power</b></td><td><span class="mono">D: 412 GB free · E: 931 GB free</span> · mains power</td><td><span class="badge b-success">OK</span></td></tr>
+          <tr><td><b>Audio input</b></td><td>USB interface · 2 inputs</td><td><span class="badge b-success">OK</span></td></tr>
+        </table>
+      </div>
+      <div class="sec">
+        <div class="over"><span class="dot"></span>Speed test</div>
+        <table class="tbl">
+          <tr><th>Model</th><th>Role</th><th>Devices</th><th>Speed</th><th>Memory</th><th>Result</th></tr>
+          <tr><td class="mono">small, hindi-small</td><td>Near-live, EN and HI</td><td class="mono">cpu 6</td><td class="mono">0.52×</td><td class="mono">0.9 GB</td><td><span class="badge b-warning">Too slow</span></td></tr>
+          <tr><td class="mono">indicwhisper-hi · q8_0</td><td>Rolling, Hindi</td><td class="mono">cpu 9</td><td class="mono">0.82×</td><td class="mono">1.1 GB</td><td></td></tr>
+          <tr><td class="mono">indicwhisper-hi · q8_0</td><td>Rolling, Hindi</td><td class="mono">iris xe</td><td class="mono">1.05×</td><td class="mono">1.4 GB</td><td></td></tr>
+          <tr><td class="mono">indicwhisper-hi · q8_0</td><td>Rolling, Hindi</td><td class="mono">cpu 7 + iris xe</td><td class="mono">0.71×</td><td class="mono">2.4 GB</td><td><span class="badge b-success">Chosen</span></td></tr>
+          <tr><td class="mono">large-v3-turbo · q5_0</td><td>Rolling, English</td><td class="mono">cpu 7 + iris xe</td><td class="mono">0.80×</td><td class="mono">2.1 GB</td><td><span class="badge b-success">Chosen</span></td></tr>
+          <tr><td class="mono">indicwhisper-ur · q8_0</td><td>Rolling, Urdu</td><td class="mono">cpu 7 + iris xe</td><td class="mono">0.74×</td><td class="mono">2.4 GB</td><td><span class="badge b-success">Chosen</span></td></tr>
+          <tr><td class="mono">hinglish · q5_0</td><td>Night, EN + HI</td><td class="mono">cpu 7 + iris xe</td><td class="mono">1.90×</td><td class="mono">3.0 GB</td><td><span class="badge b-info">Fits overnight</span></td></tr>
+        </table>
+      </div>
+    </section>
+
+    <aside class="side">
+      <div class="card">
+        <div class="over"><span class="dot"></span>Verdict</div>
+        <div class="verdict">Record + post-process</div>
+        <p class="para">Live text is off by default and not offered on this machine. Each talk is transcribed here on the CPU and Iris Xe together, part by part, while recording continues.</p>
+      </div>
+      <div class="card">
+        <div class="over"><span class="dot"></span>Ready after a 90-minute talk</div>
+        <div class="kv">
+          <span>English</span><b class="mono">about 8 min</b>
+          <span>Hindi</span><b class="mono">about 7 min</b>
+          <span>Urdu</span><b class="mono">about 7 min</b>
+          <span>Night pass</span><b>Done by 08:00</b>
+        </div>
+      </div>
+      <div class="card stack">
+        <div class="over" style="margin-bottom:0"><span class="dot"></span>Overrides</div>
+        <span class="switch on"><span class="tr"></span>Process while recording</span>
+        <span class="switch on"><span class="tr"></span>Pause on battery power</span>
+        <span class="switch"><span class="tr"></span>Allow live captions anyway</span>
+      </div>
+    </aside>
+  </div>
+
+  <footer class="status">
+    <span class="on"><i></i>Offline · no network connections</span>
+    <span class="mono">capability.json saved 16:42 IST</span>
+    <span>Re-runs when hardware or models change</span>
+    <span class="sp mono">Fingerprint 3F2A-91C7</span>
+  </footer>
+</div>
+</body></html>

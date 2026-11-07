@@ -1,0 +1,23 @@
+# Build output
+node_modules/
+dist/
+src-tauri/target/
+public/icons/
+
+# Large or private data: never commit
+models/*.bin
+models/*.gguf
+models/converted/
+eval/data/
+eval/local/
+testdata/private/
+gate-pack/
+models/manifest.local.json
+*.wav
+!testdata/*.wav
+!resources/bench/*.wav
+
+# Local
+.setup/
+.env*
+*.log

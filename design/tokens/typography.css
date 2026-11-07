@@ -1,0 +1,21 @@
+:root{
+--font-sans:"Inter","Helvetica Neue",Arial,sans-serif;
+--font-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+--font-display:var(--font-sans);--font-heading:var(--font-sans);--font-body:var(--font-sans);--font-ui:var(--font-sans);--font-meta:var(--font-mono);
+--fw-regular:400; /* @kind font */
+--fw-medium:500; /* @kind font */
+--fw-semibold:600; /* @kind font */
+--fw-bold:700; /* @kind font */
+--fs-display:60px;--lh-display:76px;
+--fs-h1:44px;--lh-h1:54px;
+--fs-h2:32px;--lh-h2:40px;
+--fs-h3:24px;--lh-h3:32px;
+--fs-h4:18px;--lh-h4:26px;
+--fs-nav:17px;--lh-nav:24px;
+--fs-body-lg:18px;--lh-body-lg:30px;
+--fs-body:16px;--lh-body:26px;
+--fs-small:14px;--lh-small:20px;
+--fs-caption:12px;--lh-caption:16px;
+--fs-overline:12px;--lh-overline:16px;--ls-overline:0.08em;
+--ls-display:-0.01em;--ls-tight:-0.005em;
+}

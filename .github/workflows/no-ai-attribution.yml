@@ -1,0 +1,32 @@
+name: No AI attribution
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Reject AI co-author trailers and attribution lines
+        shell: bash
+        run: |
+          pattern='^[[:space:]]*co-authored-by:.*(claude|anthropic|copilot|devin|cursor|codex|gemini|chatgpt|openai|windsurf|aider)|^[[:space:]]*claude-session:|generated (with|by) .*(claude|copilot|devin|cursor|codex|gemini|chatgpt)|claude\.ai/code/session|noreply@anthropic\.com'
+          if git log --format='%an <%ae>%n%cn <%ce>%n%B' | grep -i -E "$pattern"; then
+            echo "AI attribution found in commit history. See CONTRIBUTING.md." >&2
+            exit 1
+          fi
+          echo "No AI attribution found."
+      - name: Reject AI attribution in the pull request description
+        if: github.event_name == 'pull_request'
+        shell: bash
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          if printf '%s' "$PR_BODY" | grep -i -E 'generated (with|by) .*(claude|copilot|devin|cursor|codex|gemini|chatgpt)|co-authored-by:.*(claude|anthropic)|claude\.ai/code/session'; then
+            echo "AI attribution found in the pull request description. See CONTRIBUTING.md." >&2
+            exit 1
+          fi

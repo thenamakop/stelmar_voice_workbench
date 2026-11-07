@@ -1,0 +1,32 @@
+:root{
+/* Charcoal — sampled from stelmar site: header #353A3E, primary button #222526, light button #D9DADD */
+--ink-950:#17191A;--ink-900:#222526;--ink-800:#2B2F32;--ink-700:#353A3E;--ink-600:#50565B;--ink-500:#6E7378;--ink-400:#9A9EA2;--ink-300:#C3C6C9;--ink-200:#D9DADD;--ink-100:#ECEDEE;
+/* Surface neutrals */
+--paper-0:#FFFFFF;--paper-50:#F7F7F8;--paper-100:#EFF0F1;--paper-200:#E3E4E6;--paper-300:#D0D2D4;
+/* Logo spectrum — sampled from the STELMAR book-fan mark */
+--orange-800:#8A3209;--orange-700:#B0420D;--orange-600:#D44F12;--orange-500:#F06018;--orange-200:#F9C3A6;--orange-100:#FDE8DC;
+--amber-700:#8C5A07;--amber-600:#C47410;--amber-500:#F09018;--amber-300:#FFC060;--amber-100:#FFF1D9;
+--green-700:#3E6B2C;--green-600:#5A8A44;--green-500:#78A860;--green-100:#E7F1E0;
+--teal-600:#2A9A85;--teal-500:#48C0A8;--teal-100:#DDF3EE;
+--sky-500:#78D8F0;--sky-100:#E3F6FB;
+--blue-700:#2F5E8E;--blue-600:#4677A9;--blue-500:#6090C0;--blue-100:#E2ECF6;
+--red-700:#8F1E18;--red-600:#B3261E;--red-100:#F8E0DE;
+/* Glass — hero pills & countdown on photography */
+--glass-bg:rgba(255,255,255,.16);--glass-bg-strong:rgba(255,255,255,.26);--glass-border:rgba(255,255,255,.38);--hero-overlay:rgba(34,37,38,.55);
+
+/* Semantic aliases */
+--bg-page:var(--paper-0);--bg-sunken:var(--paper-50);--bg-inverse:var(--ink-700);
+--surface-card:var(--paper-0);--surface-raised:var(--paper-0);--surface-muted:var(--paper-50);--surface-inverse:var(--ink-700);--surface-header:var(--ink-700);
+--text-primary:var(--ink-900);--text-body:var(--ink-800);--text-secondary:var(--ink-600);--text-muted:var(--ink-500);--text-disabled:var(--ink-400);
+--text-inverse:var(--paper-0);--text-inverse-muted:var(--ink-300);--text-accent:var(--orange-700);--text-link:var(--blue-700);--text-link-hover:var(--orange-700);
+--border-hairline:var(--ink-200);--border-default:var(--ink-300);--border-strong:var(--ink-600);--border-rule:var(--ink-900);--border-focus:var(--blue-600);
+--action-primary:var(--ink-900);--action-primary-hover:var(--ink-700);--action-primary-press:var(--ink-950);
+--action-light:var(--ink-200);--action-light-hover:var(--ink-300);
+--action-accent:var(--orange-600);--action-accent-hover:var(--orange-700);--action-accent-press:var(--orange-800);
+--status-success-fg:var(--green-700);--status-success-bg:var(--green-100);
+--status-warning-fg:var(--amber-700);--status-warning-bg:var(--amber-100);
+--status-danger-fg:var(--red-700);--status-danger-bg:var(--red-100);
+--status-info-fg:var(--blue-700);--status-info-bg:var(--blue-100);
+--status-award-fg:var(--amber-700);--status-award-bg:var(--amber-100);
+--status-neutral-fg:var(--ink-700);--status-neutral-bg:var(--ink-100);
+}

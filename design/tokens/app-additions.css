@@ -1,0 +1,20 @@
+/* STELMAR Voice Workbench: app-only token additions.
+   colors.css, typography.css, spacing.css, effects.css and base.css in this folder are frozen,
+   byte-identical copies of the STELMAR website design system. Never edit them.
+   Everything the desktop app needs beyond the website lives here, each with a reason. */
+:root{
+  /* Hindi and Urdu text. The website only set Latin text, so Inter has no Devanagari or Arabic glyphs. */
+  --font-devanagari:"Noto Sans Devanagari","Inter","Helvetica Neue",Arial,sans-serif;
+  --font-urdu:"Noto Nastaliq Urdu","Noto Naskh Arabic",serif;
+  --lh-devanagari:1.75; /* matras above and below the line need more room than Latin */
+  --lh-urdu:2.15;       /* Nastaliq stacks diagonally and needs the most room */
+
+  /* Live captions on a projector or second screen (1920x1080 reference). */
+  --fs-live-caption:52px;--lh-live-caption:72px;
+  --fs-live-caption-sub:28px;--lh-live-caption-sub:40px;
+
+  /* Desktop shell sizes (the website had no app chrome). */
+  --app-bar-h:64px;
+  --app-status-h:32px;
+  --app-sidebar-w:336px;
+}
