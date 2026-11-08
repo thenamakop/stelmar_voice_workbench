@@ -1,0 +1,8 @@
+{
+  "_comment": "Icon names the design-system bundle uses that lucide-static 0.460.0 renamed. scripts/copy-icons.mjs copies each target to the alias name so the ports stay identical to ds-bundle.js.",
+  "aliases": {
+    "check-circle": "circle-check",
+    "alert-triangle": "triangle-alert",
+    "alert-circle": "circle-alert"
+  }
+}

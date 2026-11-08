@@ -1,0 +1,23 @@
+﻿STELMAR Voice Workbench offline check: offline
+Date: 2026-11-08 12:40:32 +05:30   Machine: Legion   Windows 10.0.26200.0
+Exe: D:\Projects\stelmar_voice_workbench\target\release\stelmar-voice-workbench.exe (2026-11-08 05:46)
+Network state: Offline
+  reason: no physical adapter (Wi-Fi or Ethernet) is Up
+  reason: no connection profile reports Internet or LocalNetwork
+  reason: no probe reached its target
+  default route: 0.0.0.0/0 via 192.168.1.1 on Wi-Fi (ifIndex 6, metric 0)
+  0.0.0.0/0 via 192.168.1.1 on Wi-Fi (ifIndex 6) - ignored: adapter is Disconnected
+  interface Wi-Fi (ifIndex 6): status Disconnected, virtual False, IPv6:Disconnected IPv4:Disconnected, non-link-local address True
+  connection profiles: none
+  physical adapters Up: none
+  probe 1.1.1.1:443: reached False (A socket operation was attempted to an unreachable host 1.1.1.1:443)
+  probe 8.8.8.8:443: reached False (A socket operation was attempted to an unreachable host 8.8.8.8:443)
+Run 1: window 143 ms, rendered 773 ms, not blank = True (charcoal 7.2%, 42 colours), app alive = True, WebView2 processes = 6, non-loopback TCP = none
+Run 2: window 128 ms, rendered 707 ms, not blank = True (charcoal 7.2%, 42 colours), app alive = True, WebView2 processes = 6, non-loopback TCP = none
+Run 3: window 133 ms, rendered 734 ms, not blank = True (charcoal 7.2%, 42 colours), app alive = True, WebView2 processes = 6, non-loopback TCP = none
+Median: window 133 ms, rendered 734 ms (runs after the first are warm starts)
+Baseline (online): window 126 ms, rendered 683 ms. Offline minus online: window 7 ms, rendered 51 ms
+Record screen screenshot: record-offline.png (not blank = True, 46 colours)
+Result: PASS
+Note (added after the run): RivaTuner Statistics Server (RTSS) and MSI Afterburner were closed for this run. RTSSHooks64.dll caused the WebView2 browser-process crashes in webview2-dump-analysis.txt; see the Phase 1 open item in docs/GATES.md.
+Note (added after the run): the screenshots shell-offline-run*.png and record-offline.png were cropped afterwards to the window's visible frame (9 px of invisible resize border removed on the left, right and bottom, which showed part of the window behind). This run watched TCP only; the script now also watches UDP endpoints and listening sockets. The offline auditor's live run on 8 Nov 2026 (network on, 20 s) found no UDP endpoint from any app or WebView2 process.

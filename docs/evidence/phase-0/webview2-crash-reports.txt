@@ -1,0 +1,11 @@
+﻿WebView2 crash reports for the app's user data folder (collected 2026-11-08 06:08 +05:30, Legion)
+Folder: %USERPROFILE%\AppData\Local\in.edu.bmu.stelmar.voiceworkbench\EBWebView\Crashpad
+The .dmp files are not committed (memory dumps, 7 to 9 MB, may hold private data); they stay on the Legion.
+
+5fa761e8-c905-4109-b4ab-37873a33b8d6.dmp  7773112 bytes  created 2026-11-08 05:57:24  sha256 FFA77FE036B651876C8F61F757D003434F3980344B2F814D7AF19BD73A7DEFA6
+cb7b7097-dce6-4057-b8a0-a16e562ae7e5.dmp  9351065 bytes  created 2026-11-08 06:02:11  sha256 D22EE08A5D3F212D6FF1C08AB267A1EDAE1109C3D70297A95AA4B11834D9BDA6
+
+temp\edge_shutdown_crash.txt: content '1', written 2026-11-08 06:02:11
+Windows Application log (last 3 h): no events from msedgewebview2.exe or stelmar-voice-workbench.exe (only MsiInstaller events from WiX package validation during tauri build).
+App log: none; Phase 0 has no logging (tracing arrives with the recorder).
+Debugger for the dumps: not installed (no cdb.exe from the Windows SDK Debugging Tools).

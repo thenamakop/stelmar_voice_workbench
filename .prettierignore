@@ -1,0 +1,23 @@
+# Kit files keep their own formatting; prettier covers only app code.
+design/
+docs/
+models/
+.claude/
+.githooks/
+.github/workflows/no-ai-attribution.yml
+README.md
+AGENTS.md
+CLAUDE.md
+CONTRIBUTING.md
+scripts/*.ps1
+# Generated or third-party
+node_modules/
+dist/
+dist-e2e/
+target/
+src-tauri/target/
+src-tauri/gen/
+public/icons/
+test-results/
+playwright-report/
+pnpm-lock.yaml

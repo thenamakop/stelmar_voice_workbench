@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  # Pull requests are built once (as pull_request); pushes build only master.
+  push:
+    branches: [master]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Release engine builds never use build-machine-native CPU flags (AGENTS.md non-negotiable 4).
+  GGML_NATIVE: "OFF"
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up pnpm (version from packageManager)
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node (version from .node-version)
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: No personal or secret data in docs/evidence (public repository)
+        run: pnpm check:evidence
+
+      - name: Lint (design adherence, no raw hex or px)
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Format check
+        run: pnpm format:check
+
+      - name: Unit tests (Vitest)
+        run: pnpm test
+
+      - name: Script tests (Windows PowerShell 5.1)
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/tests/run-tests.ps1
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install chromium
+
+      - name: Web UI tests (Playwright, mocked Tauri bridge)
+        run: pnpm test:e2e
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: test-results/screenshots/
+          if-no-files-found: ignore
+
+      - name: rustfmt
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Cargo tests
+        run: cargo test --workspace
+
+      - name: No networking crates in the Windows build
+        run: pnpm check:crates
+
+      - name: Tauri build
+        run: pnpm tauri build
+
+      - name: No remote URLs in the built UI
+        run: pnpm check:dist

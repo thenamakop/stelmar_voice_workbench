@@ -1,0 +1,39 @@
+/* App-wide rules beyond the design tokens. Tokens and fonts are imported in main.tsx from design/.
+   Only design tokens here: no raw hex or px values (scripts/check-style-values.mjs). */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  overflow: hidden;
+}
+
+/* Nav items and other bare buttons inherit the type of their surroundings. */
+button {
+  font: inherit;
+}
+
+/* Keyboard focus uses the design system's focus ring. */
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* Hindi, Urdu and mixed-script text (PLAN.md section 9). */
+[lang="hi"] {
+  font-family: var(--font-devanagari);
+  line-height: var(--lh-devanagari);
+}
+
+[lang="ur"] {
+  font-family: var(--font-urdu);
+  line-height: var(--lh-urdu);
+}

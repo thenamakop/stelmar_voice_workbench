@@ -1,0 +1,26 @@
+[package]
+name = "stelmar-voice-workbench"
+description = "STELMAR Voice Workbench: offline session recorder and transcriber"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+# The `_lib` suffix keeps the library name distinct from the binary name (cargo issue 8519 on Windows).
+name = "stelmar_voice_workbench_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# Pinned to Tauri 2.11.x (AGENTS.md stack). No Tauri plugins: no HTTP, updater, shell or opener.
+tauri = { version = "~2.11", features = [] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

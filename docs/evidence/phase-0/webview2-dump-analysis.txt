@@ -1,0 +1,1197 @@
+﻿WebView2 crash dump analysis (Legion, 2026-11-08)
+Tool: cdb.exe from WinDbg 1.2611.4001.0 (winget Microsoft.WinDbg), symbols srv*C:\symbols*https://msdl.microsoft.com/download/symbols
+Commands: !analyze -v; .ecxr; kn 15; lm (plus lmvm RTSSHooks64 and !peb for the command line)
+
+Summary (from the stacks below, nothing inferred beyond them):
+  Both dumps are the same crash.
+  Process: msedgewebview2.exe browser process (no --type= flag) for --webview-exe-name=stelmar-voice-workbench.exe, WebView2 157.0.4341.42
+  Exception: c0000005 access violation, INVALID_POINTER_READ
+  Faulting module: RTSSHooks64.dll (RivaTuner Statistics Server, C:\Program Files (x86)\RivaTuner Statistics Server, image timestamp 27 Sep 2025; no version resource)
+  Top frames: RTSSHooks64 (frames 00-05, entered through RTSSHooks64!RTSSCBTProc) <- user32!DispatchHookA <- user32!__fnHkINLPCBTCREATESTRUCT
+              <- ntdll!KiUserCallbackDispatcherContinue <- win32u!NtUserCreateWindowEx <- user32!CreateWindowExW <- combase!GetOrCreateSTAWindow
+  i.e. a window-creation (CBT) hook that RTSS injects into processes faults while the browser process creates a COM STA window.
+  Frames in our code (stelmar-voice-workbench): none. GPU drivers (igd*, nvwgf*, nvd3d*): none. d3d11/dxgi: none (dxgi.dll is loaded, not on the stack).
+  msedge.dll / embedded browser modules: none on the faulting stack (msedge.dll is loaded).
+  RTSS.exe was running on the Legion during the runs (pid 2752).
+
+=== Dump 1: 5fa761e8-c905-4109-b4ab-37873a33b8d6.dmp (05:57:24, offline run 3)
+
+************* Path validation summary **************
+Response                         Time (ms)     Location
+Deferred                                       srv*C:\symbols*https://msdl.microsoft.com/download/symbols
+
+************* Preparing the environment for Debugger Extensions Gallery repositories **************
+   ExtensionRepository : Implicit
+   UseExperimentalFeatureForNugetShare : true
+   AllowNugetExeUpdate : true
+   NonInteractiveNuget : true
+   AllowNugetMSCredentialProviderInstall : true
+   AllowParallelInitializationOfLocalRepositories : true
+
+   -- Configuring repositories
+      ----> Repository : LocalInstalled, Enabled: true
+      ----> Repository : UserExtensions, Enabled: true
+
+>>>>>>>>>>>>> Preparing the environment for Debugger Extensions Gallery repositories completed, duration 0.000 seconds
+
+************* Waiting for Debugger Extensions Gallery to Initialize **************
+
+>>>>>>>>>>>>> Waiting for Debugger Extensions Gallery to Initialize completed, duration 0.485 seconds
+   ----> Repository : UserExtensions, Enabled: true, Packages count: 0
+   ----> Repository : LocalInstalled, Enabled: true, Packages count: 46
+
+Microsoft (R) Windows Debugger Version 10.0.29680.1004 AMD64
+Copyright (c) Microsoft Corporation. All rights reserved.
+
+
+Loading Dump File [%USERPROFILE%\AppData\Local\in.edu.bmu.stelmar.voiceworkbench\EBWebView\Crashpad\reports\5fa761e8-c905-4109-b4ab-37873a33b8d6.dmp]
+User Mini Dump File: Only registers, stack and portions of memory are available
+
+
+************* Path validation summary **************
+Response                         Time (ms)     Location
+Deferred                                       srv*C:\symbols*https://msdl.microsoft.com/download/symbols
+Symbol search path is: srv*C:\symbols*https://msdl.microsoft.com/download/symbols
+Executable search path is: 
+Windows 10 Version 26200 MP (32 procs) Free x64
+Product: WinNt, suite: SingleUserTS Personal
+Edition build lab: 26100.1.amd64fre.ge_release.240331-1435
+Debug session time: Sun Nov  8 05:57:25.000 2026 (UTC + 5:30)
+System Uptime: 0 days 4:48:43.357
+Process Uptime: 0 days 0:00:03.000
+................................................................
+.........................
+Loading unloaded module list
+...........
+This dump file has an exception of interest stored in it.
+The stored exception information can be accessed via .ecxr
+(8c2c.32c0): Access violation - code c0000005 (first/second chance not available)
+
++------------------------------------------------------------------------+
+| This target supports Hardware-enforced Stack Protection. A HW based    |
+| "Shadow Stack" may be available to assist in debugging and analysis.   |
+| See aka.ms/userhsp for more info.                                      |
+|                                                                        |
+| dps @ssp                                                               |
+|                                                                        |
++------------------------------------------------------------------------+
+
+For analysis of this file, run !analyze -v
+ntdll!NtDelayExecution+0x14:
+00007ffa`5b1423d4 c3              ret
+0:020> cdb: Reading initial command '!analyze -v; .ecxr; kn 15; lm; q'
+................................................................
+.........................
+Loading unloaded module list
+...........
+*******************************************************************************
+*                                                                             *
+*                        Exception Analysis                                   *
+*                                                                             *
+*******************************************************************************
+
+
+KEY_VALUES_STRING: 1
+
+    Key  : AV.Type
+    Value: Read
+
+    Key  : Analysis.CPU.mSec
+    Value: 2609
+
+    Key  : Analysis.Elapsed.mSec
+    Value: 51315
+
+    Key  : Analysis.IO.Other.Mb
+    Value: 29
+
+    Key  : Analysis.IO.Read.Mb
+    Value: 1
+
+    Key  : Analysis.IO.Write.Mb
+    Value: 130
+
+    Key  : Analysis.Init.CPU.mSec
+    Value: 359
+
+    Key  : Analysis.Init.Elapsed.mSec
+    Value: 9300
+
+    Key  : Analysis.Memory.CommitPeak.Mb
+    Value: 728
+
+    Key  : Analysis.Version.DbgEng
+    Value: 10.0.29680.1004
+
+    Key  : Analysis.Version.Description
+    Value: 10.2608.26.1 amd64fre
+
+    Key  : Analysis.Version.Ext
+    Value: 1.2608.26.1
+
+    Key  : Failure.Bucket
+    Value: INVALID_POINTER_READ_c0000005_RTSSHooks64.dll!Unknown
+
+    Key  : Failure.Exception.Code
+    Value: 0xc0000005
+
+    Key  : Failure.Exception.IP.Address
+    Value: 0x1801490af
+
+    Key  : Failure.Exception.IP.Module
+    Value: RTSSHooks64
+
+    Key  : Failure.Exception.IP.Offset
+    Value: 0x1490af
+
+    Key  : Failure.Hash
+    Value: {4fd3e8e5-abb0-3e73-8f47-5561d40f8768}
+
+    Key  : Failure.ProblemClass.Primary
+    Value: INVALID_POINTER_READ
+
+    Key  : Faulting.IP.Type
+    Value: Paged
+
+    Key  : Timeline.OS.Boot.DeltaSec
+    Value: 17323
+
+    Key  : Timeline.Process.Day.DeltaSec
+    Value: 21445
+
+    Key  : Timeline.Process.Start.DeltaSec
+    Value: 3
+
+    Key  : WER.OS.Branch
+    Value: ge_release
+
+    Key  : WER.OS.Platform
+    Value: Windows
+
+    Key  : WER.OS.Version
+    Value: 10.0.26200.1
+
+    Key  : WER.Process.Name
+    Value: msedgewebview2.exe
+
+    Key  : WER.Process.Version
+    Value: 157.0.4341.42
+
+
+FILE_IN_CAB:  5fa761e8-c905-4109-b4ab-37873a33b8d6.dmp
+
+NTGLOBALFLAG:  0
+
+APPLICATION_VERIFIER_FLAGS:  0
+
+CONTEXT:  (.ecxr)
+rax=0000000180241b68 rbx=0000000180241af0 rcx=0000000180241b68
+rdx=00007ffa54ee94a0 rsi=0000000000001280 rdi=00007ffa54ee94a0
+rip=00000001801490af rsp=0000003ffe9fc588 rbp=0000000180072760
+ r8=0000000000000005  r9=00000001801490af r10=0000000180000000
+r11=0000003ffe9fc520 r12=0000000000000000 r13=0000000180241af0
+r14=0000000000000000 r15=0000000000000043
+iopl=0         nv up ei pl nz na pe nc
+cs=0033  ss=002b  ds=002b  es=002b  fs=0053  gs=002b             efl=00010206
+RTSSHooks64!ValidateRuntimes+0xc073f:
+00000001`801490af 8b0a            mov     ecx,dword ptr [rdx] ds:00007ffa`54ee94a0=????????
+Resetting default scope
+
+EXCEPTION_RECORD:  (.exr -1)
+ExceptionAddress: 00000001801490af (RTSSHooks64!ValidateRuntimes+0x00000000000c073f)
+   ExceptionCode: c0000005 (Access violation)
+  ExceptionFlags: 00000000
+NumberParameters: 2
+   Parameter[0]: 0000000000000000
+   Parameter[1]: 00007ffa54ee94a0
+Attempt to read from address 00007ffa54ee94a0
+
+PROCESS_NAME:  msedgewebview2.exe
+
+READ_ADDRESS:  00007ffa54ee94a0 
+
+ERROR_CODE: (NTSTATUS) 0xc0000005 - The instruction at 0x%p referenced memory at 0x%p. The memory could not be %s.
+
+EXCEPTION_CODE: (NTSTATUS) 0xc0000005 - The instruction at 0x%p referenced memory at 0x%p. The memory could not be %s.
+
+EXCEPTION_CODE_STR:  c0000005
+
+EXCEPTION_PARAMETER1:  0000000000000000
+
+EXCEPTION_PARAMETER2:  00007ffa54ee94a0
+
+STACK_TEXT:  
+0000003f`fe9fc588 00000001`8003bede     : 00000001`80241af0 00000001`00204642 00000001`8014d130 0000003f`fe9fcb70 : RTSSHooks64!ValidateRuntimes+0xc073f
+0000003f`fe9fc590 00000001`8003c012     : 00007ffa`54ed0000 00000001`80072620 00000001`8014d160 0000003f`fe9fcf20 : RTSSHooks64+0x3bede
+0000003f`fe9fcde0 00000001`80078ddc     : 00000000`00000000 00000000`00000043 00000000`01085407 00000000`00000002 : RTSSHooks64+0x3c012
+0000003f`fe9fd080 00000001`8007704b     : 00000000`00000003 0000003f`fe9fd580 00000000`01085407 0000003f`fe9fd540 : RTSSHooks64+0x78ddc
+0000003f`fe9fd220 00000001`80081f6c     : 00000000`00000003 00007ffa`5b02318d 00000001`80150440 00000000`00000003 : RTSSHooks64+0x7704b
+0000003f`fe9fd360 00007ffa`5ab4abb0     : 00000000`00000004 00007ffa`00000000 00000000`00000000 00000000`00000000 : RTSSHooks64!RTSSCBTProc+0x1dc
+0000003f`fe9fd4c0 00007ffa`5ab63b07     : 0000000b`00030043 00007ffa`5b145c24 00000234`39002c00 00000000`00000014 : user32!DispatchHookA+0x80
+0000003f`fe9fd560 00007ffa`5b145d94     : 0000000b`00030043 0000000b`00030043 0000003f`fe9fd7b0 00000000`00000000 : user32!__fnHkINLPCBTCREATESTRUCT+0xe7
+0000003f`fe9fd5c0 00007ffa`584c20c4     : 00007ffa`5ab4cd9a 00000000`40000000 ffffffff`ffff0000 00000000`00000200 : ntdll!KiUserCallbackDispatcherContinue
+0000003f`fe9fd6e8 00007ffa`5ab4cd9a     : 00000000`40000000 ffffffff`ffff0000 00000000`00000200 00000000`00000000 : win32u!NtUserCreateWindowEx+0x14
+0000003f`fe9fd6f0 00007ffa`5ab4c927     : 00000000`0000000a 00000000`00000000 00000000`00000000 00007ffa`59100f58 : user32!VerNtUserCreateWindowEx+0x236
+0000003f`fe9fda80 00007ffa`5ab4c732     : 00000234`80000000 00000000`00000000 00000000`00000000 00000234`39e223d8 : user32!CreateWindowInternal+0x1e3
+0000003f`fe9fdbe0 00007ffa`58f4f565     : 00000000`00000001 00000234`3922c7b0 00000000`00000000 00000000`00040000 : user32!CreateWindowExW+0x82
+0000003f`fe9fdc70 00007ffa`58f4f44a     : 00000234`39277ca0 00000000`00000000 00000000`00000000 00000234`39277ca0 : combase!GetOrCreateSTAWindow+0x91
+0000003f`fe9fdce0 00007ffa`58e4f456     : 00000234`39277ca0 00000000`00000000 0000003f`fe9fde70 00000000`00000000 : combase!OXIDEntry::StartServer+0x22
+(Inline Function) --------`--------     : --------`-------- --------`-------- --------`-------- --------`-------- : combase!CComApartment::StartServer+0xe5
+0000003f`fe9fdd10 00007ffa`58ee8e0d     : 00000234`392dcbe0 00000234`392dcbe0 00000000`00000000 00000000`00000000 : combase!InitChannelIfNecessary+0x166
+0000003f`fe9fdd40 00007ffa`58e61913     : 00000000`00000000 00000000`00000000 0000003f`fe9fe818 00000000`00000000 : combase!CRpcResolver::BindToSCMProxy+0x11
+0000003f`fe9fdd70 00007ffa`58e615bb     : 00000000`00000000 0000003f`fe9fdf80 00000000`00000000 00000000`00000000 : combase!CRpcResolver::DelegateActivationToSCM+0x15b
+(Inline Function) --------`--------     : --------`-------- --------`-------- --------`-------- --------`-------- : combase!CRpcResolver::CreateInstance+0x14
+0000003f`fe9fdf50 00007ffa`58f34bcd     : ffffffc0`01601f20 00000000`00000000 0000003f`fe9fe318 00007ffa`58fad852 : combase!CClientContextActivator::CreateInstance+0x1ab
+0000003f`fe9fe000 00007ffa`58ff453f     : 00000000`00000000 0000003f`fe9feb90 00000000`00000004 00000000`00000000 : combase!ActivationPropertiesIn::DelegateCreateInstance+0x9d
+0000003f`fe9fe090 00007ffa`58feede8     : 00000234`392dcbe0 00007ffa`5b0702c0 ffffffff`fa0a1f00 00000000`00000010 : combase!ICoCreateInstanceExWorker+0xd93
+0000003f`fe9fedf0 00007ffa`58fee65f     : 00007ffa`51f69438 00007ffa`51f69438 00007ffa`5916b198 00007ffa`58facf0a : combase!CComActivator::DoCreateInstance+0x1dc
+0000003f`fe9fef40 00007ffa`58f03686     : 00007ffa`51f69438 00000000`00000004 00000000`00002710 00000234`000003e8 : combase!CoCreateInstanceExCopy+0x167
+0000003f`fe9ff000 00007ffa`51f42aff     : 00000234`39ea6448 00000234`39ea6360 00000000`00000000 00007ffa`5b05747e : combase!CoCreateInstance+0xd6
+0000003f`fe9ff090 00007ffa`51f438ac     : 00007ffa`58f03686 0000b6af`16aad17f 00000234`39ea63c8 00000000`00000000 : netprofm!PublicNetworkListManager::GetPrivateNetworkListManager+0x443
+0000003f`fe9ff170 00007ffa`51f32b46     : 00000234`39ea63c8 0000445c`00019500 0000445c`00019518 00000234`39ea63e8 : netprofm!PublicNetworkListManager::NetworkCostManagerEventsAdvise+0x6c
+0000003f`fe9ff200 00007ff9`c8f3f92d     : 0000445c`00019500 00000234`39ea63e8 00000234`39ea63e8 0000445c`00019500 : netprofm!ProxyNetworkConnectionCostEventsSink<PublicNetworkListManager>::Advise+0x36
+0000003f`fe9ff230 00007ff9`c8f3f5e9     : 0000003f`fe9ff338 00007ff9`c8f3f4d6 00000000`00000038 00000000`00000000 : msedge!ChromeMain+0x12ad8d
+0000003f`fe9ff290 00007ff9`c8f3f3e3     : 00000000`00000008 00004458`000ac0d0 00007ff9`c8d7e520 00000234`00000000 : msedge!ChromeMain+0x12aa49
+0000003f`fe9ff2f0 00007ff9`c8f3f203     : 0000445c`00015dc0 00007ff9`c8e89116 0000445c`000b1500 00000000`00000070 : msedge!ChromeMain+0x12a843
+0000003f`fe9ff3e0 00007ff9`c81c9a3c     : 00000234`39002980 00000234`390002c0 ffffffff`ffffffff 00000234`39277e50 : msedge!ChromeMain+0x12a663
+0000003f`fe9ff430 00007ff9`c81c8984     : 000000a0`39277c90 00007ffa`00000000 00000234`390002c0 0000003f`fe9ff740 : msedge+0x899a3c
+0000003f`fe9ff560 00007ff9`c81c8599     : 0000003f`fe9ff7a0 00000000`00000000 0000003f`fe9ffb10 00000234`392db000 : msedge+0x898984
+0000003f`fe9ff5d0 00007ff9`c8d47665     : 0000003f`ea0f4000 0000445c`0012c678 0000445c`0012c690 00004458`000dc678 : msedge+0x898599
+0000003f`fe9ffa40 00007ff9`c8da88d8     : 00000000`00000001 00007ff9`c8da8607 00000000`00000554 ffffffff`fffffffe : msedge+0x1417665
+0000003f`fe9ffbd0 00007ff9`c8dce39d     : 00000000`00000000 0000445c`00048900 00000000`00000001 00000000`00000000 : msedge+0x14788d8
+0000003f`fe9ffc10 00007ffa`5950dda7     : 00000000`00000000 00000000`00000000 00000000`00000000 00000000`00000000 : msedge+0x149e39d
+0000003f`fe9ffca0 00007ffa`5b05ee4c     : 00000000`00000000 00000000`00000000 00000000`00000000 00000000`00000000 : kernel32!BaseThreadInitThunk+0x17
+0000003f`fe9ffcd0 00000000`00000000     : 00000000`00000000 00000000`00000000 00000000`00000000 00000000`00000000 : ntdll!RtlUserThreadStart+0x2c
+
+
+IP_IN_PAGED_CODE: 
+RTSSHooks64!ValidateRuntimes+c073f
+00000001`801490af 8b0a            mov     ecx,dword ptr [rdx]
+
+SYMBOL_NAME:  RTSSHooks64+1490af
+
+MODULE_NAME: RTSSHooks64
+
+IMAGE_NAME:  RTSSHooks64.dll
+
+STACK_COMMAND: dt ntdll!LdrpLastDllInitializer BaseDllName ; dt ntdll!LdrpFailureData ; ~20s; .ecxr ; kb
+
+FAILURE_BUCKET_ID:  INVALID_POINTER_READ_c0000005_RTSSHooks64.dll!Unknown
+
+OS_VERSION:  10.0.26200.1
+
+BUILDLAB_STR:  ge_release
+
+OSPLATFORM_TYPE:  x64
+
+OSNAME:  Windows 10
+
+FAILURE_ID_HASH:  {4fd3e8e5-abb0-3e73-8f47-5561d40f8768}
+
+Followup:     MachineOwner
+---------
+
+rax=0000000180241b68 rbx=0000000180241af0 rcx=0000000180241b68
+rdx=00007ffa54ee94a0 rsi=0000000000001280 rdi=00007ffa54ee94a0
+rip=00000001801490af rsp=0000003ffe9fc588 rbp=0000000180072760
+ r8=0000000000000005  r9=00000001801490af r10=0000000180000000
+r11=0000003ffe9fc520 r12=0000000000000000 r13=0000000180241af0
+r14=0000000000000000 r15=0000000000000043
+iopl=0         nv up ei pl nz na pe nc
+cs=0033  ss=002b  ds=002b  es=002b  fs=0053  gs=002b             efl=00010206
+RTSSHooks64!ValidateRuntimes+0xc073f:
+00000001`801490af 8b0a            mov     ecx,dword ptr [rdx] ds:00007ffa`54ee94a0=????????
+ # Child-SP          RetAddr               Call Site
+00 0000003f`fe9fc588 00000001`8003bede     RTSSHooks64!ValidateRuntimes+0xc073f
+01 0000003f`fe9fc590 00000001`8003c012     RTSSHooks64+0x3bede
+02 0000003f`fe9fcde0 00000001`80078ddc     RTSSHooks64+0x3c012
+03 0000003f`fe9fd080 00000001`8007704b     RTSSHooks64+0x78ddc
+04 0000003f`fe9fd220 00000001`80081f6c     RTSSHooks64+0x7704b
+05 0000003f`fe9fd360 00007ffa`5ab4abb0     RTSSHooks64!RTSSCBTProc+0x1dc
+06 0000003f`fe9fd4c0 00007ffa`5ab63b07     user32!DispatchHookA+0x80
+07 0000003f`fe9fd560 00007ffa`5b145d94     user32!__fnHkINLPCBTCREATESTRUCT+0xe7
+08 0000003f`fe9fd5c0 00007ffa`584c20c4     ntdll!KiUserCallbackDispatcherContinue
+09 0000003f`fe9fd6e8 00007ffa`5ab4cd9a     win32u!NtUserCreateWindowEx+0x14
+0a 0000003f`fe9fd6f0 00007ffa`5ab4c927     user32!VerNtUserCreateWindowEx+0x236
+0b 0000003f`fe9fda80 00007ffa`5ab4c732     user32!CreateWindowInternal+0x1e3
+0c 0000003f`fe9fdbe0 00007ffa`58f4f565     user32!CreateWindowExW+0x82
+0d 0000003f`fe9fdc70 00007ffa`58f4f44a     combase!GetOrCreateSTAWindow+0x91
+0e 0000003f`fe9fdce0 00007ffa`58e4f456     combase!OXIDEntry::StartServer+0x22
+0f (Inline Function) --------`--------     combase!CComApartment::StartServer+0xe5
+10 0000003f`fe9fdd10 00007ffa`58ee8e0d     combase!InitChannelIfNecessary+0x166
+11 0000003f`fe9fdd40 00007ffa`58e61913     combase!CRpcResolver::BindToSCMProxy+0x11
+12 0000003f`fe9fdd70 00007ffa`58e615bb     combase!CRpcResolver::DelegateActivationToSCM+0x15b
+13 (Inline Function) --------`--------     combase!CRpcResolver::CreateInstance+0x14
+14 0000003f`fe9fdf50 00007ffa`58f34bcd     combase!CClientContextActivator::CreateInstance+0x1ab
+start             end                 module name
+00000001`80000000 00000001`80267000   RTSSHooks64   (export symbols)       C:\Program Files (x86)\RivaTuner Statistics Server\RTSSHooks64.dll
+00007ff6`c35c0000 00007ff6`c3a3a000   msedgewebview2   (deferred)             
+00007ff9`bac40000 00007ff9`bafaa000   oneds      (deferred)             
+00007ff9`bafb0000 00007ff9`bb615000   oneauth    (deferred)             
+00007ff9`bb620000 00007ff9`bba43000   telclient   (deferred)             
+00007ff9`c7930000 00007ff9`dcfc3000   msedge     (export symbols)       C:\Program Files (x86)\Microsoft\EdgeWebView\Application\157.0.4341.42\msedge.dll
+00007ff9`dd2e0000 00007ff9`dd6ed000   msedge_elf   (deferred)             
+00007ff9`dfe80000 00007ff9`dfe99000   Windows_System_Profile_PlatformDiagnosticsAndUsageDataSettings   (deferred)             
+00007ffa`10700000 00007ffa`1075c000   dataexchange   (deferred)             
+00007ffa`1a730000 00007ffa`1a882000   Windows_UI_Immersive   (deferred)             
+00007ffa`1ecf0000 00007ffa`1ed93000   directmanipulation   (deferred)             
+00007ffa`20120000 00007ffa`207ba000   Windows_Media   (deferred)             
+00007ffa`20940000 00007ffa`209b0000   CapabilityAccessManagerClient   (deferred)             
+00007ffa`2c5b0000 00007ffa`2c6f6000   textinputframework   (deferred)             
+00007ffa`2c950000 00007ffa`2caab000   Windows_UI   (deferred)             
+00007ffa`2cde0000 00007ffa`2ce07000   nlansp_c   (deferred)             
+00007ffa`31c80000 00007ffa`31e66000   InputHost   (deferred)             
+00007ffa`35710000 00007ffa`35740000   coreprivacysettingsstore   (deferred)             
+00007ffa`3b640000 00007ffa`3b64f000   DiagnosticDataSettings   (deferred)             
+00007ffa`3d090000 00007ffa`3d0ae000   windows_staterepositorycore   (deferred)             
+00007ffa`40cf0000 00007ffa`40f81000   comctl32   (deferred)             
+00007ffa`411c0000 00007ffa`41235000   oleacc     (deferred)             
+00007ffa`41b70000 00007ffa`41c32000   mscms      (deferred)             
+00007ffa`475a0000 00007ffa`475ab000   rasadhlp   (deferred)             
+00007ffa`477a0000 00007ffa`477d7000   winmm      (deferred)             
+00007ffa`48610000 00007ffa`48861000   twinapi_appcore   (pdb symbols)          c:\symbols\twinapi.appcore.pdb\7A40554282DB96892247A45B2DCBACBC1\twinapi.appcore.pdb
+00007ffa`4a9a0000 00007ffa`4a9ab000   version    (deferred)             
+00007ffa`50a20000 00007ffa`50a3b000   wkscli     (deferred)             
+00007ffa`50a40000 00007ffa`50a99000   wevtapi    (deferred)             
+00007ffa`50b70000 00007ffa`50b95000   dhcpcsvc   (deferred)             
+00007ffa`50ba0000 00007ffa`50bbe000   dhcpcsvc6   (deferred)             
+00007ffa`50bd0000 00007ffa`50cfa000   winhttp    (deferred)             
+00007ffa`50dc0000 00007ffa`50f2a000   WinTypes   (deferred)             
+00007ffa`513a0000 00007ffa`515c7000   mfplat     (deferred)             
+00007ffa`51610000 00007ffa`5164b000   RTWorkQ    (deferred)             
+00007ffa`51f20000 00007ffa`51f8e000   netprofm   (pdb symbols)          c:\symbols\netprofm.pdb\E589A8DE44F8F6206D95CDD39F5741761\netprofm.pdb
+00007ffa`53450000 00007ffa`536ba000   DWrite     (deferred)             
+00007ffa`546b0000 00007ffa`547da000   CoreMessaging   (deferred)             
+00007ffa`54b00000 00007ffa`54b9f000   apphelp    (deferred)             
+00007ffa`54bd0000 00007ffa`54bfa000   wtsapi32   (deferred)             
+00007ffa`54d60000 00007ffa`54e07000   uxtheme    (deferred)             
+00007ffa`55c00000 00007ffa`564ae000   windows_storage   (deferred)             
+00007ffa`567e0000 00007ffa`56813000   IPHLPAPI   (deferred)             
+00007ffa`56820000 00007ffa`56978000   dnsapi     (deferred)             
+00007ffa`56980000 00007ffa`5698d000   netutils   (deferred)             
+00007ffa`56dd0000 00007ffa`56e09000   rsaenh     (deferred)             
+00007ffa`56e70000 00007ffa`56e8b000   kernel_appcore   (deferred)             
+00007ffa`56fa0000 00007ffa`56fd6000   ntmarta    (deferred)             
+00007ffa`57130000 00007ffa`5717a000   sspicli    (deferred)             
+00007ffa`57210000 00007ffa`5721d000   dsparse    (deferred)             
+00007ffa`574b0000 00007ffa`574d5000   gpapi      (deferred)             
+00007ffa`574e0000 00007ffa`57514000   userenv    (deferred)             
+00007ffa`57720000 00007ffa`5773b000   cryptsp    (deferred)             
+00007ffa`57740000 00007ffa`5774c000   CRYPTBASE   (deferred)             
+00007ffa`57890000 00007ffa`578a3000   msasn1     (deferred)             
+00007ffa`57ce0000 00007ffa`57d32000   cfgmgr32   (deferred)             
+00007ffa`57da0000 00007ffa`57daa000   dpapi      (deferred)             
+00007ffa`57f70000 00007ffa`57fd6000   winsta     (deferred)             
+00007ffa`58020000 00007ffa`58035000   umpdc      (deferred)             
+00007ffa`58040000 00007ffa`5809e000   powrprof   (deferred)             
+00007ffa`580b0000 00007ffa`580da000   bcrypt     (deferred)             
+00007ffa`580e0000 00007ffa`58109000   profapi    (deferred)             
+00007ffa`581d0000 00007ffa`5831c000   ucrtbase   (deferred)             
+00007ffa`58330000 00007ffa`584af000   crypt32    (deferred)             
+00007ffa`584c0000 00007ffa`584e7000   win32u     (pdb symbols)          c:\symbols\win32u.pdb\DC2BE92BCDB1EFC31195235C45385FF11\win32u.pdb
+00007ffa`584f0000 00007ffa`58593000   msvcp_win   (deferred)             
+00007ffa`58630000 00007ffa`5875a000   gdi32full   (deferred)             
+00007ffa`58760000 00007ffa`5880c000   bcryptprimitives   (deferred)             
+00007ffa`588e0000 00007ffa`58ce1000   KERNELBASE   (pdb symbols)          c:\symbols\kernelbase.pdb\79B505276F140450EB83DF0440BF06C61\kernelbase.pdb
+00007ffa`58cf0000 00007ffa`58de9000   SHCore     (deferred)             
+00007ffa`58df0000 00007ffa`58e21000   imm32      (deferred)             
+00007ffa`58e30000 00007ffa`591bb000   combase    (private pdb symbols)  c:\symbols\combase.pdb\4AC91D91223808F3AE6A3164A1B8B4041\combase.pdb
+00007ffa`593d0000 00007ffa`593fb000   gdi32      (deferred)             
+00007ffa`59400000 00007ffa`594d9000   oleaut32   (deferred)             
+00007ffa`594e0000 00007ffa`595ab000   kernel32   (pdb symbols)          c:\symbols\kernel32.pdb\E8C3A48CAC7EB60D8781D8C10020C44F1\kernel32.pdb
+00007ffa`595b0000 00007ffa`59659000   msvcrt     (deferred)             
+00007ffa`59660000 00007ffa`596c6000   shlwapi    (deferred)             
+00007ffa`59720000 00007ffa`59838000   rpcrt4     (deferred)             
+00007ffa`59840000 00007ffa`5999c000   msctf      (deferred)             
+00007ffa`599b0000 00007ffa`59a6c000   advapi32   (deferred)             
+00007ffa`59b30000 00007ffa`59bb1000   ws2_32     (deferred)             
+00007ffa`59c40000 00007ffa`5a3dc000   shell32    (deferred)             
+00007ffa`5a3f0000 00007ffa`5a877000   setupapi   (deferred)             
+00007ffa`5a880000 00007ffa`5a88a000   nsi        (deferred)             
+00007ffa`5aa70000 00007ffa`5ab1f000   clbcatq    (deferred)             
+00007ffa`5ab30000 00007ffa`5ad07000   user32     (pdb symbols)          c:\symbols\user32.pdb\F0BF56EE0A784974D49A58173A7CBC7E1\user32.pdb
+00007ffa`5ad20000 00007ffa`5aeba000   ole32      (private pdb symbols)  c:\symbols\ole32.pdb\7A0E668D517F5167B9AB6FE73BCC86E21\ole32.pdb
+00007ffa`5aec0000 00007ffa`5af68000   sechost    (deferred)             
+00007ffa`5afe0000 00007ffa`5b248000   ntdll      (pdb symbols)          c:\symbols\ntdll.pdb\C031D45B0DA18A6E74D06ED6AB2DD9E11\ntdll.pdb
+
+Unloaded modules:
+00007ffa`58cf0000 00007ffa`58de9000   shcore.dll
+00007ffa`1da40000 00007ffa`1da46000   KBDINEN.DLL
+00007ffa`53f70000 00007ffa`54026000   policymanager.dll
+00007ffa`59400000 00007ffa`594d9000   OLEAUT32.dll
+00007ffa`56820000 00007ffa`56978000   dnsapi.dll
+00007ffa`57210000 00007ffa`5721d000   DSPARSE.dll
+00007ffa`43030000 00007ffa`4304a000   netapi32.dll
+00007ffa`52be0000 00007ffa`52d55000   DSREG.DLL
+00007ffa`53f70000 00007ffa`54026000   policymanager.dll
+00007ff9`dd0f0000 00007ff9`dd2d6000   hevcdecoder_store.dll
+00007ffa`54ed0000 00007ffa`5500b000   dxgi.dll
+quit:
+NatVis script unloaded from 'C:\Program Files\WindowsApps\Microsoft.WinDbg_1.2611.4001.0_x64__8wekyb3d8bbwe\amd64\Visualizers\atlmfc.natvis'
+NatVis script unloaded from 'C:\Program Files\WindowsApps\Microsoft.WinDbg_1.2611.4001.0_x64__8wekyb3d8bbwe\amd64\Visualizers\concurrency.natvis'
+NatVis script unloaded from 'C:\Program Files\WindowsApps\Microsoft.WinDbg_1.2611.4001.0_x64__8wekyb3d8bbwe\amd64\Visualizers\cpp_rest.natvis'
+NatVis script unloaded from 'C:\Program Files\WindowsApps\Microsoft.WinDbg_1.2611.4001.0_x64__8wekyb3d8bbwe\amd64\Visualizers\ObjectiveC.natvis'
+NatVis script unloaded from 'C:\Program Files\WindowsApps\Microsoft.WinDbg_1.2611.4001.0_x64__8wekyb3d8bbwe\amd64\Visualizers\stl.natvis'
+NatVis script unloaded from 'C:\Program Files\WindowsApps\Microsoft.WinDbg_1.2611.4001.0_x64__8wekyb3d8bbwe\amd64\Visualizers\Windows.Data.Json.natvis'
+NatVis script unloaded from 'C:\Program Files\WindowsApps\Microsoft.WinDbg_1.2611.4001.0_x64__8wekyb3d8bbwe\amd64\Visualizers\Windows.Devices.Geolocation.natvis'
+NatVis script unloaded from 'C:\Program Files\WindowsApps\Microsoft.WinDbg_1.2611.4001.0_x64__8wekyb3d8bbwe\amd64\Visualizers\Windows.Devices.Sensors.natvis'
+NatVis script unloaded from 'C:\Program Files\WindowsApps\Microsoft.WinDbg_1.2611.4001.0_x64__8wekyb3d8bbwe\amd64\Visualizers\Windows.Media.natvis'
+NatVis script unloaded from 'C:\Program Files\WindowsApps\Microsoft.WinDbg_1.2611.4001.0_x64__8wekyb3d8bbwe\amd64\Visualizers\windows.natvis'
+NatVis script unloaded from 'C:\Program Files\WindowsApps\Microsoft.WinDbg_1.2611.4001.0_x64__8wekyb3d8bbwe\amd64\Visualizers\winrt.natvis'
+
+=== Dump 1 extra (lmvm RTSSHooks64; !peb)
+
+************* Path validation summary **************
+Response                         Time (ms)     Location
+Deferred                                       srv*C:\symbols*https://msdl.microsoft.com/download/symbols
+
+************* Preparing the environment for Debugger Extensions Gallery repositories **************
+   ExtensionRepository : Implicit
+   UseExperimentalFeatureForNugetShare : true
+   AllowNugetExeUpdate : true
+   NonInteractiveNuget : true
+   AllowNugetMSCredentialProviderInstall : true
+   AllowParallelInitializationOfLocalRepositories : true
+
+   -- Configuring repositories
+      ----> Repository : LocalInstalled, Enabled: true
+      ----> Repository : UserExtensions, Enabled: true
+
+>>>>>>>>>>>>> Preparing the environment for Debugger Extensions Gallery repositories completed, duration 0.000 seconds
+
+************* Waiting for Debugger Extensions Gallery to Initialize **************
+
+>>>>>>>>>>>>> Waiting for Debugger Extensions Gallery to Initialize completed, duration 0.016 seconds
+   ----> Repository : UserExtensions, Enabled: true, Packages count: 0
+   ----> Repository : LocalInstalled, Enabled: true, Packages count: 46
+
+Microsoft (R) Windows Debugger Version 10.0.29680.1004 AMD64
+Copyright (c) Microsoft Corporation. All rights reserved.
+
+
+Loading Dump File [%USERPROFILE%\AppData\Local\in.edu.bmu.stelmar.voiceworkbench\EBWebView\Crashpad\reports\5fa761e8-c905-4109-b4ab-37873a33b8d6.dmp]
+User Mini Dump File: Only registers, stack and portions of memory are available
+
+
+************* Path validation summary **************
+Response                         Time (ms)     Location
+Deferred                                       srv*C:\symbols*https://msdl.microsoft.com/download/symbols
+Symbol search path is: srv*C:\symbols*https://msdl.microsoft.com/download/symbols
+Executable search path is: 
+Windows 10 Version 26200 MP (32 procs) Free x64
+Product: WinNt, suite: SingleUserTS Personal
+Edition build lab: 26100.1.amd64fre.ge_release.240331-1435
+Debug session time: Sun Nov  8 05:57:25.000 2026 (UTC + 5:30)
+System Uptime: 0 days 4:48:43.357
+Process Uptime: 0 days 0:00:03.000
+................................................................
+.........................
+Loading unloaded module list
+...........
+This dump file has an exception of interest stored in it.
+The stored exception information can be accessed via .ecxr
+(8c2c.32c0): Access violation - code c0000005 (first/second chance not available)
+
++------------------------------------------------------------------------+
+| This target supports Hardware-enforced Stack Protection. A HW based    |
+| "Shadow Stack" may be available to assist in debugging and analysis.   |
+| See aka.ms/userhsp for more info.                                      |
+|                                                                        |
+| dps @ssp                                                               |
+|                                                                        |
++------------------------------------------------------------------------+
+
+For analysis of this file, run !analyze -v
+ntdll!NtDelayExecution+0x14:
+00007ffa`5b1423d4 c3              ret
+0:020> cdb: Reading initial command 'lmvm RTSSHooks64; !peb; q'
+start             end                 module name
+00000001`80000000 00000001`80267000   RTSSHooks64   (deferred)             
+    Mapped memory image file: C:\Program Files (x86)\RivaTuner Statistics Server\RTSSHooks64.dll
+    Image path: C:\Program Files (x86)\RivaTuner Statistics Server\RTSSHooks64.dll
+    Image name: RTSSHooks64.dll
+    Timestamp:        Sat Sep 27 14:18:36 2025 (68D7A4E4)
+    CheckSum:         001B6439
+    ImageSize:        00267000
+    Mapping Form:     Loaded
+    Translations:     0000.04b0 0000.04e4 0409.04b0 0409.04e4
+    Information from resource tables:
+PEB at 0000003fea0c9000
+    InheritedAddressSpace:    No
+    ReadImageFileExecOptions: No
+    BeingDebugged:            No
+    ImageBaseAddress:         00007ff6c35c0000
+    NtGlobalFlag:             0
+    NtGlobalFlag2:            0
+    Ldr                       00007ffa5b1b38e0
+    Ldr.Initialized:          Yes
+    Ldr.InInitializationOrderModuleList: 0000023439207a30 . 0000023439e87cf0
+    Ldr.InLoadOrderModuleList:           0000023439207bc0 . 0000023439e88310
+    Ldr.InMemoryOrderModuleList:         0000023439207bd0 . 0000023439e88320
+                    Base TimeStamp                     Module
+            7ff6c35c0000 6aebef33 Nov 05 08:21:31 2026 C:\Program Files (x86)\Microsoft\EdgeWebView\Application\157.0.4341.42\msedgewebview2.exe
+            7ffa5afe0000 5fd39a05 Dec 11 21:40:45 2020 C:\WINDOWS\SYSTEM32\ntdll.dll
+            7ffa594e0000 06fd28ce Sep 19 08:09:10 1973 C:\WINDOWS\System32\KERNEL32.DLL
+            7ffa588e0000 fb9071fb Sep 30 03:49:39 2103 C:\WINDOWS\System32\KERNELBASE.dll
+            7ff9dd2e0000 6aebef33 Nov 05 08:21:31 2026 C:\Program Files (x86)\Microsoft\EdgeWebView\Application\157.0.4341.42\msedge_elf.dll
+            7ffa58e30000 15b851a4 Jul 19 20:01:00 1981 C:\WINDOWS\System32\combase.dll
+            7ffa581d0000 3f426c5b Aug 19 23:58:43 2003 C:\WINDOWS\System32\ucrtbase.dll
+            7ffa59720000 d22a3515 Sep 25 04:47:41 2081 C:\WINDOWS\System32\RPCRT4.dll
+            7ffa58760000 ab7aa2f1 Mar 02 03:47:21 2061 C:\WINDOWS\System32\bcryptprimitives.dll
+            7ffa4a9a0000 879cd5a0 Feb 05 14:11:04 2042 C:\WINDOWS\SYSTEM32\version.dll
+            7ffa595b0000 715e0874 Apr 09 23:29:16 2030 C:\WINDOWS\System32\msvcrt.dll
+            7ffa599b0000 97945f69 Aug 03 01:32:49 2050 C:\WINDOWS\System32\ADVAPI32.dll
+            7ffa5aec0000 56ea9c0a Mar 17 17:29:06 2016 C:\WINDOWS\System32\sechost.dll
+            7ffa56fa0000 d67cda44 Jan 12 14:39:24 2084 C:\WINDOWS\system32\ntmarta.dll
+            7ffa5ab30000 1d1c21a9 Jun 23 19:24:49 1985 C:\WINDOWS\System32\USER32.dll
+            7ffa584c0000 47ebf119 Mar 28 00:40:17 2008 C:\WINDOWS\System32\win32u.dll
+            7ffa593d0000 5cd2417b May 08 08:09:55 2019 C:\WINDOWS\System32\GDI32.dll
+            7ffa58630000 a625c6a4 May 01 21:15:40 2058 C:\WINDOWS\System32\gdi32full.dll
+            7ffa584f0000 ec24e540 Jul 18 20:52:40 2095 C:\WINDOWS\System32\msvcp_win.dll
+            7ffa58df0000 8da71bc7 Apr 23 11:14:39 2045 C:\WINDOWS\System32\IMM32.DLL
+            7ffa54b00000 afa92ec1 May 23 04:29:13 2063 C:\WINDOWS\system32\apphelp.dll
+            7ff9c7930000 6aebef33 Nov 05 08:21:31 2026 C:\Program Files (x86)\Microsoft\EdgeWebView\Application\157.0.4341.42\msedge.dll
+            7ffa59b30000 e43dce38 May 06 07:38:56 2091 C:\WINDOWS\System32\WS2_32.dll
+            7ffa58330000 aa5e6d34 Jul 29 13:54:20 2060 C:\WINDOWS\System32\CRYPT32.dll
+            7ffa477a0000 765e58c4 Dec 06 02:53:16 2032 C:\WINDOWS\SYSTEM32\WINMM.dll
+            7ffa53450000 25f94910 Mar 11 00:06:00 1990 C:\WINDOWS\SYSTEM32\DWrite.dll
+            7ffa57da0000 eaa3ce6f Sep 29 18:32:39 2094 C:\WINDOWS\SYSTEM32\DPAPI.DLL
+            7ffa54d60000 db08095c Jun 12 21:46:28 2086 C:\WINDOWS\system32\uxtheme.dll
+               180000000 68d7a4e4 Sep 27 14:18:36 2025 C:\Program Files (x86)\RivaTuner Statistics Server\RTSSHooks64.dll
+            7ffa5a3f0000 319d0e79 May 18 05:10:41 1996 C:\WINDOWS\System32\SETUPAPI.dll
+            7ffa59660000 30329807 Aug 17 06:44:47 1995 C:\WINDOWS\System32\SHLWAPI.dll
+            7ffa5ad20000 cf30eefc Feb 25 18:13:40 2080 C:\WINDOWS\System32\ole32.dll
+            7ffa56e70000 0eb18366 Oct 24 09:45:34 1977 C:\WINDOWS\SYSTEM32\kernel.appcore.dll
+            7ffa5aa70000 59045633 Apr 29 14:30:35 2017 C:\WINDOWS\System32\clbcatq.dll
+            7ff9dfe80000 25854ee2 Dec 13 00:47:54 1989 C:\Windows\System32\Windows.System.Profile.PlatformDiagnosticsAndUsageDataSettings.dll
+            7ffa3b640000 c0c53d5e Jun 26 12:59:34 2072 C:\Windows\System32\DiagnosticDataSettings.dll
+            7ffa35710000 b64c204e Dec 01 20:48:38 2066 C:\WINDOWS\SYSTEM32\coreprivacysettingsstore.dll
+            7ffa574e0000 695101a7 Dec 28 15:38:39 2025 C:\WINDOWS\system32\USERENV.dll
+            7ffa574b0000 4f1ef26b Jan 24 23:33:23 2012 C:\WINDOWS\SYSTEM32\gpapi.dll
+            7ffa58cf0000 cfa2a62e May 22 00:21:26 2080 C:\WINDOWS\System32\shcore.dll
+            7ffa50a20000 490c7e58 Nov 01 21:35:44 2008 C:\WINDOWS\SYSTEM32\wkscli.dll
+            7ffa56980000 339bbf08 Jun 09 14:00:00 1997 C:\WINDOWS\SYSTEM32\netutils.dll
+            7ffa59840000 76a2b646 Jan 26 23:26:22 2033 C:\WINDOWS\System32\MSCTF.dll
+            7ffa58040000 aa6357b3 Aug 02 07:23:55 2060 C:\WINDOWS\SYSTEM32\powrprof.dll
+            7ffa58020000 e557de88 Dec 06 06:27:44 2091 C:\WINDOWS\SYSTEM32\UMPDC.dll
+            7ffa59400000 ea31af67 Jul 05 05:01:51 2094 C:\WINDOWS\System32\OLEAUT32.dll
+            7ffa40cf0000 65c1083b Feb 05 21:39:31 2024 C:\WINDOWS\WinSxS\amd64_microsoft.windows.common-controls_6595b64144ccf1df_6.0.26100.9711_none_3e07b8b0e334e825\COMCTL32.dll
+            7ffa57740000 95b538fc Aug 04 14:53:08 2049 C:\WINDOWS\SYSTEM32\CRYPTBASE.dll
+            7ffa2cde0000 51e42d8d Jul 15 22:42:45 2013 C:\WINDOWS\system32\nlansp_c.dll
+            7ffa475a0000 fbd56bb7 Nov 21 11:29:19 2103 C:\Windows\System32\rasadhlp.dll
+            7ffa567e0000 8849c2db Jun 16 18:13:07 2042 C:\WINDOWS\system32\IPHLPAPI.DLL
+            7ffa5a880000 34bda774 Jan 15 11:36:44 1998 C:\WINDOWS\System32\NSI.dll
+            7ffa2c5b0000 2202d2df Jan 31 12:23:19 1988 C:\WINDOWS\SYSTEM32\textinputframework.dll
+            7ffa59c40000 1173227c Apr 12 15:12:20 1979 C:\WINDOWS\System32\SHELL32.dll
+            7ffa55c00000 b7083c6b Apr 23 13:14:43 2067 C:\WINDOWS\SYSTEM32\windows.storage.dll
+            7ffa54bd0000 dec7e1ec Jun 09 23:14:12 2088 C:\WINDOWS\system32\WTSAPI32.dll
+            7ffa57130000 1d161b35 Jun 19 05:43:41 1985 C:\WINDOWS\SYSTEM32\SspiCli.dll
+            7ffa57f70000 d2d98f83 Feb 05 05:00:11 2082 C:\WINDOWS\SYSTEM32\WINSTA.dll
+            7ffa50a40000 95059643 Mar 24 09:32:11 2049 C:\WINDOWS\system32\wevtapi.dll
+            7ffa2c950000 a3055803 Sep 01 17:50:19 2056 C:\Windows\System32\Windows.UI.dll
+            7ffa580e0000 8c9522ec Sep 27 15:44:04 2044 C:\WINDOWS\SYSTEM32\profapi.dll
+            7ffa41b70000 498a9814 Feb 05 13:11:08 2009 C:\WINDOWS\SYSTEM32\mscms.dll
+            7ffa57ce0000 cf46b37c Mar 13 06:29:40 2080 C:\WINDOWS\SYSTEM32\cfgmgr32.dll
+            7ffa57890000 32126d03 Aug 15 05:49:15 1996 C:\WINDOWS\System32\MSASN1.dll
+            7ffa50ba0000 6dcc3ff6 May 16 20:34:22 2028 C:\WINDOWS\SYSTEM32\dhcpcsvc6.DLL
+            7ffa50b70000 645c95b4 May 11 12:43:56 2023 C:\WINDOWS\SYSTEM32\dhcpcsvc.DLL
+            7ffa56820000 a6bf2c82 Aug 26 05:47:06 2058 C:\WINDOWS\SYSTEM32\DNSAPI.dll
+            7ffa57210000 e14ac9fc Oct 10 14:59:32 2089 C:\WINDOWS\SYSTEM32\DSPARSE.dll
+            7ffa50bd0000 f2f3a78a Mar 01 18:50:10 2099 C:\WINDOWS\system32\WINHTTP.dll
+            7ffa20120000 e40922c6 Mar 27 08:49:34 2091 C:\Windows\System32\Windows.Media.dll
+            7ffa50dc0000 25c6fd74 Jan 31 20:30:04 1990 C:\Windows\System32\WinTypes.dll
+            7ffa1a730000 631678d2 Sep 06 04:01:46 2022 C:\Windows\System32\Windows.UI.Immersive.dll
+            7ffa3d090000 42ccb98f Jul 07 10:41:43 2005 C:\WINDOWS\SYSTEM32\windows.staterepositorycore.dll
+            7ffa580b0000 e6ad1671 Aug 21 02:09:13 2092 C:\WINDOWS\SYSTEM32\bcrypt.dll
+            7ffa57720000 e5f12b36 Mar 31 13:11:42 2092 C:\WINDOWS\System32\CRYPTSP.dll
+            7ffa56dd0000 67f6d4e8 Apr 10 01:43:28 2025 C:\WINDOWS\system32\rsaenh.dll
+            7ffa31c80000 599ad712 Aug 21 18:20:26 2017 C:\Windows\System32\InputHost.dll
+            7ffa546b0000 ed1d072d Jan 23 01:59:33 2096 C:\Windows\System32\CoreMessaging.dll
+            7ffa10700000 6e9b47a1 Oct 20 21:26:17 2028 C:\WINDOWS\system32\dataexchange.dll
+            7ffa48610000 4c8e50b6 Sep 13 21:56:30 2010 C:\WINDOWS\system32\twinapi.appcore.dll
+            7ffa411c0000 b8cdf8f0 Apr 01 17:15:52 2068 C:\WINDOWS\system32\OLEACC.dll
+            7ffa1ecf0000 9c5af3e8 Feb 15 09:56:16 2053 C:\WINDOWS\system32\directmanipulation.dll
+            7ff9bb620000 6aebef33 Nov 05 08:21:31 2026 C:\Program Files (x86)\Microsoft\EdgeWebView\Application\157.0.4341.42\telclient.dll
+            7ff9bafb0000 6aebef33 Nov 05 08:21:31 2026 C:\Program Files (x86)\Microsoft\EdgeWebView\Application\157.0.4341.42\oneauth.dll
+            7ffa20940000 caee21cd Nov 20 08:47:33 2077 C:\Windows\System32\CapabilityAccessManagerClient.dll
+            7ffa51f20000 61341d80 Sep 05 06:59:36 2021 C:\WINDOWS\System32\netprofm.dll
+            7ffa513a0000 cceb2c7f Dec 11 11:36:55 2078 C:\WINDOWS\SYSTEM32\MFPlat.DLL
+            7ffa51610000 e6050fef Apr 15 15:20:39 2092 C:\WINDOWS\SYSTEM32\RTWorkQ.DLL
+            7ff9bac40000 6aebef33 Nov 05 08:21:31 2026 < Name not readable >
+    SubSystemData:     00007ffa48836df0
+    ProcessHeap:       0000023439000000
+    ProcessParameters: 0000023439206cb0
+    CurrentDirectory:  'C:\Program Files (x86)\Microsoft\EdgeWebView\Application\157.0.4341.42\'
+    WindowTitle:  'C:\Program Files (x86)\Microsoft\EdgeWebView\Application\157.0.4341.42\msedgewebview2.exe'
+    ImageFile:    'C:\Program Files (x86)\Microsoft\EdgeWebView\Application\157.0.4341.42\msedgewebview2.exe'
+    CommandLine:  '"C:\Program Files (x86)\Microsoft\EdgeWebView\Application\157.0.4341.42\msedgewebview2.exe" --embedded-browser-webview=1 --webview-exe-name=stelmar-voice-workbench.exe --webview-exe-version=0.1.0 --user-data-dir="%USERPROFILE%\AppData\Local\in.edu.bmu.stelmar.voiceworkbench\EBWebView" --noerrdialogs --embedded-browser-webview-dpi-awareness=2 --autoplay-policy=no-user-gesture-required --disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --lang=en-US --mojo-named-platform-channel-pipe=16240.28416.18366219027381713369 /pfhostedapp:ddb90bc8944903772e478483240d8807156ea16f'
+    DllPath:      '< Name not readable >'
+    [environment block removed]
+quit:
+NatVis script unloaded from 'C:\Program Files\WindowsApps\Microsoft.WinDbg_1.2611.4001.0_x64__8wekyb3d8bbwe\amd64\Visualizers\atlmfc.natvis'
+NatVis script unloaded from 'C:\Program Files\WindowsApps\Microsoft.WinDbg_1.2611.4001.0_x64__8wekyb3d8bbwe\amd64\Visualizers\concurrency.natvis'
+NatVis script unloaded from 'C:\Program Files\WindowsApps\Microsoft.WinDbg_1.2611.4001.0_x64__8wekyb3d8bbwe\amd64\Visualizers\cpp_rest.natvis'
+NatVis script unloaded from 'C:\Program Files\WindowsApps\Microsoft.WinDbg_1.2611.4001.0_x64__8wekyb3d8bbwe\amd64\Visualizers\ObjectiveC.natvis'
+NatVis script unloaded from 'C:\Program Files\WindowsApps\Microsoft.WinDbg_1.2611.4001.0_x64__8wekyb3d8bbwe\amd64\Visualizers\stl.natvis'
+NatVis script unloaded from 'C:\Program Files\WindowsApps\Microsoft.WinDbg_1.2611.4001.0_x64__8wekyb3d8bbwe\amd64\Visualizers\Windows.Data.Json.natvis'
+NatVis script unloaded from 'C:\Program Files\WindowsApps\Microsoft.WinDbg_1.2611.4001.0_x64__8wekyb3d8bbwe\amd64\Visualizers\Windows.Devices.Geolocation.natvis'
+NatVis script unloaded from 'C:\Program Files\WindowsApps\Microsoft.WinDbg_1.2611.4001.0_x64__8wekyb3d8bbwe\amd64\Visualizers\Windows.Devices.Sensors.natvis'
+NatVis script unloaded from 'C:\Program Files\WindowsApps\Microsoft.WinDbg_1.2611.4001.0_x64__8wekyb3d8bbwe\amd64\Visualizers\Windows.Media.natvis'
+NatVis script unloaded from 'C:\Program Files\WindowsApps\Microsoft.WinDbg_1.2611.4001.0_x64__8wekyb3d8bbwe\amd64\Visualizers\windows.natvis'
+NatVis script unloaded from 'C:\Program Files\WindowsApps\Microsoft.WinDbg_1.2611.4001.0_x64__8wekyb3d8bbwe\amd64\Visualizers\winrt.natvis'
+
+=== Dump 2: cb7b7097-dce6-4057-b8a0-a16e562ae7e5.dmp (06:02:11, online smoke test)
+
+************* Path validation summary **************
+Response                         Time (ms)     Location
+Deferred                                       srv*C:\symbols*https://msdl.microsoft.com/download/symbols
+
+************* Preparing the environment for Debugger Extensions Gallery repositories **************
+   ExtensionRepository : Implicit
+   UseExperimentalFeatureForNugetShare : true
+   AllowNugetExeUpdate : true
+   NonInteractiveNuget : true
+   AllowNugetMSCredentialProviderInstall : true
+   AllowParallelInitializationOfLocalRepositories : true
+
+   -- Configuring repositories
+      ----> Repository : LocalInstalled, Enabled: true
+      ----> Repository : UserExtensions, Enabled: true
+
+>>>>>>>>>>>>> Preparing the environment for Debugger Extensions Gallery repositories completed, duration 0.000 seconds
+
+************* Waiting for Debugger Extensions Gallery to Initialize **************
+
+>>>>>>>>>>>>> Waiting for Debugger Extensions Gallery to Initialize completed, duration 0.000 seconds
+   ----> Repository : UserExtensions, Enabled: true, Packages count: 0
+   ----> Repository : LocalInstalled, Enabled: true, Packages count: 46
+
+Microsoft (R) Windows Debugger Version 10.0.29680.1004 AMD64
+Copyright (c) Microsoft Corporation. All rights reserved.
+
+
+Loading Dump File [%USERPROFILE%\AppData\Local\in.edu.bmu.stelmar.voiceworkbench\EBWebView\Crashpad\reports\cb7b7097-dce6-4057-b8a0-a16e562ae7e5.dmp]
+User Mini Dump File: Only registers, stack and portions of memory are available
+
+
+************* Path validation summary **************
+Response                         Time (ms)     Location
+Deferred                                       srv*C:\symbols*https://msdl.microsoft.com/download/symbols
+Symbol search path is: srv*C:\symbols*https://msdl.microsoft.com/download/symbols
+Executable search path is: 
+Windows 10 Version 26200 MP (32 procs) Free x64
+Product: WinNt, suite: SingleUserTS Personal
+Edition build lab: 26100.1.amd64fre.ge_release.240331-1435
+Debug session time: Sun Nov  8 06:02:12.000 2026 (UTC + 5:30)
+System Uptime: 0 days 4:53:31.035
+Process Uptime: 0 days 0:00:03.000
+................................................................
+........................
+Loading unloaded module list
+...........
+This dump file has an exception of interest stored in it.
+The stored exception information can be accessed via .ecxr
+(83a8.71cc): Access violation - code c0000005 (first/second chance not available)
+
++------------------------------------------------------------------------+
+| This target supports Hardware-enforced Stack Protection. A HW based    |
+| "Shadow Stack" may be available to assist in debugging and analysis.   |
+| See aka.ms/userhsp for more info.                                      |
+|                                                                        |
+| dps @ssp                                                               |
+|                                                                        |
++------------------------------------------------------------------------+
+
+For analysis of this file, run !analyze -v
+ntdll!NtDelayExecution+0x14:
+00007ffa`5b1423d4 c3              ret
+0:019> cdb: Reading initial command '!analyze -v; .ecxr; kn 15; lmvm RTSSHooks64; !peb; lm; q'
+................................................................
+........................
+Loading unloaded module list
+...........
+*******************************************************************************
+*                                                                             *
+*                        Exception Analysis                                   *
+*                                                                             *
+*******************************************************************************
+
+
+KEY_VALUES_STRING: 1
+
+    Key  : AV.Type
+    Value: Read
+
+    Key  : Analysis.CPU.mSec
+    Value: 1562
+
+    Key  : Analysis.Elapsed.mSec
+    Value: 2523
+
+    Key  : Analysis.IO.Other.Mb
+    Value: 0
+
+    Key  : Analysis.IO.Read.Mb
+    Value: 1
+
+    Key  : Analysis.IO.Write.Mb
+    Value: 0
+
+    Key  : Analysis.Init.CPU.mSec
+    Value: 218
+
+    Key  : Analysis.Init.Elapsed.mSec
+    Value: 2069
+
+    Key  : Analysis.Memory.CommitPeak.Mb
+    Value: 728
+
+    Key  : Analysis.Version.DbgEng
+    Value: 10.0.29680.1004
+
+    Key  : Analysis.Version.Description
+    Value: 10.2608.26.1 amd64fre
+
+    Key  : Analysis.Version.Ext
+    Value: 1.2608.26.1
+
+    Key  : Failure.Bucket
+    Value: INVALID_POINTER_READ_c0000005_RTSSHooks64.dll!Unknown
+
+    Key  : Failure.Exception.Code
+    Value: 0xc0000005
+
+    Key  : Failure.Exception.IP.Address
+    Value: 0x1801490af
+
+    Key  : Failure.Exception.IP.Module
+    Value: RTSSHooks64
+
+    Key  : Failure.Exception.IP.Offset
+    Value: 0x1490af
+
+    Key  : Failure.Hash
+    Value: {4fd3e8e5-abb0-3e73-8f47-5561d40f8768}
+
+    Key  : Failure.ProblemClass.Primary
+    Value: INVALID_POINTER_READ
+
+    Key  : Faulting.IP.Type
+    Value: Paged
+
+    Key  : Timeline.OS.Boot.DeltaSec
+    Value: 17611
+
+    Key  : Timeline.Process.Day.DeltaSec
+    Value: 21732
+
+    Key  : Timeline.Process.Start.DeltaSec
+    Value: 3
+
+    Key  : WER.OS.Branch
+    Value: ge_release
+
+    Key  : WER.OS.Platform
+    Value: Windows
+
+    Key  : WER.OS.Version
+    Value: 10.0.26200.1
+
+    Key  : WER.Process.Name
+    Value: msedgewebview2.exe
+
+    Key  : WER.Process.Version
+    Value: 157.0.4341.42
+
+
+FILE_IN_CAB:  cb7b7097-dce6-4057-b8a0-a16e562ae7e5.dmp
+
+NTGLOBALFLAG:  0
+
+APPLICATION_VERIFIER_FLAGS:  0
+
+CONTEXT:  (.ecxr)
+rax=0000000180240658 rbx=00000001802405e0 rcx=0000000180240658
+rdx=00007ffa54f035a0 rsi=00000000000012a8 rdi=00007ffa54f035a0
+rip=00000001801490af rsp=0000007d4f3fc288 rbp=0000000180073640
+ r8=0000000000000005  r9=00000001801490af r10=0000000180000000
+r11=0000007d4f3fc220 r12=0000000000000000 r13=00000001802405e0
+r14=0000000000000000 r15=0000000000000043
+iopl=0         nv up ei pl nz na pe nc
+cs=0033  ss=002b  ds=002b  es=002b  fs=0053  gs=002b             efl=00010206
+RTSSHooks64!ValidateRuntimes+0xc073f:
+00000001`801490af 8b0a            mov     ecx,dword ptr [rdx] ds:00007ffa`54f035a0=????????
+Resetting default scope
+
+EXCEPTION_RECORD:  (.exr -1)
+ExceptionAddress: 00000001801490af (RTSSHooks64!ValidateRuntimes+0x00000000000c073f)
+   ExceptionCode: c0000005 (Access violation)
+  ExceptionFlags: 00000000
+NumberParameters: 2
+   Parameter[0]: 0000000000000000
+   Parameter[1]: 00007ffa54f035a0
+Attempt to read from address 00007ffa54f035a0
+
+PROCESS_NAME:  msedgewebview2.exe
+
+READ_ADDRESS:  00007ffa54f035a0 
+
+ERROR_CODE: (NTSTATUS) 0xc0000005 - The instruction at 0x%p referenced memory at 0x%p. The memory could not be %s.
+
+EXCEPTION_CODE: (NTSTATUS) 0xc0000005 - The instruction at 0x%p referenced memory at 0x%p. The memory could not be %s.
+
+EXCEPTION_CODE_STR:  c0000005
+
+EXCEPTION_PARAMETER1:  0000000000000000
+
+EXCEPTION_PARAMETER2:  00007ffa54f035a0
+
+STACK_TEXT:  
+0000007d`4f3fc288 00000001`8003bede     : 00000001`802405e0 00000001`00204642 00000001`8014d130 0000007d`4f3fc870 : RTSSHooks64!ValidateRuntimes+0xc073f
+0000007d`4f3fc290 00000001`8003c012     : 00007ffa`54ed0000 00000001`80073540 00000001`8014d160 0000007d`4f3fcc20 : RTSSHooks64+0x3bede
+0000007d`4f3fcae0 00000001`80078d12     : 00000000`00000000 00000000`00000043 00000000`010cb3b8 00000000`00000002 : RTSSHooks64+0x3c012
+0000007d`4f3fcd80 00000001`8007704b     : 00000000`00000003 0000007d`4f3fd280 00000000`010cb3b8 0000007d`4f3fd240 : RTSSHooks64+0x78d12
+0000007d`4f3fcf20 00000001`80081f6c     : 00000000`00000003 00007ffa`5b02318d 00000001`80150440 00000000`00000003 : RTSSHooks64+0x7704b
+0000007d`4f3fd060 00007ffa`5ab4abb0     : 00000000`00000004 00007ffa`00000000 00000000`00000000 00000000`00000000 : RTSSHooks64!RTSSCBTProc+0x1dc
+0000007d`4f3fd1c0 00007ffa`5ab63b07     : 00000009`0003003b 00007ffa`5b145c24 00000192`0e002c00 00000000`00000014 : user32!DispatchHookA+0x80
+0000007d`4f3fd260 00007ffa`5b145d94     : 00000009`0003003b 00000009`0003003b 0000007d`4f3fd4b0 00000000`00000000 : user32!__fnHkINLPCBTCREATESTRUCT+0xe7
+0000007d`4f3fd2c0 00007ffa`584c20c4     : 00007ffa`5ab4cd9a 00000000`40000000 ffffffff`ffff0000 00000000`00000200 : ntdll!KiUserCallbackDispatcherContinue
+0000007d`4f3fd3e8 00007ffa`5ab4cd9a     : 00000000`40000000 ffffffff`ffff0000 00000000`00000200 00000000`00000000 : win32u!NtUserCreateWindowEx+0x14
+0000007d`4f3fd3f0 00007ffa`5ab4c927     : 00000000`0000000a 00000000`00000000 00000000`00000000 00007ffa`59100f58 : user32!VerNtUserCreateWindowEx+0x236
+0000007d`4f3fd780 00007ffa`5ab4c732     : 00000192`80000000 00000000`00000000 00000000`00000000 00000192`0e2bd558 : user32!CreateWindowInternal+0x1e3
+0000007d`4f3fd8e0 00007ffa`58f4f565     : 00000000`00000001 00000192`0e22a480 00000000`00000000 00000000`00040000 : user32!CreateWindowExW+0x82
+0000007d`4f3fd970 00007ffa`58f4f44a     : 00000192`0e2a0e30 00000000`00000000 00000000`00000000 00000192`0e2a0e30 : combase!GetOrCreateSTAWindow+0x91
+0000007d`4f3fd9e0 00007ffa`58e4f456     : 00000192`0e2a0e30 00000000`00000000 0000007d`4f3fdb70 00000000`00000000 : combase!OXIDEntry::StartServer+0x22
+(Inline Function) --------`--------     : --------`-------- --------`-------- --------`-------- --------`-------- : combase!CComApartment::StartServer+0xe5
+0000007d`4f3fda10 00007ffa`58ee8e0d     : 00000192`0e2c8be0 00000192`0e2c8be0 00000000`00000000 00000000`00000000 : combase!InitChannelIfNecessary+0x166
+0000007d`4f3fda40 00007ffa`58e61913     : 00000000`00000000 00000000`00000000 0000007d`4f3fe518 00000000`00000000 : combase!CRpcResolver::BindToSCMProxy+0x11
+0000007d`4f3fda70 00007ffa`58e615bb     : 00000000`00000000 0000007d`4f3fdc80 00000000`00000000 00000000`00000000 : combase!CRpcResolver::DelegateActivationToSCM+0x15b
+(Inline Function) --------`--------     : --------`-------- --------`-------- --------`-------- --------`-------- : combase!CRpcResolver::CreateInstance+0x14
+0000007d`4f3fdc50 00007ffa`58f34bcd     : ffffff82`b0c02220 00000000`00000000 0000007d`4f3fe018 00007ffa`58fad852 : combase!CClientContextActivator::CreateInstance+0x1ab
+0000007d`4f3fdd00 00007ffa`58ff453f     : 00000000`00000000 0000007d`4f3fe890 00000000`00000004 00000000`00000000 : combase!ActivationPropertiesIn::DelegateCreateInstance+0x9d
+0000007d`4f3fdd90 00007ffa`58feede8     : 00000192`0e2c8be0 00007ffa`5b0702c0 ffffffff`fa0a1f00 00000000`00000010 : combase!ICoCreateInstanceExWorker+0xd93
+0000007d`4f3feaf0 00007ffa`58fee65f     : 00007ffa`51f69438 00007ffa`51f69438 00007ffa`5916b198 00007ffa`58facf0a : combase!CComActivator::DoCreateInstance+0x1dc
+0000007d`4f3fec40 00007ffa`58f03686     : 00007ffa`51f69438 00000000`00000004 00000000`00002710 00000192`000003e8 : combase!CoCreateInstanceExCopy+0x167
+0000007d`4f3fed00 00007ffa`51f42aff     : 00000192`0eeef238 00000192`0eeef150 00000000`00000000 00007ffa`5b05747e : combase!CoCreateInstance+0xd6
+0000007d`4f3fed90 00007ffa`51f438ac     : 00007ffa`58f03686 0000cbf9`5417e257 00000192`0eeef1b8 00000000`00000000 : netprofm!PublicNetworkListManager::GetPrivateNetworkListManager+0x443
+0000007d`4f3fee70 00007ffa`51f32b46     : 00000192`0eeef1b8 00006844`0002d800 00006844`0002d818 00000192`0eeef1d8 : netprofm!PublicNetworkListManager::NetworkCostManagerEventsAdvise+0x6c
+0000007d`4f3fef00 00007ff9`c8f3f92d     : 00006844`0002d800 00000192`0eeef1d8 00000192`0eeef1d8 00006844`0002d800 : netprofm!ProxyNetworkConnectionCostEventsSink<PublicNetworkListManager>::Advise+0x36
+0000007d`4f3fef30 00007ff9`c8f3f5e9     : 0000007d`4f3ff038 00007ff9`c8f3f4d6 00000000`00000038 00000000`00000000 : msedge!ChromeMain+0x12ad8d
+0000007d`4f3fef90 00007ff9`c8f3f3e3     : 00000000`00000008 00006840`000a40d0 00007ff9`c8d7e520 00000190`00000000 : msedge!ChromeMain+0x12aa49
+0000007d`4f3feff0 00007ff9`c8f3f203     : 00006844`00006280 00007ff9`c8e89116 00006844`000c9500 00000000`00000070 : msedge!ChromeMain+0x12a843
+0000007d`4f3ff0e0 00007ff9`c81c9a3c     : 00000192`0e002980 00000192`0e0002c0 ffffffff`ffffffff 00000192`0e2a0fe0 : msedge!ChromeMain+0x12a663
+0000007d`4f3ff130 00007ff9`c81c8984     : 00000192`0e2a0e20 00007ffa`5b01dbcc 00000192`0e0002c0 0000007d`4f3ff440 : msedge+0x899a3c
+0000007d`4f3ff260 00007ff9`c81c8599     : 0000007d`4f3ff4a0 00000000`00000000 0000007d`4f3ff810 00000192`0e27e000 : msedge+0x898984
+0000007d`4f3ff2d0 00007ff9`c8d47665     : 0000007d`3bb3d000 00006844`00138678 00006844`00138690 00006840`000d4678 : msedge+0x898599
+0000007d`4f3ff740 00007ff9`c8da88d8     : 00000000`00000001 00007ff9`c8da8607 00000000`0000054c ffffffff`fffffffe : msedge+0x1417665
+0000007d`4f3ff8d0 00007ff9`c8dce39d     : 00000000`00000000 00006844`00064920 00000000`00000001 00000000`00000000 : msedge+0x14788d8
+0000007d`4f3ff910 00007ffa`5950dda7     : 00000000`00000000 00000000`00000000 00000000`00000000 00000000`00000000 : msedge+0x149e39d
+0000007d`4f3ff9a0 00007ffa`5b05ee4c     : 00000000`00000000 00000000`00000000 00000000`00000000 00000000`00000000 : kernel32!BaseThreadInitThunk+0x17
+0000007d`4f3ff9d0 00000000`00000000     : 00000000`00000000 00000000`00000000 00000000`00000000 00000000`00000000 : ntdll!RtlUserThreadStart+0x2c
+
+
+IP_IN_PAGED_CODE: 
+RTSSHooks64!ValidateRuntimes+c073f
+00000001`801490af 8b0a            mov     ecx,dword ptr [rdx]
+
+SYMBOL_NAME:  RTSSHooks64+1490af
+
+MODULE_NAME: RTSSHooks64
+
+IMAGE_NAME:  RTSSHooks64.dll
+
+STACK_COMMAND: dt ntdll!LdrpLastDllInitializer BaseDllName ; dt ntdll!LdrpFailureData ; ~19s; .ecxr ; kb
+
+FAILURE_BUCKET_ID:  INVALID_POINTER_READ_c0000005_RTSSHooks64.dll!Unknown
+
+OS_VERSION:  10.0.26200.1
+
+BUILDLAB_STR:  ge_release
+
+OSPLATFORM_TYPE:  x64
+
+OSNAME:  Windows 10
+
+FAILURE_ID_HASH:  {4fd3e8e5-abb0-3e73-8f47-5561d40f8768}
+
+Followup:     MachineOwner
+---------
+
+rax=0000000180240658 rbx=00000001802405e0 rcx=0000000180240658
+rdx=00007ffa54f035a0 rsi=00000000000012a8 rdi=00007ffa54f035a0
+rip=00000001801490af rsp=0000007d4f3fc288 rbp=0000000180073640
+ r8=0000000000000005  r9=00000001801490af r10=0000000180000000
+r11=0000007d4f3fc220 r12=0000000000000000 r13=00000001802405e0
+r14=0000000000000000 r15=0000000000000043
+iopl=0         nv up ei pl nz na pe nc
+cs=0033  ss=002b  ds=002b  es=002b  fs=0053  gs=002b             efl=00010206
+RTSSHooks64!ValidateRuntimes+0xc073f:
+00000001`801490af 8b0a            mov     ecx,dword ptr [rdx] ds:00007ffa`54f035a0=????????
+ # Child-SP          RetAddr               Call Site
+00 0000007d`4f3fc288 00000001`8003bede     RTSSHooks64!ValidateRuntimes+0xc073f
+01 0000007d`4f3fc290 00000001`8003c012     RTSSHooks64+0x3bede
+02 0000007d`4f3fcae0 00000001`80078d12     RTSSHooks64+0x3c012
+03 0000007d`4f3fcd80 00000001`8007704b     RTSSHooks64+0x78d12
+04 0000007d`4f3fcf20 00000001`80081f6c     RTSSHooks64+0x7704b
+05 0000007d`4f3fd060 00007ffa`5ab4abb0     RTSSHooks64!RTSSCBTProc+0x1dc
+06 0000007d`4f3fd1c0 00007ffa`5ab63b07     user32!DispatchHookA+0x80
+07 0000007d`4f3fd260 00007ffa`5b145d94     user32!__fnHkINLPCBTCREATESTRUCT+0xe7
+08 0000007d`4f3fd2c0 00007ffa`584c20c4     ntdll!KiUserCallbackDispatcherContinue
+09 0000007d`4f3fd3e8 00007ffa`5ab4cd9a     win32u!NtUserCreateWindowEx+0x14
+0a 0000007d`4f3fd3f0 00007ffa`5ab4c927     user32!VerNtUserCreateWindowEx+0x236
+0b 0000007d`4f3fd780 00007ffa`5ab4c732     user32!CreateWindowInternal+0x1e3
+0c 0000007d`4f3fd8e0 00007ffa`58f4f565     user32!CreateWindowExW+0x82
+0d 0000007d`4f3fd970 00007ffa`58f4f44a     combase!GetOrCreateSTAWindow+0x91
+0e 0000007d`4f3fd9e0 00007ffa`58e4f456     combase!OXIDEntry::StartServer+0x22
+0f (Inline Function) --------`--------     combase!CComApartment::StartServer+0xe5
+10 0000007d`4f3fda10 00007ffa`58ee8e0d     combase!InitChannelIfNecessary+0x166
+11 0000007d`4f3fda40 00007ffa`58e61913     combase!CRpcResolver::BindToSCMProxy+0x11
+12 0000007d`4f3fda70 00007ffa`58e615bb     combase!CRpcResolver::DelegateActivationToSCM+0x15b
+13 (Inline Function) --------`--------     combase!CRpcResolver::CreateInstance+0x14
+14 0000007d`4f3fdc50 00007ffa`58f34bcd     combase!CClientContextActivator::CreateInstance+0x1ab
+start             end                 module name
+00000001`80000000 00000001`80267000   RTSSHooks64   (export symbols)       C:\Program Files (x86)\RivaTuner Statistics Server\RTSSHooks64.dll
+    Loaded symbol image file: C:\Program Files (x86)\RivaTuner Statistics Server\RTSSHooks64.dll
+    Mapped memory image file: C:\Program Files (x86)\RivaTuner Statistics Server\RTSSHooks64.dll
+    Image path: C:\Program Files (x86)\RivaTuner Statistics Server\RTSSHooks64.dll
+    Image name: RTSSHooks64.dll
+    Timestamp:        Sat Sep 27 14:18:36 2025 (68D7A4E4)
+    CheckSum:         001B6439
+    ImageSize:        00267000
+    Mapping Form:     Loaded
+    Translations:     0000.04b0 0000.04e4 0409.04b0 0409.04e4
+    Information from resource tables:
+PEB at 0000007d3bb14000
+    InheritedAddressSpace:    No
+    ReadImageFileExecOptions: No
+    BeingDebugged:            No
+    ImageBaseAddress:         00007ff6c35c0000
+    NtGlobalFlag:             0
+    NtGlobalFlag2:            0
+    Ldr                       00007ffa5b1b38e0
+    Ldr.Initialized:          Yes
+    Ldr.InInitializationOrderModuleList: 000001920e207610 . 000001920eec3cf0
+    Ldr.InLoadOrderModuleList:           000001920e2077a0 . 000001920eec4090
+    Ldr.InMemoryOrderModuleList:         000001920e2077b0 . 000001920eec40a0
+                    Base TimeStamp                     Module
+            7ff6c35c0000 6aebef33 Nov 05 08:21:31 2026 C:\Program Files (x86)\Microsoft\EdgeWebView\Application\157.0.4341.42\msedgewebview2.exe
+            7ffa5afe0000 5fd39a05 Dec 11 21:40:45 2020 C:\WINDOWS\SYSTEM32\ntdll.dll
+            7ffa594e0000 06fd28ce Sep 19 08:09:10 1973 C:\WINDOWS\System32\KERNEL32.DLL
+            7ffa588e0000 fb9071fb Sep 30 03:49:39 2103 C:\WINDOWS\System32\KERNELBASE.dll
+            7ff9dd2e0000 6aebef33 Nov 05 08:21:31 2026 C:\Program Files (x86)\Microsoft\EdgeWebView\Application\157.0.4341.42\msedge_elf.dll
+            7ffa58e30000 15b851a4 Jul 19 20:01:00 1981 C:\WINDOWS\System32\combase.dll
+            7ffa581d0000 3f426c5b Aug 19 23:58:43 2003 C:\WINDOWS\System32\ucrtbase.dll
+            7ffa59720000 d22a3515 Sep 25 04:47:41 2081 C:\WINDOWS\System32\RPCRT4.dll
+            7ffa58760000 ab7aa2f1 Mar 02 03:47:21 2061 C:\WINDOWS\System32\bcryptprimitives.dll
+            7ffa4a9a0000 879cd5a0 Feb 05 14:11:04 2042 C:\WINDOWS\SYSTEM32\version.dll
+            7ffa595b0000 715e0874 Apr 09 23:29:16 2030 C:\WINDOWS\System32\msvcrt.dll
+            7ffa599b0000 97945f69 Aug 03 01:32:49 2050 C:\WINDOWS\System32\ADVAPI32.dll
+            7ffa5aec0000 56ea9c0a Mar 17 17:29:06 2016 C:\WINDOWS\System32\sechost.dll
+            7ffa56fa0000 d67cda44 Jan 12 14:39:24 2084 C:\WINDOWS\system32\ntmarta.dll
+            7ffa5ab30000 1d1c21a9 Jun 23 19:24:49 1985 C:\WINDOWS\System32\USER32.dll
+            7ffa584c0000 47ebf119 Mar 28 00:40:17 2008 C:\WINDOWS\System32\win32u.dll
+            7ffa593d0000 5cd2417b May 08 08:09:55 2019 C:\WINDOWS\System32\GDI32.dll
+            7ffa58630000 a625c6a4 May 01 21:15:40 2058 C:\WINDOWS\System32\gdi32full.dll
+            7ffa584f0000 ec24e540 Jul 18 20:52:40 2095 C:\WINDOWS\System32\msvcp_win.dll
+            7ffa58df0000 8da71bc7 Apr 23 11:14:39 2045 C:\WINDOWS\System32\IMM32.DLL
+            7ffa54b00000 afa92ec1 May 23 04:29:13 2063 C:\WINDOWS\system32\apphelp.dll
+            7ff9c7930000 6aebef33 Nov 05 08:21:31 2026 C:\Program Files (x86)\Microsoft\EdgeWebView\Application\157.0.4341.42\msedge.dll
+            7ffa59b30000 e43dce38 May 06 07:38:56 2091 C:\WINDOWS\System32\WS2_32.dll
+            7ffa58330000 aa5e6d34 Jul 29 13:54:20 2060 C:\WINDOWS\System32\CRYPT32.dll
+            7ffa477a0000 765e58c4 Dec 06 02:53:16 2032 C:\WINDOWS\SYSTEM32\WINMM.dll
+            7ffa53450000 25f94910 Mar 11 00:06:00 1990 C:\WINDOWS\SYSTEM32\DWrite.dll
+            7ffa57da0000 eaa3ce6f Sep 29 18:32:39 2094 C:\WINDOWS\SYSTEM32\DPAPI.DLL
+            7ffa54d60000 db08095c Jun 12 21:46:28 2086 C:\WINDOWS\system32\uxtheme.dll
+               180000000 68d7a4e4 Sep 27 14:18:36 2025 C:\Program Files (x86)\RivaTuner Statistics Server\RTSSHooks64.dll
+            7ffa5a3f0000 319d0e79 May 18 05:10:41 1996 C:\WINDOWS\System32\SETUPAPI.dll
+            7ffa59660000 30329807 Aug 17 06:44:47 1995 C:\WINDOWS\System32\SHLWAPI.dll
+            7ffa5ad20000 cf30eefc Feb 25 18:13:40 2080 C:\WINDOWS\System32\ole32.dll
+            7ffa56e70000 0eb18366 Oct 24 09:45:34 1977 C:\WINDOWS\SYSTEM32\kernel.appcore.dll
+            7ffa5aa70000 59045633 Apr 29 14:30:35 2017 C:\WINDOWS\System32\clbcatq.dll
+            7ff9dfe80000 25854ee2 Dec 13 00:47:54 1989 C:\Windows\System32\Windows.System.Profile.PlatformDiagnosticsAndUsageDataSettings.dll
+            7ffa3b640000 c0c53d5e Jun 26 12:59:34 2072 C:\Windows\System32\DiagnosticDataSettings.dll
+            7ffa35710000 b64c204e Dec 01 20:48:38 2066 C:\WINDOWS\SYSTEM32\coreprivacysettingsstore.dll
+            7ffa574e0000 695101a7 Dec 28 15:38:39 2025 C:\WINDOWS\system32\USERENV.dll
+            7ffa574b0000 4f1ef26b Jan 24 23:33:23 2012 C:\WINDOWS\SYSTEM32\gpapi.dll
+            7ffa58cf0000 cfa2a62e May 22 00:21:26 2080 C:\WINDOWS\System32\shcore.dll
+            7ffa50a20000 490c7e58 Nov 01 21:35:44 2008 C:\WINDOWS\SYSTEM32\wkscli.dll
+            7ffa56980000 339bbf08 Jun 09 14:00:00 1997 C:\WINDOWS\SYSTEM32\netutils.dll
+            7ffa59840000 76a2b646 Jan 26 23:26:22 2033 C:\WINDOWS\System32\MSCTF.dll
+            7ffa58040000 aa6357b3 Aug 02 07:23:55 2060 C:\WINDOWS\SYSTEM32\powrprof.dll
+            7ffa58020000 e557de88 Dec 06 06:27:44 2091 C:\WINDOWS\SYSTEM32\UMPDC.dll
+            7ffa59400000 ea31af67 Jul 05 05:01:51 2094 C:\WINDOWS\System32\OLEAUT32.dll
+            7ffa40cf0000 65c1083b Feb 05 21:39:31 2024 C:\WINDOWS\WinSxS\amd64_microsoft.windows.common-controls_6595b64144ccf1df_6.0.26100.9711_none_3e07b8b0e334e825\COMCTL32.dll
+            7ffa57740000 95b538fc Aug 04 14:53:08 2049 C:\WINDOWS\SYSTEM32\CRYPTBASE.dll
+            7ffa2cde0000 51e42d8d Jul 15 22:42:45 2013 C:\WINDOWS\system32\nlansp_c.dll
+            7ffa567e0000 8849c2db Jun 16 18:13:07 2042 C:\WINDOWS\system32\IPHLPAPI.DLL
+            7ffa5a880000 34bda774 Jan 15 11:36:44 1998 C:\WINDOWS\System32\NSI.dll
+            7ffa50ba0000 6dcc3ff6 May 16 20:34:22 2028 C:\WINDOWS\SYSTEM32\dhcpcsvc6.DLL
+            7ffa50b70000 645c95b4 May 11 12:43:56 2023 C:\WINDOWS\SYSTEM32\dhcpcsvc.DLL
+            7ffa2c5b0000 2202d2df Jan 31 12:23:19 1988 C:\WINDOWS\SYSTEM32\textinputframework.dll
+            7ffa59c40000 1173227c Apr 12 15:12:20 1979 C:\WINDOWS\System32\SHELL32.dll
+            7ffa55c00000 b7083c6b Apr 23 13:14:43 2067 C:\WINDOWS\SYSTEM32\windows.storage.dll
+            7ffa54bd0000 dec7e1ec Jun 09 23:14:12 2088 C:\WINDOWS\system32\WTSAPI32.dll
+            7ffa57130000 1d161b35 Jun 19 05:43:41 1985 C:\WINDOWS\SYSTEM32\SspiCli.dll
+            7ffa57f70000 d2d98f83 Feb 05 05:00:11 2082 C:\WINDOWS\SYSTEM32\WINSTA.dll
+            7ffa2c950000 a3055803 Sep 01 17:50:19 2056 C:\Windows\System32\Windows.UI.dll
+            7ffa580e0000 8c9522ec Sep 27 15:44:04 2044 C:\WINDOWS\SYSTEM32\profapi.dll
+            7ffa57ce0000 cf46b37c Mar 13 06:29:40 2080 C:\WINDOWS\SYSTEM32\cfgmgr32.dll
+            7ffa57890000 32126d03 Aug 15 05:49:15 1996 C:\WINDOWS\System32\MSASN1.dll
+            7ffa41b70000 498a9814 Feb 05 13:11:08 2009 C:\WINDOWS\SYSTEM32\mscms.dll
+            7ffa56820000 a6bf2c82 Aug 26 05:47:06 2058 C:\WINDOWS\SYSTEM32\DNSAPI.dll
+            7ffa57210000 e14ac9fc Oct 10 14:59:32 2089 C:\WINDOWS\SYSTEM32\DSPARSE.dll
+            7ffa50bd0000 f2f3a78a Mar 01 18:50:10 2099 C:\WINDOWS\system32\WINHTTP.dll
+            7ffa20120000 e40922c6 Mar 27 08:49:34 2091 C:\Windows\System32\Windows.Media.dll
+            7ffa50dc0000 25c6fd74 Jan 31 20:30:04 1990 C:\Windows\System32\WinTypes.dll
+            7ffa1a730000 631678d2 Sep 06 04:01:46 2022 C:\Windows\System32\Windows.UI.Immersive.dll
+            7ffa3d090000 42ccb98f Jul 07 10:41:43 2005 C:\WINDOWS\SYSTEM32\windows.staterepositorycore.dll
+            7ffa580b0000 e6ad1671 Aug 21 02:09:13 2092 C:\WINDOWS\SYSTEM32\bcrypt.dll
+            7ffa57720000 e5f12b36 Mar 31 13:11:42 2092 C:\WINDOWS\System32\CRYPTSP.dll
+            7ffa56dd0000 67f6d4e8 Apr 10 01:43:28 2025 C:\WINDOWS\system32\rsaenh.dll
+            7ffa31c80000 599ad712 Aug 21 18:20:26 2017 C:\Windows\System32\InputHost.dll
+            7ffa546b0000 ed1d072d Jan 23 01:59:33 2096 C:\Windows\System32\CoreMessaging.dll
+            7ffa10700000 6e9b47a1 Oct 20 21:26:17 2028 C:\WINDOWS\system32\dataexchange.dll
+            7ffa48610000 4c8e50b6 Sep 13 21:56:30 2010 C:\WINDOWS\system32\twinapi.appcore.dll
+            7ffa411c0000 b8cdf8f0 Apr 01 17:15:52 2068 C:\WINDOWS\system32\OLEACC.dll
+            7ffa1ecf0000 9c5af3e8 Feb 15 09:56:16 2053 C:\WINDOWS\system32\directmanipulation.dll
+            7ff9bb620000 6aebef33 Nov 05 08:21:31 2026 C:\Program Files (x86)\Microsoft\EdgeWebView\Application\157.0.4341.42\telclient.dll
+            7ff9bafb0000 6aebef33 Nov 05 08:21:31 2026 C:\Program Files (x86)\Microsoft\EdgeWebView\Application\157.0.4341.42\oneauth.dll
+            7ffa20940000 caee21cd Nov 20 08:47:33 2077 C:\Windows\System32\CapabilityAccessManagerClient.dll
+            7ff9bac40000 6aebef33 Nov 05 08:21:31 2026 C:\Program Files (x86)\Microsoft\EdgeWebView\Application\157.0.4341.42\oneds.dll
+            7ffa51f20000 61341d80 Sep 05 06:59:36 2021 C:\WINDOWS\System32\netprofm.dll
+            7ffa513a0000 cceb2c7f Dec 11 11:36:55 2078 C:\WINDOWS\SYSTEM32\MFPlat.DLL
+            7ffa51610000 e6050fef Apr 15 15:20:39 2092 C:\WINDOWS\SYSTEM32\RTWorkQ.DLL
+            7ff9df7e0000 6aebef33 Nov 05 08:21:31 2026 < Name not readable >
+    SubSystemData:     00007ffa48836df0
+    ProcessHeap:       000001920e000000
+    ProcessParameters: 000001920e207c40
+    CurrentDirectory:  'C:\Program Files (x86)\Microsoft\EdgeWebView\Application\157.0.4341.42\'
+    WindowTitle:  'C:\Program Files (x86)\Microsoft\EdgeWebView\Application\157.0.4341.42\msedgewebview2.exe'
+    ImageFile:    'C:\Program Files (x86)\Microsoft\EdgeWebView\Application\157.0.4341.42\msedgewebview2.exe'
+    CommandLine:  '"C:\Program Files (x86)\Microsoft\EdgeWebView\Application\157.0.4341.42\msedgewebview2.exe" --embedded-browser-webview=1 --webview-exe-name=stelmar-voice-workbench.exe --webview-exe-version=0.1.0 --user-data-dir="%USERPROFILE%\AppData\Local\in.edu.bmu.stelmar.voiceworkbench\EBWebView" --noerrdialogs --embedded-browser-webview-dpi-awareness=2 --autoplay-policy=no-user-gesture-required --disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --lang=en-US --mojo-named-platform-channel-pipe=34528.27972.111963901394235518 /pfhostedapp:ddb90bc8944903772e478483240d8807156ea16f'
+    DllPath:      '< Name not readable >'
+    [environment block removed]
+start             end                 module name
+00000001`80000000 00000001`80267000   RTSSHooks64   (export symbols)       C:\Program Files (x86)\RivaTuner Statistics Server\RTSSHooks64.dll
+00007ff6`c35c0000 00007ff6`c3a3a000   msedgewebview2   (deferred)             
+00007ff9`bac40000 00007ff9`bafaa000   oneds      (deferred)             
+00007ff9`bafb0000 00007ff9`bb615000   oneauth    (deferred)             
+00007ff9`bb620000 00007ff9`bba43000   telclient   (deferred)             
+00007ff9`c7930000 00007ff9`dcfc3000   msedge     (export symbols)       C:\Program Files (x86)\Microsoft\EdgeWebView\Application\157.0.4341.42\msedge.dll
+00007ff9`dd2e0000 00007ff9`dd6ed000   msedge_elf   (deferred)             
+00007ff9`df7e0000 00007ff9`dfc54000   ffmpeg     (deferred)             
+00007ff9`dfe80000 00007ff9`dfe99000   Windows_System_Profile_PlatformDiagnosticsAndUsageDataSettings   (deferred)             
+00007ffa`10700000 00007ffa`1075c000   dataexchange   (deferred)             
+00007ffa`1a730000 00007ffa`1a882000   Windows_UI_Immersive   (deferred)             
+00007ffa`1ecf0000 00007ffa`1ed93000   directmanipulation   (deferred)             
+00007ffa`20120000 00007ffa`207ba000   Windows_Media   (deferred)             
+00007ffa`20940000 00007ffa`209b0000   CapabilityAccessManagerClient   (deferred)             
+00007ffa`2c5b0000 00007ffa`2c6f6000   textinputframework   (deferred)             
+00007ffa`2c950000 00007ffa`2caab000   Windows_UI   (deferred)             
+00007ffa`2cde0000 00007ffa`2ce07000   nlansp_c   (deferred)             
+00007ffa`31c80000 00007ffa`31e66000   InputHost   (deferred)             
+00007ffa`35710000 00007ffa`35740000   coreprivacysettingsstore   (deferred)             
+00007ffa`3b640000 00007ffa`3b64f000   DiagnosticDataSettings   (deferred)             
+00007ffa`3d090000 00007ffa`3d0ae000   windows_staterepositorycore   (deferred)             
+00007ffa`40cf0000 00007ffa`40f81000   comctl32   (deferred)             
+00007ffa`411c0000 00007ffa`41235000   oleacc     (deferred)             
+00007ffa`41b70000 00007ffa`41c32000   mscms      (deferred)             
+00007ffa`477a0000 00007ffa`477d7000   winmm      (deferred)             
+00007ffa`48610000 00007ffa`48861000   twinapi_appcore   (pdb symbols)          c:\symbols\twinapi.appcore.pdb\7A40554282DB96892247A45B2DCBACBC1\twinapi.appcore.pdb
+00007ffa`4a9a0000 00007ffa`4a9ab000   version    (deferred)             
+00007ffa`50a20000 00007ffa`50a3b000   wkscli     (deferred)             
+00007ffa`50b70000 00007ffa`50b95000   dhcpcsvc   (deferred)             
+00007ffa`50ba0000 00007ffa`50bbe000   dhcpcsvc6   (deferred)             
+00007ffa`50bd0000 00007ffa`50cfa000   winhttp    (deferred)             
+00007ffa`50dc0000 00007ffa`50f2a000   WinTypes   (deferred)             
+00007ffa`513a0000 00007ffa`515c7000   mfplat     (deferred)             
+00007ffa`51610000 00007ffa`5164b000   RTWorkQ    (deferred)             
+00007ffa`51f20000 00007ffa`51f8e000   netprofm   (pdb symbols)          c:\symbols\netprofm.pdb\E589A8DE44F8F6206D95CDD39F5741761\netprofm.pdb
+00007ffa`53450000 00007ffa`536ba000   DWrite     (deferred)             
+00007ffa`546b0000 00007ffa`547da000   CoreMessaging   (deferred)             
+00007ffa`54b00000 00007ffa`54b9f000   apphelp    (deferred)             
+00007ffa`54bd0000 00007ffa`54bfa000   wtsapi32   (deferred)             
+00007ffa`54d60000 00007ffa`54e07000   uxtheme    (deferred)             
+00007ffa`55c00000 00007ffa`564ae000   windows_storage   (deferred)             
+00007ffa`567e0000 00007ffa`56813000   IPHLPAPI   (deferred)             
+00007ffa`56820000 00007ffa`56978000   dnsapi     (deferred)             
+00007ffa`56980000 00007ffa`5698d000   netutils   (deferred)             
+00007ffa`56dd0000 00007ffa`56e09000   rsaenh     (deferred)             
+00007ffa`56e70000 00007ffa`56e8b000   kernel_appcore   (deferred)             
+00007ffa`56fa0000 00007ffa`56fd6000   ntmarta    (deferred)             
+00007ffa`57130000 00007ffa`5717a000   sspicli    (deferred)             
+00007ffa`57210000 00007ffa`5721d000   dsparse    (deferred)             
+00007ffa`574b0000 00007ffa`574d5000   gpapi      (deferred)             
+00007ffa`574e0000 00007ffa`57514000   userenv    (deferred)             
+00007ffa`57720000 00007ffa`5773b000   cryptsp    (deferred)             
+00007ffa`57740000 00007ffa`5774c000   CRYPTBASE   (deferred)             
+00007ffa`57890000 00007ffa`578a3000   msasn1     (deferred)             
+00007ffa`57ce0000 00007ffa`57d32000   cfgmgr32   (deferred)             
+00007ffa`57da0000 00007ffa`57daa000   dpapi      (deferred)             
+00007ffa`57f70000 00007ffa`57fd6000   winsta     (deferred)             
+00007ffa`58020000 00007ffa`58035000   umpdc      (deferred)             
+00007ffa`58040000 00007ffa`5809e000   powrprof   (deferred)             
+00007ffa`580b0000 00007ffa`580da000   bcrypt     (deferred)             
+00007ffa`580e0000 00007ffa`58109000   profapi    (deferred)             
+00007ffa`581d0000 00007ffa`5831c000   ucrtbase   (deferred)             
+00007ffa`58330000 00007ffa`584af000   crypt32    (deferred)             
+00007ffa`584c0000 00007ffa`584e7000   win32u     (pdb symbols)          c:\symbols\win32u.pdb\DC2BE92BCDB1EFC31195235C45385FF11\win32u.pdb
+00007ffa`584f0000 00007ffa`58593000   msvcp_win   (deferred)             
+00007ffa`58630000 00007ffa`5875a000   gdi32full   (deferred)             
+00007ffa`58760000 00007ffa`5880c000   bcryptprimitives   (deferred)             
+00007ffa`588e0000 00007ffa`58ce1000   KERNELBASE   (pdb symbols)          c:\symbols\kernelbase.pdb\79B505276F140450EB83DF0440BF06C61\kernelbase.pdb
+00007ffa`58cf0000 00007ffa`58de9000   SHCore     (deferred)             
+00007ffa`58df0000 00007ffa`58e21000   imm32      (deferred)             
+00007ffa`58e30000 00007ffa`591bb000   combase    (private pdb symbols)  c:\symbols\combase.pdb\4AC91D91223808F3AE6A3164A1B8B4041\combase.pdb
+00007ffa`593d0000 00007ffa`593fb000   gdi32      (deferred)             
+00007ffa`59400000 00007ffa`594d9000   oleaut32   (deferred)             
+00007ffa`594e0000 00007ffa`595ab000   kernel32   (pdb symbols)          c:\symbols\kernel32.pdb\E8C3A48CAC7EB60D8781D8C10020C44F1\kernel32.pdb
+00007ffa`595b0000 00007ffa`59659000   msvcrt     (deferred)             
+00007ffa`59660000 00007ffa`596c6000   shlwapi    (deferred)             
+00007ffa`59720000 00007ffa`59838000   rpcrt4     (deferred)             
+00007ffa`59840000 00007ffa`5999c000   msctf      (deferred)             
+00007ffa`599b0000 00007ffa`59a6c000   advapi32   (deferred)             
+00007ffa`59b30000 00007ffa`59bb1000   ws2_32     (deferred)             
+00007ffa`59c40000 00007ffa`5a3dc000   shell32    (deferred)             
+00007ffa`5a3f0000 00007ffa`5a877000   setupapi   (deferred)             
+00007ffa`5a880000 00007ffa`5a88a000   nsi        (deferred)             
+00007ffa`5aa70000 00007ffa`5ab1f000   clbcatq    (deferred)             
+00007ffa`5ab30000 00007ffa`5ad07000   user32     (pdb symbols)          c:\symbols\user32.pdb\F0BF56EE0A784974D49A58173A7CBC7E1\user32.pdb
+00007ffa`5ad20000 00007ffa`5aeba000   ole32      (private pdb symbols)  c:\symbols\ole32.pdb\7A0E668D517F5167B9AB6FE73BCC86E21\ole32.pdb
+00007ffa`5aec0000 00007ffa`5af68000   sechost    (deferred)             
+00007ffa`5afe0000 00007ffa`5b248000   ntdll      (pdb symbols)          c:\symbols\ntdll.pdb\C031D45B0DA18A6E74D06ED6AB2DD9E11\ntdll.pdb
+
+Unloaded modules:
+00007ffa`58cf0000 00007ffa`58de9000   shcore.dll
+00007ffa`1da40000 00007ffa`1da46000   KBDINEN.DLL
+00007ffa`53f70000 00007ffa`54026000   policymanager.dll
+00007ffa`59400000 00007ffa`594d9000   OLEAUT32.dll
+00007ffa`56820000 00007ffa`56978000   dnsapi.dll
+00007ffa`57210000 00007ffa`5721d000   DSPARSE.dll
+00007ffa`43030000 00007ffa`4304a000   netapi32.dll
+00007ffa`52be0000 00007ffa`52d55000   DSREG.DLL
+00007ffa`53f70000 00007ffa`54026000   policymanager.dll
+00007ff9`dd0f0000 00007ff9`dd2d6000   hevcdecoder_store.dll
+00007ffa`54ed0000 00007ffa`5500b000   dxgi.dll
+quit:
+NatVis script unloaded from 'C:\Program Files\WindowsApps\Microsoft.WinDbg_1.2611.4001.0_x64__8wekyb3d8bbwe\amd64\Visualizers\atlmfc.natvis'
+NatVis script unloaded from 'C:\Program Files\WindowsApps\Microsoft.WinDbg_1.2611.4001.0_x64__8wekyb3d8bbwe\amd64\Visualizers\concurrency.natvis'
+NatVis script unloaded from 'C:\Program Files\WindowsApps\Microsoft.WinDbg_1.2611.4001.0_x64__8wekyb3d8bbwe\amd64\Visualizers\cpp_rest.natvis'
+NatVis script unloaded from 'C:\Program Files\WindowsApps\Microsoft.WinDbg_1.2611.4001.0_x64__8wekyb3d8bbwe\amd64\Visualizers\ObjectiveC.natvis'
+NatVis script unloaded from 'C:\Program Files\WindowsApps\Microsoft.WinDbg_1.2611.4001.0_x64__8wekyb3d8bbwe\amd64\Visualizers\stl.natvis'
+NatVis script unloaded from 'C:\Program Files\WindowsApps\Microsoft.WinDbg_1.2611.4001.0_x64__8wekyb3d8bbwe\amd64\Visualizers\Windows.Data.Json.natvis'
+NatVis script unloaded from 'C:\Program Files\WindowsApps\Microsoft.WinDbg_1.2611.4001.0_x64__8wekyb3d8bbwe\amd64\Visualizers\Windows.Devices.Geolocation.natvis'
+NatVis script unloaded from 'C:\Program Files\WindowsApps\Microsoft.WinDbg_1.2611.4001.0_x64__8wekyb3d8bbwe\amd64\Visualizers\Windows.Devices.Sensors.natvis'
+NatVis script unloaded from 'C:\Program Files\WindowsApps\Microsoft.WinDbg_1.2611.4001.0_x64__8wekyb3d8bbwe\amd64\Visualizers\Windows.Media.natvis'
+NatVis script unloaded from 'C:\Program Files\WindowsApps\Microsoft.WinDbg_1.2611.4001.0_x64__8wekyb3d8bbwe\amd64\Visualizers\windows.natvis'
+NatVis script unloaded from 'C:\Program Files\WindowsApps\Microsoft.WinDbg_1.2611.4001.0_x64__8wekyb3d8bbwe\amd64\Visualizers\winrt.natvis'
+
+=== Baseline repro dumps (06:2x, clean mode, network on), !analyze -v buckets
+6a6e7514-c8d2-47e4-84ef-cdbd3f41a27a.dmp (cycle 20): msedgewebview2.exe, INVALID_POINTER_WRITE_c0000005_RTSSHooks64.dll!Unknown
+b4bdf18c-53e3-4232-9930-298c701bd5ae.dmp (cycle 25): msedgewebview2.exe, INVALID_POINTER_READ_c0000005_RTSSHooks64.dll!Unknown
+All four dumps collected so far fault in RTSSHooks64.dll.
+
+=== Fresh-profile repro dumps (06:30 to 06:37, clean mode, network on, new EBWebView folder), !analyze -v buckets
+6106da1e-4a0a-4189-a74b-ed9cf27a7956.dmp: PROCESS_NAME:  msedgewebview2.exe, FAILURE_BUCKET_ID:  INVALID_POINTER_READ_c0000005_RTSSHooks64.dll!Unknown
+c14d5eff-ba6a-496a-849c-b723b6273574.dmp: PROCESS_NAME:  msedgewebview2.exe, FAILURE_BUCKET_ID:  INVALID_POINTER_WRITE_c0000005_RTSSHooks64.dll!Unknown
+ee8967a6-02a5-47a8-8362-fd2af8cb4a84.dmp: PROCESS_NAME:  msedgewebview2.exe, FAILURE_BUCKET_ID:  INVALID_POINTER_WRITE_c0000005_RTSSHooks64.dll!Unknown
