@@ -1,0 +1,52 @@
+{
+  "name": "stelmar-voice-workbench",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@12.18.0",
+  "engines": {
+    "node": ">=26"
+  },
+  "scripts": {
+    "icons": "node scripts/copy-icons.mjs",
+    "dev": "node scripts/copy-icons.mjs && vite",
+    "build": "node scripts/copy-icons.mjs && tsc -p tsconfig.json --noEmit && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "lint": "eslint --max-warnings 0 src && node scripts/check-style-values.mjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit && tsc -p tsconfig.node.json --noEmit",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "check:dist": "node scripts/check-dist-urls.mjs",
+    "check:crates": "node scripts/check-http-crates.mjs",
+    "check:evidence": "node scripts/check-evidence.mjs"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "~2.11.1",
+    "react": "~19.2.9",
+    "react-dom": "~19.2.9"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.65.0",
+    "@tauri-apps/cli": "~2.11.5",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.2.1",
+    "eslint": "^10.14.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.14.0",
+    "jsdom": "^31.0.0",
+    "lucide-static": "0.460.0",
+    "prettier": "^3.9.10",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.72.1",
+    "vite": "^8.3.6",
+    "vitest": "^5.1.0"
+  }
+}

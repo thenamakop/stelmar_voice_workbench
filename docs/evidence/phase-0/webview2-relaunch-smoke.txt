@@ -1,0 +1,19 @@
+﻿WebView2 relaunch repro: STELMAR Voice Workbench release build
+Date: 2026-11-08 06:01:51 +05:30   Machine: Legion   Windows 10.0.26200.0
+Exe: D:\Projects\stelmar_voice_workbench\target\release\stelmar-voice-workbench.exe (2026-11-08 05:46)
+User data folder: %USERPROFILE%\AppData\Local\in.edu.bmu.stelmar.voiceworkbench\EBWebView
+WebView2 entries: type:pid<-parentpid@start
+
+== Mode: immediate (2 cycles)
+   1: app 26156, render 871 ms, after 6 s ok, wv2 before [], wv2 after [browser:652<-26156@06:01:52.274 crashpad-handler:23624<-652@06:01:52.290 gpu-process:1652<-652@06:01:52.415 renderer:38744<-652@06:01:52.522 utility:5104<-652@06:01:52.447 utility:41280<-652@06:01:52.416], browser inherited False
+   2: app 2252, render 679 ms, after 6 s ok, wv2 before [], wv2 after [browser:28136<-2252@06:02:00.759 crashpad-handler:27676<-28136@06:02:00.772 gpu-process:41116<-28136@06:02:00.869 renderer:42328<-28136@06:02:00.978 utility:20632<-28136@06:02:00.873 utility:31024<-28136@06:02:00.896], browser inherited False
+  Mode immediate : white 0 of 2, never rendered 0, browser inherited 0, white with inherited or missing browser 0, clean-stop drain failures 0
+
+== Mode: clean (2 cycles)
+   1: app 34528, render 685 ms, after 6 s WHITE, wv2 before [], wv2 after [], browser inherited False
+   2: app 8288, render 708 ms, after 6 s ok, wv2 before [], wv2 after [browser:16932<-8288@06:02:17.254 crashpad-handler:19144<-16932@06:02:17.269 gpu-process:39812<-16932@06:02:17.387 renderer:33472<-16932@06:02:17.508 utility:21676<-16932@06:02:17.389 utility:35076<-16932@06:02:17.413], browser inherited False
+  Mode clean : white 1 of 2, never rendered 0, browser inherited 0, white with inherited or missing browser 1, clean-stop drain failures 0
+
+== Summary
+  immediate : white 0/2 (inherited or missing browser in 0 of them), never rendered 0, inherited browser 0
+  clean : white 1/2 (inherited or missing browser in 1 of them), never rendered 0, inherited browser 0

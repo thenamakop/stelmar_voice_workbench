@@ -3,6 +3,15 @@ node_modules/
 dist/
 src-tauri/target/
 public/icons/
+# Cargo workspace target at the repository root, Tauri's generated schemas, test output
+/target/
+src-tauri/gen/
+dist-e2e/
+test-results/
+playwright-report/
+*.local
+.vscode/*
+!.vscode/extensions.json
 
 # Large or private data: never commit
 models/*.bin

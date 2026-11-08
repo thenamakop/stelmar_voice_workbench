@@ -1,0 +1,31 @@
+﻿WebView2 outbound connections at launch: STELMAR Voice Workbench release build
+Machine: Legion (Legion), Windows 10.0.26200.0, Wi-Fi on
+Date: 2026-11-08 05:44:11 +05:30
+Exe: D:\Projects\stelmar_voice_workbench\target\release\stelmar-voice-workbench.exe (2026-11-08 05:27)
+WebView2 runtime: 157.0.4341.42
+Method: Clear-DnsClientCache (cleared: True), start the exe, poll Get-NetTCPConnection every 0.5 s for 15 s over the app's process tree (by parent PID), then Get-DnsClientCache. No interaction.
+
+== Process tree
+  pid 8564  msedgewebview2.exe
+  pid 12292  msedgewebview2.exe
+  pid 32096  msedgewebview2.exe
+  pid 32496  stelmar-voice-workbench.exe
+  pid 33044  msedgewebview2.exe
+  pid 37224  msedgewebview2.exe
+  pid 38016  msedgewebview2.exe
+
+== Non-loopback TCP connections (first sighting)
+  +3.8s  pid 32096 msedgewebview2.exe  192.168.1.34:62178 -> 40.104.56.130:443  SynSent  host: (no matching DNS cache entry)
+
+== DNS client cache after launch (Entry, RecordName, Type, Data)
+  empty
+
+== Control: does the DNS client cache record lookups on this machine?
+  Resolve-DnsName www.microsoft.com -Type A, then Get-DnsClientCache: 0 entries.
+  Dnscache service: Running. DoH server addresses configured: 149.112.112.112, 9.9.9.9, 8.8.8.8.
+  Conclusion: Get-DnsClientCache returns nothing here even for a known lookup, so this method
+  cannot map the remote IPs to hostnames on the Legion. Hostname: unknown.
+
+== Earlier sightings (offline-auditor runs, same build, same machine, 2026-11-08)
+  From the WebView2 browser process at +3 to +4 s, port 443: 40.104.66.98, 40.104.66.226,
+  40.104.77.162, 52.98.123.178, 40.99.31.146. No hostnames recovered then either.

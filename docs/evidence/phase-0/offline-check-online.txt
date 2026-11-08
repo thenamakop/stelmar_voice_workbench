@@ -1,0 +1,17 @@
+﻿STELMAR Voice Workbench offline check: online
+Date: 2026-11-08 06:39:57 +05:30   Machine: Legion   Windows 10.0.26200.0
+Exe: D:\Projects\stelmar_voice_workbench\target\release\stelmar-voice-workbench.exe (2026-11-08 05:46)
+Network state: Online
+  reason: physical adapter Up: Wi-Fi (Intel(R) Wi-Fi 6E AX211 160MHz)
+  reason: connection profile on Wi-Fi reports IPv4 Internet
+  default route: 0.0.0.0/0 via 192.168.1.1 on Wi-Fi (ifIndex 6, metric 0)
+  interface Wi-Fi (ifIndex 6): status Up, virtual False, IPv6:Connected IPv4:Connected, non-link-local address True
+  connection profile: Wi-Fi IPv4 Internet, IPv6 NoTraffic
+  physical adapter Up: Wi-Fi (Intel(R) Wi-Fi 6E AX211 160MHz)
+  probe: not run (facts already show the machine online)
+Run 1: window 162 ms, rendered 687 ms, not blank = True (charcoal 7.2%, 42 colours), app alive = True, WebView2 processes = 6, non-loopback TCP = 40.100.7.128:443 Established, 40.100.7.128:443 SynSent
+Run 2: window 126 ms, rendered 676 ms, not blank = True (charcoal 7.2%, 42 colours), app alive = True, WebView2 processes = 6, non-loopback TCP = 40.104.56.194:443 Established, 40.104.56.194:443 SynSent
+Run 3: window 114 ms, rendered 683 ms, not blank = True (charcoal 7.2%, 42 colours), app alive = True, WebView2 processes = 6, non-loopback TCP = 40.104.77.242:443 Established, 40.104.77.242:443 SynSent
+Median: window 126 ms, rendered 683 ms (runs after the first are warm starts)
+Result: PASS
+Note (added after the run): "PASS" here means only that all three runs rendered; this is the start-up baseline for the offline run, not an offline result. The non-loopback connections above come from the WebView2 runtime's browser process (open item in docs/GATES.md, Phase 8). The script now reports online runs as BASELINE instead of PASS, and also watches UDP endpoints and listening sockets. The screenshots shell-online-run*.png were cropped afterwards to the window's visible frame (9 px of invisible resize border removed on the left, right and bottom).
