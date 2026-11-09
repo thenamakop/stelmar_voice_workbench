@@ -1,17 +1,17 @@
-﻿source: commit d3eaf02
+﻿source: commit de1dd78
 build: stelmar-voice-workbench.exe sha256 1bbf39e5884849ffab144de3026e25ee5519c37266e6dd55c0d4a6c369a698d0 (built 2026-11-09 16:17)
 build: wb-testbench.exe sha256 da71e91c47760b8bd629e016a201efa7e56f51340f29d57955c9f408f7842e18 (built 2026-11-09 21:39)
 build: wb-emulate.exe sha256 dc7d7a9896433e012375cc42c69047a5c6231bedeef64fedf81b81525fce4d94 (built 2026-11-09 20:32)
 gate: phase1-webview-emu-low (re-evaluated from saved data)
 started: 2026-11-09 16:47:20 +05:30
-note: evaluation redone from the saved recording and reports of the run in D:\STELMAR-Gate\webview-emu-low-20261109-164720 with the current analyser; re-scored under the recording-gate rule of 9 Nov 2026 (docs/PLAN.md section 12) with -FromRun, from the saved run in D:\STELMAR-Gate\webview-emu-low-20261109-164720 (started 2026-11-09T16:47:20+05:30, ended 16:50:34 IST); the build under test is the final gate build, stelmar-voice-workbench.exe sha256 1bbf39e5884849ffab144de3026e25ee5519c37266e6dd55c0d4a6c369a698d0 (built 2026-11-09 16:17, unchanged since). Only what the saved data holds is re-evaluated; the live app log, GPU check, cable polling and overlay checks of the original run are not repeated and its own evidence stands for them.
+note: evaluation redone from the saved recording and reports of the run in D:\STELMAR-Gate\webview-emu-low-20261109-164720 with the current analyser; INFORMATION ONLY, not a Phase 1 verdict (the final verdicts come from a fresh run of every gate under the amended rule): re-scored under the recording-gate rule of 9 Nov 2026 as amended by Amendment 1 (docs/PLAN.md section 12) with -FromRun, from the saved run in D:\STELMAR-Gate\webview-emu-low-20261109-164720 (started 2026-11-09T16:47:20+05:30, ended 16:50:34 IST); the build under test is the final gate build, stelmar-voice-workbench.exe sha256 1bbf39e5884849ffab144de3026e25ee5519c37266e6dd55c0d4a6c369a698d0 (built 2026-11-09 16:17, unchanged since). Only what the saved data holds is re-evaluated; the live app log, GPU check, cable polling and overlay checks of the original run are not repeated and its own evidence stands for them.
 machine: Legion
 emulation profile: emu-low
 overlay tools closed: checked by the original run before it started (the gate refuses to start otherwise); not saved, not re-checked
 Track B paused: not re-evaluated (the original run's gate code takes D:\Projects\stelmar-gate.lock; whether it was held is not in the saved data)
 free RAM: 18 GB at start (needs 14 GB), 18.1 GB at end
 app build: target\gate\stelmar-voice-workbench.exe (cargo profile gate, features gate-hooks + custom-protocol)
-verdict: INVALID (no verdict; the run must be repeated)
+verdict: PASS (PROVISIONAL: emulated)
 
 checks:
   [x] reference capture ran cleanly (its own ring overruns 0)
@@ -29,10 +29,9 @@ checks:
 recording rule (9 Nov 2026): fidelity decides PASS or FAIL; upstream breaks are reported; a run with limits exceeded is INVALID (docs/PLAN.md section 12)
 fidelity: app compared with the reference capture over 88,43,040 frames (184.2 s) in 1 run(s) of the app; differing frames 0; reference audio the app has no recording of 0 frame(s); audio only the app has 0 frame(s); restart gaps 0 frame(s)
   run 1: app frames 0 to 8915040, one fixed offset 61440 frames (found by a stretch of the reference); compared 8843040, differing 0, largest difference 0
-upstream breaks (between the source and the reference capture; reported, not gated): 0 in 3.1 minutes of audio, 0.0 per 10 minutes
-player callbacks: no late-callback data in play.json
-validity: INVALID (no verdict; the run must be repeated)
-  - the player recorded no late-callback data (a player before 9 Nov 2026 20:34), so an upstream break cannot be attributed
+upstream breaks (between the source and the reference capture; reported, not gated): 0 in 3.1 minutes of audio, 0 counted toward the limit of 1 (breaks in the first 3 s of playback are not counted)
+player callbacks: no late-callback data in play.json (not needed: the run has no upstream break)
+validity: valid (limits: a late player callback within 500 ms of a break, more than 250 ms unmatched in a break, more than max(1, floor(minutes / 10)) counted breaks, a missing, misaligned or incomplete reference, or an upstream break without late-callback data)
 display recovery: not re-evaluated here (the live app log is not saved); the original run's evidence stands
 
 measurements:
