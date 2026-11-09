@@ -1,0 +1,106 @@
+# Candidate fine-tunes for conversion to whisper.cpp ggml (docs/PLAN.md section 5, models/README.md).
+# convert_hf_whisper.py reads this file; quantize_models.py writes models/manifest.local.json.
+# Licence rule (AGENTS.md): MIT, Apache 2.0, BSD or ISC only; anything else is dropped and recorded.
+# `revision` pins the Hugging Face commit read on 8 November 2026; `sha256` pins a plain-URL archive.
+#
+# independence_unknown_on: sets the sources neither confirm nor rule out as training data; treated like
+# not_independent_on for ranking, but reported as "unknown".
+# not_independent_on: evaluation sets whose training split (or a sibling split of the same corpus)
+# the model was trained on. Its numbers on those sets are reported but marked "not independent" in
+# every summary and table, and Phase 5 never ranks on them. training_data_evidence says where this
+# was read; "unverified" means the source does not say and the set is marked to be safe.
+
+[[candidate]]
+id = "hindi-small"
+repo = "vasista22/whisper-hindi-small"
+revision = "fb4a24afc20c42906deed31c3689e4be31da41fe"
+base = "small"
+languages = ["hi"]
+candidate_roles = ["near-live"]
+licence = "Apache-2.0"
+licence_evidence = "Hugging Face model card metadata (license: apache-2.0), read 8 Nov 2026"
+not_independent_on = ["fleurs-hi"]
+training_data_evidence = "Model card: trained on FLEURS train and dev (among others), read 8 Nov 2026"
+notes = "Trained on FLEURS train and dev: its FLEURS numbers are not independent."
+
+[[candidate]]
+id = "hindi-medium"
+repo = "vasista22/whisper-hindi-medium"
+revision = "d53532a4dc1d0d89e484ed8f7acfb2228a7d3785"
+base = "medium"
+languages = ["hi"]
+candidate_roles = ["rolling", "night"]
+licence = "Apache-2.0"
+licence_evidence = "Hugging Face model card metadata (license: apache-2.0), read 8 Nov 2026"
+not_independent_on = ["fleurs-hi"]
+training_data_evidence = "Model card: trained on FLEURS train and dev (among others), read 8 Nov 2026"
+notes = "Trained on FLEURS train and dev: its FLEURS numbers are not independent."
+
+[[candidate]]
+id = "indicwhisper-hi"
+url = "https://indicwhisper.objectstore.e2enetworks.net/hindi_models.zip"
+sha256 = "e409b7d56d3cf3c04d0b307347d48a96fd2c045c53ff99ed24dec5e3f80ea4c0"
+model_subdir = "whisper-medium-hi_alldata_multigpu"
+base = "medium"
+languages = ["hi"]
+candidate_roles = ["rolling", "night"]
+licence = "MIT"
+licence_evidence = """Vistaar README, section License: "Vistaar is MIT-licensed. The license applies to all the \
+fine-tuned language models" (https://github.com/AI4Bharat/vistaar/blob/21dce3406fddf0e18984165e735d23db38760dd3/README.md#license, \
+read 8 Nov 2026); LICENSE file: "MIT License, Copyright (c) 2023 AI4Bhārat"."""
+not_independent_on = ["fleurs-hi", "kathbath-hi"]
+training_data_evidence = "Vistaar README: Vistaar-Train = Kathbath, Kathbath Hard, CommonVoice, FLEURS, IndicTTS, MUCS, Gramvaani, read 8 Nov 2026"
+notes = "AI4Bharat IndicWhisper (Vistaar), fine-tuned from Whisper medium."
+
+[[candidate]]
+id = "indicwhisper-ur"
+url = "https://indicwhisper.objectstore.e2enetworks.net/urdu_models.zip"
+sha256 = "8544568dbc1fb8a87030d4b2913f79eb6a58ee52260ac878a8d8c395072445b8"
+model_subdir = ""  # found by looking for config.json inside the archive
+base = "medium"
+languages = ["ur"]
+candidate_roles = ["rolling", "night"]
+licence = "MIT"
+licence_evidence = """Vistaar README, section License: "Vistaar is MIT-licensed. The license applies to all the \
+fine-tuned language models" (https://github.com/AI4Bharat/vistaar/blob/21dce3406fddf0e18984165e735d23db38760dd3/README.md#license, \
+read 8 Nov 2026); LICENSE file: "MIT License, Copyright (c) 2023 AI4Bhārat"."""
+not_independent_on = ["fleurs-ur", "kathbath-ur"]
+training_data_evidence = "Vistaar README: Vistaar-Train = Kathbath, Kathbath Hard, CommonVoice, FLEURS, IndicTTS, MUCS, Gramvaani, read 8 Nov 2026"
+notes = "AI4Bharat IndicWhisper (Vistaar), fine-tuned from Whisper medium."
+
+[[candidate]]
+id = "vaani-hi"
+repo = "ARTPARK-IISc/whisper-medium-vaani-hindi"
+revision = "8e4d906e0eec66f27a31286e1a034702ef6d11bc"
+base = "medium"
+languages = ["hi"]
+candidate_roles = ["rolling", "night"]
+licence = "Apache-2.0"
+licence_evidence = "Hugging Face model card metadata (license: apache-2.0), read 8 Nov 2026"
+not_independent_on = ["fleurs-hi"]
+training_data_evidence = "Model card: about 718 h from Vaani, Gramvaani, IndicVoices, FLEURS, IndicTTS, Common Voice (splits not stated; Kathbath not listed), read 8 Nov 2026"
+
+[[candidate]]
+id = "hinglish"
+repo = "Trelis/whisper-hinglish-preview"
+revision = "eab1188fd2d0e91f2584229b32b3bfe1901c896c"
+base = "large-v3"
+languages = ["hi", "en"]
+candidate_roles = ["rolling", "night", "live"]
+licence = "Apache-2.0"
+licence_evidence = "Hugging Face model card metadata (license: apache-2.0), read 8 Nov 2026"
+not_independent_on = ["fleurs-hi"]
+independence_unknown_on = ["coshe-eval"]
+training_data_evidence = """Model card (read 9 Nov 2026): names no training data, only the starting checkpoint \
+ARTPARK-IISc/whisper-large-v3-vaani-hindi (a Vaani-fine-tuned large-v3, whose Vaani family lists FLEURS in training: \
+fleurs-hi is marked not independent to be safe). CoSHE appears on the card only as an evaluation benchmark \
+(CoSHE-500, derived from soketlabs/CoSHE-Eval, which Trelis asks people not to train on); the card does not say \
+whether CoSHE-Eval or its source recordings were used for this model, so coshe-eval is independence unknown."""
+notes = "Code-switching fine-tune; uses a <|mixedcode|> token after the language token. Check it after conversion."
+special_tokens = ["<|mixedcode|>"]
+# n_vocab is 51867: <|mixedcode|> was appended as id 51866 after the standard large-v3 vocabulary.
+# whisper.cpp derives special-token ids from n_vocab and would shift them all by one, so the
+# converter also writes a copy without that last embedding row (the raw conversion is kept as
+# ggml-hinglish-raw-f16.bin to show the difference). Evaluated through --file only if its output
+# is still correct (Phase 5 If Blocked); D14's code-switch token is not available in whisper.cpp.
+truncate_vocab_to = 51866

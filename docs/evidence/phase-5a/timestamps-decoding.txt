@@ -1,0 +1,44 @@
+Phase 5a: Hindi fine-tunes decoded with and without timestamp tokens
+
+Machine: Legion (Core i9-14900HX), native profile, CPU only. Date: 8 Nov 2026.
+whisper.cpp: v1.9.5 (d1be6fde11ac), whisper-cli built GGML_NATIVE=OFF + AVX2 set. Gate lock checked;
+below-normal priority.
+
+Found: the first harness smoke run of hindi-small-q8_0 (near-live role, VAD on, whisper-cli default
+timestamp decoding) scored 67.8% WER on 20 FLEURS hi clips, while the same model was near-perfect on a
+direct whisper-cli run with -nt. The harness output began with U+FFFD in every hypothesis.
+
+Clip: FLEURS hi_in test 12106180364446341165 (9.18 s, CC BY 4.0). Reference and outputs are not
+reproduced: FLEURS text and model output for its clips are not committed (eval/README.md). What each
+output looked like is described instead.
+
+1. hindi-small-q8_0 through the harness's own call (near-live: greedy, no fallback, no context, VAD):
+   whisper-cli -m models\converted\ggml-hindi-small-q8_0.bin -t 8 -bs 1 -bo 1 -np -nf -mc 0
+     --vad -vm models\ggml-silero-v6.2.0.bin -vmsd 15 -l hi -oj -of <tmp> -f <clip>
+   ts: first character U+FFFD, then a fluent Hindi sentence about something else (hallucination).
+
+2. Greedy, no fallback, no context, without VAD; timestamps on (ts) and off (-nt):
+   whisper-cli -m <model> -f <clip> -l hi -t 8 -np -bs 1 -bo 1 -nf -mc 0 [-nt]
+   hindi-small-q8_0      ts   U+FFFD, then an unrelated fluent sentence (hallucination)
+   hindi-small-q8_0      -nt  correct transcription of the clip, numerals as digits
+   hindi-medium-q8_0     ts   first word broken (U+FFFD), the rest correct, numbers spelled out as words
+   hindi-medium-q8_0     -nt  correct transcription, numerals as digits
+   indicwhisper-hi-q8_0  ts   first word broken (U+FFFD), the rest correct, numbers spelled out as words
+   indicwhisper-hi-q8_0  -nt  correct transcription, numerals as digits
+   vaani-hi-q8_0         ts   correct but both numbers missing
+   vaani-hi-q8_0         -nt  identical to ts (both numbers missing)
+
+3. hindi-small-q8_0 with the near-live role exactly as in eval/roles.toml after the fix (VAD on, -nt):
+   whisper-cli ... -bs 1 -bo 1 -nf -mc 0 --vad -vm models\ggml-silero-v6.2.0.bin -vmsd 15 -l hi -nt
+   correct transcription of the clip, numerals as digits.
+
+Cause: the fine-tunes were trained without timestamp tokens (the vasista22 models; IndicWhisper shows the
+same broken first token). Decoding with timestamps makes the first token a byte fragment (U+FFFD) and
+lets the small model run off into text from its training data.
+
+Fix: every role in eval/roles.toml sets timestamps = false, and whisper-cli gets -nt. This matches
+docs/PLAN.md section 5 (segment times come from the audio clock and VAD, never from model timestamps).
+Phase 2's wb-engine must decode without timestamps too (whisper-rs FullParams::set_no_timestamps(true))
+or the CLI comparison and the app will disagree. Every summary now counts utterances with U+FFFD
+(broken_utf8_utterances), and all results were re-run after the fix (eval/results/TABLES.md;
+summary in tables-phase-5a.md).

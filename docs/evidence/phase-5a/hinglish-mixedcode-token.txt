@@ -1,0 +1,86 @@
+Phase 5a: Trelis/whisper-hinglish-preview and its <|mixedcode|> token after conversion
+
+Machine: Legion (Core i9-14900HX), native profile, CPU only. Date: 8 Nov 2026.
+whisper.cpp: v1.9.5 (d1be6fde11ac6e0407606b4e42fe72d34add8037), whisper-cli built GGML_NATIVE=OFF + AVX2 set.
+Checkpoint: https://huggingface.co/Trelis/whisper-hinglish-preview@eab1188fd2d0e91f2584229b32b3bfe1901c896c (Apache-2.0)
+  model-00001-of-00002.safetensors sha256 084aa9aadbf48503a73cee2d5a2960bb272428e33fc96fcb7cc09cad53fcdfe4
+  model-00002-of-00002.safetensors sha256 c0d42c5d57befad7b259b42a9061bf8c157c8a65b2c444a68cfddf15bd4ba5c2
+
+1. Checkpoint (config.json, added_tokens.json)
+   vocab_size 51867; num_mel_bins 128; 32 encoder and 32 decoder layers (large-v3).
+   <|mixedcode|> = id 51866, appended after the standard large-v3 vocabulary (51866 tokens).
+   Standard ids in the checkpoint: <|translate|> 50359, <|transcribe|> 50360, <|notimestamps|> 50364, <|0.00|> 50365.
+
+2. What whisper.cpp does with it (scripts/models/convert_hf_whisper.py --inspect hinglish)
+   whisper.cpp stores no special-token ids; it derives them from n_vocab: 51867 -> 101 languages, so every
+   task and timestamp id is one too high:
+     <|translate|> 50359 -> 50360, <|transcribe|> 50360 -> 50361, <|startoflm|> 50361 -> 50362,
+     <|startofprev|> 50362 -> 50363, <|nospeech|> 50363 -> 50364, <|notimestamps|> 50364 -> 50365,
+     <|0.00|> 50365 -> 50366
+   convert-h5-to-ggml.py writes only vocab.json (50257 tokens), so <|mixedcode|> has no name in the ggml file.
+
+3. Conversion
+   raw (as converted):      models/converted/ggml-hinglish-raw-f16.bin  n_vocab 51867
+                            sha256 c813199f7befae93416f80302cd5bb87b3beb706458fd52eb5c8d635dd36049f
+   trimmed (scripts/models/ggml_vocab.py truncate ... 51866: last row of the tied token embedding removed):
+                            models/converted/ggml-hinglish-f16.bin      n_vocab 51866, 100 languages
+                            sha256 e8e126837031c14c86848db0aa9f50b3340382dc647dd3bd7d35294e4d91ea5a
+   Quantised from the trimmed file: hinglish-q8_0 (1.66 GB), hinglish-q5_0 (1.08 GB); hashes in
+   models/manifest.local.json. The raw file is not in the manifest.
+
+4. whisper-cli -m <model> -f <clip> -l hi -t 8 -bs 5 -np -nt (beam 5, no timestamps, no VAD),
+   gate lock checked, below-normal priority
+   CoSHE-Eval audio_1322 (10.7 s, code-switched; CC BY-NC 4.0, evaluation only, so its text is not
+   reproduced here):
+     raw:     exit -1073741819 (0xC0000005 access violation), no output
+     trimmed: exit 0; Hindi words correct in Devanagari; of the reference's 4 English words inside Hindi
+              sentences, 1 kept in Latin script and 3 written in Devanagari; the reference's two English-only
+              phrases (9 words) were dropped
+   FLEURS hi_in 10011266027513218401 (CC BY 4.0; text not reproduced, see eval/README.md):
+     raw:     exit -1073741819 (0xC0000005 access violation), no output
+     trimmed: exit 0; Devanagari Hindi close to the reference (a few word-form differences)
+
+Decision (PROVISIONAL; Phase 5 If Blocked rule): the <|mixedcode|> token is lost in conversion. On these two
+clips the trimmed model decodes (Devanagari Hindi; some English words stay in Latin script) where the raw one
+crashes, so it is kept for evaluation through --file. Two clips do not show its output is "still correct":
+the keep-or-drop decision rests on the 20-clip CoSHE-Eval smoke runs (smoke-hinglish-q8_0-coshe and
+smoke-hinglish-q5_0-coshe beside smoke-medium-coshe, current role settings; WER, deletions and the
+Latin->Devanagari rate in tables-phase-5a.md) and finally on Phase 5's full runs. whisper.cpp cannot prompt or produce <|mixedcode|>, so D14 (English words in Latin script)
+depends on what the model writes without it; Phase 5 measures that on CoSHE-Eval and the local mixed set
+(Latin->Devanagari rate) and records D14's fallback if it falls short. Never load the raw file: it crashes
+whisper.cpp v1.9.5.
+
+5. 20-clip CoSHE-Eval smoke runs, VAD chunks of at most 15 s (valid results; 9 Nov 2026)
+   An earlier run of these three decoded each 56 s clip in 30 s windows without model timestamps; whisper.cpp
+   stops such a window at its token limit and skips the rest, losing 20 to 41% of the reference words. Those
+   numbers were withdrawn after the re-review. The harness now cuts each clip at VAD pauses (whisper.cpp's
+   Silero VAD, eval/wbeval/chunking.py) into chunks of at most 15 s and decodes each chunk on its own.
+   Machine: Legion (native, CPU only). whisper.cpp v1.9.5 (d1be6fde11ac), portable AVX2 build, 8 threads,
+   night role (beam 5, fallback, previous-chunk context, VAD, no model timestamps), language given from the
+   reference (oracle: detection not measured). Run through eval/run.py all; results in eval/results/TABLES.md,
+   copied to tables-phase-5a.md. The longest chunk was 14.1 to 14.8 s, depending on the run.
+     run                          WER    WER nukta ignored   CER    Latin->Devanagari (reference words)   truncated   broken   RTF
+     smoke-hinglish-q8_0-coshe    11.5   11.3                7.9    5.1 %                                 0 of 20     0        1.66
+     smoke-hinglish-q5_0-coshe    11.6   11.4                8.0    4.7 %                                 0 of 20     0        1.97
+     smoke-medium-coshe           57.0   57.0                52.5   5.8 %                                 11 of 20    0        1.36
+   Reading: on Hindi-English code-switched speech the trimmed Hinglish model scores about a fifth of stock
+   medium's WER, with word counts that match the references (for example audio_0: 237 words against 236).
+   Stock medium really fails on the Hindi-heavy clips (repetition loops such as "??? ???"; its 11 truncated
+   clips are all Hindi or mixed). Its 57.0 is measured with ungated context: each chunk's text, loops
+   included, is fed (last 200 characters) as the prompt of the next chunk, and unlike the app (PLAN section 6)
+   the harness does not reset the context after a flagged chunk. A failure that poisons the next prompt
+   makes stock medium look worse than the app's guards would allow, so the size of the gap is not
+   established (the ranking is probably right). Control run pending: see the GATES open item for Phase 5. q5_0 is
+   within 0.1 WER points of q8_0 (PLAN section 5 asks for within 1). English words inside Hindi sentences
+   stay in Latin script about 95% of the time even without <|mixedcode|> (Latin->Devanagari 4.7 to 5.1%).
+   Independence: UNKNOWN for the two Hinglish rows (the tables print "unknown"). The Trelis model card
+   (read 9 Nov 2026) names no training data, only its starting checkpoint (ARTPARK-IISc/whisper-large-v3-vaani-hindi,
+   a Vaani-fine-tuned large-v3), and mentions CoSHE only as an evaluation benchmark (CoSHE-500, derived from
+   soketlabs/CoSHE-Eval); the CoSHE-500 card asks people not to train on that subset, but nothing says this
+   model was not trained on CoSHE-Eval or its source recordings. So the Hinglish-versus-medium gap above is
+   a smoke result, not evidence, until a clean set or a statement from the authors settles it. Stock medium
+   (OpenAI weights) is not known to have seen CoSHE-Eval and is marked independent.
+   Caveats: 20 clips (about 17 minutes) of one set; language given, not detected; CoSHE references include a
+   little romanised Hindi, which counts as English in the Latin->Devanagari rate. The keep decision is
+   therefore supported for Phase 5 but still PROVISIONAL until its full runs, on this set and the local
+   code-switched set.

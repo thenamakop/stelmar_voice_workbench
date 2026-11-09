@@ -1,0 +1,30 @@
+Phase 5a Verification: a converted small model transcribes one FLEURS Hindi clip in Devanagari
+through whisper.cpp's own CLI.
+
+Machine: Legion (Core i9-14900HX), native profile (no emulation), CPU only
+Date: 8 Nov 2026
+whisper.cpp: v1.9.5 (d1be6fde11ac6e0407606b4e42fe72d34add8037), whisper-cli built with
+  GGML_NATIVE=OFF, AVX, AVX2, FMA, F16C (scripts/models/build_whispercpp.py)
+Model: hindi-small-q8_0 = vasista22/whisper-hindi-small@fb4a24afc20c42906deed31c3689e4be31da41fe
+  (Apache-2.0), converted with convert-h5-to-ggml.py to f16 (sha256
+  5d9f25596aad22c9...), quantised with whisper-quantize to q8_0
+  (models/converted/ggml-hindi-small-q8_0.bin, sha256 0b2ff62094c004b0..., full hashes in
+  models/manifest.local.json)
+Converter checks: n_mels 80, encoder_layers 12, n_vocab 51865 (99 languages), special-token ids
+  match whisper.cpp's derived ids
+Clip: FLEURS hi_in test 10011266027513218401 (CC BY 4.0), 9.12 s, 16 kHz mono
+Gate lock checked before the run; whisper-cli ran at below-normal priority, 8 threads, beam 5.
+
+Command (from the repository folder):
+  eval\.tools\whisper.cpp\build\bin\Release\whisper-cli.exe -m models\converted\ggml-hindi-small-q8_0.bin
+    -f eval\data\fleurs-hi\audio\10011266027513218401.wav -l hi -t 8 -bs 5 -np -nt
+
+Exit code: 0
+Output:    one segment; 52 of 52 letters in Devanagari (U+0900..U+097F); a close transcription of the
+           clip (a few word-form differences from the reference). The text is not reproduced here:
+           FLEURS references and model output for its clips are not committed (eval/README.md).
+
+Note: vasista22 models were trained on FLEURS train and dev, so FLEURS numbers for them are not
+independent; this check is about script and a working conversion, not accuracy.
+
+Result: PASS

@@ -1,0 +1,3 @@
+{"v": 0, "type": "segment", "start_ms": 250, "end_ms": 3100, "text": " आज की बैठक में चार विषयों पर चर्चा होगी", "lang": "hi", "lang_prob": null, "mixed": false, "model": "medium"}
+{"v": 0, "type": "segment", "start_ms": 3100, "end_ms": 6800, "text": " पहले सत्र के बाद चाय का समय रहेगा", "lang": "hi", "lang_prob": null, "mixed": false, "model": "medium"}
+{"v": 0, "type": "done"}

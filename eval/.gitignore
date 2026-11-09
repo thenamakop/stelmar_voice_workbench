@@ -1,0 +1,8 @@
+# Development-time tools, environment and outputs for eval/ and scripts/models/. Never committed.
+.venv/
+.tools/
+results/
+logs/
+__pycache__/
+.pytest_cache/
+*.pyc
