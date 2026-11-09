@@ -364,3 +364,41 @@ fn a_panic_before_writing_a_batch_loses_nothing() -> TestResult {
 fn a_panic_in_the_middle_of_a_batch_loses_nothing_and_duplicates_nothing() -> TestResult {
     panic_while_writing_loses_nothing(PanicPoint::MidBatch, "rec-panic-mid")
 }
+
+#[test]
+fn a_batch_that_keeps_panicking_is_dropped_and_counted_and_recording_goes_on() -> TestResult {
+    let (_root, dir, rec, _events) = setup("rec-panic-repeat", 60)?;
+    let (mut prod, handle) = StreamHandle::manual(input(), 20);
+    rec.send(RecorderMsg::Stream(handle))?;
+    let k = feed_blocks(&mut prod, 0, 0.3, 150);
+    std::thread::sleep(Duration::from_millis(200));
+    // The next batch panics every time it is tried.
+    rec.send(RecorderMsg::InjectPanic(PanicPoint::BeforeWriteRepeated(3)))?;
+    let k2 = feed_blocks(&mut prod, k, 0.3, 150);
+    std::thread::sleep(Duration::from_millis(400));
+    // Audio behind the poisoned batch is recorded.
+    let end = feed_blocks(&mut prod, k2, 0.5, 150);
+    std::thread::sleep(Duration::from_millis(300));
+    assert!(rec.is_running());
+    let report = rec.stop()?;
+    assert_eq!(
+        report.recorder_restarts, 3,
+        "three attempts, then the batch is dropped"
+    );
+    assert!(report.dropped_samples > 0, "the dropped batch is counted");
+    let got = all_samples(&dir)?;
+    assert_eq!(
+        got.len() as u64 + report.dropped_samples,
+        end,
+        "written plus dropped must equal what was fed"
+    );
+    assert!(
+        got.windows(2).all(|w| w[0] < w[1]),
+        "what was written stays in order"
+    );
+    assert!(
+        got.last().copied() == Some(sample(end - 1)),
+        "the newest audio is recorded"
+    );
+    Ok(())
+}

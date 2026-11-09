@@ -77,7 +77,16 @@ pub enum PanicPoint {
     BeforeWrite,
     /// In the middle of a batch that spans a part rollover, after its first part was written.
     MidBatch,
+    /// Before writing, on each of the next N attempts (a batch that keeps panicking).
+    BeforeWriteRepeated(u8),
 }
+
+/// After this many panics in a row on the same batch, the rest of that batch is discarded and
+/// counted in `dropped_samples`, so one poisonous batch cannot hold the recorder in a restart loop.
+const MAX_PANICS_PER_BATCH: u8 = 3;
+/// `recorder_restarted` events (session.json, toast) are written at most this often; the restart
+/// counter still counts every restart.
+const RESTART_EVENT_EVERY: Duration = Duration::from_secs(5);
 
 /// What the recorder left behind at Stop.
 #[derive(Debug, Clone, Serialize)]
@@ -250,6 +259,11 @@ struct Recorder {
     /// and duplicates nothing.
     batch_len: usize,
     batch_done: usize,
+    /// Panics in a row on the current batch (reset when a batch completes).
+    batch_panics: u8,
+    /// When `recorder_restarted` was last written, and restarts since then not yet reported.
+    last_restart_event: Option<Instant>,
+    restarts_unreported: u32,
     /// Test hook: where to panic next (see `PanicPoint`).
     panic_point: Option<PanicPoint>,
     /// A Stop being handled, so a panic during it can still reply.
@@ -341,6 +355,9 @@ fn run(cfg: RecorderConfig, rx: &Receiver<RecorderMsg>, events: Sender<Event>) {
         last_callbacks: (0, now),
         batch_len: 0,
         batch_done: 0,
+        batch_panics: 0,
+        last_restart_event: None,
+        restarts_unreported: 0,
         panic_point: None,
         pending_stop: None,
         first_write_pending: false,
@@ -447,6 +464,17 @@ impl Recorder {
     /// Returns true when the thread should end (a panic during Stop: the caller is told).
     fn after_panic(&mut self, msg: &str) -> bool {
         self.restarts += 1;
+        self.restarts_unreported += 1;
+        let mut discarded = 0u64;
+        if self.batch_len > 0 && self.batch_panics >= MAX_PANICS_PER_BATCH {
+            // The same batch has panicked repeatedly: drop what is left of it (counted) so the
+            // recorder goes on with the audio behind it.
+            discarded = self.batch_len.saturating_sub(self.batch_done) as u64;
+            self.dropped_samples += discarded;
+            self.batch_len = 0;
+            self.batch_done = 0;
+            self.batch_panics = 0;
+        }
         // The drain buffer may have been moved out when the panic hit: rebuild it.
         self.rebuild_scratch();
         if let Some(reply) = self.pending_stop.take() {
@@ -466,12 +494,28 @@ impl Recorder {
             }
             self.part_no += 1;
         }
-        let _ = catch_unwind(AssertUnwindSafe(|| {
-            self.error(format!(
-                "The recorder hit an internal error and continues in a new part: {msg}"
-            ));
-            self.event("recorder_restarted", Some(msg.to_string()));
-        }));
+        let due = self
+            .last_restart_event
+            .is_none_or(|t| t.elapsed() >= RESTART_EVENT_EVERY);
+        if due {
+            self.last_restart_event = Some(Instant::now());
+            let count = std::mem::take(&mut self.restarts_unreported);
+            let _ = catch_unwind(AssertUnwindSafe(|| {
+                self.error(format!(
+                    "The recorder hit an internal error and continues in a new part: {msg}"
+                ));
+                let mut detail = msg.to_string();
+                if count > 1 {
+                    detail.push_str(&format!(" ({count} restarts since the last report)"));
+                }
+                if discarded > 0 {
+                    detail.push_str(&format!(
+                        "; {discarded} samples of a batch that kept failing were dropped"
+                    ));
+                }
+                self.event("recorder_restarted", Some(detail));
+            }));
+        }
         false
     }
 
@@ -696,13 +740,21 @@ impl Recorder {
             Ok(()) => {
                 self.batch_len = 0;
                 self.batch_done = 0;
+                self.batch_panics = 0;
             }
-            Err(payload) => std::panic::resume_unwind(payload),
+            Err(payload) => {
+                self.batch_panics = self.batch_panics.saturating_add(1);
+                std::panic::resume_unwind(payload)
+            }
         }
     }
 
     /// Writes `samples` from the cursor `done` on, advancing it after each successful write.
     fn process(&mut self, samples: &[f32], done: &mut usize) {
+        if let Some(PanicPoint::BeforeWriteRepeated(n)) = self.panic_point {
+            self.panic_point = (n > 1).then_some(PanicPoint::BeforeWriteRepeated(n - 1));
+            panic!("injected recorder panic before writing audio, repeated (test hook)");
+        }
         if self.panic_point == Some(PanicPoint::BeforeWrite) {
             self.panic_point = None;
             panic!("injected recorder panic before writing audio (test hook)");

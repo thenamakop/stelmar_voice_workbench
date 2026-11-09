@@ -257,8 +257,8 @@ function ConvertTo-WbArray {
   if ($List -is [System.Collections.IList]) { foreach ($item in $List.ToArray()) { $item } } else { foreach ($item in $List) { $item } }
 }
 
-# The driver-xrun rule (approved 9 Nov 2026). Windows flags the first captured packet when a
-# stream opens while audio is already flowing, and cpal reports it as an xrun: every app start in
+# The driver-xrun rule (approved 9 Nov 2026). Each stream start while audio is already flowing counts one xrun
+# in cpal (which packet Windows flags is not proven; the callback count at the xrun is not recorded): every app start in
 # the kill test counts exactly one, in its first second, with nothing lost around it. So:
 #   Allowed: ONE driver xrun per run (per stream start or restart), no later than $WindowMs after
 #            that run's first audio, and only when the sample comparison shows zero loss and
