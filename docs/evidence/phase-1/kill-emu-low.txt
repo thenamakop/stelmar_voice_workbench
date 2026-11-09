@@ -1,0 +1,136 @@
+﻿source: commit d170fc4 with uncommitted or untracked changes (the build hashes below identify the code)
+build: stelmar-voice-workbench.exe sha256 9adb5dfa1f3cae8b6c3bd80545a286f54d739a08e7f1fa778f3b96ea9cc77837 (built 2026-11-09 04:12)
+build: wb-testbench.exe sha256 7fecf5ec8a8be99b42dd5b302aadc9b4d966886fb6e7fb2edfd87de5a54e69f3 (built 2026-11-09 04:12)
+build: wb-emulate.exe sha256 f61b04a3286fa48385964912740b5253f2edfd2b92161fd914230f15cf980316 (built 2026-11-08 18:07)
+gate: phase1-kill-emu-low
+started: 2026-11-09 09:15:35 +05:30
+machine: Legion
+emulation profile: emu-low
+overlay tools closed: yes (RTSS.exe and MSIAfterburner.exe not running when the gate started)
+overlay tools at the end: none running
+Track B paused: D:\Projects\stelmar-gate.lock held for the whole run (removed in a finally block)
+Track B busy lock: D:\Projects\stelmar-eval-busy.lock absent at start
+free RAM: 17.7 GB at start (needs 14 GB), 17.6 GB at end
+parts: 30 s for this test (WB_GATE_PART_SECONDS), so kills can be aimed at rollovers; not covered here: kills during Pause or while the input is lost
+app build: target\gate\stelmar-voice-workbench.exe (cargo profile gate, features gate-hooks + custom-protocol)
+verdict: FAIL
+
+checks:
+  [x] audio lost at each kill <= 1000 ms (max 0 ms)
+  [x] every part played before repair, after each kill
+  [x] every part decodes in Media Foundation at the end
+  [x] restart offered Resume after every kill (5 of 5)
+  [x] parts.json equals a rebuild from the part files
+  [x] only the restarts break the audio (5 forward jumps for 5 kills)
+  [x] no silent gaps and no foreign sound (unexplained unmatched 0 ms)
+  [x] no capture-chain breaks beyond one start-up repeat (0; excused 0)
+  [x] reference capture ran cleanly
+  [ ] zero overruns, driver xruns and dropped samples (final run, and before every kill)
+  [x] mirror SHA-256 equals the originals at Stop
+
+loss per kill (method: kill time minus that run's first-sample time, minus the audio that run left on disk after repair):
+  kill 1 (-500 ms from a rollover; landed 29,861 ms into a part): first sample 09:15:41.619, killed 09:17:41.271: 1,19,652 ms of wall time, 1,19,861 ms recorded, lost -209 ms; from the source signal -213 ms; parts playable before repair: True
+  kill 2 (500 ms from a rollover; landed 866 ms into a part): first sample 09:17:45.563, killed 09:19:46.272: 1,20,709 ms of wall time, 1,20,866 ms recorded, lost -157 ms; from the source signal -159 ms; parts playable before repair: True
+  kill 3 (-500 ms from a rollover; landed 29,736 ms into a part): first sample 09:19:50.494, killed 09:21:50.141: 1,19,647 ms of wall time, 1,19,736 ms recorded, lost -89 ms; from the source signal -85 ms; parts playable before repair: True
+  kill 4 (random; landed 2,268 ms into a part): first sample 09:21:54.340, killed 09:23:26.394: 92,053 ms of wall time, 92,268 ms recorded, lost -215 ms; from the source signal -221 ms; parts playable before repair: True
+  kill 5 (random; landed 4,073 ms into a part): first sample 09:23:30.727, killed 09:24:34.639: 63,912 ms of wall time, 64,073 ms recorded, lost -161 ms; from the source signal -153 ms; parts playable before repair: True
+
+parts after each kill, before repair (Media Foundation decode):
+  kill 1: audio/part-0001.wav header 30000 ms decoded 30000 ms; audio/part-0002.wav header 30000 ms decoded 30000 ms; audio/part-0003.wav header 30000 ms decoded 30000 ms; audio/part-0004.wav header 29520 ms decoded 29520 ms
+  kill 2: audio/part-0001.wav header 30000 ms decoded 30000 ms; audio/part-0002.wav header 30000 ms decoded 30000 ms; audio/part-0003.wav header 30000 ms decoded 30000 ms; audio/part-0004.wav header 29861 ms decoded 29861 ms; audio/part-0005.wav header 30000 ms decoded 30000 ms; audio/part-0006.wav header 30000 ms decoded 30000 ms; audio/part-0007.wav header 30000 ms decoded 30000 ms; audio/part-0008.wav header 30000 ms decoded 30000 ms; audio/part-0009.wav header 440 ms decoded 440 ms
+  kill 3: audio/part-0001.wav header 30000 ms decoded 30000 ms; audio/part-0002.wav header 30000 ms decoded 30000 ms; audio/part-0003.wav header 30000 ms decoded 30000 ms; audio/part-0004.wav header 29861 ms decoded 29861 ms; audio/part-0005.wav header 30000 ms decoded 30000 ms; audio/part-0006.wav header 30000 ms decoded 30000 ms; audio/part-0007.wav header 30000 ms decoded 30000 ms; audio/part-0008.wav header 30000 ms decoded 30000 ms; audio/part-0009.wav header 866 ms decoded 866 ms; audio/part-0010.wav header 30000 ms decoded 30000 ms; audio/part-0011.wav header 30000 ms decoded 30000 ms; audio/part-0012.wav header 30000 ms decoded 30000 ms; audio/part-0013.wav header 29480 ms decoded 29480 ms
+  kill 4: audio/part-0001.wav header 30000 ms decoded 30000 ms; audio/part-0002.wav header 30000 ms decoded 30000 ms; audio/part-0003.wav header 30000 ms decoded 30000 ms; audio/part-0004.wav header 29861 ms decoded 29861 ms; audio/part-0005.wav header 30000 ms decoded 30000 ms; audio/part-0006.wav header 30000 ms decoded 30000 ms; audio/part-0007.wav header 30000 ms decoded 30000 ms; audio/part-0008.wav header 30000 ms decoded 30000 ms; audio/part-0009.wav header 866 ms decoded 866 ms; audio/part-0010.wav header 30000 ms decoded 30000 ms; audio/part-0011.wav header 30000 ms decoded 30000 ms; audio/part-0012.wav header 30000 ms decoded 30000 ms; audio/part-0013.wav header 29736 ms decoded 29736 ms; audio/part-0014.wav header 30000 ms decoded 30000 ms; audio/part-0015.wav header 30000 ms decoded 30000 ms; audio/part-0016.wav header 30000 ms decoded 30000 ms; audio/part-0017.wav header 1330 ms decoded 1330 ms
+  kill 5: audio/part-0001.wav header 30000 ms decoded 30000 ms; audio/part-0002.wav header 30000 ms decoded 30000 ms; audio/part-0003.wav header 30000 ms decoded 30000 ms; audio/part-0004.wav header 29861 ms decoded 29861 ms; audio/part-0005.wav header 30000 ms decoded 30000 ms; audio/part-0006.wav header 30000 ms decoded 30000 ms; audio/part-0007.wav header 30000 ms decoded 30000 ms; audio/part-0008.wav header 30000 ms decoded 30000 ms; audio/part-0009.wav header 866 ms decoded 866 ms; audio/part-0010.wav header 30000 ms decoded 30000 ms; audio/part-0011.wav header 30000 ms decoded 30000 ms; audio/part-0012.wav header 30000 ms decoded 30000 ms; audio/part-0013.wav header 29736 ms decoded 29736 ms; audio/part-0014.wav header 30000 ms decoded 30000 ms; audio/part-0015.wav header 30000 ms decoded 30000 ms; audio/part-0016.wav header 30000 ms decoded 30000 ms; audio/part-0017.wav header 2268 ms decoded 2268 ms; audio/part-0018.wav header 30000 ms decoded 30000 ms; audio/part-0019.wav header 30000 ms decoded 30000 ms; audio/part-0020.wav header 3220 ms decoded 3220 ms
+
+final: 22 parts, 548.0 s of audio, mirror 26 files equal True (mirror on the same machine, separate drive pending)
+parts.json check: {"equal":true,"in_parts_json":22,"rebuilt":22,"differences":[]}
+cable interference: none
+default playback device: not the cable (checked at start)
+reference capture: 0 breaks; in the app recording: restarts and own 5, capture-chain (FAIL) 0, EXCUSED start-up repeats 0
+
+discontinuities against the source (each should be one restart):
+  {"at_ms":119861.33333333333,"source_ms":124772.64583333333,"part":5,"source_jump_frames":195776,"source_jump_ms":4078.6666666666665}
+  {"at_ms":240728.0,"source_ms":249717.97916666666,"part":10,"source_jump_frames":195040,"source_jump_ms":4063.3333333333335}
+  {"at_ms":360464.0,"source_ms":373517.3125,"part":14,"source_jump_frames":197472,"source_jump_ms":4114.0}
+  {"at_ms":452732.0,"source_ms":469899.3125,"part":17,"source_jump_frames":197344,"source_jump_ms":4111.333333333333}
+  {"at_ms":516805.3333333333,"source_ms":538083.9791666666,"part":20,"source_jump_frames":200480,"source_jump_ms":4176.666666666667}
+
+progress:
+  09:15:42 run 0 recording in D:\STELMAR-Gate\kill-emu-low-20261109-091535\rec\2026-11-09\gate-kill-20261109-091535
+  09:17:41.271 kill 1 after 106 s: taskkill /F /PID 4988: SUCCESS: The process with PID 4988 has been terminated. (last status: part 4, overrun samples 0)
+  09:17:46 run 1 resumed: part 5, audio 120.8 s
+  09:19:46.272 kill 2 after 98 s: taskkill /F /PID 5068: SUCCESS: The process with PID 5068 has been terminated. (last status: part 8, overrun samples 0)
+  09:19:51 run 2 resumed: part 10, audio 241.7 s
+  09:21:50.141 kill 3 after 109 s: taskkill /F /PID 29556: SUCCESS: The process with PID 29556 has been terminated. (last status: part 13, overrun samples 0)
+  09:21:55 run 3 resumed: part 14, audio 361.4 s
+  09:23:26.394 kill 4 after 90 s: taskkill /F /PID 50016: SUCCESS: The process with PID 50016 has been terminated. (last status: part 17, overrun samples 0)
+  09:23:31 run 4 resumed: part 18, audio 453.7 s
+  09:24:34.639 kill 5 after 62 s: taskkill /F /PID 42636: SUCCESS: The process with PID 42636 has been terminated. (last status: part 20, overrun samples 0)
+  09:24:40 run 5 resumed: part 21, audio 517.8 s
+
+session events:
+  2026-11-09T09:15:41.5832322+05:30 audio_ms=0 opened 
+  2026-11-09T09:15:41.6191251+05:30 audio_ms=0 audio_started CABLE Output (VB-Audio Virtual Cable) 48000 Hz 2 ch
+  2026-11-09T09:15:42.5997762+05:30 audio_ms=970 gap overrun_samples+0 xruns+1 dropped_samples+0 (totals 0, 1, 0)
+  2026-11-09T09:17:45.3013376+05:30 audio_ms=119861 recovered parts=4 headers_repaired=1 empty_removed=0 quarantined=
+  2026-11-09T09:17:45.5171304+05:30 audio_ms=119861 resumed_after_crash 
+  2026-11-09T09:17:45.5633957+05:30 audio_ms=119861 audio_started CABLE Output (VB-Audio Virtual Cable) 48000 Hz 2 ch
+  2026-11-09T09:17:46.5403895+05:30 audio_ms=120841 gap overrun_samples+0 xruns+1 dropped_samples+0 (totals 0, 1, 0)
+  2026-11-09T09:19:50.2725252+05:30 audio_ms=240727 recovered parts=9 headers_repaired=1 empty_removed=0 quarantined=
+  2026-11-09T09:19:50.4493415+05:30 audio_ms=240727 resumed_after_crash 
+  2026-11-09T09:19:50.494258+05:30 audio_ms=240727 audio_started CABLE Output (VB-Audio Virtual Cable) 48000 Hz 2 ch
+  2026-11-09T09:19:51.4621183+05:30 audio_ms=241697 gap overrun_samples+0 xruns+1 dropped_samples+0 (totals 0, 1, 0)
+  2026-11-09T09:21:54.1371541+05:30 audio_ms=360463 recovered parts=13 headers_repaired=1 empty_removed=0 quarantined=
+  2026-11-09T09:21:54.3058519+05:30 audio_ms=360463 resumed_after_crash 
+  2026-11-09T09:21:54.3409102+05:30 audio_ms=360463 audio_started CABLE Output (VB-Audio Virtual Cable) 48000 Hz 2 ch
+  2026-11-09T09:21:55.3249842+05:30 audio_ms=361443 gap overrun_samples+0 xruns+1 dropped_samples+0 (totals 0, 1, 0)
+  2026-11-09T09:23:30.532441+05:30 audio_ms=452731 recovered parts=17 headers_repaired=1 empty_removed=0 quarantined=
+  2026-11-09T09:23:30.6823086+05:30 audio_ms=452731 resumed_after_crash 
+  2026-11-09T09:23:30.7271064+05:30 audio_ms=452731 audio_started CABLE Output (VB-Audio Virtual Cable) 48000 Hz 2 ch
+  2026-11-09T09:23:31.7033141+05:30 audio_ms=453711 gap overrun_samples+0 xruns+1 dropped_samples+0 (totals 0, 1, 0)
+  2026-11-09T09:24:38.7922676+05:30 audio_ms=516804 recovered parts=20 headers_repaired=1 empty_removed=0 quarantined=
+  2026-11-09T09:24:38.933926+05:30 audio_ms=516804 resumed_after_crash 
+  2026-11-09T09:24:38.9691327+05:30 audio_ms=516804 audio_started CABLE Output (VB-Audio Virtual Cable) 48000 Hz 2 ch
+  2026-11-09T09:24:39.9473295+05:30 audio_ms=517774 gap overrun_samples+0 xruns+1 dropped_samples+0 (totals 0, 1, 0)
+  2026-11-09T09:25:10.2151034+05:30 audio_ms=548034 closed overrun_samples=0 xruns=1 dropped_samples=0 recorder_restarts=0 recorder_cpu_ms=171
+
+app log for this run (recovery, session, warnings):
+  2026-11-09T03:45:41.196552Z  INFO main app started version="0.1.0" pid=4988 gate_hooks=true
+  2026-11-09T03:45:41.198191Z  WARN main gate hooks active (development build, gate-hooks feature)
+  2026-11-09T03:45:41.623707Z  INFO wb-gate session recording dir="D:\\STELMAR-Gate\\kill-emu-low-20261109-091535\\rec\\2026-11-09\\gate-kill-20261109-091535" device="CABLE Output (VB-Audio Virtual Cable)" rate=48000 channels=2 resumed=false
+  2026-11-09T03:45:41.623736Z  WARN wb-gate gate: session started dir="D:\\STELMAR-Gate\\kill-emu-low-20261109-091535\\rec\\2026-11-09\\gate-kill-20261109-091535"
+  2026-11-09T03:45:42.599594Z  WARN wb-events Audio was lost: overrun_samples+0 xruns+1 dropped_samples+0 (totals 0, 1, 0) source="recorder"
+  2026-11-09T03:47:45.273252Z  INFO main app started version="0.1.0" pid=5068 gate_hooks=true
+  2026-11-09T03:47:45.275206Z  WARN main gate hooks active (development build, gate-hooks feature)
+  2026-11-09T03:47:45.304384Z  WARN wb-recovery-scan recovery: session left open by a crash; offering Resume or Close dir="D:\\STELMAR-Gate\\kill-emu-low-20261109-091535\\rec\\2026-11-09\\gate-kill-20261109-091535" parts=4 audio_ms=119861
+  2026-11-09T03:47:45.376092Z  WARN          wb-gate gate: recovery offered sessions=1 action="resume"
+  2026-11-09T03:47:45.559652Z  INFO          wb-gate session recording dir="D:\\STELMAR-Gate\\kill-emu-low-20261109-091535\\rec\\2026-11-09\\gate-kill-20261109-091535" device="CABLE Output (VB-Audio Virtual Cable)" rate=48000 channels=2 resumed=true
+  2026-11-09T03:47:46.540187Z  WARN        wb-events Audio was lost: overrun_samples+0 xruns+1 dropped_samples+0 (totals 0, 1, 0) source="recorder"
+  2026-11-09T03:49:50.221725Z  INFO main app started version="0.1.0" pid=29556 gate_hooks=true
+  2026-11-09T03:49:50.223503Z  WARN main gate hooks active (development build, gate-hooks feature)
+  2026-11-09T03:49:50.273827Z  WARN wb-recovery-scan recovery: session left open by a crash; offering Resume or Close dir="D:\\STELMAR-Gate\\kill-emu-low-20261109-091535\\rec\\2026-11-09\\gate-kill-20261109-091535" parts=9 audio_ms=240727
+  2026-11-09T03:49:50.324327Z  WARN          wb-gate gate: recovery offered sessions=1 action="resume"
+  2026-11-09T03:49:50.491377Z  INFO          wb-gate session recording dir="D:\\STELMAR-Gate\\kill-emu-low-20261109-091535\\rec\\2026-11-09\\gate-kill-20261109-091535" device="CABLE Output (VB-Audio Virtual Cable)" rate=48000 channels=2 resumed=true
+  2026-11-09T03:49:51.461968Z  WARN        wb-events Audio was lost: overrun_samples+0 xruns+1 dropped_samples+0 (totals 0, 1, 0) source="recorder"
+  2026-11-09T03:51:54.066621Z  INFO main app started version="0.1.0" pid=50016 gate_hooks=true
+  2026-11-09T03:51:54.068241Z  WARN main gate hooks active (development build, gate-hooks feature)
+  2026-11-09T03:51:54.139670Z  WARN wb-recovery-scan recovery: session left open by a crash; offering Resume or Close dir="D:\\STELMAR-Gate\\kill-emu-low-20261109-091535\\rec\\2026-11-09\\gate-kill-20261109-091535" parts=13 audio_ms=360463
+  2026-11-09T03:51:54.169037Z  WARN          wb-gate gate: recovery offered sessions=1 action="resume"
+  2026-11-09T03:51:54.348437Z  INFO          wb-gate session recording dir="D:\\STELMAR-Gate\\kill-emu-low-20261109-091535\\rec\\2026-11-09\\gate-kill-20261109-091535" device="CABLE Output (VB-Audio Virtual Cable)" rate=48000 channels=2 resumed=true
+  2026-11-09T03:51:55.324800Z  WARN        wb-events Audio was lost: overrun_samples+0 xruns+1 dropped_samples+0 (totals 0, 1, 0) source="recorder"
+  2026-11-09T03:53:30.441993Z  INFO main app started version="0.1.0" pid=42636 gate_hooks=true
+  2026-11-09T03:53:30.443930Z  WARN main gate hooks active (development build, gate-hooks feature)
+  2026-11-09T03:53:30.533669Z  WARN wb-recovery-scan recovery: session left open by a crash; offering Resume or Close dir="D:\\STELMAR-Gate\\kill-emu-low-20261109-091535\\rec\\2026-11-09\\gate-kill-20261109-091535" parts=17 audio_ms=452731
+  2026-11-09T03:53:30.546551Z  WARN          wb-gate gate: recovery offered sessions=1 action="resume"
+  2026-11-09T03:53:30.725847Z  INFO          wb-gate session recording dir="D:\\STELMAR-Gate\\kill-emu-low-20261109-091535\\rec\\2026-11-09\\gate-kill-20261109-091535" device="CABLE Output (VB-Audio Virtual Cable)" rate=48000 channels=2 resumed=true
+  2026-11-09T03:53:31.703175Z  WARN        wb-events Audio was lost: overrun_samples+0 xruns+1 dropped_samples+0 (totals 0, 1, 0) source="recorder"
+  2026-11-09T03:54:38.693055Z  INFO main app started version="0.1.0" pid=47112 gate_hooks=true
+  2026-11-09T03:54:38.694564Z  WARN main gate hooks active (development build, gate-hooks feature)
+  2026-11-09T03:54:38.793898Z  WARN wb-recovery-scan recovery: session left open by a crash; offering Resume or Close dir="D:\\STELMAR-Gate\\kill-emu-low-20261109-091535\\rec\\2026-11-09\\gate-kill-20261109-091535" parts=20 audio_ms=516804
+  2026-11-09T03:54:38.795634Z  WARN          wb-gate gate: recovery offered sessions=1 action="resume"
+  2026-11-09T03:54:38.976353Z  INFO          wb-gate session recording dir="D:\\STELMAR-Gate\\kill-emu-low-20261109-091535\\rec\\2026-11-09\\gate-kill-20261109-091535" device="CABLE Output (VB-Audio Virtual Cable)" rate=48000 channels=2 resumed=true
+  2026-11-09T03:54:39.947111Z  WARN        wb-events Audio was lost: overrun_samples+0 xruns+1 dropped_samples+0 (totals 0, 1, 0) source="recorder"
+  2026-11-09T03:55:10.579296Z  INFO          wb-gate session stopped dir=D:\STELMAR-Gate\kill-emu-low-20261109-091535\rec\2026-11-09\gate-kill-20261109-091535 parts=22 audio_ms=548034 overrun_samples=0 xruns=1 mirror_all_match=true
+  2026-11-09T03:55:10.580932Z  WARN          wb-gate gate: stop file seen; session stopped; exiting
+
+audio and reports: D:\STELMAR-Gate\kill-emu-low-20261109-091535 (not in the repository)

@@ -1,9 +1,26 @@
 //! STELMAR Voice Workbench app process.
 //!
-//! Phase 0: the window, the strict offline configuration and one command that tells the UI
-//! whether the first-launch system check has run. Audio, engines and the scheduler come later.
+//! Phase 1: audio capture and crash-safe recording (crates/wb-recorder) behind Tauri commands
+//! and channel events, crash recovery at start-up, and a display guard that recovers from
+//! WebView2 process failures without touching the recording.
 
+mod boundary;
 mod capability;
+mod display;
+#[cfg(feature = "gate-hooks")]
+mod gate;
+mod recording;
+mod settings;
+mod state;
+#[cfg(windows)]
+mod win;
+
+use std::fs::OpenOptions;
+use std::sync::Mutex;
+
+use tauri::{Manager, RunEvent, WindowEvent};
+
+use crate::state::AppState;
 
 /// Errors that stop the app from starting.
 #[derive(Debug, thiserror::Error)]
@@ -12,11 +29,101 @@ pub enum RunError {
     Tauri(#[from] tauri::Error),
 }
 
-/// Starts the app and blocks until the last window closes.
+fn init_logging(app: &tauri::App) {
+    let Ok(dir) = app.path().app_log_dir() else {
+        return;
+    };
+    if std::fs::create_dir_all(&dir).is_err() {
+        return;
+    }
+    let Ok(file) = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(dir.join("app.log"))
+    else {
+        return;
+    };
+    let _ = tracing_subscriber::fmt()
+        .with_writer(Mutex::new(file))
+        .with_ansi(false)
+        .with_thread_names(true)
+        .with_target(false)
+        .try_init();
+}
+
+fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    init_logging(app);
+    boundary::install_panic_hook();
+    tracing::info!(
+        version = recording::APP_VERSION,
+        pid = std::process::id(),
+        gate_hooks = cfg!(feature = "gate-hooks"),
+        "app started"
+    );
+    // Emulation (wb-emulate) is a development aid: only development and gate builds read it.
+    #[cfg(any(debug_assertions, feature = "gate-hooks"))]
+    tracing::info!(
+        emulated = std::env::var("WB_EMULATE").unwrap_or_default(),
+        "emulation profile"
+    );
+    let data_dir = app.path().app_data_dir()?;
+    let settings = settings::load(&data_dir, app.path().document_dir().ok());
+    let (state, events_rx) = AppState::new(data_dir, settings);
+    state::spawn_forwarder(events_rx, state.snapshot.clone(), state.subscribers.clone());
+    app.manage(state);
+    #[cfg(feature = "gate-hooks")]
+    gate::apply_overrides(app.handle());
+
+    let handle = app.handle().clone();
+    std::thread::Builder::new()
+        .name("wb-recovery-scan".into())
+        .spawn(move || recording::scan_for_recovery(&handle))?;
+
+    for window in app.webview_windows().values() {
+        display::guard(window);
+    }
+    #[cfg(feature = "gate-hooks")]
+    gate::start(app.handle());
+    Ok(())
+}
+
+/// Starts the app and blocks until it exits.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() -> Result<(), RunError> {
-    tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![capability::has_capability_profile])
-        .run(tauri::generate_context!())?;
+    let app = tauri::Builder::default()
+        .setup(setup)
+        .on_window_event(|window, event| {
+            // Closing the window mid-session would end the recording: ask for Stop first.
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                if recording::is_recording(window.app_handle()) {
+                    api.prevent_close();
+                    tracing::warn!("window close refused while recording");
+                    window
+                        .app_handle()
+                        .state::<AppState>()
+                        .broadcast(serde_json::json!({ "kind": "close_blocked" }));
+                }
+            }
+        })
+        .invoke_handler(tauri::generate_handler![
+            capability::has_capability_profile,
+            recording::list_inputs,
+            recording::get_settings,
+            recording::save_settings,
+            recording::start_session,
+            recording::pause,
+            recording::resume,
+            recording::stop_session,
+            recording::subscribe_events,
+            recording::recorder_snapshot,
+            recording::recovery_list,
+            recording::recover_session,
+        ])
+        .build(tauri::generate_context!())?;
+    app.run(|_handle, event| {
+        if let RunEvent::Exit = event {
+            tracing::info!("app exiting");
+        }
+    });
     Ok(())
 }

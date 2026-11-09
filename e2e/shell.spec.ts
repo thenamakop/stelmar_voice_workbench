@@ -72,7 +72,57 @@ test("Record screen renders Inter, IBM Plex Mono, Devanagari and Nastaliq from l
   expect(remote).toEqual([]);
 });
 
+test("Record screen while recording matches record-only.html (screenshot)", async ({ page }) => {
+  const remote = watchRequests(page);
+  await page.goto("/e2e/index.html?profile=present&state=recording");
+  await expect(page.getByRole("heading", { level: 1, name: "Parallel Track Sessions I" })).toBeVisible();
+  await expect(page.getByLabel("Recorded time")).toHaveText("00:45:15");
+  await expect(page.getByRole("button", { name: "Stop Session" })).toBeVisible();
+  await expect(page.getByText("In sync")).toBeVisible();
+  await expect(page.getByLabel("Parts").getByText("Recording")).toBeVisible();
+  // The level event arrives on the channel shortly after subscribing.
+  await expect(page.getByRole("meter", { name: "Input level" })).toHaveAttribute("aria-valuenow", "-21");
+  await fontsReady(page);
+  await page.screenshot({ path: `${SCREENSHOT_DIR}/record-recording.png` });
+  expect(remote).toEqual([]);
+});
+
+test("input lost shows the banner and keeps the session open (screenshot)", async ({ page }) => {
+  const remote = watchRequests(page);
+  await page.goto("/e2e/index.html?profile=present&state=input_lost");
+  await expect(page.getByRole("alert")).toContainText("Input lost");
+  await fontsReady(page);
+  await page.screenshot({ path: `${SCREENSHOT_DIR}/record-input-lost.png` });
+  expect(remote).toEqual([]);
+});
+
+test("crash recovery offers Resume and Close (screenshot)", async ({ page }) => {
+  const remote = watchRequests(page);
+  await page.goto("/e2e/index.html?profile=present&state=recovery");
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByText("Resume This Session?")).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Resume Recording" })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Close Session" })).toBeVisible();
+  await fontsReady(page);
+  await page.screenshot({ path: `${SCREENSHOT_DIR}/recovery-dialog.png` });
+  await dialog.getByRole("button", { name: "Resume Recording" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Parallel Track Sessions I" })).toBeVisible();
+  expect(remote).toEqual([]);
+});
+
+test("Start Session dialog (screenshot)", async ({ page }) => {
+  const remote = watchRequests(page);
+  await page.goto("/e2e/index.html?profile=present");
+  await page.getByRole("button", { name: "Record" }).click();
+  await page.getByRole("button", { name: "Start Session" }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await fontsReady(page);
+  await page.screenshot({ path: `${SCREENSHOT_DIR}/start-dialog-phase1.png` });
+  expect(remote).toEqual([]);
+});
+
 test("every screen opens from the nav", async ({ page }) => {
+  const remote = watchRequests(page);
   await page.goto("/e2e/index.html?profile=present");
   const screens: [string, string][] = [
     ["Sessions", "Sessions"],
@@ -87,4 +137,5 @@ test("every screen opens from the nav", async ({ page }) => {
     await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
     await page.screenshot({ path: `${SCREENSHOT_DIR}/${nav.toLowerCase()}-nav.png` });
   }
+  expect(remote).toEqual([]);
 });

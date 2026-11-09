@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-list-inputs"
+description = "Enables the list_inputs command without any pre-configured scope."
+commands.allow = ["list_inputs"]
+
+[[permission]]
+identifier = "deny-list-inputs"
+description = "Denies the list_inputs command without any pre-configured scope."
+commands.deny = ["list_inputs"]
