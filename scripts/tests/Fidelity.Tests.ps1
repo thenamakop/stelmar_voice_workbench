@@ -83,14 +83,14 @@ $v = Score (New-Compare) $big (New-Play)
 Check 'a break with more than 250 ms unmatched is INVALID' ($v.Verdict -eq 'INVALID' -and ($v.InvalidReasons -join ' ') -match '251 ms unmatched')
 $ok250 = New-RefAnalysis -Minutes 30 -Jumps @(,@(52000.0, -10.4)) -Unmatched @(,@(51978.7, 250.0))
 Check 'exactly 250 ms unmatched is still inside the limit' ((Score (New-Compare) $ok250 (New-Play)).Verdict -eq 'PASS')
-$many = New-RefAnalysis -Minutes 20 -Jumps @(@(1000.0, -10.0), @(90000.0, -12.0), @(500000.0, -11.0)) -Unmatched @()
+$many = New-RefAnalysis -Minutes 20 -Jumps @(@(5000.0, -10.0), @(90000.0, -12.0), @(500000.0, -11.0)) -Unmatched @()
 $v = Score (New-Compare) $many (New-Play)
-Check 'more than 1 upstream break per 10 minutes of audio is INVALID' ($v.Verdict -eq 'INVALID' -and ($v.InvalidReasons -join ' ') -match '3 upstream break')
+Check 'more than max(1, floor(minutes / 10)) counted upstream breaks is INVALID' ($v.Verdict -eq 'INVALID' -and ($v.InvalidReasons -join ' ') -match '3 counted upstream break' -and ($v.InvalidReasons -join ' ') -match 'limit is 2')
 $twoIn20 = New-RefAnalysis -Minutes 20 -Jumps @(@(1000.0, -10.0), @(90000.0, -12.0)) -Unmatched @()
-Check 'exactly 1 break per 10 minutes is inside the limit' ((Score (New-Compare) $twoIn20 (New-Play)).Verdict -eq 'PASS')
+Check 'a 20-minute run allows 2 counted breaks' ((Score (New-Compare) $twoIn20 (New-Play)).Verdict -eq 'PASS')
 $short = New-RefAnalysis -Minutes 3 -Jumps @(,@(3877.0, -10.96)) -Unmatched @(,@(3877.0, 22.7))
 $v = Score (New-Compare) $short (New-Play)
-Check 'a single break in a 3-minute run is more than 1 per 10 minutes, so INVALID' ($v.Verdict -eq 'INVALID' -and ($v.InvalidReasons -join ' ') -match '3\.3 per 10 minutes')
+Check 'Amendment 1 (b): a single break in a 3-minute run is inside the limit of 1 (it was INVALID as a rate)' ($v.Verdict -eq 'PASS' -and $v.Breaks.Count -eq 1)
 Check 'a reference capture that is missing is INVALID' ((Score (New-Compare) $null (New-Play) $null).Verdict -eq 'INVALID')
 Check 'an app recording that was not compared is INVALID' ((Score $null (New-RefAnalysis) (New-Play)).Verdict -eq 'INVALID')
 $v = Score (New-Compare -Aligned $false) (New-RefAnalysis) (New-Play)
@@ -100,12 +100,43 @@ Check 'audio the app recorded that the reference lacks (incomplete reference) is
 $v = Score (New-Compare) (New-RefAnalysis) (New-Play) ([pscustomobject]@{ overrun_samples = 480; xruns = 0 })
 Check 'a reference capture that lost samples itself is INVALID' ($v.Verdict -eq 'INVALID' -and ($v.InvalidReasons -join ' ') -match 'lost samples itself')
 $noLate = [pscustomobject]@{ underrun_callbacks = 0 }
+$v = Score (New-Compare) $a $noLate
+Check 'Amendment 1 (a): a run with an upstream break and no late-callback data is INVALID, not PASS' ($v.Verdict -eq 'INVALID' -and ($v.InvalidReasons -join ' ') -match 'upstream break and the player recorded no late-callback data')
 $v = Score (New-Compare) (New-RefAnalysis) $noLate
-Check 'a player without late-callback data is INVALID, not PASS' ($v.Verdict -eq 'INVALID' -and ($v.InvalidReasons -join ' ') -match 'no late-callback data')
-$v = Score (New-Compare -Differing 5) (New-RefAnalysis -Minutes 3 -Jumps @(,@(3877.0, -10.96))) (New-Play)
+Check 'Amendment 1 (a): a run with 0 upstream breaks needs no late-callback data' ($v.Verdict -eq 'PASS' -and $v.Breaks.Count -eq 0)
+$v = Score (New-Compare) $a (New-Play -MaxGap 21.9)
+Check 'Amendment 1 (a): the same break with late-callback data is attributed and the run is valid' ($v.Verdict -eq 'PASS')
+$v = Score (New-Compare -Differing 5) (New-RefAnalysis -Minutes 3 -Jumps @(,@(3877.0, -10.96)) -Unmatched @(,@(3877.0, 300.0))) (New-Play)
 Check 'INVALID takes precedence over a fidelity FAIL (the run is repeated)' ($v.Verdict -eq 'INVALID' -and $v.FailReasons.Count -eq 1)
 $text = (Get-WbVerdictLines -Result $v -Compare (New-Compare -Differing 5)) -join "`n"
 Check 'the evidence says INVALID needs a repeat and still lists the fidelity result' ($text -match 'validity: INVALID \(no verdict; the run must be repeated\)' -and $text -match 'fidelity FAIL')
+
+# ---- Amendment 1 (b): the limit is max(1, floor(minutes / 10)) counted breaks per run -------------------
+function Breaks($n, $firstMs = 5000.0) { 1..$n | ForEach-Object { , @(($firstMs + ($_ * 20000.0)), -10.0) } }
+Check '3 minutes: 1 counted break is inside the limit, 2 are INVALID' ((Score (New-Compare) (New-RefAnalysis -Minutes 3 -Jumps @(Breaks 1)) (New-Play)).Verdict -eq 'PASS' -and (Score (New-Compare) (New-RefAnalysis -Minutes 3 -Jumps @(Breaks 2)) (New-Play)).Verdict -eq 'INVALID')
+Check '19.9 minutes still allows only 1 counted break' ((Score (New-Compare) (New-RefAnalysis -Minutes 19.9 -Jumps @(Breaks 1)) (New-Play)).Verdict -eq 'PASS' -and (Score (New-Compare) (New-RefAnalysis -Minutes 19.9 -Jumps @(Breaks 2)) (New-Play)).Verdict -eq 'INVALID')
+Check '30 minutes allows 3 counted breaks, not 4' ((Score (New-Compare) (New-RefAnalysis -Minutes 30 -Jumps @(Breaks 3)) (New-Play)).Verdict -eq 'PASS' -and (Score (New-Compare) (New-RefAnalysis -Minutes 30 -Jumps @(Breaks 4)) (New-Play)).Verdict -eq 'INVALID')
+Check '120 minutes allows 12 counted breaks, not 13' ((Score (New-Compare) (New-RefAnalysis -Minutes 120 -Jumps @(Breaks 12)) (New-Play)).Verdict -eq 'PASS' -and (Score (New-Compare) (New-RefAnalysis -Minutes 120 -Jumps @(Breaks 13)) (New-Play)).Verdict -eq 'INVALID')
+
+# ---- Amendment 1 (c): breaks in the first 3 s of playback are reported, not counted --------------------
+$early = New-RefAnalysis -Minutes 3 -Jumps @(@(17.0, -1.6), @(1798.0, -12.08), @(60000.0, -10.0)) -Unmatched @(@(17.0, 82.7), @(1706.0, 92.0))
+$v = Score (New-Compare) $early (New-Play)
+Check 'two start-up breaks plus one later break in a 3-minute run: all reported, 1 counted, valid' ($v.Verdict -eq 'PASS' -and $v.Breaks.Count -eq 3 -and $v.CountedBreaks.Count -eq 1)
+$two = New-RefAnalysis -Minutes 3 -Jumps @(@(17.0, -1.6), @(60000.0, -10.0), @(100000.0, -10.0))
+Check 'start-up breaks do not make room: 2 later breaks in 3 minutes are still INVALID' ((Score (New-Compare) $two (New-Play)).Verdict -eq 'INVALID')
+Check 'a break at 2,999 ms is not counted and one at 3,000 ms is' ((Score (New-Compare) (New-RefAnalysis -Minutes 3 -Jumps @(,@(2999.0, -10.0))) (New-Play)).CountedBreaks.Count -eq 0 -and (Score (New-Compare) (New-RefAnalysis -Minutes 3 -Jumps @(,@(3000.0, -10.0))) (New-Play)).CountedBreaks.Count -eq 1)
+$earlyBig = New-RefAnalysis -Minutes 3 -Jumps @(,@(1706.0, -12.0)) -Unmatched @(,@(1706.0, 260.0))
+$v = Score (New-Compare) $earlyBig (New-Play)
+Check 'a start-up break with more than 250 ms unmatched is still INVALID' ($v.Verdict -eq 'INVALID' -and ($v.InvalidReasons -join ' ') -match '260 ms unmatched')
+$lateEarly = @([pscustomobject]@{ source_ms = 1900.0; at_ms = 3000.0; interval_ms = 150.0; buffer_ms = 100.0 })
+$v = Score (New-Compare) (New-RefAnalysis -Minutes 3 -Jumps @(,@(1706.0, -12.0))) (New-Play -MaxGap 150.0 -LateEvents $lateEarly)
+Check 'a start-up break with a late player callback within 500 ms is still INVALID' ($v.Verdict -eq 'INVALID' -and ($v.InvalidReasons -join ' ') -match 'late player callback')
+$v = Score (New-Compare) (New-RefAnalysis -Minutes 3 -Jumps @(,@(1706.0, -12.0))) $noLate
+Check 'a start-up break without late-callback data is still INVALID (it cannot be attributed)' ($v.Verdict -eq 'INVALID')
+
+# ---- the amendment leaves the fidelity check alone ------------------------------------------------------
+Check 'fidelity still decides FAIL with breaks inside the new limits' ((Score (New-Compare -Differing 1) (New-RefAnalysis -Minutes 3 -Jumps @(Breaks 1)) (New-Play)).Verdict -eq 'FAIL')
+Check 'dropped samples still FAIL with no breaks and no late-callback data' ((Score (New-Compare) (New-RefAnalysis) $noLate $ref 480).Verdict -eq 'FAIL')
 
 # ---- 5. The first, too sensitive late-callback data is judged by the buffer ---------------------------
 $oldFormat = [pscustomobject]@{

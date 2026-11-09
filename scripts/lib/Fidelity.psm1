@@ -19,6 +19,20 @@
        misaligned (or its data is incomplete: see Get-WbRunVerdict).
     d. The start-up xrun rule for the app's own xruns (Get-WbXrunVerdict) is unchanged.
 
+  Amendment 1 (9 Nov 2026), after the first re-scoring showed two specification errors:
+    a. Late-callback data is required only for a run that has an upstream break. A run with 0
+       upstream breaks needs none. Reason: the data exists to attribute a break; with no break
+       there is nothing to attribute.
+    b. The break limit is a count per run, not a rate: at most max(1, floor(minutes of audio /
+       10)) counted upstream breaks. Reason: a rate made a single break in a 3-minute run
+       INVALID (3.3 per 10 minutes), which is not what the limit is for.
+    c. Upstream breaks within the first 3 s of playback are reported but not counted toward the
+       limit in (b). The 250 ms unmatched and the late-callback conditions still apply to them.
+       Reason: consistent with the start-up allowance for the app's own xruns; the cable
+       replays stale buffer audio at start-up (see the alignment note in docs/PLAN.md).
+    The fidelity check (the app equals the reference after one alignment, 0 dropped) does not
+    change.
+
   ASCII only; Windows PowerShell 5.1.
 #>
 Import-Module (Join-Path $PSScriptRoot 'GateRun.psm1')
@@ -26,7 +40,12 @@ Import-Module (Join-Path $PSScriptRoot 'GateRun.psm1')
 # Limits of the validity rule (c).
 $script:LateWindowMs = 500
 $script:MaxUnmatchedMs = 250
-$script:MaxBreaksPer10Min = 1.0
+# Amendment 1 (b): at most max(1, floor(minutes of audio / 10)) counted breaks per run.
+$script:MinBreakLimit = 1
+$script:MinutesPerBreak = 10
+# Amendment 1 (c): breaks before this source position (the first 3 s of playback) are reported
+# but not counted toward the limit.
+$script:StartupMs = 3000
 # Events closer than this are one break (a repeat and the unmatched stretch beside it).
 $script:ClusterMs = 200
 # The player's output buffer: only a gap longer than this can run it dry.
@@ -170,10 +189,11 @@ function Get-WbRunVerdict {
     }
   }
   $late = Get-WbPlayerLateCallbacks -Play $Play
-  if (-not $late.Known) {
-    $invalid += 'the player recorded no late-callback data (a player before 9 Nov 2026 20:34), so an upstream break cannot be attributed'
-  }
   $breaks = @(Get-WbUpstreamBreaks -RefAnalysis $RefAnalysis -Play $Play -PlayStarted $PlayStarted)
+  # Amendment 1 (a): late-callback data is needed only to attribute a break.
+  if ($breaks.Count -gt 0 -and -not $late.Known) {
+    $invalid += 'the run has an upstream break and the player recorded no late-callback data (a player before 9 Nov 2026 20:34), so the break cannot be attributed'
+  }
   foreach ($b in $breaks) {
     if ($b.LateCallbacks.Count -gt 0) {
       $invalid += ("an upstream break at source {0:n3} s has {1} late player callback(s) within {2} ms (the player may have caused it)" -f ($b.SourceMs / 1000.0), $b.LateCallbacks.Count, $script:LateWindowMs)
@@ -184,11 +204,11 @@ function Get-WbRunVerdict {
   }
   $minutes = 0.0
   if ($RefAnalysis -and (Test-WbHasProperty $RefAnalysis 'recorded_ms')) { $minutes = [double]$RefAnalysis.recorded_ms / 60000.0 }
-  if ($minutes -gt 0) {
-    $rate10 = $breaks.Count / ($minutes / 10.0)
-    if ($rate10 -gt $script:MaxBreaksPer10Min) {
-      $invalid += ("{0} upstream break(s) in {1:n1} minutes of audio is {2:n1} per 10 minutes (limit {3:n0})" -f $breaks.Count, $minutes, $rate10, $script:MaxBreaksPer10Min)
-    }
+  # Amendment 1 (b) and (c): a count per run, not counting breaks in the first 3 s of playback.
+  $counted = @($breaks | Where-Object { $_.SourceMs -ge $script:StartupMs })
+  $limit = [int][math]::Max($script:MinBreakLimit, [math]::Floor($minutes / $script:MinutesPerBreak))
+  if ($counted.Count -gt $limit) {
+    $invalid += ("{0} counted upstream break(s) in {1:n1} minutes of audio; the limit is {2} (max(1, floor(minutes / 10)); breaks in the first 3 s of playback are not counted)" -f $counted.Count, $minutes, $limit)
   }
 
   # --- fidelity (a)
@@ -208,7 +228,8 @@ function Get-WbRunVerdict {
     InvalidReasons = @($invalid)
     FailReasons    = @($fail)
     Breaks         = @($breaks)
-    BreaksPer10Min = $(if ($minutes -gt 0) { $breaks.Count / ($minutes / 10.0) } else { $null })
+    CountedBreaks  = @($counted)
+    BreakLimit     = $limit
     AudioMinutes   = $minutes
     Late           = $late
   }
@@ -234,8 +255,7 @@ function Get-WbVerdictLines {
   } else {
     $lines += 'fidelity: not computed (no comparison data)'
   }
-  $per = $(if ($null -ne $Result.BreaksPer10Min) { ('{0:n1}' -f $Result.BreaksPer10Min) } else { 'n/a' })
-  $lines += ("upstream breaks (between the source and the reference capture; reported, not gated): {0} in {1:n1} minutes of audio, {2} per 10 minutes" -f @($Result.Breaks).Count, $Result.AudioMinutes, $per)
+  $lines += ("upstream breaks (between the source and the reference capture; reported, not gated): {0} in {1:n1} minutes of audio, {2} counted toward the limit of {3} (breaks in the first 3 s of playback are not counted)" -f @($Result.Breaks).Count, $Result.AudioMinutes, @($Result.CountedBreaks).Count, $Result.BreakLimit)
   foreach ($b in @($Result.Breaks)) {
     $wall = $(if ($b.Wall) { ('{0:HH:mm:ss.fff} IST' -f $b.Wall) } else { 'wall clock unknown' })
     $xr = $(if ($b.NearestXrun) { ("nearest reference xrun #{0} at {1:HH:mm:ss.fff} ({2:n0} ms {3})" -f $b.NearestXrun.N, $b.NearestXrun.Wall, [math]::Abs($b.NearestXrun.DeltaMs), $(if ($b.NearestXrun.DeltaMs -lt 0) { 'before' } else { 'after' })) } else { 'no reference xrun logged' })
@@ -244,13 +264,13 @@ function Get-WbVerdictLines {
   if ($Result.Late.Known) {
     $lines += ("player callbacks: longest gap {0:n1} ms against a {1} ms output buffer; late callbacks (a gap longer than the buffer) {2}" -f $Result.Late.MaxGapMs, $script:PlayerBufferMs, @($Result.Late.Events).Count)
   } else {
-    $lines += 'player callbacks: no late-callback data in play.json'
+    $lines += $(if (@($Result.Breaks).Count -gt 0) { 'player callbacks: no late-callback data in play.json' } else { 'player callbacks: no late-callback data in play.json (not needed: the run has no upstream break)' })
   }
   if ($Result.InvalidReasons.Count -gt 0) {
     $lines += 'validity: INVALID (no verdict; the run must be repeated)'
     foreach ($r in $Result.InvalidReasons) { $lines += "  - $r" }
   } else {
-    $lines += ("validity: valid (limits: late player callback within {0} ms of a break, more than {1} ms unmatched in a break, more than {2:n0} break per 10 minutes, reference missing or misaligned)" -f $script:LateWindowMs, $script:MaxUnmatchedMs, $script:MaxBreaksPer10Min)
+    $lines += ("validity: valid (limits: a late player callback within {0} ms of a break, more than {1} ms unmatched in a break, more than max(1, floor(minutes / 10)) counted breaks, a missing, misaligned or incomplete reference, or an upstream break without late-callback data)" -f $script:LateWindowMs, $script:MaxUnmatchedMs)
   }
   if ($Result.FailReasons.Count -gt 0) {
     $lines += 'fidelity FAIL:'
