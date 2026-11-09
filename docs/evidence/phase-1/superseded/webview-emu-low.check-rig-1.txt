@@ -1,0 +1,125 @@
+﻿source: commit 0db2f17 with uncommitted or untracked changes (the build hashes below identify the code)
+build: stelmar-voice-workbench.exe sha256 1bbf39e5884849ffab144de3026e25ee5519c37266e6dd55c0d4a6c369a698d0 (built 2026-11-09 16:17)
+build: wb-testbench.exe sha256 d326b4e72cbfb84b6256a02812822af268be251638233332dd8d8654fdf8587f (built 2026-11-09 20:33)
+build: wb-emulate.exe sha256 dc7d7a9896433e012375cc42c69047a5c6231bedeef64fedf81b81525fce4d94 (built 2026-11-09 20:32)
+gate: phase1-webview-emu-low
+started: 2026-11-09 20:34:05 +05:30
+machine: Legion
+emulation profile: emu-low
+overlay tools closed: yes (RTSS.exe and MSIAfterburner.exe not running when the gate started)
+overlay tools at the end: none running
+Track B paused: D:\Projects\stelmar-gate.lock held for the whole run (removed in a finally block)
+Track B busy lock: D:\Projects\stelmar-eval-busy.lock absent at start
+free RAM: 17.9 GB at start (needs 14 GB), 17.9 GB at end
+app build: target\gate\stelmar-voice-workbench.exe (cargo profile gate, features gate-hooks + custom-protocol)
+verdict: FAIL
+
+checks:
+  [x] reference capture ran cleanly (its own ring overruns 0)
+  [x] no dropped or silent audio caused by the recorder (0 breaks not in the reference; silent gaps 0.0 ms)
+  [ ] no capture-chain breaks beyond one start-up repeat (1; excused start-up repeats 0)
+  [x] recorded duration within 1 s of the source
+  [ ] recording equals the source except next to an excused start-up repeat (unexplained 22.667 ms of 22.666666666666668 ms)
+  [x] channel 1 matches the source too
+  [x] no other program played into the cable
+  [x] zero ring-buffer overruns
+  [x] driver xruns: none, or one within 2 s of the stream start with zero loss around it (xruns 0, excused 0)
+  [x] zero samples dropped by the writer
+  [x] capture thread at MMCSS priority (mmcss)
+  [x] no recorder restarts
+  [x] every part decodes in Media Foundation
+  [x] mirror SHA-256 equals the originals
+  [x] player had no underruns (source played cleanly)
+  [x] no job process on the NVIDIA GPU
+  [x] display recovered in a new window
+
+measurements:
+  source: 3.0 min of known noise, 48 kHz stereo, played by wb-testbench into 'CABLE Input' from outside the job
+  recorded content: 180.011 s against source 180.000 s (difference 11.0 ms); discontinuities 1; silent gaps 0.0 ms; unmatched 22.7 ms; lowest block correlation 1.0000
+  parts: 1; audio 184.8 s; overrun samples 0; driver xruns 0; samples dropped by the writer 0; recorder restarts 0
+  priorities: recorder thread mmcss, capture thread mmcss; ring buffer 20 s, highest fill 0.10%
+  recorder thread CPU: 1.53 s over 186 s = 0.824% of one core
+  app process CPU (main process; WebView2 processes not counted): 8.0 s = 1.07% of the job's 4 logical processors (4.30% of one core)
+  mirror: 5 files compared, all equal: True (mirror on the same machine, separate drive pending: C: instead of an external SSD)
+  player: 8640000 frames of 8640000, underrun callbacks 0, render thread priority mmcss, output buffer fixed 4800 frames (100 ms)
+  rig placement (player and reference capture pinned to performance cores outside the job, HIGH priority class; masks read back from the running processes):
+    job (the app inside the emulation job): pid 6848, mask 0xf0000 (logical processors 16-19)
+    player: pid 48156, mask 0xc000 (logical processors 14-15), priority class High; the player itself reports 0xc000 at stream start
+    reference capture: pid 32076, mask 0x3000 (logical processors 12-13), priority class High; the reference capture itself reports 0xffffffff at stream start
+    overlap: none (checked on the planned masks before anything started, and on the masks read back from the running processes)
+  player late callbacks: 120 (render callbacks later than 1.5 times the audio before them, and 2 ms more); longest gap between callbacks 21.5 ms
+    late callback at source 3.880 s: 20.0 ms after the previous one, which delivered 10.0 ms of audio
+    late callback at source 3.990 s: 20.0 ms after the previous one, which delivered 10.0 ms of audio
+    late callback at source 4.260 s: 19.2 ms after the previous one, which delivered 10.0 ms of audio
+    late callback at source 5.770 s: 20.2 ms after the previous one, which delivered 10.0 ms of audio
+    late callback at source 7.200 s: 19.9 ms after the previous one, which delivered 10.0 ms of audio
+    late callback at source 8.010 s: 20.3 ms after the previous one, which delivered 10.0 ms of audio
+    late callback at source 10.450 s: 20.1 ms after the previous one, which delivered 10.0 ms of audio
+    late callback at source 11.210 s: 20.0 ms after the previous one, which delivered 10.0 ms of audio
+    late callback at source 12.680 s: 20.0 ms after the previous one, which delivered 10.0 ms of audio
+    late callback at source 13.070 s: 19.6 ms after the previous one, which delivered 10.0 ms of audio
+    ... 54 more recorded in play.json
+    shared break at source 3.877 s: 3 late player callback(s) within 1,000 ms of it
+    shared break at source 3.900 s: 3 late player callback(s) within 1,000 ms of it
+  cable interference: none seen by the 1-second session poll (sounds shorter than a second can be missed; the analysis above is the check)
+  default playback device: not the cable (checked at start)
+  signal starts at source frame 0 (0.0 ms of the source's start never reached the captures: playback start-up); leading audio before the signal: 0 ms
+  unmatched stretch: source 3.88 s (about 20:34:13 IST), 23 ms; also in the reference capture: True
+  reference capture (separate cpal + hound recorder outside the job; shares the audio engine, cable driver and cpal with the app): 1 breaks, unmatched 22.6666666666667 ms, its overruns 0, xruns 1
+  breaks in the app recording: recorder's own 0; capture-chain (also in the reference, FAIL, investigate) 1; EXCUSED start-up repeats 0 
+  capture position breaks counted in the app's callback (device time not following on): 0
+  GPU check: 10 job processes, 0 processes in nvidia-smi, overlap 0
+  webview: killed WebView2 browser process 1864 at 20:34:52.113; display restarts reported: 1
+
+progress:
+  20:34:08 recording in D:\STELMAR-Gate\webview-emu-low-20261109-203405\rec\2026-11-09\gate-webview-20261109-203405
+  20:34:09 rig pinned: job 0xf0000, player 0xc000, reference capture 0x3000, no overlap
+  20:34:26 job processes: 10; nvidia-smi processes: 0; job processes on the NVIDIA GPU: 0
+  20:34:52 killed WebView2 browser process 1864 at 20:34:52.113
+  20:35:53 audio 1.7 min, part 1, overrun samples 0, xruns 0, ring max 0.10%, recorder cpu 796 ms, in_sync lag 1000 ms
+  20:36:53 audio 2.7 min, part 1, overrun samples 0, xruns 0, ring max 0.10%, recorder cpu 1343 ms, in_sync lag 1085 ms
+
+emulation log:
+  profile=emu-low
+  cores: class 0: 16 cores / 16 threads; class 1: 8 cores / 16 threads
+  affinity_mask=0xf0000 logical_processors=4 chosen=[16, 17, 18, 19] efficiency_classes=[0, 0, 0, 0]
+  job_memory_limit_bytes=11811160064
+  vulkan[0] Intel(R) RaptorLake-S Mobile Graphics Controller vendor=0x8086 integrated=true luid=f0cb2b1800000000 driver=Intel Corporation 101.7092
+  vulkan[1] NVIDIA GeForce RTX 4070 Laptop GPU vendor=0x10de integrated=false luid=87908c1900000000 driver=NVIDIA 621.14
+  vulkan[2] Intel(R) RaptorLake-S Mobile Graphics Controller vendor=0x8086 integrated=true luid=e2af020000000000 driver=Intel Corporation 101.7092
+  note: 2 Intel integrated Vulkan devices listed (different LUIDs or unknown: check the drivers); exposing only index 0
+  env WB_EMULATE=emu-low
+  env WB_EMULATE_REPORTED_RAM_BYTES=17179869184
+  env WB_EMULATE_JOB_MEMORY_BYTES=11811160064
+  env WB_EMULATE_LOGICAL_PROCESSORS=4
+  env CUDA_VISIBLE_DEVICES=-1
+  env GGML_VK_VISIBLE_DEVICES=0
+  command: powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:\Projects\stelmar_voice_workbench\scripts\gates\recorder-gate-inner.ps1 -Exe D:\Projects\stelmar_voice_workbench\target\gate\stelmar-voice-workbench.exe -ResultFile D:\STELMAR-Gate\webview-emu-low-20261109-203405\inner.json
+
+discontinuities:
+  {"at_ms":6279.604166666667,"source_ms":3900.0,"part":1,"source_jump_frames":-526,"source_jump_ms":-10.958333333333334}
+
+decode (Media Foundation source reader, the decoder Windows players use):
+  audio/part-0001.wav: header 184750 ms, decoded 184750 ms, playable True
+
+app log for this run (warnings, errors, session lines):
+  2026-11-09T15:04:07.178782Z  INFO main app started version="0.1.0" pid=6848 gate_hooks=true
+  2026-11-09T15:04:07.181243Z  WARN main gate hooks active (development build, gate-hooks feature)
+  2026-11-09T15:04:07.181474Z  INFO main display guard installed window="main"
+  2026-11-09T15:04:07.601147Z  INFO wb-gate session recording dir="D:\\STELMAR-Gate\\webview-emu-low-20261109-203405\\rec\\2026-11-09\\gate-webview-20261109-203405" device="CABLE Output (VB-Audio Virtual Cable)" rate=48000 channels=2 resumed=false
+  2026-11-09T15:04:07.601177Z  WARN wb-gate gate: session started dir="D:\\STELMAR-Gate\\webview-emu-low-20261109-203405\\rec\\2026-11-09\\gate-webview-20261109-203405"
+  2026-11-09T15:04:52.148989Z ERROR    main WebView2 process failed window="main" kind=Browser recording=true
+  2026-11-09T15:04:52.763243Z  INFO    main display guard installed window="main-2"
+  2026-11-09T15:04:52.763271Z  WARN    main display recovered in a new window new="main-2" old="main"
+  2026-11-09T15:07:12.406761Z  INFO wb-events part closed part=1 start_ms=0 duration_ms=184750
+  2026-11-09T15:07:12.522993Z  INFO   wb-gate session stopped dir=D:\STELMAR-Gate\webview-emu-low-20261109-203405\rec\2026-11-09\gate-webview-20261109-203405 parts=1 audio_ms=184750 overrun_samples=0 xruns=0 mirror_all_match=true
+  2026-11-09T15:07:12.524985Z  WARN   wb-gate gate: stop file seen; session stopped; exiting
+
+audio and reports: D:\STELMAR-Gate\webview-emu-low-20261109-203405 (not in the repository)
+
+Notes (added 9 Nov 2026 after reading this run):
+- This is the check run of the test-rig change (player and reference capture pinned outside the job). The placement lines above are what the running processes had; no overlap.
+- The reference capture reports mask 0xffffffff "at stream start": in this first version the gate pinned it after it had started, so its first moments were unpinned. Both processes now wait for a go file that the gate creates after pinning (--go-file). Not re-run yet.
+- The late-callback count above (120) used a threshold of 1.5 times the audio before a callback; those were ordinary 20 ms gaps against a 100 ms output buffer and cannot starve it. A late callback is now a gap longer than the output buffer, with a histogram of gaps of 20, 30 and 50 ms. The longest gap in this run was 21.5 ms, so the player never ran its buffer dry.
+- The break at source 3.88 s is 3.9 s after playback began and 39 s before the WebView2 kill (20:34:52), so the kill is not involved.
+
