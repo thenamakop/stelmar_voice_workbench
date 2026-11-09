@@ -68,6 +68,7 @@ Set-WbCleanPSModulePath
 Import-Module (Join-Path $repo 'scripts\lib\GateRun.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Redact.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\AppProcess.psm1') -Force
+Import-Module (Join-Path $repo 'scripts\lib\Rig.psm1') -Force
 foreach ($f in @($Exe, $Testbench, $Emulate)) { if (-not (Test-Path $f)) { throw "Missing $f; build it first (scripts\gates\build-gate.ps1)" } }
 
 function Q([string]$v) { ConvertTo-WbArg $v }
@@ -120,7 +121,7 @@ function Get-ResultFromRun([string]$run) {
     Progress = @("re-evaluated from the saved run $run"); CableDefaultRoles = $null; AppLog = @(); NvOverlap = $null; JobPids = $null; NvPids = $null; WebviewKill = $null; Interference = $null
     LastStatus = (Read-Json (Join-Path $run 'status.json')); HostStress = (Read-Json (Join-Path $run 'host-stress.json'))
     Reference = (Read-Json (Join-Path $run 'reference.json')); RefAnalysis = (Read-Json (Join-Path $run 'reference-analysis.json'))
-    AnalysisError = $analysisErr; RefAnalysisError = $refAnalysisErr
+    AnalysisError = $analysisErr; RefAnalysisError = $refAnalysisErr; Rig = $null
   }
 }
 
@@ -137,6 +138,10 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
   if ($cableRoles.Count -gt 0 -and -not $AllowCableDefault) { throw ("The default playback device ($($cableRoles -join ', ')) is ${PlayDevice}: every sound this computer makes would play into the test signal. Set the default playback device to the speakers (Windows Settings > System > Sound), then run the gate again (or pass -AllowCableDefault).") }
   $intruders = @(Get-CableIntruders)
   if ($intruders.Count -gt 0) { throw ("Another program is playing into $PlayDevice : " + ($intruders -join ', ') + '. Stop it (or close it) so only the gate player feeds the cable.') }
+  # Where the player and the reference capture will run: outside the job's cores. The gate does
+  # not start if the plan overlaps the job or itself.
+  $rigPlan = Get-WbRigPlan -Emulate $Emulate -Profile $Profile
+  if ($rigPlan) { Assert-WbRigPlacement -JobMask $rigPlan.JobMask -PlayerMask $rigPlan.PlayerMask -ReferenceMask $rigPlan.ReferenceMask -What 'planned, before anything starts' }
   $interference = New-Object System.Collections.Generic.List[string]
   $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
   $run = Join-Path $WorkRoot "$Gate-$Profile-$stamp"
@@ -196,9 +201,15 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
   # Independent reference capture of the same cable, outside the job (wb-testbench capture).
   $refDir = Join-Path $run 'reference'
   $refStop = Join-Path $run 'STOP-REF'
-  $refProc = Start-Process -FilePath $Testbench -ArgumentList @('capture', '--device', (Q $CaptureDevice), '--dir', (Q $refDir), '--stop-file', (Q $refStop), '--report', (Q (Join-Path $run 'reference.json'))) -PassThru -WindowStyle Hidden
+  $goFile = Join-Path $run 'GO-RIG'
+  $refProc = Start-Process -FilePath $Testbench -ArgumentList @('capture', '--device', (Q $CaptureDevice), '--dir', (Q $refDir), '--stop-file', (Q $refStop), '--go-file', (Q $goFile), '--report', (Q (Join-Path $run 'reference.json'))) -PassThru -WindowStyle Hidden
   Start-Sleep -Seconds 1
-  $play = Start-Process -FilePath $Testbench -ArgumentList @('play', '--device', (Q $PlayDevice), '--file', (Q $source), '--report', (Q (Join-Path $run 'play.json'))) -PassThru -WindowStyle Hidden
+  $play = Start-Process -FilePath $Testbench -ArgumentList @('play', '--device', (Q $PlayDevice), '--file', (Q $source), '--go-file', (Q $goFile), '--report', (Q (Join-Path $run 'play.json'))) -PassThru -WindowStyle Hidden
+  # Pin both to cores outside the job at HIGH priority class; they wait for the go file before
+  # they open their streams, so no callback runs unpinned. Then check what they really have.
+  $rig = Set-WbRigPins -Plan $rigPlan -Player $play -Reference $refProc -GoFile $goFile
+  $rig = Confirm-WbRigAgainstJob -Rig $rig -Player $play -Reference $refProc
+  if ($rig) { $progress.Add("$(Get-Date -Format 'HH:mm:ss') rig pinned: job $(Format-WbMask $rig.Job.Mask), player $(Format-WbMask $rig.Player.Mask), reference capture $(Format-WbMask $rig.Reference.Mask), no overlap") }
 
   # GPU visibility: no process of the job may appear in nvidia-smi.
   Start-Sleep -Seconds 15
@@ -265,7 +276,7 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
     NvOverlap = $nvOverlap; JobPids = $jobPids; NvPids = $nvPids; WebviewKill = $webviewKill; Interference = @(ConvertTo-WbArray $interference)
     LastStatus = $lastStatus; HostStress = (Read-Json (Join-Path $run 'host-stress.json'))
     Reference = (Read-Json (Join-Path $run 'reference.json')); RefAnalysis = (Read-Json (Join-Path $run 'reference-analysis.json'))
-    AnalysisError = $analysisErr; RefAnalysisError = $refAnalysisErr; CableDefaultRoles = $cableRoles
+    AnalysisError = $analysisErr; RefAnalysisError = $refAnalysisErr; CableDefaultRoles = $cableRoles; Rig = $rig
   }
 }
 }
@@ -355,6 +366,9 @@ $lines += ("  recorder thread CPU: {0:n2} s over {1:n0} s = {2:n3}% of one core"
 $lines += ("  app process CPU (main process; WebView2 processes not counted): {0:n1} s = {1:n2}% of the job's {2} logical processors ({3:n2}% of one core)" -f $r.Inner.app_cpu_seconds, $appCpuPctMachine, $logical, $appCpuPctCore)
 $lines += ("  mirror: {0} files compared, all equal: {1} (mirror on the same machine, separate drive pending: C: instead of an external SSD)" -f @($stopped.mirror.files).Count, $stopped.mirror.all_match)
 $lines += ("  player: {0} frames of {1}, underrun callbacks {2}, render thread priority {3}, output buffer {4}" -f $r.Play.frames_played, $r.Play.frames_in_file, $r.Play.underrun_callbacks, $r.Play.render_priority, $r.Play.buffer)
+$lines += Get-WbRigLines -Rig $r.Rig -Play $r.Play -Reference $r.Reference
+$breakSources = @(@($r.Analysis.unmatched_ranges) | ForEach-Object { [double]$_.source_ms }) + @(@($r.Analysis.discontinuities) | ForEach-Object { [double]$_.source_ms })
+$lines += Get-WbLateCallbackLines -Play $r.Play -BreakSourceMs @($breakSources | Sort-Object -Unique)
 $lines += "  $lines_cable"
 $lines += $(if ($null -eq $r.CableDefaultRoles) { '  default playback device: not recorded for this run' } elseif (@($r.CableDefaultRoles).Count -gt 0) { "  default playback device: THE CABLE for $(@($r.CableDefaultRoles) -join ', ') (run with -AllowCableDefault: other sounds on this computer can reach the test signal)" } else { '  default playback device: not the cable (checked at start)' })
 $playStart = [DateTimeOffset]::Parse($r.Play.started_at)

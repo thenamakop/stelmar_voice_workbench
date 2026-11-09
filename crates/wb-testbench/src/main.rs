@@ -3,12 +3,12 @@
 //! ```text
 //! wb-testbench devices
 //! wb-testbench gen      --out FILE.wav --seconds N [--rate 48000] [--channels 2] [--seed S]
-//! wb-testbench play     --device "CABLE Input" --file FILE.wav [--report R.json]
+//! wb-testbench play     --device "CABLE Input" --file FILE.wav [--stop-file F] [--go-file G] [--report R.json]
 //! wb-testbench analyse  --session DIR --source FILE.wav [--report R.json]
 //! wb-testbench decode   --session DIR [--report R.json]
 //! wb-testbench parts-check --session DIR [--report R.json]   parts.json against the files
 //! wb-testbench sessions [--device CABLE]            audio sessions playing into an endpoint
-//! wb-testbench capture  --device "CABLE Output" --dir DIR --stop-file F [--report R.json]
+//! wb-testbench capture  --device "CABLE Output" --dir DIR --stop-file F [--go-file G] [--report R.json]
 //!                       independent reference capture (to tell source-chain glitches from the recorder's)
 //! wb-testbench stress   [--threads N] [--gpu "UHD"] [--seconds N] [--stop-file F] [--report R.json]
 //! ```
@@ -286,7 +286,9 @@ fn run() -> Result<()> {
         "gen" => generate(&args),
         "play" => {
             let file = PathBuf::from(args.get("file")?);
-            let report = play::play(args.get("device")?, &file)?;
+            let stop = args.opts.get("stop-file").map(PathBuf::from);
+            let go = args.opts.get("go-file").map(PathBuf::from);
+            let report = play::play(args.get("device")?, &file, stop.as_deref(), go.as_deref())?;
             output(&args, &report)
         }
         "analyse" => {
@@ -309,6 +311,7 @@ fn run() -> Result<()> {
                 args.get("device")?,
                 Path::new(args.get("dir")?),
                 Path::new(args.get("stop-file")?),
+                args.opts.get("go-file").map(Path::new),
             )?;
             output(&args, &report)
         }

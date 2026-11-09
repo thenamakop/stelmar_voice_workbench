@@ -5,6 +5,8 @@
 //! wb-emulate --profile emu-low|emu-mid|native [--log FILE] -- <command> [args...]
 //! wb-emulate probe [--commit-gb N] [--cuda-hold S]   what a child process sees (CPUs, commit, CUDA)
 //! wb-emulate topology                  logical processors and their efficiency class
+//! wb-emulate rig --profile emu-low|emu-mid   JSON: the job's mask and the two cores outside it
+//!                                      the test rig (player, reference capture) is pinned to
 //! ```
 //!
 //! Cores are chosen by efficiency class from GetLogicalProcessorInformationEx, never by assumed
@@ -52,6 +54,7 @@ mod app {
         let args: Vec<String> = std::env::args().skip(1).collect();
         match args.first().map(String::as_str) {
             Some("probe") => probe(&args[1..]),
+            Some("rig") => rig(&args[1..]),
             Some("topology") => {
                 for c in topology::cores(&win::processor_core_records()?)? {
                     println!(
@@ -63,6 +66,44 @@ mod app {
             }
             _ => launch(&args),
         }
+    }
+
+    /// Prints the test rig's placement as JSON (masks as hex strings).
+    fn rig(args: &[String]) -> Result<ExitCode> {
+        let mut profile = None;
+        let mut i = 0;
+        while i < args.len() {
+            match args[i].as_str() {
+                "--profile" => {
+                    profile = Some(
+                        args.get(i + 1)
+                            .ok_or_else(|| anyhow!("--profile needs a value"))?
+                            .parse::<Profile>()?,
+                    );
+                    i += 2;
+                }
+                other => bail!(
+                    "unexpected argument {other}; usage: wb-emulate rig --profile emu-low|emu-mid"
+                ),
+            }
+        }
+        let profile = profile.ok_or_else(|| anyhow!("--profile is required"))?;
+        let cores = topology::cores(&win::processor_core_records()?)?;
+        let Some(plan) = topology::rig(&cores, profile)? else {
+            bail!("the native profile has no job mask; the rig is not pinned");
+        };
+        let json = serde_json::json!({
+            "profile": profile.name(),
+            "job_mask": format!("0x{:x}", plan.job_mask),
+            "player_mask": format!("0x{:x}", plan.player_mask),
+            "player_logical": plan.player_logical,
+            "reference_mask": format!("0x{:x}", plan.reference_mask),
+            "reference_logical": plan.reference_logical,
+            "strict": plan.strict,
+            "note": plan.note,
+        });
+        println!("{json}");
+        Ok(ExitCode::SUCCESS)
     }
 
     fn launch(args: &[String]) -> Result<ExitCode> {

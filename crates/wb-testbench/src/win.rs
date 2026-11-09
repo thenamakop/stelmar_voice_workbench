@@ -397,6 +397,11 @@ impl Drop for ComThread {
 
 /// Logical processors in this process's affinity mask (what a job limits it to).
 pub fn affinity_count() -> Option<u32> {
+    affinity_mask().map(usize::count_ones)
+}
+
+/// This process's affinity mask.
+pub fn affinity_mask() -> Option<usize> {
     let mut process_mask = 0usize;
     let mut system_mask = 0usize;
     // SAFETY: GetCurrentProcess returns a pseudo-handle that needs no cleanup.
@@ -410,7 +415,7 @@ pub fn affinity_count() -> Option<u32> {
         )
     }
     .ok()?;
-    Some(process_mask.count_ones())
+    Some(process_mask)
 }
 
 /// COM and Media Foundation for the calling thread.

@@ -63,6 +63,7 @@ Set-WbCleanPSModulePath
 Import-Module (Join-Path $repo 'scripts\lib\GateRun.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Redact.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\AppProcess.psm1') -Force
+Import-Module (Join-Path $repo 'scripts\lib\Rig.psm1') -Force
 foreach ($f in @($Exe, $Testbench, $Emulate)) { if (-not (Test-Path $f)) { throw "Missing $f; build it first (scripts\gates\build-gate.ps1)" } }
 
 function Q([string]$v) { ConvertTo-WbArg $v }
@@ -85,6 +86,8 @@ $result = Invoke-WbGate -Name "phase1-kill-$Profile" -Body {
   if ($cableRoles.Count -gt 0 -and -not $AllowCableDefault) { throw ("The default playback device ($($cableRoles -join ', ')) is ${PlayDevice}: every sound this computer makes would play into the test signal. Set the default playback device to the speakers (Windows Settings > System > Sound), then run the gate again (or pass -AllowCableDefault).") }
   $intruders = @(Get-CableIntruders)
   if ($intruders.Count -gt 0) { throw ("Another program is playing into $PlayDevice : " + ($intruders -join ', ')) }
+  $rigPlan = Get-WbRigPlan -Emulate $Emulate -Profile $Profile
+  if ($rigPlan) { Assert-WbRigPlacement -JobMask $rigPlan.JobMask -PlayerMask $rigPlan.PlayerMask -ReferenceMask $rigPlan.ReferenceMask -What 'planned, before anything starts' }
   $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
   $run = Join-Path $WorkRoot "kill-$Profile-$stamp"
   $rec = Join-Path $run 'rec'
@@ -113,9 +116,13 @@ $result = Invoke-WbGate -Name "phase1-kill-$Profile" -Body {
 
   $refDir = Join-Path $run 'reference'
   $refStop = Join-Path $run 'STOP-REF'
-  $refProc = Start-Process -FilePath $Testbench -ArgumentList @('capture', '--device', (Q $CaptureDevice), '--dir', (Q $refDir), '--stop-file', (Q $refStop), '--report', (Q (Join-Path $run 'reference.json'))) -PassThru -WindowStyle Hidden
+  $goFile = Join-Path $run 'GO-RIG'
+  $refProc = Start-Process -FilePath $Testbench -ArgumentList @('capture', '--device', (Q $CaptureDevice), '--dir', (Q $refDir), '--stop-file', (Q $refStop), '--go-file', (Q $goFile), '--report', (Q (Join-Path $run 'reference.json'))) -PassThru -WindowStyle Hidden
   Start-Sleep -Seconds 1
-  $play = Start-Process -FilePath $Testbench -ArgumentList @('play', '--device', (Q $PlayDevice), '--file', (Q $source), '--report', (Q (Join-Path $run 'play.json'))) -PassThru -WindowStyle Hidden
+  $playStop = Join-Path $run 'STOP-PLAY'
+  $play = Start-Process -FilePath $Testbench -ArgumentList @('play', '--device', (Q $PlayDevice), '--file', (Q $source), '--stop-file', (Q $playStop), '--go-file', (Q $goFile), '--report', (Q (Join-Path $run 'play.json'))) -PassThru -WindowStyle Hidden
+  # Pin the player and the reference capture outside the job's cores at HIGH priority class.
+  $rig = Set-WbRigPins -Plan $rigPlan -Player $play -Reference $refProc -GoFile $goFile
   Start-Sleep -Seconds 2
 
   function Start-App([int]$Index) {
@@ -137,6 +144,8 @@ $result = Invoke-WbGate -Name "phase1-kill-$Profile" -Body {
   $env:WB_GATE_START = "Gate kill $stamp"
   $env:WB_GATE_RECOVERY = ''
   $current = Start-App 0
+  $rig = Confirm-WbRigAgainstJob -Rig $rig -Player $play -Reference $refProc
+  if ($rig) { $progress.Add("$(Get-Date -Format 'HH:mm:ss') rig pinned: job $(Format-WbMask $rig.Job.Mask), player $(Format-WbMask $rig.Player.Mask), reference capture $(Format-WbMask $rig.Reference.Mask), no overlap") }
   $sessionDir = $current.Status.recorder.session_dir
   $progress.Add("$(Get-Date -Format 'HH:mm:ss') run 0 recording in $sessionDir")
   $env:WB_GATE_START = ''
@@ -186,7 +195,9 @@ $result = Invoke-WbGate -Name "phase1-kill-$Profile" -Body {
   $env:WB_GATE_RECOVERY = ''
   Set-Content -LiteralPath $env:WB_GATE_STOP_FILE -Value 'stop'
   if (-not $current.Emu.WaitForExit(600000)) { throw 'The app did not stop' }
-  Stop-Process -Id $play.Id -Force -ErrorAction SilentlyContinue
+  # Ask the player to stop (so it writes its report, with the late-callback count); kill it only if it does not.
+  Set-Content -LiteralPath $playStop -Value 'stop'
+  if (-not $play.WaitForExit(30000)) { Stop-Process -Id $play.Id -Force -ErrorAction SilentlyContinue }
   Set-Content -LiteralPath $refStop -Value 'stop'
   [void]$refProc.WaitForExit(120000)
   $refAnalysisErr = Invoke-WbAnalyse -Testbench $Testbench -Session $refDir -Source $source -Report (Join-Path $run 'reference-analysis.json')
@@ -204,7 +215,7 @@ $result = Invoke-WbGate -Name "phase1-kill-$Profile" -Body {
     Run = $run; SessionDir = $sessionDir; Report = $report; Rounds = @(ConvertTo-WbArray $rounds); Progress = $progress; Interference = @(ConvertTo-WbArray $interference)
     Analysis = (Read-Json (Join-Path $run 'analysis.json')); Decode = (Read-Json (Join-Path $run 'decode.json'))
     RefAnalysis = (Read-Json (Join-Path $run 'reference-analysis.json')); Reference = (Read-Json (Join-Path $run 'reference.json'))
-    AnalysisError = $analysisErr; RefAnalysisError = $refAnalysisErr; CableDefaultRoles = $cableRoles
+    AnalysisError = $analysisErr; RefAnalysisError = $refAnalysisErr; CableDefaultRoles = $cableRoles; Rig = $rig; Play = (Read-Json (Join-Path $run 'play.json'))
     PartsCheck = (Read-Json (Join-Path $run 'parts-check.json')); Meta = (Read-Json (Join-Path $sessionDir 'session.json')); AppLog = $appLog
   }
 }
@@ -297,6 +308,8 @@ $lines += ''
 $lines += ("final: {0} parts, {1:n1} s of audio, mirror {2} files equal {3} (mirror on the same machine, separate drive pending)" -f @($stopped.recorder.parts).Count, ($stopped.recorder.audio_ms / 1000.0), @($stopped.mirror.files).Count, $stopped.mirror.all_match)
 $lines += ("driver xruns (rule: one per run within 2 s of the stream start, reported not gated, only with zero loss and duplication): total {0}; excused at audio-time offsets {1} ms; problems: {2}" -f $xr.TotalXruns, ((@($xr.Excused) | ForEach-Object { [math]::Round($_.OffsetMs) }) -join ', '), $(if (@($xr.Problems).Count) { @($xr.Problems) -join '; ' } else { 'none' }))
 $lines += "parts.json check: $($r.PartsCheck | ConvertTo-Json -Compress)"
+$lines += Get-WbRigLines -Rig $r.Rig -Play $r.Play -Reference $r.Reference
+$lines += Get-WbLateCallbackLines -Play $r.Play -BreakSourceMs @(@($r.Analysis.unmatched_ranges) | ForEach-Object { [double]$_.source_ms })
 $lines += "cable interference: $(if ($r.Interference.Count) { $r.Interference -join '; ' } else { 'none' })"
 $lines += $(if (@($r.CableDefaultRoles).Count -gt 0) { "default playback device: THE CABLE for $(@($r.CableDefaultRoles) -join ', ') (run with -AllowCableDefault: other sounds on this computer can reach the test signal)" } else { 'default playback device: not the cable (checked at start)' })
 $lines += "reference capture: $(@($r.RefAnalysis.discontinuities).Count) breaks; in the app recording: restarts and own $($split.Own.Count), capture-chain (FAIL) $($split.Chain.Count), EXCUSED start-up repeats $($split.Excused.Count)"

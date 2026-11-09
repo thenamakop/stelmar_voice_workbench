@@ -29,10 +29,18 @@ pub struct ReferenceReport {
     pub xruns: u64,
     pub started_at: String,
     pub ended_at: String,
+    /// This process's affinity mask when the stream started (hex), as the rig pinned it.
+    pub affinity_mask: Option<String>,
 }
 
 /// Records `device_part` into `dir` until `stop_file` exists.
-pub fn capture(device_part: &str, dir: &Path, stop_file: &Path) -> Result<ReferenceReport> {
+pub fn capture(
+    device_part: &str,
+    dir: &Path,
+    stop_file: &Path,
+    go_file: Option<&Path>,
+) -> Result<ReferenceReport> {
+    crate::play::wait_for_go(go_file)?;
     let needle = device_part.to_lowercase();
     let device = cpal::default_host()
         .input_devices()?
@@ -88,6 +96,7 @@ pub fn capture(device_part: &str, dir: &Path, stop_file: &Path) -> Result<Refere
         hound::WavWriter::create(&path, spec).with_context(|| path.display().to_string())?;
     let _guard = wb_recorder::sys::raise_recorder_priority();
     let started_at = rfc3339(now_ist());
+    let affinity_mask = crate::play::affinity_hex();
     stream.play()?;
     let mut buf = vec![0.0f32; rate as usize * usize::from(channels) / 2];
     let mut samples = 0u64;
@@ -122,5 +131,6 @@ pub fn capture(device_part: &str, dir: &Path, stop_file: &Path) -> Result<Refere
         xruns: xruns.load(Ordering::Relaxed),
         started_at,
         ended_at: rfc3339(now_ist()),
+        affinity_mask,
     })
 }
