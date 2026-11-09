@@ -16,6 +16,9 @@ playwright-report/
 # Large or private data: never commit
 models/*.bin
 models/*.gguf
+models/*.safetensors
+models/*.zip
+models/*.part
 models/converted/
 eval/data/
 eval/local/
