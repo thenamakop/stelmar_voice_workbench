@@ -116,7 +116,7 @@ function Get-ResultFromRun([string]$run) {
   $analysisErr = Invoke-WbAnalyse -Testbench $Testbench -Session $sessionDir -Source $source -Report (Join-Path $run 'analysis.json')
   $refAnalysisErr = Invoke-WbAnalyse -Testbench $Testbench -Session $refDir -Source $source -Report (Join-Path $run 'reference-analysis.json')
   & $Testbench decode --session $sessionDir --report (Join-Path $run 'decode.json') | Out-Null
-  $cmp = Invoke-WbNative -FilePath $Testbench -ArgumentList @('compare', '--app', $sessionDir, '--reference', $refDir, '--report', (Join-Path $run 'compare.json'))
+  $cmp = Invoke-WbCompare -Testbench $Testbench -SessionDir $sessionDir -ReferenceDir $refDir -RunDir $run
   [pscustomobject]@{
     Run = $run; Compare = (Read-Json (Join-Path $run 'compare.json')); CompareError = $(if ($cmp.ExitCode -ne 0) { (@($cmp.Error) + @($cmp.Output)) -join ' ' } else { $null }); SessionDir = $sessionDir; Source = $source; Report = (Read-Json (Join-Path $run 'stop-report.json')); Inner = (Read-Json (Join-Path $run 'inner.json'))
     Play = $play; Stress = (Read-Json (Join-Path $run 'stress.json')); Analysis = (Read-Json (Join-Path $run 'analysis.json')); Decode = (Read-Json (Join-Path $run 'decode.json'))
@@ -267,7 +267,7 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
   & $Testbench decode --session $sessionDir --report (Join-Path $run 'decode.json') | Out-Null
   $refAnalysisErr = Invoke-WbAnalyse -Testbench $Testbench -Session $refDir -Source $source -Report (Join-Path $run 'reference-analysis.json')
   $decode = Read-Json (Join-Path $run 'decode.json')
-  $cmp = Invoke-WbNative -FilePath $Testbench -ArgumentList @('compare', '--app', $sessionDir, '--reference', $refDir, '--report', (Join-Path $run 'compare.json'))
+  $cmp = Invoke-WbCompare -Testbench $Testbench -SessionDir $sessionDir -ReferenceDir $refDir -RunDir $run
   $appLog = @()
   if (Test-Path $logFile) {
     $fs = [System.IO.File]::Open($logFile, 'Open', 'Read', 'ReadWrite')

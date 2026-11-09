@@ -8,7 +8,7 @@
 //! wb-testbench decode   --session DIR [--report R.json]
 //! wb-testbench parts-check --session DIR [--report R.json]   parts.json against the files
 //! wb-testbench sessions [--device CABLE]            audio sessions playing into an endpoint
-//! wb-testbench compare  --app SESSION --reference DIR [--report R.json]   fidelity: app vs reference
+//! wb-testbench compare  --app SESSION --reference DIR [--reference-signal-start-ms N] [--app-signal-start-ms N] [--report R.json]   fidelity: app vs reference
 //! wb-testbench capture  --device "CABLE Output" --dir DIR --stop-file F [--go-file G] [--report R.json]
 //!                       independent reference capture (to tell source-chain glitches from the recorder's)
 //! wb-testbench stress   [--threads N] [--gpu "UHD"] [--seconds N] [--stop-file F] [--report R.json]
@@ -313,7 +313,18 @@ fn run() -> Result<()> {
             let app = compare::Recording::load(&app_dir)?;
             let reference = compare::Recording::load(Path::new(args.get("reference")?))?;
             let starts = compare::run_starts(&app_dir, &app).unwrap_or_else(|_| vec![0]);
-            let report = compare::compare(&app, &reference, &starts)?;
+            let rate = f64::from(app.rate);
+            let from_ms = |key: &str| -> Option<u64> {
+                args.opts
+                    .get(key)
+                    .and_then(|v| v.parse::<f64>().ok())
+                    .map(|ms| (ms * rate / 1000.0).round() as u64)
+            };
+            let hints = compare::Hints {
+                reference_signal_start: from_ms("reference-signal-start-ms"),
+                app_signal_start: from_ms("app-signal-start-ms"),
+            };
+            let report = compare::compare(&app, &reference, &starts, &hints)?;
             output(&args, &report)
         }
         "capture" => {

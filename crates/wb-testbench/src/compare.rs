@@ -246,18 +246,37 @@ fn find_snippet(rec: &Recording, snippet: &[i16], from: u64, to: u64) -> Result<
     Ok(None)
 }
 
+/// Where the signal starts in each recording. The cable can hold stale audio from an earlier run
+/// before the signal (a short buffer replayed in a loop, which matches itself at many offsets), so
+/// the alignment snippet is taken from the signal, not from the first loud frame. The gates pass
+/// the signal's start from the source analysis; without it the first loud frame is used.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Hints {
+    /// First frame of the signal in the reference recording.
+    pub reference_signal_start: Option<u64>,
+    /// First frame of the signal in the first run of the app.
+    pub app_signal_start: Option<u64>,
+}
+
 /// Finds the one offset for the app's run `[s, e)`: app frame = reference frame + offset.
 fn align(
     app: &Recording,
     reference: &Recording,
     s: u64,
     e: u64,
+    hints: &Hints,
 ) -> Result<Option<(i64, &'static str)>> {
     let limit = SEARCH_MINUTES * 60 * u64::from(app.rate);
     let after = SNIPPET_AFTER_FIRST_LOUD_MS * u64::from(app.rate) / 1000;
     let w = SNIPPET_FRAMES as u64;
     // A stretch of the reference, found in the app's run.
-    if let Some(r0) = first_signal_frame(reference, 0, reference.total.min(limit))? {
+    let ref_from = hints
+        .reference_signal_start
+        .unwrap_or(0)
+        .min(reference.total);
+    if let Some(r0) =
+        first_signal_frame(reference, ref_from, reference.total.min(ref_from + limit))?
+    {
         let at = r0 + after;
         if at + w <= reference.total {
             let snippet = reference.read(at, w)?;
@@ -267,7 +286,11 @@ fn align(
         }
     }
     // The other way round: a stretch of the app's run, found in the reference.
-    if let Some(a0) = first_signal_frame(app, s, e.min(s + limit))? {
+    let app_from = match (s, hints.app_signal_start) {
+        (0, Some(f)) => f.clamp(s, e),
+        _ => s,
+    };
+    if let Some(a0) = first_signal_frame(app, app_from, e.min(app_from + limit))? {
         let at = a0 + after;
         if at + w <= e {
             let snippet = app.read(at, w)?;
@@ -285,6 +308,7 @@ fn compare_segment(
     reference: &Recording,
     s: u64,
     e: u64,
+    hints: &Hints,
 ) -> Result<SegmentCompare> {
     let mut seg = SegmentCompare {
         index,
@@ -302,7 +326,7 @@ fn compare_segment(
         reference_start_frame: 0,
         reference_end_frame: 0,
     };
-    let Some((offset, by)) = align(app, reference, s, e)? else {
+    let Some((offset, by)) = align(app, reference, s, e, hints)? else {
         return Ok(seg);
     };
     seg.aligned = true;
@@ -380,7 +404,12 @@ impl SegmentCompare {
 
 /// Compares the app's recording with the reference. `run_starts` are the first frames of the
 /// app's runs (the first is 0); a run lasts until the next one starts.
-pub fn compare(app: &Recording, reference: &Recording, run_starts: &[u64]) -> Result<Compare> {
+pub fn compare(
+    app: &Recording,
+    reference: &Recording,
+    run_starts: &[u64],
+    hints: &Hints,
+) -> Result<Compare> {
     let mut notes = Vec::new();
     if app.rate != reference.rate || app.channels != reference.channels {
         return Err(anyhow!(
@@ -403,7 +432,7 @@ pub fn compare(app: &Recording, reference: &Recording, run_starts: &[u64]) -> Re
     let mut segments = Vec::new();
     for (i, &s) in starts.iter().enumerate() {
         let e = starts.get(i + 1).copied().unwrap_or(app.total);
-        segments.push(compare_segment(i, app, reference, s, e)?);
+        segments.push(compare_segment(i, app, reference, s, e, hints)?);
     }
     let aligned = segments.iter().all(|s| s.aligned);
     if !aligned {
@@ -531,7 +560,12 @@ mod tests {
     }
 
     fn cmp(app: &Path, reference: &Path, starts: &[u64]) -> Result<Compare> {
-        compare(&Recording::load(app)?, &Recording::load(reference)?, starts)
+        compare(
+            &Recording::load(app)?,
+            &Recording::load(reference)?,
+            starts,
+            &Hints::default(),
+        )
     }
 
     /// The reference starts 300 frames after the app; both then hold the same signal.
@@ -675,6 +709,35 @@ mod tests {
         assert_eq!(c.segments.len(), 2);
         assert_ne!(c.segments[0].offset_frames, c.segments[1].offset_frames);
         assert_eq!(c.restart_gap_frames, 6_000);
+        Ok(())
+    }
+
+    #[test]
+    fn stale_looped_audio_before_the_signal_does_not_fool_the_alignment_when_the_signal_start_is_given()
+    -> Result<()> {
+        let t = TempDir::new("cmp-loop")?;
+        let signal = noise(40_000, 5);
+        // A short buffer replayed in a loop before the signal: it matches itself every 1,000
+        // frames, so a snippet taken from it is found at the wrong place.
+        let looped = |frames: usize| -> Vec<i16> {
+            let unit = noise(1_000, 3);
+            unit.iter().copied().cycle().take(frames * 2).collect()
+        };
+        let mut app = looped(9_000);
+        app.extend(&signal);
+        // The reference started 4,500 frames later and sees the same stale stream from there.
+        let mut reference = looped(9_000)[2 * 4_500..].to_vec();
+        reference.extend(&signal);
+        let a = session(t.path(), "app", &app, 16_000)?;
+        let r = session(t.path(), "ref", &reference, 100_000)?;
+        // The app started 4,500 frames earlier: app frame = reference frame + 4,500.
+        let hints = Hints {
+            reference_signal_start: Some(4_500),
+            app_signal_start: Some(9_000),
+        };
+        let c = compare(&Recording::load(&a)?, &Recording::load(&r)?, &[0], &hints)?;
+        assert!(c.aligned && c.equal, "{c:?}");
+        assert_eq!(c.segments[0].offset_frames, Some(4_500));
         Ok(())
     }
 }

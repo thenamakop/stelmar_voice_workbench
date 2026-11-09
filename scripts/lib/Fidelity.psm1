@@ -32,6 +32,29 @@ $script:ClusterMs = 200
 # The player's output buffer: only a gap longer than this can run it dry.
 $script:PlayerBufferMs = 100
 
+# Compares the app's recording with the reference capture (wb-testbench compare) and writes
+# compare.json into the run folder. The start of the signal in each recording (from the source
+# analyses, analysis.json and reference-analysis.json in the run folder) tells the tool where to
+# take the alignment snippet: the cable can hold stale audio before the signal, which repeats
+# itself and would match at the wrong offset. Returns the command result (ExitCode, Output, Error).
+function Invoke-WbCompare {
+  param(
+    [Parameter(Mandatory = $true)] [string]$Testbench,
+    [Parameter(Mandatory = $true)] [string]$SessionDir,
+    [Parameter(Mandatory = $true)] [string]$ReferenceDir,
+    [Parameter(Mandatory = $true)] [string]$RunDir
+  )
+  $args2 = @('compare', '--app', $SessionDir, '--reference', $ReferenceDir, '--report', (Join-Path $RunDir 'compare.json'))
+  foreach ($pair in @(@('analysis.json', '--app-signal-start-ms'), @('reference-analysis.json', '--reference-signal-start-ms'))) {
+    $f = Join-Path $RunDir $pair[0]
+    if (Test-Path -LiteralPath $f) {
+      $j = Get-Content -LiteralPath $f -Raw | ConvertFrom-Json
+      if (Test-WbHasProperty $j 'content_start_ms') { $args2 += @($pair[1], ([double]$j.content_start_ms).ToString([Globalization.CultureInfo]::InvariantCulture)) }
+    }
+  }
+  Invoke-WbNative -FilePath $Testbench -ArgumentList $args2
+}
+
 # The player's late render callbacks under the rule: gaps longer than its output buffer. Known is
 # false when play.json has no callback data (a player before 9 Nov 2026 20:34). Data written with
 # the first, too sensitive threshold (gaps of 1.5 times the audio before a callback) is re-judged:
@@ -230,4 +253,4 @@ function Get-WbVerdictLines {
   $lines
 }
 
-Export-ModuleMember -Function Get-WbPlayerLateCallbacks, Get-WbUpstreamBreaks, Get-WbRunVerdict, Get-WbVerdictLines
+Export-ModuleMember -Function Invoke-WbCompare, Get-WbPlayerLateCallbacks, Get-WbUpstreamBreaks, Get-WbRunVerdict, Get-WbVerdictLines
