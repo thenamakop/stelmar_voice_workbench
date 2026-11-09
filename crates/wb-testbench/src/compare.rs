@@ -159,8 +159,9 @@ pub struct Compare {
     pub aligned: bool,
     pub compared_frames: u64,
     pub differing_frames: u64,
-    /// Frames of the reference outside the span the app covers that hold audio: audio Windows
-    /// delivered that the app has no recording of (a FAIL).
+    /// Frames of the reference after the span the app covers that hold audio: audio Windows
+    /// delivered after the app's last frame that the app has no recording of (a FAIL). Audio
+    /// before the app's first frame and the gaps between its runs are not counted.
     pub reference_only_loud_frames: u64,
     /// Frames of the app with audio that the reference does not cover (the reference is
     /// incomplete: the run is INVALID).
@@ -389,8 +390,15 @@ fn compare_segment(
         e.saturating_sub(covered_end.max(covered_start)),
     );
     seg.app_only_frames = head + tail;
+    // Stale audio before the signal (the cable replaying an earlier run) is not the signal: the
+    // reference starting a little later than the app may miss some of it. From the signal on,
+    // everything the app recorded must be in the reference.
+    let head_from = match (s, hints.app_signal_start) {
+        (0, Some(f)) => f.clamp(s, s + head),
+        _ => s,
+    };
     seg.app_only_loud_frames =
-        loud_frames_in(app, s, s + head)? + loud_frames_in(app, e.saturating_sub(tail), e)?;
+        loud_frames_in(app, head_from, s + head)? + loud_frames_in(app, e.saturating_sub(tail), e)?;
     Ok(seg)
 }
 
@@ -452,8 +460,10 @@ pub fn compare(
             .map(|s| s.reference_end_frame)
             .max()
             .unwrap_or(0);
-        reference_only_loud = loud_frames_in(reference, 0, span_start)?
-            + loud_frames_in(reference, span_end, reference.total)?;
+        // Audio before the app's first frame is not the app's to record (the kill test starts
+        // the app after the signal began); audio after its last frame is.
+        let _ = span_start;
+        reference_only_loud = loud_frames_in(reference, span_end, reference.total)?;
         let mut ordered: Vec<(u64, u64)> = segments
             .iter()
             .map(|s| (s.reference_start_frame, s.reference_end_frame))
@@ -738,6 +748,44 @@ mod tests {
         let c = compare(&Recording::load(&a)?, &Recording::load(&r)?, &[0], &hints)?;
         assert!(c.aligned && c.equal, "{c:?}");
         assert_eq!(c.segments[0].offset_frames, Some(4_500));
+        Ok(())
+    }
+
+    #[test]
+    fn reference_audio_from_before_the_app_started_is_not_a_difference() -> Result<()> {
+        let t = TempDir::new("cmp-late-app")?;
+        let signal = noise(40_000, 11);
+        // The reference started with the signal; the app started 6,000 frames into it.
+        let a = session(t.path(), "app", &signal[2 * 6_000..], 16_000)?;
+        let r = session(t.path(), "ref", &signal, 100_000)?;
+        let c = cmp(&a, &r, &[0])?;
+        assert!(c.aligned && c.equal, "{c:?}");
+        assert_eq!(c.reference_only_loud_frames, 0);
+        assert_eq!(c.segments[0].offset_frames, Some(-6_000));
+        Ok(())
+    }
+
+    #[test]
+    fn stale_audio_only_the_app_recorded_before_the_signal_is_not_counted_with_the_signal_start()
+    -> Result<()> {
+        let t = TempDir::new("cmp-stale-head")?;
+        let signal = noise(40_000, 12);
+        let stale = noise(3_000, 13);
+        let mut app = stale.clone();
+        app.extend(&signal);
+        // The reference started 2,000 frames later and misses the first 2,000 stale frames.
+        let mut reference = stale[2 * 2_000..].to_vec();
+        reference.extend(&signal);
+        let a = session(t.path(), "app", &app, 16_000)?;
+        let r = session(t.path(), "ref", &reference, 100_000)?;
+        let hints = Hints {
+            reference_signal_start: Some(1_000),
+            app_signal_start: Some(3_000),
+        };
+        let c = compare(&Recording::load(&a)?, &Recording::load(&r)?, &[0], &hints)?;
+        assert!(c.aligned && c.equal, "{c:?}");
+        assert_eq!(c.app_only_loud_frames, 0);
+        assert_eq!(c.segments[0].app_only_frames, 2_000);
         Ok(())
     }
 }
