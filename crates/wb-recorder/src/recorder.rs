@@ -33,7 +33,7 @@ use crate::parts::{self, AUDIO_DIR, PartRecord, PartsIndex};
 use crate::session::{self, InputInfo, SessionMeta};
 use crate::sys::{self, AwakeGuard};
 use crate::util::{now_ist, rfc3339};
-use crate::wav::{PartWriter, frames_to_ms};
+use crate::wav::{self, PCM16_HEADER_BYTES, PartWriter, Salvage, f32_to_i16, frames_to_ms};
 
 /// 10-minute parts (PLAN D10).
 pub const DEFAULT_PART_SECONDS: u32 = 600;
@@ -162,6 +162,75 @@ struct CloseJob {
     start_ms: u64,
 }
 
+/// Adds a closed part to `parts.json`. False when the file could not be read.
+fn index_part(
+    dir: &std::path::Path,
+    events: &Sender<Event>,
+    index: &mut PartsIndex,
+    job: &CloseJob,
+    report: bool,
+) -> bool {
+    match parts::record_for_file(dir, job.part, job.start_ms) {
+        Ok(rec) => {
+            index.parts.push(rec.clone());
+            index.parts.sort_by_key(|p| p.part);
+            if let Err(e) = parts::save(dir, index) {
+                let _ = events.send(Notice::event(
+                    NoticeLevel::Error,
+                    "recorder",
+                    format!("Could not write parts.json: {e}"),
+                ));
+            }
+            session::append_log(
+                dir,
+                now_ist(),
+                &format!(
+                    "part_closed part={} start_ms={} duration_ms={} sha256={}{}",
+                    rec.part,
+                    rec.start_ms,
+                    rec.duration_ms,
+                    rec.sha256,
+                    if rec.needs_repair {
+                        " needs_repair=true"
+                    } else {
+                        ""
+                    }
+                ),
+            );
+            let _ = events.send(Event::PartClosed(rec));
+            true
+        }
+        Err(e) => {
+            if report {
+                let _ = events.send(Notice::event(
+                    NoticeLevel::Error,
+                    "recorder",
+                    format!("Could not index part {}: {e}", job.part),
+                ));
+            }
+            false
+        }
+    }
+}
+
+/// Whole frames a part file holds, from its length (the header is not trusted).
+fn file_frames(path: &std::path::Path, channels: u16) -> Option<u64> {
+    if let Ok(info) = wav::inspect(path) {
+        return Some(info.frames_on_disk);
+    }
+    let len = std::fs::metadata(path).ok()?.len();
+    Some(len.saturating_sub(PCM16_HEADER_BYTES) / (u64::from(channels.max(1)) * 2))
+}
+
+/// What `open_part` did.
+enum OpenResult {
+    Opened,
+    /// A write failed a moment ago and the retry is not due yet.
+    Blocked,
+    /// The file could not be created.
+    Failed,
+}
+
 struct Closer {
     tx: Option<Sender<CloseJob>>,
     join: Option<JoinHandle<PartsIndex>>,
@@ -174,35 +243,45 @@ impl Closer {
             .name("wb-part-closer".into())
             .spawn(move || {
                 sys::lower_current_thread();
+                // Parts that could not be read when they closed (the fault may still have been
+                // there) are tried again with every later part and once more at the end.
+                let mut retry: Vec<CloseJob> = Vec::new();
                 for job in rx {
-                    match parts::record_for_file(&dir, job.part, job.start_ms) {
-                        Ok(rec) => {
-                            index.parts.push(rec.clone());
-                            if let Err(e) = parts::save(&dir, &index) {
-                                let _ = events.send(Notice::event(
-                                    NoticeLevel::Error,
-                                    "recorder",
-                                    format!("Could not write parts.json: {e}"),
-                                ));
-                            }
-                            session::append_log(
-                                &dir,
-                                now_ist(),
-                                &format!(
-                                    "part_closed part={} start_ms={} duration_ms={} sha256={}",
-                                    rec.part, rec.start_ms, rec.duration_ms, rec.sha256
-                                ),
-                            );
-                            let _ = events.send(Event::PartClosed(rec));
-                        }
-                        Err(e) => {
-                            let _ = events.send(Notice::event(
-                                NoticeLevel::Error,
-                                "recorder",
-                                format!("Could not index part {}: {e}", job.part),
-                            ));
+                    for earlier in std::mem::take(&mut retry) {
+                        if !index_part(&dir, &events, &mut index, &earlier, false) {
+                            retry.push(earlier);
                         }
                     }
+                    if !index_part(&dir, &events, &mut index, &job, true) {
+                        retry.push(job);
+                    }
+                }
+                for last in retry {
+                    if !index_part(&dir, &events, &mut index, &last, false) {
+                        let _ = events.send(Notice::event(
+                            NoticeLevel::Error,
+                            "recorder",
+                            format!(
+                                "Part {} is on disk but not in parts.json; recovery will index it",
+                                last.part
+                            ),
+                        ));
+                    }
+                }
+                // Parts closed with a header that did not match their length: one more try at
+                // the repair now that the session is ending.
+                let mut changed = false;
+                for rec in index.parts.iter_mut().filter(|r| r.needs_repair) {
+                    let path = dir.join(&rec.file);
+                    if wav::repair_header(&path).is_ok() {
+                        if let Ok(fixed) = parts::record_for_file(&dir, rec.part, rec.start_ms) {
+                            *rec = fixed;
+                            changed = true;
+                        }
+                    }
+                }
+                if changed {
+                    let _ = parts::save(&dir, &index);
                 }
                 index
             })
@@ -236,6 +315,9 @@ struct Recorder {
     stream: Option<StreamHandle>,
     meter: Option<LevelMeter>,
     scratch: Vec<f32>,
+    /// Samples (interleaved, 16-bit) that a failed part owes the recording: they go first into
+    /// the next part. Small: at most about a second plus the rest of one batch.
+    carry: Vec<i16>,
 
     writer: Option<PartWriter>,
     /// Number of the open part, or of the next one to open.
@@ -343,6 +425,7 @@ fn run(cfg: RecorderConfig, rx: &Receiver<RecorderMsg>, events: Sender<Event>) {
         stream: None,
         meter: None,
         scratch: Vec::new(),
+        carry: Vec::new(),
         writer: None,
         part_no: cfg.index.next_part(),
         next_start_ms: cfg.index.end_ms(),
@@ -803,12 +886,31 @@ impl Recorder {
         let part_frames = u64::from(self.part_seconds) * u64::from(input.sample_rate);
         while *done < samples.len() {
             let rest = &samples[*done..];
-            if self.writer.is_none() && !self.open_part(&input) {
-                // Could not open a part: this batch is lost. It is counted and logged; the ring
-                // holds what follows until the retry.
-                self.dropped_samples += rest.len() as u64;
-                *done = samples.len();
-                return;
+            if self.writer.is_none() {
+                match self.open_part(&input) {
+                    OpenResult::Opened => {
+                        if !self.write_carry() {
+                            // The new part failed at once; write_failed has handled it.
+                            continue;
+                        }
+                    }
+                    OpenResult::Blocked => {
+                        // A write just failed and the retry is not due: keep the rest of this
+                        // batch (it goes into the next part, after the carried samples).
+                        self.carry.extend(rest.iter().map(|&s| f32_to_i16(s)));
+                        *done = samples.len();
+                        return;
+                    }
+                    OpenResult::Failed => {
+                        // The next part cannot be opened either: what the failed part owed and
+                        // this batch are lost. They are counted and logged; the ring holds what
+                        // follows until the retry.
+                        self.dropped_samples += (self.carry.len() + rest.len()) as u64;
+                        self.carry.clear();
+                        *done = samples.len();
+                        return;
+                    }
+                }
             }
             let Some(writer) = self.writer.as_mut() else {
                 *done = samples.len();
@@ -818,10 +920,11 @@ impl Recorder {
             let take = rest.len().min(room.max(channels));
             let (now, _) = rest.split_at(take);
             if let Err(e) = writer.write_f32(now) {
-                self.dropped_samples += rest.len() as u64;
-                *done = samples.len();
+                // The chunk is in the writer's pending copy: write_failed carries what did not
+                // reach the disk into the next part; the rest of the batch follows it.
+                *done += take;
                 self.write_failed(e);
-                return;
+                continue;
             }
             *done += take;
             if self.panic_point == Some(PanicPoint::MidBatch) && *done < samples.len() {
@@ -834,7 +937,7 @@ impl Recorder {
                 self.first_write_pending = false;
                 if let Some(Err(e)) = self.writer.as_mut().map(PartWriter::flush) {
                     self.write_failed(e);
-                    return;
+                    continue;
                 }
             }
             if self
@@ -847,9 +950,9 @@ impl Recorder {
         }
     }
 
-    fn open_part(&mut self, input: &InputInfo) -> bool {
+    fn open_part(&mut self, input: &InputInfo) -> OpenResult {
         if self.write_blocked_until.is_some_and(|t| Instant::now() < t) {
-            return false;
+            return OpenResult::Blocked;
         }
         let path = self
             .dir
@@ -868,7 +971,7 @@ impl Recorder {
                         self.part_no, self.next_start_ms
                     ),
                 );
-                true
+                OpenResult::Opened
             }
             Err(e) => {
                 // A leftover file with this number (should not happen): skip the number.
@@ -877,16 +980,94 @@ impl Recorder {
                 }
                 self.write_blocked_until = Some(Instant::now() + WRITE_RETRY);
                 self.error(format!("Could not open part {}: {e}", path.display()));
+                OpenResult::Failed
+            }
+        }
+    }
+
+    /// A write or flush failed. Nothing already captured may be lost: the part is closed with
+    /// whatever reached the disk (the file is kept even if its header cannot be rewritten), the
+    /// samples that did not reach it are carried into the next part, and only samples the next
+    /// part also fails to take are counted in `dropped_samples`.
+    fn write_failed(&mut self, e: Error) {
+        self.error(format!("Write failed, starting a new part: {e}"));
+        let salvage = self.writer.as_mut().map(PartWriter::take_salvage);
+        let on_disk = self.close_part_inner(true);
+        if let Some(s) = salvage {
+            self.carry_over(&s, on_disk);
+        }
+        self.write_blocked_until = Some(Instant::now() + WRITE_RETRY);
+        self.event("write_error", Some(e.to_string()));
+    }
+
+    /// Works out, from the frames the failed file really holds, which of the writer's pending
+    /// samples still have to be written.
+    fn carry_over(&mut self, s: &Salvage, on_disk: u64) {
+        let ch = usize::from(s.channels.max(1));
+        let pending_frames = (s.pending.len() / ch) as u64;
+        let first_pending = s.accepted_frames.saturating_sub(pending_frames);
+        // Frames the last successful flush covered that are not in the file: gone (counted).
+        let missing_before = first_pending.saturating_sub(on_disk);
+        // Pending frames that did reach the file are not written twice.
+        let start = on_disk.max(first_pending);
+        let skip = (start - first_pending).min(pending_frames) as usize;
+        let owed = &s.pending[skip * ch..];
+        // Samples at the start of this part came from an earlier failed part. If this part
+        // failed to take them too, they are lost and counted.
+        let carried_again = (s.carry_frames.saturating_sub(start) as usize).min(owed.len() / ch);
+        let lost_frames = missing_before + carried_again as u64;
+        self.dropped_samples += lost_frames * ch as u64;
+        let mut next: Vec<i16> = owed[carried_again * ch..].to_vec();
+        next.append(&mut self.carry);
+        self.carry = next;
+    }
+
+    /// Writes the carried samples at the start of the part that was just opened. False when
+    /// that write failed (`write_failed` has dealt with it).
+    fn write_carry(&mut self) -> bool {
+        if self.carry.is_empty() {
+            return true;
+        }
+        let carry = std::mem::take(&mut self.carry);
+        let Some(w) = self.writer.as_mut() else {
+            self.carry = carry;
+            return false;
+        };
+        match w.write_carry(&carry) {
+            Ok(()) => true,
+            Err(e) => {
+                self.write_failed(e);
                 false
             }
         }
     }
 
-    fn write_failed(&mut self, e: Error) {
-        self.error(format!("Write failed, starting a new part: {e}"));
-        self.close_part();
-        self.write_blocked_until = Some(Instant::now() + WRITE_RETRY);
-        self.event("write_error", Some(e.to_string()));
+    /// At Stop: whatever a failed part still owes the recording gets one last try in a new
+    /// part, and is counted as dropped if that fails too.
+    fn flush_carry_at_stop(&mut self) {
+        if self.carry.is_empty() {
+            return;
+        }
+        if self.writer.is_none() {
+            let input = self
+                .stream
+                .as_ref()
+                .map(|s| s.input.clone())
+                .or_else(|| self.meta.input.clone());
+            if let Some(input) = input {
+                if matches!(self.open_part(&input), OpenResult::Opened) {
+                    self.write_carry();
+                }
+            }
+        }
+        if !self.carry.is_empty() {
+            let lost = self.carry.len();
+            self.dropped_samples += lost as u64;
+            self.carry.clear();
+            self.error(format!(
+                "{lost} samples could not be written before Stop and were dropped"
+            ));
+        }
     }
 
     fn with_writer(&mut self, f: fn(&mut PartWriter) -> Result<(), Error>) {
@@ -899,33 +1080,57 @@ impl Recorder {
 
     /// Finishes the open part (if any) and queues it for indexing.
     fn close_part(&mut self) {
-        let Some(w) = self.writer.take() else { return };
+        self.close_part_inner(false);
+    }
+
+    /// Closes the open part and queues it for indexing; returns the whole frames the file
+    /// holds. After a failed write (`after_failure`) that count comes from the file's length,
+    /// not from the samples handed to the writer.
+    ///
+    /// A part with audio in it is never deleted: if the header cannot be finished or repaired
+    /// (the fault that broke the write may still be there) the file stays as it is, is indexed
+    /// with `needs_repair`, and recovery rewrites its header. Only a file with no whole frame
+    /// is removed.
+    fn close_part_inner(&mut self, after_failure: bool) -> u64 {
+        let Some(w) = self.writer.take() else {
+            return 0;
+        };
         let path: PathBuf = w.path().to_path_buf();
         let part = self.part_no;
         let start_ms = self.next_start_ms;
+        let (rate, channels, accepted) = (w.sample_rate(), w.channels(), w.frames());
         // Advance the number first, so a failure below never reuses it.
         self.part_no += 1;
-        let frames = match w.finish() {
-            Ok((frames, rate, _)) => {
-                self.next_start_ms += frames_to_ms(frames, rate);
-                frames
-            }
+        let mut frames = match w.finish() {
+            Ok((frames, _, _)) => frames,
             Err(e) => {
                 self.error(format!("Could not finish part {part}: {e}"));
-                // The data that reached the file is still indexed; recovery repairs the header.
-                let info = crate::wav::repair_header(&path).ok();
-                let frames = info.as_ref().map_or(0, |r| r.frames);
-                if let Some(r) = info {
-                    self.next_start_ms += frames_to_ms(r.frames, r.sample_rate);
+                match wav::repair_header(&path) {
+                    Ok(r) => r.frames,
+                    Err(_) => file_frames(&path, channels).unwrap_or(accepted),
                 }
-                frames
             }
         };
-        if frames == 0 {
-            let _ = std::fs::remove_file(&path);
-            return;
+        if after_failure {
+            match file_frames(&path, channels) {
+                Some(on_disk) => frames = on_disk,
+                None => {
+                    // The file cannot be read at all: leave it for recovery, do not guess.
+                    self.error(format!(
+                        "Part {part} could not be read after a write failure; it is left for recovery"
+                    ));
+                    return 0;
+                }
+            }
         }
+        if frames == 0 {
+            // No whole frame in the file: nothing to keep.
+            let _ = std::fs::remove_file(&path);
+            return 0;
+        }
+        self.next_start_ms += frames_to_ms(frames, rate);
         self.closer.close(CloseJob { part, start_ms });
+        frames
     }
 
     fn check_disk(&mut self) {
@@ -1058,7 +1263,10 @@ impl Recorder {
     }
 
     fn stop(&mut self) -> Result<StopReport, Error> {
+        // A write failure may have the ring on hold: try again now rather than lose what it holds.
+        self.write_blocked_until = None;
         self.drain();
+        self.flush_carry_at_stop();
         self.close_part();
         self.log_counters_now();
         let (overrun_samples, xruns) = self.counters();

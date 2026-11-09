@@ -402,3 +402,308 @@ fn a_batch_that_keeps_panicking_is_dropped_and_counted_and_recording_goes_on() -
     );
     Ok(())
 }
+
+// ---- Write failures ---------------------------------------------------------------------------
+//
+// A real write failure part-way through a part: a second handle on the open part file takes a
+// shared lock, and Windows then refuses the recorder's writes to it with a lock violation (the
+// same kind of error as a full disk: the write call fails) while reads still work. Nothing in
+// the recorder is replaced or hooked for these tests.
+
+/// Whole samples of a part file read from its length, ignoring a header that is out of date.
+fn raw_samples(path: &std::path::Path) -> Result<Vec<i16>, Box<dyn std::error::Error>> {
+    let info = wav::inspect(path)?;
+    let bytes = std::fs::read(path)?;
+    let start = info.data_offset as usize;
+    let end = start + info.frames_on_disk as usize * usize::from(info.block_align);
+    Ok(bytes[start..end]
+        .chunks_exact(2)
+        .map(|b| i16::from_le_bytes([b[0], b[1]]))
+        .collect())
+}
+
+/// Every sample in every part file of the session folder, in part order, read from file lengths.
+fn raw_all_samples(dir: &std::path::Path) -> Result<Vec<i16>, Box<dyn std::error::Error>> {
+    let mut out = Vec::new();
+    for n in parts::part_numbers_on_disk(dir)? {
+        out.extend(raw_samples(
+            &dir.join("audio").join(parts::part_file_name(n)),
+        )?);
+    }
+    Ok(out)
+}
+
+/// Feeds audio until the recorder has flushed part 1 once (its header then covers about a
+/// second) and 0.6 s more, so some audio is in the file beyond what its header counts but the
+/// next one-second flush has not run. Returns the next sample index.
+fn feed_until_between_flushes(
+    prod: &mut impl Producer<Item = f32>,
+    part: &std::path::Path,
+    start: u64,
+) -> Result<u64, Box<dyn std::error::Error>> {
+    let mut k = feed(prod, start, 1.1);
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    while !wav::inspect(part).is_ok_and(|i| i.header_data_len >= 30_000) {
+        if std::time::Instant::now() > deadline {
+            return Err("the first flush never happened".into());
+        }
+        k = feed(prod, k, 0.1);
+    }
+    Ok(feed(prod, k, 0.6))
+}
+
+fn expected(len: u64) -> Vec<i16> {
+    (0..len).map(sample).collect()
+}
+
+/// Ticks the stream's callback counter like a live device, so the five-second no-audio watchdog
+/// does not report a manual stream as lost during these long tests.
+struct Ticker {
+    on: Arc<AtomicBool>,
+    join: Option<std::thread::JoinHandle<()>>,
+}
+
+impl Ticker {
+    fn start(handle: &StreamHandle) -> Self {
+        let counters = Arc::clone(&handle.counters);
+        let on = Arc::new(AtomicBool::new(true));
+        let flag = Arc::clone(&on);
+        let join = std::thread::spawn(move || {
+            while flag.load(Ordering::Relaxed) {
+                counters.callbacks.fetch_add(1, Ordering::Relaxed);
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        });
+        Self {
+            on,
+            join: Some(join),
+        }
+    }
+}
+
+impl Drop for Ticker {
+    fn drop(&mut self) {
+        self.on.store(false, Ordering::Relaxed);
+        if let Some(j) = self.join.take() {
+            let _ = j.join();
+        }
+    }
+}
+
+fn stop_with_timeout(
+    rec: RecorderHandle,
+) -> Result<wb_recorder::recorder::StopReport, Box<dyn std::error::Error>> {
+    let (done_tx, done_rx) = mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = done_tx.send(rec.stop());
+    });
+    Ok(done_rx
+        .recv_timeout(Duration::from_secs(30))
+        .map_err(|_| "Stop hung after a write failure")??)
+}
+
+/// Error notices and whether any message contains `needle`.
+fn drain_errors(events: &mpsc::Receiver<Event>) -> Vec<String> {
+    let mut out = Vec::new();
+    while let Ok(ev) = events.try_recv() {
+        if let Event::Notice(n) = ev {
+            if n.level == wb_recorder::events::NoticeLevel::Error {
+                out.push(n.message);
+            }
+        }
+    }
+    out
+}
+
+/// The disk fails part-way through part 1 and works again for part 2. Every sample captured is
+/// on disk exactly once, in order; nothing is counted as dropped; parts.json, the mirror and a
+/// rebuild from the files agree; part 1 is kept and marked needs_repair (its header cannot be
+/// rewritten while the fault lasts), and recovery repairs it.
+#[test]
+#[allow(clippy::incompatible_msrv)] // File::lock_shared needs Rust 1.89; the test toolchain is newer.
+fn a_write_failure_part_way_loses_nothing_and_duplicates_nothing() -> TestResult {
+    use std::fs::OpenOptions;
+    use wb_recorder::mirror::MirrorHandle;
+    use wb_recorder::recovery;
+
+    let (root, dir, rec, events) = setup("rec-write-fail", 600)?;
+    let backup = root.path().join("backup");
+    let (mirror_tx, _mirror_rx) = mpsc::channel();
+    let mut mirror = MirrorHandle::spawn(dir.clone(), Some(backup.clone()), mirror_tx)?;
+    let (mut prod, handle) = StreamHandle::manual(input(), 20);
+    let ticker = Ticker::start(&handle);
+    rec.send(RecorderMsg::Stream(handle))?;
+
+    // Audio until part 1 holds data beyond what its header counts, mid-way between two flushes.
+    let first_part = dir.join("audio").join(parts::part_file_name(1));
+    let k1 = feed_until_between_flushes(&mut prod, &first_part, 0)?;
+    assert!(first_part.exists(), "the first part is open");
+
+    // The disk "fails": writes to part 1 are refused from now on (reads still work).
+    let blocker = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&first_part)?;
+    blocker.lock_shared()?;
+    let k2 = feed(&mut prod, k1, 2.0);
+    std::thread::sleep(Duration::from_millis(1_500));
+    assert!(
+        rec.is_running(),
+        "the recorder thread survives a failed write"
+    );
+
+    // Part 2 takes the audio that follows (and the audio that part 1 could not take).
+    let end = feed(&mut prod, k2, 2.0);
+    std::thread::sleep(Duration::from_millis(300));
+    let report = stop_with_timeout(rec)?;
+    let verify = mirror.final_sync();
+    mirror.stop();
+    drop(ticker);
+
+    // Reported.
+    let errors = drain_errors(&events);
+    assert!(
+        !errors.is_empty(),
+        "the failed write must reach the UI as an error"
+    );
+    let meta = session::load_meta(&dir)?;
+    assert!(
+        meta.events.iter().any(|e| e.kind == "write_error"),
+        "session.json must log the write error"
+    );
+
+    // Frames on disk (all parts) plus dropped samples equal the frames fed; the lock only
+    // affects part 1, so part 2 takes everything and nothing is dropped.
+    let index = parts::load(&dir)?;
+    let on_disk: u64 = index.parts.iter().map(|p| p.frames).sum();
+    assert_eq!(
+        on_disk + report.dropped_samples,
+        end,
+        "frames on disk + dropped must equal frames fed; parts {:?}",
+        index.parts
+    );
+    assert_eq!(report.dropped_samples, 0, "the next part took everything");
+
+    // Not one sample lost or repeated, including around the cut between the parts.
+    let got = raw_all_samples(&dir)?;
+    assert_eq!(got.len() as u64, end);
+    assert!(
+        got == expected(end),
+        "samples missing, repeated or reordered"
+    );
+
+    // Part 1 is kept, marked needs_repair; parts.json matches a rebuild from the files.
+    assert!(index.parts.len() >= 2, "{:?}", index.parts);
+    assert!(
+        index.parts[0].needs_repair,
+        "part 1 closed with an unrepaired header"
+    );
+    assert!(!index.parts[1].needs_repair);
+    assert_eq!(index, parts::rebuild_from_folder(&dir)?);
+
+    // The mirror holds the same bytes, including part 1.
+    assert!(verify.all_match, "mirror differs: {:?}", verify.message);
+    let mirror_part = backup.join("audio").join(parts::part_file_name(1));
+    assert!(mirror_part.exists(), "the mirror has no copy of part 1");
+    assert_eq!(std::fs::read(&mirror_part)?, std::fs::read(&first_part)?);
+
+    // The fault clears. Recovery rewrites part 1's header; everything plays and matches.
+    blocker.unlock()?;
+    drop(blocker);
+    assert!(!wav::inspect(&first_part)?.header_matches_length());
+    recovery::repair(&dir)?;
+    assert!(wav::inspect(&first_part)?.header_matches_length());
+    let fixed = parts::load(&dir)?;
+    assert!(fixed.parts.iter().all(|p| !p.needs_repair));
+    assert_eq!(fixed, parts::rebuild_from_folder(&dir)?);
+    assert!(
+        all_samples(&dir)? == expected(end),
+        "samples differ after recovery"
+    );
+    Ok(())
+}
+
+/// The part after the failed one cannot be opened either (a stray file has its number). What the
+/// failed part owed the recording cannot be written, so it is counted, not lost silently; what
+/// was already on disk stays; recording goes on in the part after that.
+#[test]
+#[allow(clippy::incompatible_msrv)] // File::lock_shared needs Rust 1.89; the test toolchain is newer.
+fn when_the_next_part_fails_too_the_loss_is_counted_not_silent() -> TestResult {
+    use std::fs::OpenOptions;
+    use wb_recorder::mirror::MirrorHandle;
+
+    let (root, dir, rec, events) = setup("rec-write-fail-twice", 600)?;
+    let backup = root.path().join("backup");
+    let (mirror_tx, _mirror_rx) = mpsc::channel();
+    let mut mirror = MirrorHandle::spawn(dir.clone(), Some(backup), mirror_tx)?;
+    let (mut prod, handle) = StreamHandle::manual(input(), 20);
+    let ticker = Ticker::start(&handle);
+    rec.send(RecorderMsg::Stream(handle))?;
+
+    let audio = dir.join("audio");
+    let first_part = audio.join(parts::part_file_name(1));
+    let k1 = feed_until_between_flushes(&mut prod, &first_part, 0)?;
+    // Part 2 cannot be created: something already has its name.
+    let stray = audio.join(parts::part_file_name(2));
+    std::fs::write(&stray, b"not a part")?;
+    let blocker = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&first_part)?;
+    blocker.lock_shared()?;
+    let k2 = feed(&mut prod, k1, 2.0);
+    std::thread::sleep(Duration::from_millis(2_500));
+    let end = feed(&mut prod, k2, 2.0);
+    std::thread::sleep(Duration::from_millis(300));
+    let report = stop_with_timeout(rec)?;
+    let verify = mirror.final_sync();
+    mirror.stop();
+    drop(ticker);
+    blocker.unlock()?;
+    drop(blocker);
+    std::fs::remove_file(&stray)?;
+
+    let errors = drain_errors(&events);
+    assert!(
+        errors.iter().any(|m| m.contains("Could not open part")),
+        "the second failure must be reported: {errors:?}"
+    );
+    let meta = session::load_meta(&dir)?;
+    assert!(meta.events.iter().any(|e| e.kind == "write_error"));
+
+    // Counted: frames on disk + dropped samples == frames fed. Some loss is expected here and
+    // it is bounded by what a failed part holds (about a second) plus one batch.
+    let index = parts::load(&dir)?;
+    let on_disk: u64 = index.parts.iter().map(|p| p.frames).sum();
+    assert_eq!(
+        on_disk + report.dropped_samples,
+        end,
+        "parts {:?}",
+        index.parts
+    );
+    assert!(report.dropped_samples > 0, "the loss must be counted");
+    assert!(
+        report.dropped_samples <= u64::from(RATE) * 2,
+        "dropped {} is more than a failed part and a batch can hold",
+        report.dropped_samples
+    );
+
+    // What is on disk is the start of the recording, then the end of it, each intact: part 1
+    // holds the start, the last part the audio from after the lost stretch.
+    let got = raw_all_samples(&dir)?;
+    let want = expected(end);
+    let n1 = index.parts[0].frames as usize;
+    assert!(
+        got[..n1] == want[..n1],
+        "audio before the failure was damaged"
+    );
+    let tail = got.len() - n1;
+    assert!(
+        got[n1..] == want[want.len() - tail..],
+        "audio after the lost stretch was damaged"
+    );
+    assert_eq!(got.last().copied(), Some(sample(end - 1)));
+    assert_eq!(index, parts::rebuild_from_folder(&dir)?);
+    assert!(verify.all_match, "mirror differs: {:?}", verify.message);
+    Ok(())
+}

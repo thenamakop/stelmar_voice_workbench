@@ -24,6 +24,10 @@ pub struct PartRecord {
     pub sample_rate: u32,
     pub channels: u16,
     pub sha256: String,
+    /// The file's header does not match its length (a write failed while the part was closing).
+    /// `frames` and `duration_ms` come from the length; recovery rewrites the header.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub needs_repair: bool,
 }
 
 impl PartRecord {
@@ -109,6 +113,7 @@ pub fn record_for_file(session_dir: &Path, part: u32, start_ms: u64) -> Result<P
         sample_rate: info.sample_rate,
         channels: info.channels,
         sha256,
+        needs_repair: !info.header_matches_length(),
     })
 }
 

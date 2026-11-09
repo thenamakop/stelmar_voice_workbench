@@ -78,6 +78,8 @@ export interface PartRecord {
   sample_rate: number;
   channels: number;
   sha256: string;
+  /** Set when the header did not match the file length at close; recovery rewrites it. */
+  needs_repair?: boolean;
 }
 
 export interface SessionInfo {

@@ -11,6 +11,9 @@ use crate::Error;
 /// sizes). hound's header is at most 68 bytes; the mirror rewrites this many on every pass.
 pub const HEADER_REWRITE_BYTES: u64 = 4096;
 
+/// Bytes before the first sample in a part the recorder writes (hound's 16-bit PCM header).
+pub const PCM16_HEADER_BYTES: u64 = 44;
+
 /// Writes one part: 16-bit PCM at the device rate, channels as captured.
 pub struct PartWriter {
     path: PathBuf,
@@ -19,7 +22,26 @@ pub struct PartWriter {
     sync_handle: File,
     channels: u16,
     sample_rate: u32,
+    /// Whole frames accepted so far (handed to `write_f32` or `write_carry`).
     frames: u64,
+    /// The recorder's own copy of the samples accepted since the last successful `flush`
+    /// (about one second at most). If a write or flush fails, `take_salvage` hands it back, so
+    /// the samples that never reached the disk can be written to the next part.
+    pending: Vec<i16>,
+    /// Frames at the start of this part that were carried over from a part that failed.
+    carry_frames: u64,
+}
+
+/// What a part that failed still owes the recording (see `PartWriter::take_salvage`).
+#[derive(Debug, Default)]
+pub struct Salvage {
+    /// Interleaved samples accepted since the last successful flush.
+    pub pending: Vec<i16>,
+    /// Whole frames accepted by the part in total.
+    pub accepted_frames: u64,
+    /// Frames at the start of the part that came from an earlier failed part.
+    pub carry_frames: u64,
+    pub channels: u16,
 }
 
 impl PartWriter {
@@ -50,6 +72,8 @@ impl PartWriter {
             channels,
             sample_rate,
             frames: 0,
+            pending: Vec::new(),
+            carry_frames: 0,
         })
     }
 
@@ -72,20 +96,53 @@ impl PartWriter {
 
     /// Writes interleaved samples in [-1, 1]. `samples.len()` must be a multiple of the channel
     /// count; the recorder only passes whole frames.
+    ///
+    /// The samples count as accepted, and are kept in the pending copy, before the write is
+    /// tried: if it fails part-way, `take_salvage` still holds all of them.
     pub fn write_f32(&mut self, samples: &[f32]) -> Result<(), Error> {
-        for &s in samples {
+        let from = self.pending.len();
+        self.pending.extend(samples.iter().map(|&s| f32_to_i16(s)));
+        self.frames += (samples.len() / usize::from(self.channels.max(1))) as u64;
+        self.write_pending_from(from)
+    }
+
+    /// Writes samples carried over from a part that failed, at the start of this part.
+    pub fn write_carry(&mut self, samples: &[i16]) -> Result<(), Error> {
+        let from = self.pending.len();
+        self.pending.extend_from_slice(samples);
+        let frames = (samples.len() / usize::from(self.channels.max(1))) as u64;
+        self.frames += frames;
+        self.carry_frames += frames;
+        self.write_pending_from(from)
+    }
+
+    fn write_pending_from(&mut self, from: usize) -> Result<(), Error> {
+        for i in from..self.pending.len() {
             self.writer
-                .write_sample(f32_to_i16(s))
+                .write_sample(self.pending[i])
                 .map_err(|e| Error::wav(&self.path, e))?;
         }
-        self.frames += (samples.len() / usize::from(self.channels.max(1))) as u64;
         Ok(())
+    }
+
+    /// Hands back the pending copy and the counts needed to work out which samples reached the
+    /// disk. Used after a failed write or flush.
+    pub fn take_salvage(&mut self) -> Salvage {
+        Salvage {
+            pending: std::mem::take(&mut self.pending),
+            accepted_frames: self.frames,
+            carry_frames: self.carry_frames,
+            channels: self.channels,
+        }
     }
 
     /// Updates the header to the samples written so far and hands the bytes to the OS, so the
     /// file is a playable WAV up to this point.
     pub fn flush(&mut self) -> Result<(), Error> {
-        self.writer.flush().map_err(|e| Error::wav(&self.path, e))
+        self.writer.flush().map_err(|e| Error::wav(&self.path, e))?;
+        // Everything accepted so far has been handed to the OS.
+        self.pending.clear();
+        Ok(())
     }
 
     /// Flushes, then asks the OS to put the data on the disk.
@@ -105,6 +162,7 @@ impl PartWriter {
             channels,
             sample_rate,
             frames,
+            ..
         } = self;
         writer.finalize().map_err(|e| Error::wav(&path, e))?;
         sync_handle.sync_all().map_err(|e| Error::io(&path, e))?;
