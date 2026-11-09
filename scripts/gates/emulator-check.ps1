@@ -41,7 +41,7 @@ Import-Module (Join-Path $repo 'scripts\lib\AppProcess.psm1') -Force
 
 function Get-NvidiaPids {
   $pids = @()
-  foreach ($l in (& nvidia-smi 2>$null)) { if ($l -match '^\|\s+\S+\s+\S+\s+\S+\s+(\d+)\s+(C\+G|C|G)\s') { $pids += [int]$Matches[1] } }
+  foreach ($l in (Invoke-WbNative -FilePath 'nvidia-smi').Output) { if ($l -match '^\|\s+\S+\s+\S+\s+\S+\s+(\d+)\s+(C\+G|C|G)\s') { $pids += [int]$Matches[1] } }
   $pids
 }
 

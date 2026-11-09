@@ -68,9 +68,9 @@ foreach ($f in @($Exe, $Testbench, $Emulate)) { if (-not (Test-Path $f)) { throw
 function Q([string]$v) { ConvertTo-WbArg $v }
 function Read-Json([string]$Path) { if (Test-Path -LiteralPath $Path) { Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json } else { $null } }
 function Get-CableIntruders([int[]]$Allow = @()) {
-  $json = & $Testbench sessions --device $PlayDevice 2>$null
-  if ($LASTEXITCODE -ne 0 -or -not $json) { return @() }
-  @(($json | Out-String | ConvertFrom-Json) | Where-Object { $_.active -and $Allow -notcontains [int]$_.pid } | ForEach-Object {
+  $res = Invoke-WbNative -FilePath $Testbench -ArgumentList @('sessions', '--device', $PlayDevice)
+  if ($res.ExitCode -ne 0 -or $res.Output.Count -eq 0) { return @() }
+  @((($res.Output -join "`n") | ConvertFrom-Json) | Where-Object { $_.active -and $Allow -notcontains [int]$_.pid } | ForEach-Object {
     "$((Get-Process -Id $_.pid -ErrorAction SilentlyContinue).ProcessName) (pid $($_.pid)) on $($_.endpoint)"
   })
 }
@@ -163,7 +163,8 @@ $result = Invoke-WbGate -Name "phase1-kill-$Profile" -Body {
     $app = @(Get-Process stelmar-voice-workbench -ErrorAction SilentlyContinue)
     if ($app.Count -ne 1) { throw "Expected one app process before kill $k, found $($app.Count)" }
     $killAt = [DateTimeOffset]::Now
-    $tk = & taskkill.exe /F /PID $app[0].Id 2>&1
+    $tkRes = Invoke-WbNative -FilePath 'taskkill.exe' -ArgumentList @('/F', '/PID', "$($app[0].Id)")
+    $tk = @($tkRes.Output) + @($tkRes.Error)
     $progress.Add("$($killAt.ToString('HH:mm:ss.fff')) kill $k after $wait s: taskkill /F /PID $($app[0].Id): $($tk -join ' ') (last status: part $($st.recorder.part), overrun samples $($st.recorder.overrun_samples))")
     if (-not $current.Emu.WaitForExit(60000)) { throw "Job did not end after kill $k" }
     Start-Sleep -Milliseconds 500

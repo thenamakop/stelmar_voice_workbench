@@ -1,177 +1,55 @@
-﻿source: commit d170fc4 with uncommitted or untracked changes (the build hashes below identify the code)
-build: stelmar-voice-workbench.exe sha256 9adb5dfa1f3cae8b6c3bd80545a286f54d739a08e7f1fa778f3b96ea9cc77837 (built 2026-11-09 04:12)
-build: wb-testbench.exe sha256 7fecf5ec8a8be99b42dd5b302aadc9b4d966886fb6e7fb2edfd87de5a54e69f3 (built 2026-11-09 04:12)
+﻿source: commit 1e10bfc with uncommitted or untracked changes (the build hashes below identify the code)
+build: stelmar-voice-workbench.exe sha256 1bbf39e5884849ffab144de3026e25ee5519c37266e6dd55c0d4a6c369a698d0 (built 2026-11-09 16:17)
+build: wb-testbench.exe sha256 69d891e783541d071b2ebd86e8a7427720b1af9efe9dcc6a10b1b31fe33839fd (built 2026-11-09 16:17)
 build: wb-emulate.exe sha256 f61b04a3286fa48385964912740b5253f2edfd2b92161fd914230f15cf980316 (built 2026-11-08 18:07)
-gate: phase1-soak-emu-low
-started: 2026-11-09 07:12:40 +05:30
+gate: phase1-soak-emu-low (re-evaluated from saved data)
+started: 2026-11-09 17:44:31 +05:30
+note: evaluation redone from the saved recording and reports of the run in D:\STELMAR-Gate\soak-emu-low-20261109-174432 with the current analyser; written with -FromRun after a harness fix (git call outside the repo): the original run reached its evidence step and stopped on 'fatal: not a git repository' (started from %USERPROFILE%); run folder D:\STELMAR-Gate\soak-emu-low-20261109-174432; original run started 2026-11-09T17:44:31+05:30 and ended 2026-11-09 19:45:12 IST (D:\STELMAR-Gate\run-all.log); free RAM at start and end from that log; the final gate build (stelmar-voice-workbench.exe sha256 1bbf39e5884849ffab144de3026e25ee5519c37266e6dd55c0d4a6c369a698d0, built 2026-11-09 16:17) was in target\gate unchanged from before the run. Not saved by the original run and so not re-evaluated: the 1-second cable-interference polling, the NVIDIA-GPU check, the progress samples, the overlay-tools check at the end, and whether the Track B lock was held.
 machine: Legion
 emulation profile: emu-low
-overlay tools closed: yes (RTSS.exe and MSIAfterburner.exe not running when the gate started)
-overlay tools at the end: none running
-Track B paused: D:\Projects\stelmar-gate.lock held for the whole run (removed in a finally block)
-Track B busy lock: D:\Projects\stelmar-eval-busy.lock absent at start
-free RAM: 17.3 GB at start (needs 14 GB), 17.7 GB at end
+overlay tools closed: checked by the original run before it started (the gate refuses to start otherwise); not saved, not re-checked
+Track B paused: not re-evaluated (the original run's gate code takes D:\Projects\stelmar-gate.lock; whether it was held is not in the saved data)
+free RAM: 18.2 GB at start (needs 14 GB), 18.1 GB at end
 app build: target\gate\stelmar-voice-workbench.exe (cargo profile gate, features gate-hooks + custom-protocol)
-verdict: PASS (PROVISIONAL: emulated)
+verdict: FAIL
 
 checks:
   [x] reference capture ran cleanly (its own ring overruns 0)
   [x] no dropped or silent audio caused by the recorder (0 breaks not in the reference; silent gaps 0.0 ms)
-  [x] no capture-chain breaks beyond one start-up repeat (0; excused start-up repeats 1)
+  [ ] no capture-chain breaks beyond one start-up repeat (1; excused start-up repeats 0)
   [x] recorded duration within 1 s of the source
-  [x] recording equals the source except next to an excused start-up repeat (unexplained 0 ms of 82.66666666666667 ms)
+  [ ] recording equals the source except next to an excused start-up repeat (unexplained 93.333 ms of 93.33333333333333 ms)
   [x] channel 1 matches the source too
-  [x] no other program played into the cable
   [x] zero ring-buffer overruns
-  [x] zero driver capture glitches (xruns)
+  [x] driver xruns: none, or one within 2 s of the stream start with zero loss around it (xruns 0, excused 0)
   [x] zero samples dropped by the writer
   [x] capture thread at MMCSS priority (mmcss)
   [x] no recorder restarts
   [x] every part decodes in Media Foundation
   [x] mirror SHA-256 equals the originals
   [x] player had no underruns (source played cleanly)
-  [x] no job process on the NVIDIA GPU
   [x] app process CPU under 5% of the job's processors
 
 measurements:
   source: 120.0 min of known noise, 48 kHz stereo, played by wb-testbench into 'CABLE Input' from outside the job
-  recorded content: 7,200.011 s against source 7,200.000 s (difference 11.0 ms); discontinuities 1; silent gaps 0.0 ms; unmatched 82.7 ms; lowest block correlation 1.0000
-  parts: 13; audio 7,205.5 s; overrun samples 0; driver xruns 0; samples dropped by the writer 0; recorder restarts 0
+  recorded content: 7,200.012 s against source 7,200.000 s (difference 11.6 ms); discontinuities 1; silent gaps 0.0 ms; unmatched 93.3 ms; lowest block correlation 1.0000
+  parts: 13; audio 7,206.0 s; overrun samples 0; driver xruns 0; samples dropped by the writer 0; recorder restarts 0
   priorities: recorder thread mmcss, capture thread mmcss; ring buffer 20 s, highest fill 0.30%
-  recorder thread CPU: 52.72 s over 7,209 s = 0.731% of one core
-  app process CPU (main process; WebView2 processes not counted): 294.4 s = 1.02% of the job's 4 logical processors (4.08% of one core)
+  recorder thread CPU: 56.81 s over 7,210 s = 0.788% of one core
+  app process CPU (main process; WebView2 processes not counted): 310.6 s = 1.08% of the job's 4 logical processors (4.31% of one core)
   mirror: 17 files compared, all equal: True (mirror on the same machine, separate drive pending: C: instead of an external SSD)
   player: 345600000 frames of 345600000, underrun callbacks 0, render thread priority mmcss, output buffer fixed 4800 frames (100 ms)
-  cable interference: none seen by the 1-second session poll (sounds shorter than a second can be missed; the analysis above is the check)
-  default playback device: not the cable (checked at start)
+  cable interference polling: not re-evaluated (measured live, not saved); the analysis above is the evidence
+  default playback device: not recorded for this run
   signal starts at source frame 0 (0.0 ms of the source's start never reached the captures: playback start-up); leading audio before the signal: 0 ms
-  unmatched stretch: source 0.02 s (about 07:12:44 IST), 83 ms; also in the reference capture: True
-  reference capture (separate cpal + hound recorder outside the job; shares the audio engine, cable driver and cpal with the app): 1 breaks, unmatched 82.6666666666667 ms, its overruns 0, xruns 1
-  breaks in the app recording: recorder's own 0; capture-chain (also in the reference, FAIL, investigate) 0; EXCUSED start-up repeats 1 (at source 100 ms, -11 ms)
-  capture position breaks counted in the app's callback (device time not following on): 5
-  GPU check: 10 job processes, 0 processes in nvidia-smi, overlap 0
+  unmatched stretch: source 84.91 s (about 17:46:01 IST), 93 ms; also in the reference capture: True
+  reference capture (separate cpal + hound recorder outside the job; shares the audio engine, cable driver and cpal with the app): 1 breaks, unmatched 93.3333333333333 ms, its overruns 0, xruns 1
+  breaks in the app recording: recorder's own 0; capture-chain (also in the reference, FAIL, investigate) 1; EXCUSED start-up repeats 0 
+  capture position breaks counted in the app's callback (device time not following on): 3
+  GPU check: not re-evaluated (measured live, not saved); emulator-check.txt covers it
 
 progress:
-  07:12:43 recording in D:\STELMAR-Gate\soak-emu-low-20261109-071240\rec\2026-11-09\gate-soak-20261109-071240
-  07:13:01 job processes: 10; nvidia-smi processes: 0; job processes on the NVIDIA GPU: 0
-  07:14:02 audio 1.3 min, part 1, overrun samples 0, xruns 0, ring max 0.10%, recorder cpu 250 ms, in_sync lag 1085 ms
-  07:15:03 audio 2.3 min, part 1, overrun samples 0, xruns 0, ring max 0.15%, recorder cpu 687 ms, in_sync lag 1010 ms
-  07:16:04 audio 3.4 min, part 1, overrun samples 0, xruns 0, ring max 0.15%, recorder cpu 984 ms, in_sync lag 1085 ms
-  07:17:05 audio 4.4 min, part 1, overrun samples 0, xruns 0, ring max 0.15%, recorder cpu 1468 ms, in_sync lag 1085 ms
-  07:18:06 audio 5.4 min, part 1, overrun samples 0, xruns 0, ring max 0.15%, recorder cpu 1812 ms, in_sync lag 1010 ms
-  07:19:06 audio 6.4 min, part 1, overrun samples 0, xruns 0, ring max 0.15%, recorder cpu 2265 ms, in_sync lag 1000 ms
-  07:20:07 audio 7.4 min, part 1, overrun samples 0, xruns 0, ring max 0.15%, recorder cpu 2484 ms, in_sync lag 1095 ms
-  07:21:08 audio 8.4 min, part 1, overrun samples 0, xruns 0, ring max 0.15%, recorder cpu 2984 ms, in_sync lag 1071 ms
-  07:22:09 audio 9.4 min, part 1, overrun samples 0, xruns 0, ring max 0.15%, recorder cpu 3468 ms, in_sync lag 1010 ms
-  07:23:10 audio 10.5 min, part 2, overrun samples 0, xruns 0, ring max 0.15%, recorder cpu 4031 ms, in_sync lag 1010 ms
-  07:24:10 audio 11.5 min, part 2, overrun samples 0, xruns 0, ring max 0.15%, recorder cpu 4468 ms, in_sync lag 1071 ms
-  07:25:11 audio 12.5 min, part 2, overrun samples 0, xruns 0, ring max 0.15%, recorder cpu 4953 ms, in_sync lag 1010 ms
-  07:26:12 audio 13.5 min, part 2, overrun samples 0, xruns 0, ring max 0.15%, recorder cpu 5484 ms, in_sync lag 1095 ms
-  07:27:13 audio 14.5 min, part 2, overrun samples 0, xruns 0, ring max 0.15%, recorder cpu 5781 ms, in_sync lag 1000 ms
-  07:28:14 audio 15.5 min, part 2, overrun samples 0, xruns 0, ring max 0.15%, recorder cpu 6218 ms, in_sync lag 1010 ms
-  07:29:15 audio 16.5 min, part 2, overrun samples 0, xruns 0, ring max 0.15%, recorder cpu 6687 ms, in_sync lag 1095 ms
-  07:30:16 audio 17.6 min, part 2, overrun samples 0, xruns 0, ring max 0.15%, recorder cpu 7109 ms, in_sync lag 1085 ms
-  07:31:17 audio 18.6 min, part 2, overrun samples 0, xruns 0, ring max 0.15%, recorder cpu 7500 ms, in_sync lag 1010 ms
-  07:32:17 audio 19.6 min, part 2, overrun samples 0, xruns 0, ring max 0.15%, recorder cpu 8046 ms, in_sync lag 1000 ms
-  07:33:18 audio 20.6 min, part 3, overrun samples 0, xruns 0, ring max 0.15%, recorder cpu 8500 ms, in_sync lag 1000 ms
-  07:34:19 audio 21.6 min, part 3, overrun samples 0, xruns 0, ring max 0.15%, recorder cpu 8906 ms, in_sync lag 1000 ms
-  07:35:20 audio 22.6 min, part 3, overrun samples 0, xruns 0, ring max 0.15%, recorder cpu 9546 ms, in_sync lag 1085 ms
-  07:36:21 audio 23.6 min, part 3, overrun samples 0, xruns 0, ring max 0.15%, recorder cpu 10109 ms, in_sync lag 1000 ms
-  07:37:22 audio 24.6 min, part 3, overrun samples 0, xruns 0, ring max 0.15%, recorder cpu 10578 ms, in_sync lag 1085 ms
-  07:38:22 audio 25.7 min, part 3, overrun samples 0, xruns 0, ring max 0.15%, recorder cpu 11156 ms, in_sync lag 1000 ms
-  07:39:23 audio 26.7 min, part 3, overrun samples 0, xruns 0, ring max 0.15%, recorder cpu 11562 ms, in_sync lag 1095 ms
-  07:40:24 audio 27.7 min, part 3, overrun samples 0, xruns 0, ring max 0.15%, recorder cpu 11734 ms, in_sync lag 1000 ms
-  07:41:25 audio 28.7 min, part 3, overrun samples 0, xruns 0, ring max 0.15%, recorder cpu 12000 ms, in_sync lag 1010 ms
-  07:42:26 audio 29.7 min, part 3, overrun samples 0, xruns 0, ring max 0.15%, recorder cpu 12250 ms, in_sync lag 1010 ms
-  07:43:26 audio 30.7 min, part 4, overrun samples 0, xruns 0, ring max 0.15%, recorder cpu 12531 ms, in_sync lag 1095 ms
-  07:44:27 audio 31.7 min, part 4, overrun samples 0, xruns 0, ring max 0.15%, recorder cpu 12765 ms, in_sync lag 1010 ms
-  07:45:28 audio 32.8 min, part 4, overrun samples 0, xruns 0, ring max 0.15%, recorder cpu 13171 ms, in_sync lag 1010 ms
-  07:46:29 audio 33.8 min, part 4, overrun samples 0, xruns 0, ring max 0.15%, recorder cpu 13640 ms, in_sync lag 1095 ms
-  07:47:30 audio 34.8 min, part 4, overrun samples 0, xruns 0, ring max 0.15%, recorder cpu 14031 ms, in_sync lag 1010 ms
-  07:48:31 audio 35.8 min, part 4, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 14562 ms, in_sync lag 1085 ms
-  07:49:32 audio 36.8 min, part 4, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 15031 ms, in_sync lag 1010 ms
-  07:50:32 audio 37.8 min, part 4, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 15578 ms, in_sync lag 1000 ms
-  07:51:33 audio 38.8 min, part 4, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 16140 ms, in_sync lag 1095 ms
-  07:52:34 audio 39.9 min, part 4, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 16687 ms, in_sync lag 1000 ms
-  07:53:35 audio 40.9 min, part 5, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 17375 ms, in_sync lag 1010 ms
-  07:54:36 audio 41.9 min, part 5, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 17796 ms, in_sync lag 1010 ms
-  07:55:37 audio 42.9 min, part 5, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 18187 ms, in_sync lag 1095 ms
-  07:56:38 audio 43.9 min, part 5, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 18640 ms, in_sync lag 1095 ms
-  07:57:39 audio 44.9 min, part 5, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 19187 ms, in_sync lag 1010 ms
-  07:58:39 audio 45.9 min, part 5, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 19531 ms, in_sync lag 1000 ms
-  07:59:40 audio 47.0 min, part 5, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 20187 ms, in_sync lag 1085 ms
-  08:00:41 audio 48.0 min, part 5, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 20703 ms, in_sync lag 1095 ms
-  08:01:42 audio 49.0 min, part 5, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 21171 ms, in_sync lag 1085 ms
-  08:02:43 audio 50.0 min, part 6, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 21718 ms, in_sync lag 1000 ms
-  08:03:44 audio 51.0 min, part 6, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 22281 ms, in_sync lag 1000 ms
-  08:04:45 audio 52.0 min, part 6, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 22703 ms, in_sync lag 1061 ms
-  08:05:46 audio 53.0 min, part 6, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 23078 ms, in_sync lag 1010 ms
-  08:06:46 audio 54.1 min, part 6, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 23500 ms, in_sync lag 1000 ms
-  08:07:47 audio 55.1 min, part 6, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 23875 ms, in_sync lag 1000 ms
-  08:08:48 audio 56.1 min, part 6, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 24218 ms, in_sync lag 1095 ms
-  08:09:49 audio 57.1 min, part 6, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 24625 ms, in_sync lag 1010 ms
-  08:10:50 audio 58.1 min, part 6, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 25203 ms, in_sync lag 1010 ms
-  08:11:51 audio 59.1 min, part 6, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 25656 ms, in_sync lag 1095 ms
-  08:12:51 audio 60.1 min, part 7, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 26156 ms, in_sync lag 1085 ms
-  08:13:52 audio 61.2 min, part 7, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 26515 ms, in_sync lag 1010 ms
-  08:14:53 audio 62.2 min, part 7, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 27031 ms, in_sync lag 1010 ms
-  08:15:54 audio 63.2 min, part 7, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 27500 ms, in_sync lag 1000 ms
-  08:16:54 audio 64.2 min, part 7, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 28062 ms, in_sync lag 1085 ms
-  08:17:55 audio 65.2 min, part 7, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 28468 ms, in_sync lag 1000 ms
-  08:18:56 audio 66.2 min, part 7, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 28890 ms, in_sync lag 1000 ms
-  08:19:57 audio 67.2 min, part 7, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 29265 ms, in_sync lag 1000 ms
-  08:20:57 audio 68.2 min, part 7, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 29640 ms, in_sync lag 1000 ms
-  08:21:58 audio 69.3 min, part 7, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 30015 ms, in_sync lag 1085 ms
-  08:22:59 audio 70.3 min, part 8, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 30500 ms, in_sync lag 1010 ms
-  08:24:00 audio 71.3 min, part 8, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 31046 ms, in_sync lag 1000 ms
-  08:25:01 audio 72.3 min, part 8, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 31609 ms, in_sync lag 1085 ms
-  08:26:01 audio 73.3 min, part 8, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 32203 ms, in_sync lag 1085 ms
-  08:27:02 audio 74.3 min, part 8, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 32578 ms, in_sync lag 1000 ms
-  08:28:03 audio 75.3 min, part 8, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 33062 ms, in_sync lag 1010 ms
-  08:29:04 audio 76.3 min, part 8, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 33609 ms, in_sync lag 1000 ms
-  08:30:05 audio 77.4 min, part 8, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 34250 ms, in_sync lag 1000 ms
-  08:31:05 audio 78.4 min, part 8, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 34796 ms, in_sync lag 1000 ms
-  08:32:06 audio 79.4 min, part 8, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 35406 ms, in_sync lag 1071 ms
-  08:33:07 audio 80.4 min, part 9, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 35750 ms, in_sync lag 1000 ms
-  08:34:08 audio 81.4 min, part 9, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 36187 ms, in_sync lag 1085 ms
-  08:35:09 audio 82.4 min, part 9, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 36593 ms, in_sync lag 1095 ms
-  08:36:09 audio 83.5 min, part 9, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 37015 ms, in_sync lag 1095 ms
-  08:37:10 audio 84.5 min, part 9, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 37484 ms, in_sync lag 1010 ms
-  08:38:11 audio 85.5 min, part 9, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 37812 ms, in_sync lag 1000 ms
-  08:39:12 audio 86.5 min, part 9, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 38328 ms, in_sync lag 1000 ms
-  08:40:12 audio 87.5 min, part 9, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 38796 ms, in_sync lag 1000 ms
-  08:41:13 audio 88.5 min, part 9, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 39203 ms, in_sync lag 1010 ms
-  08:42:14 audio 89.5 min, part 9, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 39609 ms, in_sync lag 1010 ms
-  08:43:14 audio 90.5 min, part 10, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 40171 ms, in_sync lag 1010 ms
-  08:44:15 audio 91.5 min, part 10, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 40531 ms, in_sync lag 1085 ms
-  08:45:16 audio 92.5 min, part 10, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 41062 ms, in_sync lag 1085 ms
-  08:46:17 audio 93.6 min, part 10, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 41375 ms, in_sync lag 1010 ms
-  08:47:18 audio 94.6 min, part 10, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 41718 ms, in_sync lag 1000 ms
-  08:48:18 audio 95.6 min, part 10, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 41984 ms, in_sync lag 1010 ms
-  08:49:19 audio 96.6 min, part 10, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 42468 ms, in_sync lag 1010 ms
-  08:50:20 audio 97.6 min, part 10, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 42812 ms, in_sync lag 1095 ms
-  08:51:20 audio 98.6 min, part 10, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 43109 ms, in_sync lag 1000 ms
-  08:52:21 audio 99.6 min, part 10, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 43578 ms, in_sync lag 1095 ms
-  08:53:22 audio 100.7 min, part 11, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 44093 ms, in_sync lag 1000 ms
-  08:54:22 audio 101.7 min, part 11, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 44515 ms, in_sync lag 1085 ms
-  08:55:23 audio 102.7 min, part 11, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 45000 ms, in_sync lag 1010 ms
-  08:56:23 audio 103.7 min, part 11, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 45484 ms, in_sync lag 1071 ms
-  08:57:24 audio 104.7 min, part 11, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 45921 ms, in_sync lag 1085 ms
-  08:58:25 audio 105.7 min, part 11, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 46500 ms, in_sync lag 1085 ms
-  08:59:25 audio 106.7 min, part 11, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 47046 ms, in_sync lag 1000 ms
-  09:00:26 audio 107.7 min, part 11, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 47578 ms, in_sync lag 1010 ms
-  09:01:27 audio 108.7 min, part 11, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 48171 ms, in_sync lag 1085 ms
-  09:02:27 audio 109.7 min, part 11, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 48500 ms, in_sync lag 1085 ms
-  09:03:28 audio 110.8 min, part 12, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 49078 ms, in_sync lag 1000 ms
-  09:04:28 audio 111.8 min, part 12, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 49453 ms, in_sync lag 1085 ms
-  09:05:29 audio 112.8 min, part 12, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 49921 ms, in_sync lag 1000 ms
-  09:06:30 audio 113.8 min, part 12, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 50468 ms, in_sync lag 1085 ms
-  09:07:30 audio 114.8 min, part 12, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 50953 ms, in_sync lag 1000 ms
-  09:08:31 audio 115.8 min, part 12, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 51234 ms, in_sync lag 1085 ms
-  09:09:31 audio 116.8 min, part 12, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 51484 ms, in_sync lag 1010 ms
-  09:10:32 audio 117.8 min, part 12, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 51890 ms, in_sync lag 1010 ms
-  09:11:33 audio 118.8 min, part 12, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 52281 ms, in_sync lag 1010 ms
-  09:12:33 audio 119.8 min, part 12, overrun samples 0, xruns 0, ring max 0.30%, recorder cpu 52625 ms, in_sync lag 1000 ms
+  re-evaluated from the saved run D:\STELMAR-Gate\soak-emu-low-20261109-174432
 
 emulation log:
   profile=emu-low
@@ -188,10 +66,10 @@ emulation log:
   env WB_EMULATE_LOGICAL_PROCESSORS=4
   env CUDA_VISIBLE_DEVICES=-1
   env GGML_VK_VISIBLE_DEVICES=0
-  command: powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:\Projects\stelmar_voice_workbench\scripts\gates\recorder-gate-inner.ps1 -Exe D:\Projects\stelmar_voice_workbench\target\gate\stelmar-voice-workbench.exe -ResultFile D:\STELMAR-Gate\soak-emu-low-20261109-071240\inner.json
+  command: powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:\Projects\stelmar_voice_workbench\scripts\gates\recorder-gate-inner.ps1 -Exe D:\Projects\stelmar_voice_workbench\target\gate\stelmar-voice-workbench.exe -ResultFile D:\STELMAR-Gate\soak-emu-low-20261109-174432\inner.json
 
 discontinuities:
-  {"at_ms":2448.375,"source_ms":100.0,"part":1,"source_jump_frames":-528,"source_jump_ms":-11.0}
+  {"at_ms":87409.72916666667,"source_ms":85000.0,"part":1,"source_jump_frames":-556,"source_jump_ms":-11.583333333333334}
 
 decode (Media Foundation source reader, the decoder Windows players use):
   audio/part-0001.wav: header 600000 ms, decoded 600000 ms, playable True
@@ -206,28 +84,8 @@ decode (Media Foundation source reader, the decoder Windows players use):
   audio/part-0010.wav: header 600000 ms, decoded 600000 ms, playable True
   audio/part-0011.wav: header 600000 ms, decoded 600000 ms, playable True
   audio/part-0012.wav: header 600000 ms, decoded 600000 ms, playable True
-  audio/part-0013.wav: header 5530 ms, decoded 5530 ms, playable True
+  audio/part-0013.wav: header 6010 ms, decoded 6010 ms, playable True
 
 app log for this run (warnings, errors, session lines):
-  2026-11-09T01:42:42.118152Z  INFO main app started version="0.1.0" pid=7704 gate_hooks=true
-  2026-11-09T01:42:42.120206Z  WARN main gate hooks active (development build, gate-hooks feature)
-  2026-11-09T01:42:42.120296Z  INFO main display guard installed window="main"
-  2026-11-09T01:42:42.527000Z  INFO wb-gate session recording dir="D:\\STELMAR-Gate\\soak-emu-low-20261109-071240\\rec\\2026-11-09\\gate-soak-20261109-071240" device="CABLE Output (VB-Audio Virtual Cable)" rate=48000 channels=2 resumed=false
-  2026-11-09T01:42:42.527031Z  WARN wb-gate gate: session started dir="D:\\STELMAR-Gate\\soak-emu-low-20261109-071240\\rec\\2026-11-09\\gate-soak-20261109-071240"
-  2026-11-09T01:52:42.626702Z  INFO wb-events part closed part=1 start_ms=0 duration_ms=600000
-  2026-11-09T02:02:42.631841Z  INFO wb-events part closed part=2 start_ms=600000 duration_ms=600000
-  2026-11-09T02:12:42.621889Z  INFO wb-events part closed part=3 start_ms=1200000 duration_ms=600000
-  2026-11-09T02:22:42.628749Z  INFO wb-events part closed part=4 start_ms=1800000 duration_ms=600000
-  2026-11-09T02:32:42.632045Z  INFO wb-events part closed part=5 start_ms=2400000 duration_ms=600000
-  2026-11-09T02:42:42.626136Z  INFO wb-events part closed part=6 start_ms=3000000 duration_ms=600000
-  2026-11-09T02:52:42.628721Z  INFO wb-events part closed part=7 start_ms=3600000 duration_ms=600000
-  2026-11-09T03:02:42.630118Z  INFO wb-events part closed part=8 start_ms=4200000 duration_ms=600000
-  2026-11-09T03:12:42.627713Z  INFO wb-events part closed part=9 start_ms=4800000 duration_ms=600000
-  2026-11-09T03:22:42.625721Z  INFO wb-events part closed part=10 start_ms=5400000 duration_ms=600000
-  2026-11-09T03:32:42.630254Z  INFO wb-events part closed part=11 start_ms=6000000 duration_ms=600000
-  2026-11-09T03:42:42.622667Z  INFO wb-events part closed part=12 start_ms=6600000 duration_ms=600000
-  2026-11-09T03:42:48.076701Z  INFO wb-events part closed part=13 start_ms=7200000 duration_ms=5530
-  2026-11-09T03:42:50.775371Z  INFO   wb-gate session stopped dir=D:\STELMAR-Gate\soak-emu-low-20261109-071240\rec\2026-11-09\gate-soak-20261109-071240 parts=13 audio_ms=7205530 overrun_samples=0 xruns=0 mirror_all_match=true
-  2026-11-09T03:42:50.778262Z  WARN   wb-gate gate: stop file seen; session stopped; exiting
 
-audio and reports: D:\STELMAR-Gate\soak-emu-low-20261109-071240 (not in the repository)
+audio and reports: D:\STELMAR-Gate\soak-emu-low-20261109-174432 (not in the repository)

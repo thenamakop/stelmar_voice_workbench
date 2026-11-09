@@ -77,7 +77,7 @@ function Get-Descendants([int]$RootId) {
 }
 
 function Get-NvidiaPids {
-  $out = & nvidia-smi 2>$null
+  $out = (Invoke-WbNative -FilePath 'nvidia-smi').Output
   $pids = @()
   foreach ($l in $out) {
     if ($l -match '^\|\s+\S+\s+\S+\s+\S+\s+(\d+)\s+(C\+G|C|G)\s') { $pids += [int]$Matches[1] }
@@ -88,9 +88,9 @@ function Get-NvidiaPids {
 # Audio sessions playing into the cable now, other than $Allow (process ids). Anything else
 # mixes into the test signal (seen in Phase 1: a browser tab routed to CABLE Input).
 function Get-CableIntruders([int[]]$Allow = @()) {
-  $json = & $Testbench sessions --device $PlayDevice 2>$null
-  if ($LASTEXITCODE -ne 0 -or -not $json) { return @() }
-  @(($json | Out-String | ConvertFrom-Json) | Where-Object { $_.active -and $Allow -notcontains [int]$_.pid } | ForEach-Object {
+  $res = Invoke-WbNative -FilePath $Testbench -ArgumentList @('sessions', '--device', $PlayDevice)
+  if ($res.ExitCode -ne 0 -or $res.Output.Count -eq 0) { return @() }
+  @((($res.Output -join "`n") | ConvertFrom-Json) | Where-Object { $_.active -and $Allow -notcontains [int]$_.pid } | ForEach-Object {
     $name = (Get-Process -Id $_.pid -ErrorAction SilentlyContinue).ProcessName
     "$name (pid $($_.pid)) on $($_.endpoint)"
   })

@@ -168,6 +168,56 @@ Check 'dropped samples fail' (-not $v.Pass -and ($v.Problems -join ' ') -match '
 $v = Get-WbXrunVerdict -SessionDir (New-XrunSession 'x-garbled' @($start0, @(970, 'gap', 'something else')))
 Check 'a gap event that cannot be read fails instead of being skipped' (-not $v.Pass)
 
+# ---- The gates run from any folder, and a native command's stderr cannot end them ------------
+# A 3-hour load run and a 2-hour soak ended at their evidence step: the launcher was started from
+# the user's home folder, `git rev-parse 2>$null` printed "fatal: not a git repository", and
+# Windows PowerShell 5.1 turned that stderr line into a terminating NativeCommandError under
+# $ErrorActionPreference = 'Stop'. The header now runs git with -C <repo root found from the
+# module>, and every native call goes through Invoke-WbNative. This runs the header step in a
+# Windows PowerShell 5.1 process whose current folder is outside the repository.
+Import-Module (Join-Path $here '..\lib\PsEnv.psm1') -Force
+$outside = Join-Path $env:TEMP ('wb-outside-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $outside | Out-Null
+$probeGit = Invoke-WbNative -FilePath 'git' -ArgumentList @('-C', $outside, 'rev-parse', '--git-dir')
+if ($probeGit.ExitCode -eq 0) {
+  Write-Host 'skip outside-the-repo test: the temp folder is inside a git repository'
+} else {
+  $gateRunPath = (Resolve-Path (Join-Path $here '..\lib\GateRun.psm1')).Path
+  $tpl = @'
+$ErrorActionPreference = 'Stop'
+Set-Location -LiteralPath '__OUTSIDE__'
+Import-Module '__GATERUN__' -Force
+$h = @(Get-WbGateHeader -Machine 'Legion')
+$src = @($h | Where-Object { $_ -like 'source: commit *' })
+[Console]::Out.WriteLine('HEADER_SOURCE_LINES=' + $src.Count)
+[Console]::Out.WriteLine('HEADER_SOURCE_KNOWN=' + @($src | Where-Object { $_ -notlike '*unknown*' }).Count)
+try { & git rev-parse --short HEAD 2>$null | Out-Null; [Console]::Out.WriteLine('CONTROL=no-throw') } catch { [Console]::Out.WriteLine('CONTROL=throws') }
+$r = Invoke-WbNative -FilePath 'git' -ArgumentList @('rev-parse', '--short', 'HEAD')
+[Console]::Out.WriteLine('NATIVE_FAILS=' + ($r.ExitCode -ne 0) + ' STDERR_CAPTURED=' + ($r.Error.Count -gt 0))
+$m = Invoke-WbNative -FilePath 'no-such-command-wb.exe'
+[Console]::Out.WriteLine('MISSING_EXIT=' + $m.ExitCode)
+[Console]::Out.WriteLine('ROOT=' + (Get-WbRepoRoot))
+'@
+  $childPath = Join-Path $outside 'child.ps1'
+  $tpl.Replace('__OUTSIDE__', $outside).Replace('__GATERUN__', $gateRunPath) | Set-Content -LiteralPath $childPath -Encoding ASCII
+  $res = @(Invoke-WbWindowsPowerShell -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $childPath))
+  $text = $res -join "`n"
+  Write-Host ("info control (the old call, git ... 2>`$null under Stop, from outside the repo): " + (($res | Where-Object { $_ -like 'CONTROL=*' }) -join ''))
+  Check 'the gate header step runs from a folder outside the repository (5.1, Stop)' ($LASTEXITCODE -eq 0 -and $text -match 'HEADER_SOURCE_LINES=1')
+  Check 'the header names the commit even from outside the repository' ($text -match 'HEADER_SOURCE_KNOWN=1')
+  Check 'a failing native command returns its exit code and stderr instead of throwing' ($text -match 'NATIVE_FAILS=True STDERR_CAPTURED=True')
+  Check 'a missing native command returns -1 instead of throwing' ($text -match 'MISSING_EXIT=-1')
+  Check 'the repository root comes from the module, not the current folder' ($text -match [regex]::Escape('ROOT=' + (Resolve-Path (Join-Path $here '..\..')).Path))
+}
+Remove-Item -LiteralPath $outside -Recurse -Force -ErrorAction SilentlyContinue
+
+# No gate or library script may redirect a native command's stderr itself (that is the crash).
+$scriptRoot = (Resolve-Path (Join-Path $here '..')).Path
+$redirects = @(Get-ChildItem -Path (Join-Path $scriptRoot 'gates'), (Join-Path $scriptRoot 'lib') -Include *.ps1, *.psm1 -Recurse -File |
+  Where-Object { $_.Name -notin @('GateRun.psm1', 'PsEnv.psm1') } |
+  Where-Object { (Get-Content -LiteralPath $_.FullName) | Where-Object { $_ -match '\s2>' -and $_ -notmatch '^\s*#' } })
+Check ('gate scripts redirect no native stderr themselves: ' + (($redirects | ForEach-Object { $_.Name }) -join ', ')) ($redirects.Count -eq 0)
+
 Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
 
 if ($fails) { Write-Host "$fails failed"; exit 1 }

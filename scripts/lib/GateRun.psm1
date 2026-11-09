@@ -97,15 +97,62 @@ function Invoke-WbGate {
   }
 }
 
+# The repository root, found from this module's own location (scripts\lib), never from the
+# current folder: the gates are started from any folder.
+function Get-WbRepoRoot {
+  (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path
+}
+
+# Runs a native command and returns its exit code, stdout lines and stderr lines. Under Windows
+# PowerShell 5.1 a redirected stderr line (2>$null, 2>&1) becomes an error record, and with
+# $ErrorActionPreference = 'Stop' that is a terminating NativeCommandError that ends the gate (a
+# 3-hour run ended at its evidence step on "fatal: not a git repository"). Here the preference is
+# relaxed for the call and stderr is collected as text, so the caller decides what a failure means.
+# A command that does not exist comes back as exit code -1 with the reason in Error.
+function Invoke-WbNative {
+  param(
+    [Parameter(Mandatory = $true)] [string]$FilePath,
+    [string[]]$ArgumentList = @()
+  )
+  $prev = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  $all = @()
+  $code = -1
+  try {
+    $all = @(& $FilePath @ArgumentList 2>&1)
+    $code = $LASTEXITCODE
+  } catch {
+    $all = @($_)
+    $code = -1
+  } finally {
+    $ErrorActionPreference = $prev
+  }
+  $out = New-Object System.Collections.Generic.List[string]
+  $err = New-Object System.Collections.Generic.List[string]
+  foreach ($x in $all) {
+    if ($x -is [System.Management.Automation.ErrorRecord]) { $err.Add("$x") } else { $out.Add("$x") }
+  }
+  [pscustomobject]@{ ExitCode = $code; Output = @($out); Error = @($err) }
+}
+
 # Header lines for an evidence file of the current (or just finished) gate run.
 function Get-WbGateHeader {
   param([string]$Machine = 'Legion', [string]$Profile = '', [string[]]$Builds = @())
   $c = $script:Current
   $lines = @()
   # Which code produced this evidence: commit, uncommitted changes, and the executables' hashes.
-  $commit = (& git rev-parse --short HEAD 2>$null)
-  $dirty = @(& git status --porcelain 2>$null).Count -gt 0
-  if ($commit) { $lines += "source: commit $commit$(if ($dirty) { ' with uncommitted or untracked changes (the build hashes below identify the code)' } else { '' })" }
+  # git -C the repository root, so it works from any folder. If git fails the evidence still gets
+  # written (the build hashes identify the code) and says so, instead of losing a finished run.
+  $root = Get-WbRepoRoot
+  $rev = Invoke-WbNative -FilePath 'git' -ArgumentList @('-C', $root, 'rev-parse', '--short', 'HEAD')
+  if ($rev.ExitCode -eq 0 -and $rev.Output.Count -gt 0) {
+    $st = Invoke-WbNative -FilePath 'git' -ArgumentList @('-C', $root, 'status', '--porcelain')
+    $dirty = ($st.ExitCode -eq 0 -and $st.Output.Count -gt 0)
+    $lines += "source: commit $($rev.Output[0])$(if ($dirty) { ' with uncommitted or untracked changes (the build hashes below identify the code)' } else { '' })"
+  } else {
+    $why = (@($rev.Error) + @($rev.Output)) -join ' '
+    $lines += "source: commit unknown (git failed in the repository: $why); the build hashes below identify the code"
+  }
   foreach ($b in $Builds) {
     if ($b -and (Test-Path -LiteralPath $b)) {
       $h = (Get-FileHash -LiteralPath $b -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -120,7 +167,13 @@ function Get-WbGateHeader {
   }
   $lines += "machine: $Machine"
   if ($Profile) { $lines += "emulation profile: $Profile" }
-  $lines += 'overlay tools closed: yes (RTSS.exe and MSIAfterburner.exe not running when the gate started)'
+  # A re-evaluated run (-FromRun) did not take these measurements now: say so instead of claiming them.
+  $fromRun = ($c -and $c.Name -like '*re-evaluated*')
+  if ($fromRun) {
+    $lines += 'overlay tools closed: checked by the original run before it started (the gate refuses to start otherwise); not saved, not re-checked'
+  } else {
+    $lines += 'overlay tools closed: yes (RTSS.exe and MSIAfterburner.exe not running when the gate started)'
+  }
   if ($c -and $null -ne $c.OverlayAtEnd) {
     if ($c.OverlayAtEnd.Count -gt 0) {
       $lines += ('overlay tools at the end: RUNNING (' + ($c.OverlayAtEnd -join ', ') + ') - result not valid')
@@ -128,9 +181,13 @@ function Get-WbGateHeader {
       $lines += 'overlay tools at the end: none running'
     }
   }
-  $lines += "Track B paused: $($script:LockPath) held for the whole run (removed in a finally block)"
+  if ($fromRun) {
+    $lines += "Track B paused: not re-evaluated (the original run's gate code takes $($script:LockPath); whether it was held is not in the saved data)"
+  } else {
+    $lines += "Track B paused: $($script:LockPath) held for the whole run (removed in a finally block)"
+  }
   if ($c) {
-    $lines += "Track B busy lock: $($c.TrackBWait)"
+    if (-not $fromRun) { $lines += "Track B busy lock: $($c.TrackBWait)" }
     $lines += "free RAM: $($c.FreeRamStart) GB at start (needs $($script:MinFreeRamGB) GB), $(if ($null -ne $c.FreeRamEnd) { "$($c.FreeRamEnd) GB" } else { 'not measured' }) at end"
   }
   $lines
@@ -235,9 +292,9 @@ function Invoke-WbAnalyse {
 # two-tone chime reached the cable five times in 3 hours and failed the load and soak gates.
 function Get-WbCableDefaultRoles {
   param([Parameter(Mandatory = $true)] [string]$Testbench, [string]$Cable = 'CABLE Input')
-  $json = & $Testbench devices 2>$null
-  if ($LASTEXITCODE -ne 0 -or -not $json) { return @() }
-  $d = ($json | Out-String) | ConvertFrom-Json
+  $res = Invoke-WbNative -FilePath $Testbench -ArgumentList @('devices')
+  if ($res.ExitCode -ne 0 -or $res.Output.Count -eq 0) { return @() }
+  $d = ($res.Output -join "`n") | ConvertFrom-Json
   if (-not (Test-WbHasProperty $d 'default_roles') -or $null -eq $d.default_roles) { return @() }
   $roles = @()
   foreach ($role in 'console', 'multimedia', 'communications') {
@@ -349,4 +406,4 @@ function Write-WbGateCrashEvidence {
   Write-WbEvidence -Path $Path -Lines $lines -MachineLabel $Machine
 }
 
-Export-ModuleMember -Function Get-WbOverlayTools, Assert-WbNoOverlayTools, Invoke-WbGate, Get-WbGateHeader, ConvertTo-WbArg, Split-WbDiscontinuities, Get-WbUnexplainedUnmatchedMs, Test-WbGateData, Write-WbGateCrashEvidence, Get-WbFreeRamGB, Set-WbGateContext, Invoke-WbAnalyse, Test-WbHasProperty, Get-WbCableDefaultRoles, ConvertTo-WbArray, Get-WbXrunVerdict
+Export-ModuleMember -Function Get-WbOverlayTools, Assert-WbNoOverlayTools, Invoke-WbGate, Get-WbGateHeader, ConvertTo-WbArg, Split-WbDiscontinuities, Get-WbUnexplainedUnmatchedMs, Test-WbGateData, Write-WbGateCrashEvidence, Get-WbFreeRamGB, Set-WbGateContext, Invoke-WbAnalyse, Test-WbHasProperty, Get-WbCableDefaultRoles, ConvertTo-WbArray, Get-WbXrunVerdict, Invoke-WbNative, Get-WbRepoRoot
