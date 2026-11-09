@@ -64,6 +64,7 @@ Import-Module (Join-Path $repo 'scripts\lib\GateRun.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Redact.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\AppProcess.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Rig.psm1') -Force
+Import-Module (Join-Path $repo 'scripts\lib\Fidelity.psm1') -Force
 foreach ($f in @($Exe, $Testbench, $Emulate)) { if (-not (Test-Path $f)) { throw "Missing $f; build it first (scripts\gates\build-gate.ps1)" } }
 
 function Q([string]$v) { ConvertTo-WbArg $v }
@@ -206,6 +207,7 @@ $result = Invoke-WbGate -Name "phase1-kill-$Profile" -Body {
   $analysisErr = Invoke-WbAnalyse -Testbench $Testbench -Session $sessionDir -Source $source -Report (Join-Path $run 'analysis.json')
   & $Testbench decode --session $sessionDir --report (Join-Path $run 'decode.json') | Out-Null
   & $Testbench parts-check --session $sessionDir --report (Join-Path $run 'parts-check.json') | Out-Null
+  $cmp = Invoke-WbNative -FilePath $Testbench -ArgumentList @('compare', '--app', $sessionDir, '--reference', $refDir, '--report', (Join-Path $run 'compare.json'))
   $appLog = @()
   if (Test-Path $logFile) {
     $fs = [System.IO.File]::Open($logFile, 'Open', 'Read', 'ReadWrite')
@@ -215,7 +217,7 @@ $result = Invoke-WbGate -Name "phase1-kill-$Profile" -Body {
     Run = $run; SessionDir = $sessionDir; Report = $report; Rounds = @(ConvertTo-WbArray $rounds); Progress = $progress; Interference = @(ConvertTo-WbArray $interference)
     Analysis = (Read-Json (Join-Path $run 'analysis.json')); Decode = (Read-Json (Join-Path $run 'decode.json'))
     RefAnalysis = (Read-Json (Join-Path $run 'reference-analysis.json')); Reference = (Read-Json (Join-Path $run 'reference.json'))
-    AnalysisError = $analysisErr; RefAnalysisError = $refAnalysisErr; CableDefaultRoles = $cableRoles; Rig = $rig; Play = (Read-Json (Join-Path $run 'play.json'))
+    AnalysisError = $analysisErr; RefAnalysisError = $refAnalysisErr; CableDefaultRoles = $cableRoles; Rig = $rig; Compare = (Read-Json (Join-Path $run 'compare.json')); CompareError = $(if ($cmp.ExitCode -ne 0) { (@($cmp.Error) + @($cmp.Output)) -join ' ' } else { $null }); Play = (Read-Json (Join-Path $run 'play.json'))
     PartsCheck = (Read-Json (Join-Path $run 'parts-check.json')); Meta = (Read-Json (Join-Path $sessionDir 'session.json')); AppLog = $appLog
   }
 }
@@ -279,25 +281,34 @@ $checks["restart offered Resume after every kill ($offered of $($r.Rounds.Count)
 $checks['parts.json equals a rebuild from the part files'] = [bool]$r.PartsCheck.equal
 $checks["only the restarts break the audio ($($disc.Count) forward jumps for $($r.Rounds.Count) kills)"] = ($disc.Count -eq $r.Rounds.Count -and -not ($disc | Where-Object { [int64]$_.source_jump_frames -le 0 }))
 $refUnmatched = $(if ($r.RefAnalysis) { [double]$r.RefAnalysis.unmatched_ms } else { 0 })
-$unexplained = Get-WbUnexplainedUnmatchedMs -App $r.Analysis -Near (@($split.Own) + @($split.Excused))
-$checks["no silent gaps and no foreign sound (unexplained unmatched $unexplained ms)"] = ([double]$r.Analysis.silent_gap_ms -eq 0 -and $unexplained -eq 0 -and $r.Interference.Count -eq 0)
-$checks["no capture-chain breaks beyond one start-up repeat ($($split.Chain.Count); excused $($split.Excused.Count))"] = ($split.Chain.Count -eq 0)
+# The rule of 9 Nov 2026 (docs/PLAN.md section 12): each run of the app is judged against the
+# reference capture, with one fixed offset per run; breaks between the source and the reference
+# are reported and judged for validity, not failed.
+$killPlayStart = $(if ($r.Play -and (Test-WbHasProperty $r.Play 'started_at')) { [DateTimeOffset]::Parse($r.Play.started_at) } else { $null })
+$rv = Get-WbRunVerdict -Compare $r.Compare -RefAnalysis $r.RefAnalysis -Play $r.Play -Reference $r.Reference -PlayStarted $killPlayStart -DroppedSamples ([int64]$stopped.recorder.dropped_samples)
+$fidelityText = $(if ($r.Compare) { "$(@($r.Compare.segments).Count) runs, differing frames $($r.Compare.differing_frames), reference audio without an app recording $($r.Compare.reference_only_loud_frames) frames" } else { 'no comparison data' })
+$checks["fidelity: each run of the app equals the reference capture sample for sample, one fixed offset per run ($fidelityText)"] = ($null -ne $r.Compare -and [bool]$r.Compare.aligned -and [bool]$r.Compare.equal)
+$checks['no other program played into the cable'] = ($r.Interference.Count -eq 0)
 $checks['reference capture ran cleanly'] = ($r.Reference -and [int64]$r.Reference.overrun_samples -eq 0 -and $r.RefAnalysis)
 $checks['zero ring-buffer overruns and dropped samples (final run, and before every kill)'] = ([int64]$stopped.recorder.overrun_samples + [int64]$stopped.recorder.dropped_samples -eq 0 -and -not ($r.Rounds | Where-Object { $_.OverrunsBefore -ne 0 }))
-$lossFree = ([double]$r.Analysis.silent_gap_ms -eq 0 -and $unexplained -eq 0 -and -not ($disc | Where-Object { [int64]$_.source_jump_frames -le 0 }))
+$lossFree = ($null -ne $r.Compare -and [bool]$r.Compare.equal)
 $xr = Get-WbXrunVerdict -SessionDir $r.SessionDir -LossFree $lossFree
 $checks["driver xruns: at most one per run, within 2 s of the stream start, zero loss or duplication around it (total $($xr.TotalXruns), excused $(@($xr.Excused).Count))"] = $xr.Pass
 $checks['mirror SHA-256 equals the originals at Stop'] = [bool]$stopped.mirror.all_match
-$pass = -not ($checks.Values -contains $false)
+$pass = -not ($checks.Values -contains $false) -and $rv.Verdict -ne 'FAIL'
+$verdict = $(if ($rv.Verdict -eq 'INVALID') { 'INVALID' } elseif ($pass) { 'PASS' } else { 'FAIL' })
 
 $lines = @()
 $lines += Get-WbGateHeader -Machine $Machine -Profile $Profile -Builds @($Exe, $Testbench, $Emulate)
 $lines += "parts: $PartSeconds s for this test (WB_GATE_PART_SECONDS), so kills can be aimed at rollovers; not covered here: kills during Pause or while the input is lost"
 $lines += 'app build: target\gate\stelmar-voice-workbench.exe (cargo profile gate, features gate-hooks + custom-protocol)'
-$lines += "verdict: $(if ($pass) { 'PASS' } else { 'FAIL' })$(if ($Profile -ne 'native' -and $pass) { ' (PROVISIONAL: emulated)' })"
+$lines += "verdict: $(if ($verdict -eq 'INVALID') { 'INVALID (no verdict; the run must be repeated)' } elseif ($verdict -eq 'PASS' -and $Profile -ne 'native') { 'PASS (PROVISIONAL: emulated)' } else { $verdict })"
 $lines += ''
 $lines += 'checks:'
 foreach ($k in $checks.Keys) { $lines += "  [$(if ($checks[$k]) { 'x' } else { ' ' })] $k" }
+$lines += ''
+$lines += Get-WbVerdictLines -Result $rv -Compare $r.Compare
+if ($r.CompareError) { $lines += "comparison error: $($r.CompareError)" }
 $lines += ''
 $lines += 'loss per kill (method: kill time minus that run''s first-sample time, minus the audio that run left on disk after repair):'
 $lines += $lossLines
@@ -314,7 +325,7 @@ $lines += "cable interference: $(if ($r.Interference.Count) { $r.Interference -j
 $lines += $(if (@($r.CableDefaultRoles).Count -gt 0) { "default playback device: THE CABLE for $(@($r.CableDefaultRoles) -join ', ') (run with -AllowCableDefault: other sounds on this computer can reach the test signal)" } else { 'default playback device: not the cable (checked at start)' })
 $killPlayStart = $(if ($r.Play -and (Test-WbHasProperty $r.Play 'started_at')) { [DateTimeOffset]::Parse($r.Play.started_at) } else { $null })
 $lines += Get-WbReferenceXrunLines -RefAnalysis $r.RefAnalysis -Reference $r.Reference -PlayStarted $killPlayStart -BreakSourceMs @(@($r.Analysis.unmatched_ranges) | ForEach-Object { [double]$_.source_ms })
-$lines += "reference capture: $(@($r.RefAnalysis.discontinuities).Count) breaks; in the app recording: restarts and own $($split.Own.Count), capture-chain (FAIL) $($split.Chain.Count), EXCUSED start-up repeats $($split.Excused.Count)"
+$lines += "reference capture: $(@($r.RefAnalysis.discontinuities).Count) breaks; in the app recording: restarts and own $($split.Own.Count), shared with the reference (upstream, see the upstream breaks section) $($split.Chain.Count), start-up repeats within the old allowance $($split.Excused.Count)"
 $lines += ''
 $lines += 'discontinuities against the source (each should be one restart):'
 $lines += ($disc | ForEach-Object { "  $($_ | ConvertTo-Json -Compress)" })
@@ -332,5 +343,6 @@ $lines += "audio and reports: $($r.Run) (not in the repository)"
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 $evidence = Join-Path $OutDir "kill-$Profile.txt"
 Write-WbEvidence -Path $evidence -Lines $lines -MachineLabel $Machine
-Write-Host "$(if ($pass) { 'PASS' } else { 'FAIL' }): $evidence"
-if (-not $pass) { exit 1 }
+Write-Host "${verdict}: $evidence"
+if ($verdict -eq 'INVALID') { exit 3 }
+if ($verdict -eq 'FAIL') { exit 1 }

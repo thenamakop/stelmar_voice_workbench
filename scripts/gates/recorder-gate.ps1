@@ -69,6 +69,7 @@ Import-Module (Join-Path $repo 'scripts\lib\GateRun.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Redact.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\AppProcess.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Rig.psm1') -Force
+Import-Module (Join-Path $repo 'scripts\lib\Fidelity.psm1') -Force
 foreach ($f in @($Exe, $Testbench, $Emulate)) { if (-not (Test-Path $f)) { throw "Missing $f; build it first (scripts\gates\build-gate.ps1)" } }
 
 function Q([string]$v) { ConvertTo-WbArg $v }
@@ -115,8 +116,9 @@ function Get-ResultFromRun([string]$run) {
   $analysisErr = Invoke-WbAnalyse -Testbench $Testbench -Session $sessionDir -Source $source -Report (Join-Path $run 'analysis.json')
   $refAnalysisErr = Invoke-WbAnalyse -Testbench $Testbench -Session $refDir -Source $source -Report (Join-Path $run 'reference-analysis.json')
   & $Testbench decode --session $sessionDir --report (Join-Path $run 'decode.json') | Out-Null
+  $cmp = Invoke-WbNative -FilePath $Testbench -ArgumentList @('compare', '--app', $sessionDir, '--reference', $refDir, '--report', (Join-Path $run 'compare.json'))
   [pscustomobject]@{
-    Run = $run; SessionDir = $sessionDir; Source = $source; Report = (Read-Json (Join-Path $run 'stop-report.json')); Inner = (Read-Json (Join-Path $run 'inner.json'))
+    Run = $run; Compare = (Read-Json (Join-Path $run 'compare.json')); CompareError = $(if ($cmp.ExitCode -ne 0) { (@($cmp.Error) + @($cmp.Output)) -join ' ' } else { $null }); SessionDir = $sessionDir; Source = $source; Report = (Read-Json (Join-Path $run 'stop-report.json')); Inner = (Read-Json (Join-Path $run 'inner.json'))
     Play = $play; Stress = (Read-Json (Join-Path $run 'stress.json')); Analysis = (Read-Json (Join-Path $run 'analysis.json')); Decode = (Read-Json (Join-Path $run 'decode.json'))
     Progress = @("re-evaluated from the saved run $run"); CableDefaultRoles = $null; AppLog = @(); NvOverlap = $null; JobPids = $null; NvPids = $null; WebviewKill = $null; Interference = $null
     LastStatus = (Read-Json (Join-Path $run 'status.json')); HostStress = (Read-Json (Join-Path $run 'host-stress.json'))
@@ -265,6 +267,7 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
   & $Testbench decode --session $sessionDir --report (Join-Path $run 'decode.json') | Out-Null
   $refAnalysisErr = Invoke-WbAnalyse -Testbench $Testbench -Session $refDir -Source $source -Report (Join-Path $run 'reference-analysis.json')
   $decode = Read-Json (Join-Path $run 'decode.json')
+  $cmp = Invoke-WbNative -FilePath $Testbench -ArgumentList @('compare', '--app', $sessionDir, '--reference', $refDir, '--report', (Join-Path $run 'compare.json'))
   $appLog = @()
   if (Test-Path $logFile) {
     $fs = [System.IO.File]::Open($logFile, 'Open', 'Read', 'ReadWrite')
@@ -272,6 +275,7 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
   }
   [pscustomobject]@{
     Run = $run; SessionDir = $sessionDir; Source = $source; Report = $report; Inner = $innerRes; Play = $playRes
+    Compare = (Read-Json (Join-Path $run 'compare.json')); CompareError = $(if ($cmp.ExitCode -ne 0) { (@($cmp.Error) + @($cmp.Output)) -join ' ' } else { $null })
     Stress = $stressRes; Analysis = $analysis; Decode = $decode; Progress = $progress; AppLog = $appLog
     NvOverlap = $nvOverlap; JobPids = $jobPids; NvPids = $nvPids; WebviewKill = $webviewKill; Interference = @(ConvertTo-WbArray $interference)
     LastStatus = $lastStatus; HostStress = (Read-Json (Join-Path $run 'host-stress.json'))
@@ -312,16 +316,18 @@ $recCpuPctCore = 100.0 * ([double]$rec.recorder_cpu_ms / 1000.0) / $wall
 $checks = [ordered]@{}
 $split = Split-WbDiscontinuities -App $r.Analysis -Reference $r.RefAnalysis
 $refUnmatched = $(if ($r.RefAnalysis) { [double]$r.RefAnalysis.unmatched_ms } else { 0 })
+# The rule of 9 Nov 2026 (docs/PLAN.md section 12): the app is judged against the reference
+# capture (what Windows delivered), not against the source.
+$playStart = [DateTimeOffset]::Parse($r.Play.started_at)
+$rv = Get-WbRunVerdict -Compare $r.Compare -RefAnalysis $r.RefAnalysis -Play $r.Play -Reference $r.Reference -PlayStarted $playStart -DroppedSamples ([int64]$stopped.recorder.dropped_samples)
+$fidelityText = $(if ($r.Compare) { "differing frames $($r.Compare.differing_frames), reference audio without an app recording $($r.Compare.reference_only_loud_frames) frames" } else { 'no comparison data' })
 $checks['reference capture ran cleanly (its own ring overruns 0)'] = ($r.Reference -and [int64]$r.Reference.overrun_samples -eq 0 -and $r.RefAnalysis)
-$checks["no dropped or silent audio caused by the recorder ($($split.Own.Count) breaks not in the reference; silent gaps $($r.Analysis.silent_gap_ms) ms)"] = ($split.Own.Count -eq 0 -and [double]$r.Analysis.silent_gap_ms -eq 0)
-$checks["no capture-chain breaks beyond one start-up repeat ($($split.Chain.Count); excused start-up repeats $($split.Excused.Count))"] = ($split.Chain.Count -eq 0)
+$checks["fidelity: the app's recording equals the reference capture sample for sample, one fixed offset per run ($fidelityText)"] = ($null -ne $r.Compare -and [bool]$r.Compare.aligned -and [bool]$r.Compare.equal)
 $checks['recorded duration within 1 s of the source'] = ([math]::Abs([double]$r.Analysis.duration_diff_ms) -le 1000)
 $unexplained = Get-WbUnexplainedUnmatchedMs -App $r.Analysis -Near $split.Excused
-$checks["recording equals the source except next to an excused start-up repeat (unexplained $unexplained ms of $($r.Analysis.unmatched_ms) ms)"] = ($unexplained -eq 0)
-$checks['channel 1 matches the source too'] = ($null -eq $r.Analysis.channel1_unmatched_ms -or [double]$r.Analysis.channel1_unmatched_ms -eq 0)
 if ($null -ne $r.Interference) { $checks['no other program played into the cable'] = (@($r.Interference).Count -eq 0) }
 $checks['zero ring-buffer overruns'] = ([int64]$rec.overrun_samples -eq 0)
-$lossFree = ($split.Own.Count -eq 0 -and [double]$r.Analysis.silent_gap_ms -eq 0 -and $unexplained -eq 0)
+$lossFree = ($null -ne $r.Compare -and [bool]$r.Compare.equal)
 $xr = Get-WbXrunVerdict -SessionDir $r.SessionDir -LossFree $lossFree
 $checks["driver xruns: none, or one within 2 s of the stream start with zero loss around it (xruns $($rec.xruns), excused $(@($xr.Excused).Count))"] = ([int64]$rec.xruns -eq 0 -or $xr.Pass)
 $checks['zero samples dropped by the writer'] = ([int64]$rec.dropped_samples -eq 0)
@@ -343,19 +349,24 @@ if ($Gate -eq 'panic') {
   $checks['panic on a plain thread happened'] = ($pi -and [bool]$pi.thread_panicked)
   $checks['panic inside the recorder thread: it restarted once and continued in a new part'] = ([bool]$r.Report.recorder_panic_injection.sent -and [int]$rec.recorder_restarts -eq 1 -and @($rec.parts).Count -ge 2)
 }
-if ($Gate -eq 'webview') {
+if ($Gate -eq 'webview' -and @($r.AppLog).Count -gt 0) {
   $checks['display recovered in a new window'] = [bool]($r.AppLog | Where-Object { $_ -match 'display recovered in a new window' })
 }
-$pass = -not ($checks.Values -contains $false)
+$pass = -not ($checks.Values -contains $false) -and $rv.Verdict -ne 'FAIL'
+$verdict = $(if ($rv.Verdict -eq 'INVALID') { 'INVALID' } elseif ($pass) { 'PASS' } else { 'FAIL' })
 $lines_cable = $(if ($null -eq $r.Interference) { 'cable interference polling: not re-evaluated (measured live, not saved); the analysis above is the evidence' } elseif (@($r.Interference).Count -gt 0) { 'cable interference seen (run invalid for the "equals the source" check): ' + (@($r.Interference) -join '; ') } else { 'cable interference: none seen by the 1-second session poll (sounds shorter than a second can be missed; the analysis above is the check)' })
 
 $lines = @()
 $lines += Get-WbGateHeader -Machine $Machine -Profile $Profile -Builds @($Exe, $Testbench, $Emulate)
 $lines += "app build: target\gate\stelmar-voice-workbench.exe (cargo profile gate, features gate-hooks + custom-protocol)"
-$lines += "verdict: $(if ($pass) { 'PASS' } else { 'FAIL' })$(if ($Profile -ne 'native' -and $pass) { ' (PROVISIONAL: emulated)' })"
+$lines += "verdict: $(if ($verdict -eq 'INVALID') { 'INVALID (no verdict; the run must be repeated)' } elseif ($verdict -eq 'PASS' -and $Profile -ne 'native') { 'PASS (PROVISIONAL: emulated)' } else { $verdict })"
 $lines += ''
 $lines += 'checks:'
 foreach ($k in $checks.Keys) { $lines += "  [$(if ($checks[$k]) { 'x' } else { ' ' })] $k" }
+$lines += ''
+$lines += Get-WbVerdictLines -Result $rv -Compare $r.Compare
+if ($r.CompareError) { $lines += "comparison error: $($r.CompareError)" }
+if ($Gate -eq 'webview' -and @($r.AppLog).Count -eq 0) { $lines += 'display recovery: not re-evaluated here (the live app log is not saved); the original run''s evidence stands' }
 $lines += ''
 $lines += 'measurements:'
 $lines += ("  source: {0:n1} min of known noise, 48 kHz stereo, played by wb-testbench into '{1}' from outside the job" -f ($r.Analysis.source_ms / 60000.0), $PlayDevice)
@@ -380,7 +391,7 @@ foreach ($u in @($r.Analysis.unmatched_ranges)) {
 }
 $lines += Get-WbReferenceXrunLines -RefAnalysis $r.RefAnalysis -Reference $r.Reference -PlayStarted $playStart -BreakSourceMs @(@($r.Analysis.unmatched_ranges) | ForEach-Object { [double]$_.source_ms })
 $lines += ("  reference capture (separate cpal + hound recorder outside the job; shares the audio engine, cable driver and cpal with the app): {0} breaks, unmatched {1} ms, its overruns {2}, xruns {3}" -f @($r.RefAnalysis.discontinuities).Count, $refUnmatched, $r.Reference.overrun_samples, $r.Reference.xruns)
-$lines += ("  breaks in the app recording: recorder's own {0}; capture-chain (also in the reference, FAIL, investigate) {1}; EXCUSED start-up repeats {2} {3}" -f $split.Own.Count, $split.Chain.Count, $split.Excused.Count, ((@($split.Excused) | ForEach-Object { "(at source $([math]::Round([double]$_.source_ms)) ms, $([math]::Round([double]$_.source_jump_ms, 1)) ms)" }) -join ' '))
+$lines += ("  breaks in the app recording: recorder's own {0}; shared with the reference (upstream; see the upstream breaks section) {1}; start-up repeats within the old allowance {2} {3}" -f $split.Own.Count, $split.Chain.Count, $split.Excused.Count, ((@($split.Excused) | ForEach-Object { "(at source $([math]::Round([double]$_.source_ms)) ms, $([math]::Round([double]$_.source_jump_ms, 1)) ms)" }) -join ' '))
 $lines += ("  capture position breaks counted in the app's callback (device time not following on): {0}" -f $rec.position_breaks)
 $lines += $(if ($null -ne $r.NvOverlap) { "  GPU check: {0} job processes, {1} processes in nvidia-smi, overlap {2}" -f @($r.JobPids).Count, @($r.NvPids).Count, @($r.NvOverlap).Count } else { '  GPU check: not re-evaluated (measured live, not saved); emulator-check.txt covers it' })
 if ($r.Stress) { $lines += ("  stress: {0} threads at {1:n1} M loops/thread/s for {2:n0} s; GPU {3}: {4} dispatches {5}" -f $r.Stress.cpu_threads, $r.Stress.cpu_mloops_per_thread_s, $r.Stress.seconds, $r.Stress.gpu_adapter, $r.Stress.gpu_dispatches, $r.Stress.gpu_error) }
@@ -407,5 +418,6 @@ $lines += "audio and reports: $($r.Run) (not in the repository)"
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 $evidence = Join-Path $OutDir "$Gate-$Profile.txt"
 Write-WbEvidence -Path $evidence -Lines $lines -MachineLabel $Machine
-Write-Host "$(if ($pass) { 'PASS' } else { 'FAIL' }): $evidence"
-if (-not $pass) { exit 1 }
+Write-Host "${verdict}: $evidence"
+if ($verdict -eq 'INVALID') { exit 3 }
+if ($verdict -eq 'FAIL') { exit 1 }

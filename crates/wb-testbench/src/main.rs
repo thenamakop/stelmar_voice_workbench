@@ -8,6 +8,7 @@
 //! wb-testbench decode   --session DIR [--report R.json]
 //! wb-testbench parts-check --session DIR [--report R.json]   parts.json against the files
 //! wb-testbench sessions [--device CABLE]            audio sessions playing into an endpoint
+//! wb-testbench compare  --app SESSION --reference DIR [--report R.json]   fidelity: app vs reference
 //! wb-testbench capture  --device "CABLE Output" --dir DIR --stop-file F [--go-file G] [--report R.json]
 //!                       independent reference capture (to tell source-chain glitches from the recorder's)
 //! wb-testbench stress   [--threads N] [--gpu "UHD"] [--seconds N] [--stop-file F] [--report R.json]
@@ -17,6 +18,7 @@
 //! redaction rules (scripts/lib/Redact.psm1).
 
 mod analyse;
+mod compare;
 mod play;
 mod redact;
 mod reference;
@@ -306,6 +308,14 @@ fn run() -> Result<()> {
         }
         "decode" => decode(&args),
         "parts-check" => parts_check(&args),
+        "compare" => {
+            let app_dir = PathBuf::from(args.get("app")?);
+            let app = compare::Recording::load(&app_dir)?;
+            let reference = compare::Recording::load(Path::new(args.get("reference")?))?;
+            let starts = compare::run_starts(&app_dir, &app).unwrap_or_else(|_| vec![0]);
+            let report = compare::compare(&app, &reference, &starts)?;
+            output(&args, &report)
+        }
         "capture" => {
             let report = reference::capture(
                 args.get("device")?,

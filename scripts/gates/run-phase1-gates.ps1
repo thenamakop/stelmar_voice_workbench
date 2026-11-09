@@ -58,7 +58,7 @@ try {
     $out = @(Invoke-WbWindowsPowerShell -ArgumentList $argList)
     $code = $LASTEXITCODE
     $text = $out -join "`n"
-    $verdict = @($out | Where-Object { $_ -match '^(PASS|FAIL): ' } | Select-Object -Last 1)
+    $verdict = @($out | Where-Object { $_ -match '^(PASS|FAIL|INVALID): ' } | Select-Object -Last 1)
     if ($text -match 'Ask the user before running gate') {
       $stopReason = "$g : Track B's busy lock was held for more than 30 minutes"
     } elseif ($text -match 'GB of RAM free; gate .* needs at least') {
