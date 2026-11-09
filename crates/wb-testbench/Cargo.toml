@@ -14,6 +14,7 @@ hound.workspace = true
 ringbuf.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+time.workspace = true
 wb-recorder.workspace = true
 
 [target.'cfg(windows)'.dependencies]

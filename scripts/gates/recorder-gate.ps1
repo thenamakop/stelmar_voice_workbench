@@ -378,6 +378,7 @@ foreach ($u in @($r.Analysis.unmatched_ranges)) {
   $when = $playStart.AddMilliseconds([double]$u.source_ms - [double]$r.Analysis.content_first_source_frame / 48.0)
   $lines += ("  unmatched stretch: source {0:n2} s (about {1} IST), {2:n0} ms; also in the reference capture: {3}" -f ([double]$u.source_ms / 1000.0), $when.ToString('HH:mm:ss'), [double]$u.ms, $alsoRef)
 }
+$lines += Get-WbReferenceXrunLines -RefAnalysis $r.RefAnalysis -Reference $r.Reference -PlayStarted $playStart -BreakSourceMs @(@($r.Analysis.unmatched_ranges) | ForEach-Object { [double]$_.source_ms })
 $lines += ("  reference capture (separate cpal + hound recorder outside the job; shares the audio engine, cable driver and cpal with the app): {0} breaks, unmatched {1} ms, its overruns {2}, xruns {3}" -f @($r.RefAnalysis.discontinuities).Count, $refUnmatched, $r.Reference.overrun_samples, $r.Reference.xruns)
 $lines += ("  breaks in the app recording: recorder's own {0}; capture-chain (also in the reference, FAIL, investigate) {1}; EXCUSED start-up repeats {2} {3}" -f $split.Own.Count, $split.Chain.Count, $split.Excused.Count, ((@($split.Excused) | ForEach-Object { "(at source $([math]::Round([double]$_.source_ms)) ms, $([math]::Round([double]$_.source_jump_ms, 1)) ms)" }) -join ' '))
 $lines += ("  capture position breaks counted in the app's callback (device time not following on): {0}" -f $rec.position_breaks)

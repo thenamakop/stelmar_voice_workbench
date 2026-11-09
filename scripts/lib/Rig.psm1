@@ -221,4 +221,55 @@ function Get-WbLateCallbackLines {
   $lines
 }
 
-Export-ModuleMember -Function ConvertFrom-WbMask, Format-WbMask, Format-WbLogicalList, Get-WbRigPlan, Assert-WbRigPlacement, Set-WbRigPlacement, Get-WbJobPlacement, Set-WbRigPins, Confirm-WbRigAgainstJob, Get-WbRigLines, Get-WbLateCallbackLines
+# Evidence lines for the reference capture's xruns (each with its callback count, its position in
+# the reference recording and its wall-clock time to the millisecond), and the nearest one to each
+# shared break. $PlayStarted is when the player's first callback ran (DateTimeOffset): a break at
+# source position S happened at about PlayStarted + (S - first source frame heard).
+function Get-WbReferenceXrunLines {
+  param(
+    $RefAnalysis,
+    $Reference,
+    $PlayStarted,
+    [double[]]$BreakSourceMs = @()
+  )
+  if ($null -eq $RefAnalysis -or -not (Test-WbHasProperty $RefAnalysis 'content_start_ms')) {
+    return @('  reference xruns: not available (no reference analysis)')
+  }
+  $events = @()
+  if (Test-WbHasProperty $RefAnalysis 'xruns') { $events = @($RefAnalysis.xruns) }
+  $reported = $(if ($Reference -and (Test-WbHasProperty $Reference 'xruns')) { [int64]$Reference.xruns } else { -1 })
+  if ($events.Count -eq 0) {
+    return @("  reference xruns: $(if ($reported -ge 0) { $reported } else { 'not recorded' }) (no per-xrun list: an earlier reference capture)")
+  }
+  $rate = [double]$RefAnalysis.sample_rate
+  $first = [double]$RefAnalysis.content_first_source_frame * 1000.0 / $rate
+  $lines = @("  reference xruns (WASAPI discontinuity flag, as cpal reports it; logged by the reference capture): $($events.Count)")
+  $items = @()
+  foreach ($e in $events) {
+    $wall = [DateTimeOffset]::Parse($e.wall_clock)
+    $src = [double]$e.audio_ms - [double]$RefAnalysis.content_start_ms + $first
+    $items += [pscustomobject]@{ N = $e.n; Wall = $wall; SourceMs = $src }
+    $where = $(if ($src -lt 0) { 'before the signal starts' } else { ('about source {0:n3} s' -f ($src / 1000.0)) })
+    $lines += ("    #{0} at {1:HH:mm:ss.fff} IST: {2} callbacks and {3} frames in; reference recording {4:n3} s; {5}" -f $e.n, $wall, $e.callbacks_before, $e.frames_before, ([double]$e.audio_ms / 1000.0), $where)
+  }
+  foreach ($b in $BreakSourceMs) {
+    if ($null -eq $PlayStarted) { continue }
+    $when = ([DateTimeOffset]$PlayStarted).AddMilliseconds($b - $first)
+    $near = $items | Sort-Object { [math]::Abs(($_.Wall - $when).TotalMilliseconds) } | Select-Object -First 1
+    $text = ("    shared break at source {0:n3} s, {1:HH:mm:ss.fff} IST (to the second: {1:HH:mm:ss}): " -f ($b / 1000.0), $when)
+    $d = ($near.Wall - $when).TotalMilliseconds
+    if ([math]::Abs($d) -le 2000) {
+      if ([math]::Abs($d) -lt 1) {
+        $text += ("nearest reference xrun #{0} at {1:HH:mm:ss.fff}, within 1 ms of it" -f $near.N, $near.Wall)
+      } else {
+        $text += ("nearest reference xrun #{0} at {1:HH:mm:ss.fff}, {2:n0} ms {3}" -f $near.N, $near.Wall, [math]::Abs($d), $(if ($d -lt 0) { 'before it' } else { 'after it' }))
+      }
+    } else {
+      $text += ("no reference xrun within 2 s (nearest: #{0} at {1:HH:mm:ss.fff}, {2:n1} s {3})" -f $near.N, $near.Wall, ([math]::Abs($d) / 1000.0), $(if ($d -lt 0) { 'before' } else { 'after' }))
+    }
+    $lines += $text
+  }
+  $lines
+}
+
+Export-ModuleMember -Function Get-WbReferenceXrunLines, ConvertFrom-WbMask, Format-WbMask, Format-WbLogicalList, Get-WbRigPlan, Assert-WbRigPlacement, Set-WbRigPlacement, Get-WbJobPlacement, Set-WbRigPins, Confirm-WbRigAgainstJob, Get-WbRigLines, Get-WbLateCallbackLines

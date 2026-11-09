@@ -93,6 +93,22 @@ Check 'a break with no late callback says the player never ran its buffer dry' (
 $old = [pscustomobject]@{ underrun_callbacks = 0 }
 Check 'an older play.json without the counter says so' (((Get-WbLateCallbackLines -Play $old) -join ' ') -match 'not recorded')
 
+# ---- Reference xruns are shown next to a shared break -------------------------------------------
+$refA = [pscustomobject]@{
+  sample_rate = 48000; content_start_ms = 2278.0; content_first_source_frame = 0
+  xruns = @(
+    [pscustomobject]@{ n = 1; callbacks_before = 0; frames_before = 0; audio_ms = 0.0; wall_clock = '2026-11-09T20:34:08.912+05:30' },
+    [pscustomobject]@{ n = 2; callbacks_before = 412; frames_before = 197760; audio_ms = 6150.0; wall_clock = '2026-11-09T20:34:13.790+05:30' })
+}
+$refR = [pscustomobject]@{ xruns = 2 }
+$playAt = [DateTimeOffset]::Parse('2026-11-09T20:34:09.913+05:30')
+$xt = (Get-WbReferenceXrunLines -RefAnalysis $refA -Reference $refR -PlayStarted $playAt -BreakSourceMs @(3877.3, 90000.0)) -join "`n"
+Check 'each reference xrun is listed with its callback count, recording position and wall clock to the millisecond' ($xt -match '#2 at 20:34:13.790 IST: 412 callbacks and 197760 frames in; reference recording 6.150 s; about source 3.872 s')
+Check 'an xrun before the signal starts says so' ($xt -match '#1 at 20:34:08.912 IST.*before the signal starts')
+Check 'a shared break shows its wall-clock time to the second and the nearest reference xrun' ($xt -match 'shared break at source 3.877 s, 20:34:13.790 IST \(to the second: 20:34:13\): nearest reference xrun #2 at 20:34:13.790, within 1 ms of it')
+Check 'a break with no reference xrun within 2 s says so' ($xt -match 'shared break at source 90.000 s.*no reference xrun within 2 s')
+Check 'an earlier reference capture without the list says so' (((Get-WbReferenceXrunLines -RefAnalysis ([pscustomobject]@{ sample_rate = 48000; content_start_ms = 0.0; content_first_source_frame = 0 }) -Reference $refR -PlayStarted $playAt) -join ' ') -match 'no per-xrun list')
+
 # ---- The go file: created after pinning, also without a plan ------------------------------------
 $goFile = Join-Path $tmp 'GO-RIG'
 $psExe = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'

@@ -81,6 +81,10 @@ pub struct Analysis {
     pub channel1_unmatched_ms: Option<f64>,
     pub min_block_correlation: f64,
     pub passed: bool,
+    /// The reference capture's xruns (callback count, position and wall clock), from the
+    /// `xruns.json` it writes next to its recording. Empty for any other recording.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub xruns: Vec<crate::reference::XrunRecord>,
 }
 
 /// Channel 0 of every part in `parts.json` order.
@@ -376,6 +380,7 @@ pub fn analyse(
         channel1_unmatched_ms: r1.as_ref().map(|_| ms(ch1_unmatched as f64)),
         min_block_correlation: min_corr,
         passed,
+        xruns: crate::reference::read_xruns(session),
     })
 }
 
