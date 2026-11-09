@@ -163,6 +163,10 @@ pub struct Compare {
     /// delivered after the app's last frame that the app has no recording of (a FAIL). Audio
     /// before the app's first frame and the gaps between its runs are not counted.
     pub reference_only_loud_frames: u64,
+    /// The same count, reported even when the tail is not judged (`ignore_reference_tail`).
+    pub reference_tail_loud_frames: u64,
+    /// True when reference audio after the app's last frame was not judged.
+    pub reference_tail_ignored: bool,
     /// Frames of the app with audio that the reference does not cover (the reference is
     /// incomplete: the run is INVALID).
     pub app_only_loud_frames: u64,
@@ -257,6 +261,9 @@ pub struct Hints {
     pub reference_signal_start: Option<u64>,
     /// First frame of the signal in the first run of the app.
     pub app_signal_start: Option<u64>,
+    /// Do not judge reference audio after the app's last frame. The force-kill test stops the
+    /// app first and the player a moment later by design, so the signal outlives the session.
+    pub ignore_reference_tail: bool,
 }
 
 /// Finds the one offset for the app's run `[s, e)`: app frame = reference frame + offset.
@@ -448,6 +455,7 @@ pub fn compare(
     }
     // Reference frames outside the span the app covers hold audio the app has no recording of.
     let mut reference_only_loud = 0;
+    let mut reference_tail_loud = 0;
     let mut restart_gap = 0;
     if aligned {
         let span_start = segments
@@ -463,7 +471,12 @@ pub fn compare(
         // Audio before the app's first frame is not the app's to record (the kill test starts
         // the app after the signal began); audio after its last frame is.
         let _ = span_start;
-        reference_only_loud = loud_frames_in(reference, span_end, reference.total)?;
+        reference_tail_loud = loud_frames_in(reference, span_end, reference.total)?;
+        reference_only_loud = if hints.ignore_reference_tail {
+            0
+        } else {
+            reference_tail_loud
+        };
         let mut ordered: Vec<(u64, u64)> = segments
             .iter()
             .map(|s| (s.reference_start_frame, s.reference_end_frame))
@@ -487,6 +500,8 @@ pub fn compare(
         compared_frames,
         differing_frames,
         reference_only_loud_frames: reference_only_loud,
+        reference_tail_loud_frames: reference_tail_loud,
+        reference_tail_ignored: hints.ignore_reference_tail,
         app_only_loud_frames,
         restart_gap_frames: restart_gap,
         equal,
@@ -744,6 +759,7 @@ mod tests {
         let hints = Hints {
             reference_signal_start: Some(4_500),
             app_signal_start: Some(9_000),
+            ..Hints::default()
         };
         let c = compare(&Recording::load(&a)?, &Recording::load(&r)?, &[0], &hints)?;
         assert!(c.aligned && c.equal, "{c:?}");
@@ -781,11 +797,32 @@ mod tests {
         let hints = Hints {
             reference_signal_start: Some(1_000),
             app_signal_start: Some(3_000),
+            ..Hints::default()
         };
         let c = compare(&Recording::load(&a)?, &Recording::load(&r)?, &[0], &hints)?;
         assert!(c.aligned && c.equal, "{c:?}");
         assert_eq!(c.app_only_loud_frames, 0);
         assert_eq!(c.segments[0].app_only_frames, 2_000);
+        Ok(())
+    }
+
+    #[test]
+    fn reference_audio_after_the_app_stopped_can_be_left_unjudged_but_is_still_reported()
+    -> Result<()> {
+        let t = TempDir::new("cmp-tail")?;
+        let signal = noise(40_000, 14);
+        // The app was stopped 10,000 frames before the signal ended.
+        let a = session(t.path(), "app", &signal[..2 * 30_000], 16_000)?;
+        let r = session(t.path(), "ref", &signal, 100_000)?;
+        let hints = Hints {
+            ignore_reference_tail: true,
+            ..Hints::default()
+        };
+        let c = compare(&Recording::load(&a)?, &Recording::load(&r)?, &[0], &hints)?;
+        assert!(c.aligned && c.equal, "{c:?}");
+        assert_eq!(c.reference_only_loud_frames, 0);
+        assert_eq!(c.reference_tail_loud_frames, 10_000);
+        assert!(c.reference_tail_ignored);
         Ok(())
     }
 }

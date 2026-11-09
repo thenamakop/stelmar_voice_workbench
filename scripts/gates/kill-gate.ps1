@@ -207,7 +207,7 @@ $result = Invoke-WbGate -Name "phase1-kill-$Profile" -Body {
   $analysisErr = Invoke-WbAnalyse -Testbench $Testbench -Session $sessionDir -Source $source -Report (Join-Path $run 'analysis.json')
   & $Testbench decode --session $sessionDir --report (Join-Path $run 'decode.json') | Out-Null
   & $Testbench parts-check --session $sessionDir --report (Join-Path $run 'parts-check.json') | Out-Null
-  $cmp = Invoke-WbCompare -Testbench $Testbench -SessionDir $sessionDir -ReferenceDir $refDir -RunDir $run
+  $cmp = Invoke-WbCompare -Testbench $Testbench -SessionDir $sessionDir -ReferenceDir $refDir -RunDir $run -IgnoreReferenceTail
   $appLog = @()
   if (Test-Path $logFile) {
     $fs = [System.IO.File]::Open($logFile, 'Open', 'Read', 'ReadWrite')

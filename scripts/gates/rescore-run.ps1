@@ -17,7 +17,9 @@ param(
   [string]$OutDir,
   [string]$Testbench,
   [string]$Machine = 'Legion',
-  [string]$Note = ''
+  [string]$Note = '',
+  # The force-kill test stops the app before the player (see Invoke-WbCompare).
+  [switch]$IgnoreReferenceTail
 )
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -34,7 +36,7 @@ New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 function Read-Json([string]$Path) { if (Test-Path -LiteralPath $Path) { Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json } else { $null } }
 $sessionDir = (Get-ChildItem (Join-Path $Run 'rec') -Directory | ForEach-Object { Get-ChildItem $_.FullName -Directory } | Select-Object -First 1).FullName
 $refDir = Join-Path $Run 'reference'
-$cmp = Invoke-WbCompare -Testbench $Testbench -SessionDir $sessionDir -ReferenceDir $refDir -RunDir $Run
+$cmp = Invoke-WbCompare -Testbench $Testbench -SessionDir $sessionDir -ReferenceDir $refDir -RunDir $Run -IgnoreReferenceTail:$IgnoreReferenceTail
 $compare = Read-Json (Join-Path $Run 'compare.json')
 $play = Read-Json (Join-Path $Run 'play.json')
 $refAnalysis = Read-Json (Join-Path $Run 'reference-analysis.json')

@@ -8,7 +8,7 @@
 //! wb-testbench decode   --session DIR [--report R.json]
 //! wb-testbench parts-check --session DIR [--report R.json]   parts.json against the files
 //! wb-testbench sessions [--device CABLE]            audio sessions playing into an endpoint
-//! wb-testbench compare  --app SESSION --reference DIR [--reference-signal-start-ms N] [--app-signal-start-ms N] [--report R.json]   fidelity: app vs reference
+//! wb-testbench compare  --app SESSION --reference DIR [--reference-signal-start-ms N] [--app-signal-start-ms N] [--reference-tail ignore] [--report R.json]   fidelity: app vs reference
 //! wb-testbench capture  --device "CABLE Output" --dir DIR --stop-file F [--go-file G] [--report R.json]
 //!                       independent reference capture (to tell source-chain glitches from the recorder's)
 //! wb-testbench stress   [--threads N] [--gpu "UHD"] [--seconds N] [--stop-file F] [--report R.json]
@@ -323,6 +323,10 @@ fn run() -> Result<()> {
             let hints = compare::Hints {
                 reference_signal_start: from_ms("reference-signal-start-ms"),
                 app_signal_start: from_ms("app-signal-start-ms"),
+                ignore_reference_tail: args
+                    .opts
+                    .get("reference-tail")
+                    .is_some_and(|v| v == "ignore"),
             };
             let report = compare::compare(&app, &reference, &starts, &hints)?;
             output(&args, &report)

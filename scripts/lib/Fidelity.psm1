@@ -42,7 +42,9 @@ function Invoke-WbCompare {
     [Parameter(Mandatory = $true)] [string]$Testbench,
     [Parameter(Mandatory = $true)] [string]$SessionDir,
     [Parameter(Mandatory = $true)] [string]$ReferenceDir,
-    [Parameter(Mandatory = $true)] [string]$RunDir
+    [Parameter(Mandatory = $true)] [string]$RunDir,
+    # The force-kill test stops the app before the player: the signal outlives the session.
+    [switch]$IgnoreReferenceTail
   )
   $args2 = @('compare', '--app', $SessionDir, '--reference', $ReferenceDir, '--report', (Join-Path $RunDir 'compare.json'))
   foreach ($pair in @(@('analysis.json', '--app-signal-start-ms'), @('reference-analysis.json', '--reference-signal-start-ms'))) {
@@ -52,6 +54,7 @@ function Invoke-WbCompare {
       if (Test-WbHasProperty $j 'content_start_ms') { $args2 += @($pair[1], ([double]$j.content_start_ms).ToString([Globalization.CultureInfo]::InvariantCulture)) }
     }
   }
+  if ($IgnoreReferenceTail) { $args2 += @('--reference-tail', 'ignore') }
   Invoke-WbNative -FilePath $Testbench -ArgumentList $args2
 }
 
@@ -218,6 +221,9 @@ function Get-WbVerdictLines {
   $lines += 'recording rule (9 Nov 2026): fidelity decides PASS or FAIL; upstream breaks are reported; a run with limits exceeded is INVALID (docs/PLAN.md section 12)'
   if ($null -ne $Compare) {
     $lines += ("fidelity: app compared with the reference capture over {0:n0} frames ({1:n1} s) in {2} run(s) of the app; differing frames {3}; reference audio the app has no recording of {4} frame(s); audio only the app has {5} frame(s); restart gaps {6} frame(s)" -f $Compare.compared_frames, ([double]$Compare.compared_frames / [double]$Compare.sample_rate), @($Compare.segments).Count, $Compare.differing_frames, $Compare.reference_only_loud_frames, $Compare.app_only_loud_frames, $Compare.restart_gap_frames)
+    if ((Test-WbHasProperty $Compare 'reference_tail_ignored') -and [bool]$Compare.reference_tail_ignored) {
+      $lines += ("  reference audio after the app's last frame: {0} frame(s), not judged (this gate stops the app before the player, by design)" -f $Compare.reference_tail_loud_frames)
+    }
     foreach ($s in @($Compare.segments)) {
       $off = $(if ($null -ne $s.offset_frames) { "$($s.offset_frames) frames (found by a stretch of the $($s.aligned_by))" } else { 'not found' })
       $lines += ("  run {0}: app frames {1} to {2}, one fixed offset {3}; compared {4}, differing {5}, largest difference {6}" -f ($s.index + 1), $s.app_start_frame, $s.app_end_frame, $off, $s.compared_frames, $s.differing_frames, $s.max_abs_diff)
