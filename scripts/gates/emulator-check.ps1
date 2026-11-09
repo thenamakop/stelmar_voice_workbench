@@ -33,6 +33,8 @@ $repo = Resolve-Path (Join-Path $here '..\..')
 if (-not $OutDir) { $OutDir = Join-Path $repo 'docs\evidence\phase-1' }
 if (-not $Testbench) { $Testbench = Join-Path $repo 'target\release\wb-testbench.exe' }
 if (-not $Emulate) { $Emulate = Join-Path $repo 'target\release\wb-emulate.exe' }
+Import-Module (Join-Path $repo 'scripts\lib\PsEnv.psm1') -Force
+Set-WbCleanPSModulePath
 Import-Module (Join-Path $repo 'scripts\lib\GateRun.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Redact.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\AppProcess.psm1') -Force

@@ -30,6 +30,8 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
+Import-Module (Join-Path $here 'lib\PsEnv.psm1') -Force
+Set-WbCleanPSModulePath
 if (-not $Exe) { $Exe = Join-Path $here '..\target\release\stelmar-voice-workbench.exe' }
 if (-not $OutDir) { $OutDir = Join-Path $here '..\docs\evidence\phase-1' }
 Import-Module (Join-Path $here 'lib\NetworkState.psm1') -Force
@@ -37,7 +39,7 @@ Import-Module (Join-Path $here 'lib\Redact.psm1') -Force
 Import-Module (Join-Path $here 'lib\AppProcess.psm1') -Force
 
 $log = New-Object System.Collections.Generic.List[string]
-function Say([string]$line) { Write-Host $line; $log.Add($line) }
+function Say([string]$line) { Write-Host ($line | ConvertTo-WbRedacted -MachineLabel $Machine); $log.Add($line) }
 
 $exePath = (Resolve-Path -LiteralPath $Exe).Path
 $hash = (Get-FileHash -LiteralPath $exePath -Algorithm SHA256).Hash.ToLower()

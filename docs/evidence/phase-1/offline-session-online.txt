@@ -1,0 +1,25 @@
+﻿Phase 1 offline check with a recording (online)
+date: 2026-11-09 15:29:28 +05:30
+machine: Legion
+exe: D:\Projects\stelmar_voice_workbench\target\release\stelmar-voice-workbench.exe
+exe sha256: fbd9ecbf25337446d95e018650d37f6a5963115fd0b184dadcae3810420b3e4d (10620928 bytes, built 2026-11-09 14:49)
+WB_GATE_ strings in the exe: 0 (must be 0: no gate hooks in a release build)
+watch window: 240 s
+Network state: Online
+  reason: physical adapter Up: Wi-Fi (Intel(R) Wi-Fi 6E AX211 160MHz)
+  reason: connection profile on Wi-Fi reports IPv4 Internet
+  default route: 0.0.0.0/0 via 192.168.1.1 on Wi-Fi (ifIndex 6, metric 0)
+  interface Wi-Fi (ifIndex 6): status Up, virtual False, IPv6:Connected IPv4:Connected, non-link-local address True
+  connection profile: Wi-Fi IPv4 Internet, IPv6 NoTraffic
+  physical adapter Up: Wi-Fi (Intel(R) Wi-Fi 6E AX211 160MHz)
+  probe: not run (facts already show the machine online)
+window shown after 223 ms; rendered after 1159 ms
+watched 241 s, 211 polls, up to 14 processes (app tree plus WebView2); app still running at the end: True
+non-loopback sockets seen: 2
+  150.171.27.11:443 Established (last seen at +184 s)
+  52.98.58.34:443 Established (last seen at +223 s)
+verdict: BASELINE (online: 2 non-loopback endpoints from WebView2 are expected; compare with the offline run)
+
+Notes (added 9 Nov 2026):
+- Track B (Phase 5a) was transcribing in the background during this run, so render times are higher than the Phase 0 baseline of 683 ms. The like-for-like pair is 1,159 ms rendered online against 1,223 ms offline.
+- Both runs: the operator pressed Start on the Record screen, recorded about a minute and pressed Stop inside the watch window.

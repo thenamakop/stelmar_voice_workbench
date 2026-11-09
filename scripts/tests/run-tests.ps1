@@ -3,11 +3,12 @@
 # Exit code 1 when any test file fails. ASCII only; Windows PowerShell 5.1.
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
+Import-Module (Join-Path $here '..\lib\PsEnv.psm1') -Force
 $failed = @()
 $files = @(Get-ChildItem -Path $here -Filter '*.Tests.ps1' | Sort-Object Name)
 foreach ($f in $files) {
   Write-Host "== $($f.Name)"
-  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $f.FullName
+  Invoke-WbWindowsPowerShell -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $f.FullName) | ForEach-Object { Write-Host $_ }
   if ($LASTEXITCODE -ne 0) { $failed += $f.Name }
 }
 Write-Host ""

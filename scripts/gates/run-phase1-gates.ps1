@@ -26,6 +26,8 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
+Import-Module (Join-Path $here '..\lib\PsEnv.psm1') -Force
+Set-WbCleanPSModulePath
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Log) | Out-Null
 
 function Write-Log([string]$Line) {
@@ -51,12 +53,10 @@ try {
     if ($g -in @('panic', 'webview', 'load', 'soak')) { $argList += @('-Gate', $g, '-Profile', $Profile) }
     if ($g -eq 'kill') { $argList += @('-Profile', $Profile) }
     if ($AllowCableDefault -and $g -ne 'emulator') { $argList += '-AllowCableDefault' }
-    # A child's stderr merged with 2>&1 becomes error records; under 'Stop' (Windows PowerShell
-    # 5.1) the first one would end this script, so collect them as text instead.
-    $ErrorActionPreference = 'Continue'
-    $out = @(& powershell.exe @argList 2>&1 | ForEach-Object { "$_" })
+    # The helper gives the child Windows PowerShell 5.1's own module path (a parent shell's
+    # PowerShell 7 path makes Get-FileHash vanish) and collects stderr as text.
+    $out = @(Invoke-WbWindowsPowerShell -ArgumentList $argList)
     $code = $LASTEXITCODE
-    $ErrorActionPreference = 'Stop'
     $text = $out -join "`n"
     $verdict = @($out | Where-Object { $_ -match '^(PASS|FAIL): ' } | Select-Object -Last 1)
     if ($text -match 'Ask the user before running gate') {

@@ -63,6 +63,8 @@ if (-not $Exe) { $Exe = Join-Path $repo 'target\gate\stelmar-voice-workbench.exe
 if (-not $Testbench) { $Testbench = Join-Path $repo 'target\release\wb-testbench.exe' }
 if (-not $Emulate) { $Emulate = Join-Path $repo 'target\release\wb-emulate.exe' }
 if ($Minutes -le 0) { $Minutes = @{ soak = 120; load = 30; panic = 3; webview = 3 }[$Gate] }
+Import-Module (Join-Path $repo 'scripts\lib\PsEnv.psm1') -Force
+Set-WbCleanPSModulePath
 Import-Module (Join-Path $repo 'scripts\lib\GateRun.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Redact.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\AppProcess.psm1') -Force

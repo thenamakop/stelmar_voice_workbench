@@ -175,6 +175,7 @@ Candidates (Phase 5 picks per language and role; sizes are whisper.cpp ggml file
 - **Urdu.** No small Urdu model is good enough for near-live text yet, so Urdu is never offered live on CPU machines. A licensed small Urdu fine-tune can join if it passes Phase 5.
 - **Scripts.** Hindi in Devanagari; Urdu in Perso-Arabic script, right to left, in Nastaliq; English in Latin. Every segment stores `lang`, `lang_prob`, `mixed` and `dir`; mixed segments render with `dir="auto"`.
 - **Timestamps** come from the audio clock and VAD, never from model timestamps.
+- **The audio clock** (decided 9 Nov 2026, Phase 1): segment times are milliseconds of recorded audio from session start, continuous across parts, with paused time and input-loss gaps excluded. `session.json` logs each pause and resume with its wall-clock time (IST) and its audio time, so the UI can show both.
 - **Not in version 1:** distil-whisper (English only); faster-whisper as a second engine (about twice as fast on CPU with batching in its README, but it needs a bundled Python runtime; the engine protocol allows adding it later); Qwen3-ASR (no Urdu); SeamlessM4T (non-commercial licence).
 
 ## 6. Accuracy plan

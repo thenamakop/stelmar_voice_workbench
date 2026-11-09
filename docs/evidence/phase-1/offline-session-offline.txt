@@ -1,0 +1,26 @@
+﻿Phase 1 offline check with a recording (offline)
+date: 2026-11-09 15:37:17 +05:30
+machine: Legion
+exe: D:\Projects\stelmar_voice_workbench\target\release\stelmar-voice-workbench.exe
+exe sha256: fbd9ecbf25337446d95e018650d37f6a5963115fd0b184dadcae3810420b3e4d (10620928 bytes, built 2026-11-09 14:49)
+WB_GATE_ strings in the exe: 0 (must be 0: no gate hooks in a release build)
+watch window: 240 s
+Network state: Offline
+  reason: no physical adapter (Wi-Fi or Ethernet) is Up
+  reason: no connection profile reports Internet or LocalNetwork
+  reason: no probe reached its target
+  default route: 0.0.0.0/0 via 192.168.1.1 on Wi-Fi (ifIndex 6, metric 0)
+  0.0.0.0/0 via 192.168.1.1 on Wi-Fi (ifIndex 6) - ignored: adapter is Disconnected
+  interface Wi-Fi (ifIndex 6): status Disconnected, virtual False, IPv6:Disconnected IPv4:Disconnected, non-link-local address True
+  connection profiles: none
+  physical adapters Up: none
+  probe 1.1.1.1:443: reached False (A socket operation was attempted to an unreachable host 1.1.1.1:443)
+  probe 8.8.8.8:443: reached False (A socket operation was attempted to an unreachable host 8.8.8.8:443)
+window shown after 240 ms; rendered after 1223 ms
+watched 241 s, 224 polls, up to 14 processes (app tree plus WebView2); app still running at the end: True
+non-loopback sockets seen: none
+verdict: PASS (offline: no non-loopback socket during a recording session)
+
+Notes (added 9 Nov 2026):
+- Track B (Phase 5a) was transcribing in the background during this run, so render times are higher than the Phase 0 baseline of 683 ms. The like-for-like pair is 1,159 ms rendered online against 1,223 ms offline.
+- Both runs: the operator pressed Start on the Record screen, recorded about a minute and pressed Stop inside the watch window.

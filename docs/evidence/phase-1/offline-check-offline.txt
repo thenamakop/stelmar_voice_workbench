@@ -1,0 +1,25 @@
+﻿STELMAR Voice Workbench offline check: offline
+Date: 2026-11-09 15:41:51 +05:30   Machine: %COMPUTERNAME%   Windows 10.0.26200.0
+Exe: D:\Projects\stelmar_voice_workbench\target\release\stelmar-voice-workbench.exe (2026-11-09 14:49)
+Network state: Offline
+  reason: no physical adapter (Wi-Fi or Ethernet) is Up
+  reason: no connection profile reports Internet or LocalNetwork
+  reason: no probe reached its target
+  default route: 0.0.0.0/0 via 192.168.1.1 on Wi-Fi (ifIndex 6, metric 0)
+  0.0.0.0/0 via 192.168.1.1 on Wi-Fi (ifIndex 6) - ignored: adapter is Disconnected
+  interface Wi-Fi (ifIndex 6): status Disconnected, virtual False, IPv6:Disconnected IPv4:Disconnected, non-link-local address True
+  connection profiles: none
+  physical adapters Up: none
+  probe 1.1.1.1:443: reached False (A socket operation was attempted to an unreachable host 1.1.1.1:443)
+  probe 8.8.8.8:443: reached False (A socket operation was attempted to an unreachable host 8.8.8.8:443)
+Run 1: window 211 ms, rendered 1117 ms, not blank = True (charcoal 7.1%, 63 colours), app alive = True, WebView2 processes = 6, non-loopback network = none
+Run 2: window 135 ms, rendered 1060 ms, not blank = True (charcoal 7.1%, 63 colours), app alive = True, WebView2 processes = 6, non-loopback network = none
+Run 3: window 139 ms, rendered 1050 ms, not blank = True (charcoal 7.1%, 63 colours), app alive = True, WebView2 processes = 6, non-loopback network = none
+Median: window 139 ms, rendered 1060 ms (runs after the first are warm starts)
+Baseline (online): window 126 ms, rendered 683 ms. Offline minus online: window 13 ms, rendered 377 ms
+Result: PASS
+
+Notes (added 9 Nov 2026):
+- Track B (Phase 5a) was transcribing in the background during these runs. That explains the render time of about 1,060 ms here against the Phase 0 baseline of 683 ms (taken on a quiet machine). The like-for-like comparison from the same afternoon, in offline-session-online.txt and offline-session-offline.txt, is 1,159 ms rendered online against 1,223 ms offline.
+- This run used the Phase 1 release build (sha256 fbd9ecbf25337446d95e018650d37f6a5963115fd0b184dadcae3810420b3e4d, see offline-session-offline.txt). It was first written over docs/evidence/phase-0/offline-check-offline.txt by mistake; that file is restored and Phase 0's evidence is unchanged.
+- The "Baseline (online)" line compares with the Phase 0 baseline file, because no Phase 1 offline-check-online.txt was made; the Phase 1 online baseline is offline-session-online.txt.
