@@ -1,27 +1,22 @@
-﻿source: commit 013746e with uncommitted or untracked changes (the build hashes below identify the code)
+﻿source: commit d3eaf02
 build: stelmar-voice-workbench.exe sha256 1bbf39e5884849ffab144de3026e25ee5519c37266e6dd55c0d4a6c369a698d0 (built 2026-11-09 16:17)
-build: wb-testbench.exe sha256 f6ec58a66ba6affb77651ce25a8c2108303bc3814df27c7aa39d59c68a15a692 (built 2026-11-09 20:57)
+build: wb-testbench.exe sha256 da71e91c47760b8bd629e016a201efa7e56f51340f29d57955c9f408f7842e18 (built 2026-11-09 21:39)
 build: wb-emulate.exe sha256 dc7d7a9896433e012375cc42c69047a5c6231bedeef64fedf81b81525fce4d94 (built 2026-11-09 20:32)
-gate: phase1-webview-emu-low
+gate: phase1-webview-emu-low (re-evaluated from saved data)
 started: 2026-11-09 20:58:29 +05:30
+note: evaluation redone from the saved recording and reports of the run in D:\STELMAR-Gate\webview-emu-low-20261109-205829 with the current analyser; re-scored under the recording-gate rule of 9 Nov 2026 (docs/PLAN.md section 12) with -FromRun, from the saved run in D:\STELMAR-Gate\webview-emu-low-20261109-205829 (started 2026-11-09T20:58:29+05:30, ended 21:02:14 IST); the build under test is the final gate build, stelmar-voice-workbench.exe sha256 1bbf39e5884849ffab144de3026e25ee5519c37266e6dd55c0d4a6c369a698d0 (built 2026-11-09 16:17, unchanged since). Only what the saved data holds is re-evaluated; the live app log, GPU check, cable polling and overlay checks of the original run are not repeated and its own evidence stands for them.
 machine: Legion
 emulation profile: emu-low
-overlay tools closed: yes (RTSS.exe and MSIAfterburner.exe not running when the gate started)
-overlay tools at the end: none running
-Track B paused: D:\Projects\stelmar-gate.lock held for the whole run (removed in a finally block)
-Track B busy lock: D:\Projects\stelmar-eval-busy.lock absent at start
+overlay tools closed: checked by the original run before it started (the gate refuses to start otherwise); not saved, not re-checked
+Track B paused: not re-evaluated (the original run's gate code takes D:\Projects\stelmar-gate.lock; whether it was held is not in the saved data)
 free RAM: 17.6 GB at start (needs 14 GB), 17.6 GB at end
 app build: target\gate\stelmar-voice-workbench.exe (cargo profile gate, features gate-hooks + custom-protocol)
-verdict: FAIL
+verdict: INVALID (no verdict; the run must be repeated)
 
 checks:
   [x] reference capture ran cleanly (its own ring overruns 0)
-  [x] no dropped or silent audio caused by the recorder (0 breaks not in the reference; silent gaps 0.0 ms)
-  [ ] no capture-chain breaks beyond one start-up repeat (1; excused start-up repeats 1)
+  [x] fidelity: the app's recording equals the reference capture sample for sample, one fixed offset per run (differing frames 0, reference audio without an app recording 0 frames)
   [x] recorded duration within 1 s of the source
-  [ ] recording equals the source except next to an excused start-up repeat (unexplained 92 ms of 174.66666666666666 ms)
-  [x] channel 1 matches the source too
-  [x] no other program played into the cable
   [x] zero ring-buffer overruns
   [x] driver xruns: none, or one within 2 s of the stream start with zero loss around it (xruns 0, excused 0)
   [x] zero samples dropped by the writer
@@ -30,8 +25,17 @@ checks:
   [x] every part decodes in Media Foundation
   [x] mirror SHA-256 equals the originals
   [x] player had no underruns (source played cleanly)
-  [x] no job process on the NVIDIA GPU
-  [x] display recovered in a new window
+
+recording rule (9 Nov 2026): fidelity decides PASS or FAIL; upstream breaks are reported; a run with limits exceeded is INVALID (docs/PLAN.md section 12)
+fidelity: app compared with the reference capture over 87,71,520 frames (182.7 s) in 1 run(s) of the app; differing frames 0; reference audio the app has no recording of 0 frame(s); audio only the app has 0 frame(s); restart gaps 0 frame(s)
+  run 1: app frames 0 to 8899200, one fixed offset 120960 frames (found by a stretch of the reference); compared 8771520, differing 0, largest difference 0
+upstream breaks (between the source and the reference capture; reported, not gated): 2 in 3.0 minutes of audio, 6.6 per 10 minutes
+  at source 0.017 s, 20:58:34.548 IST: repeat 1.6 ms, skipped 0.0 ms, unmatched 82.7 ms; nearest reference xrun #1 at 20:58:34.532 (17 ms before); late player callbacks within 500 ms: 0
+  at source 1.706 s, 20:58:36.237 IST: repeat 12.1 ms, skipped 0.0 ms, unmatched 92.0 ms; nearest reference xrun #1 at 20:58:34.532 (1,706 ms before); late player callbacks within 500 ms: 0
+player callbacks: longest gap 21.9 ms against a 100 ms output buffer; late callbacks (a gap longer than the buffer) 0
+validity: INVALID (no verdict; the run must be repeated)
+  - 2 upstream break(s) in 3.0 minutes of audio is 6.6 per 10 minutes (limit 1)
+display recovery: not re-evaluated here (the live app log is not saved); the original run's evidence stands
 
 measurements:
   source: 3.0 min of known noise, 48 kHz stereo, played by wb-testbench into 'CABLE Input' from outside the job
@@ -42,18 +46,14 @@ measurements:
   app process CPU (main process; WebView2 processes not counted): 4.9 s = 0.65% of the job's 4 logical processors (2.62% of one core)
   mirror: 5 files compared, all equal: True (mirror on the same machine, separate drive pending: C: instead of an external SSD)
   player: 8640000 frames of 8640000, underrun callbacks 0, render thread priority mmcss, output buffer fixed 4800 frames (100 ms)
-  rig placement (player and reference capture pinned to performance cores outside the job, HIGH priority class; masks read back from the running processes):
-    job (the app inside the emulation job): pid 28656, mask 0xf0000 (logical processors 16-19)
-    player: pid 47676, mask 0xc000 (logical processors 14-15), priority class High; the player itself reports 0xc000 at stream start
-    reference capture: pid 50780, mask 0x3000 (logical processors 12-13), priority class High; the reference capture itself reports 0x3000 at stream start
-    overlap: none (checked on the planned masks before anything started, and on the masks read back from the running processes)
+  rig placement: not pinned (native profile) or not recorded for this run
   player late callbacks: 0 (a gap between render callbacks longer than the 100 ms output buffer); longest gap between callbacks 21.9 ms; gaps of 20 ms or more: 64, 30 ms or more: 0, 50 ms or more: 0
     shared break at source 0.017 s: no late player callback within 500 ms of it; the longest callback gap in the whole run was 21.9 ms, so the player never ran its output buffer dry
     shared break at source 0.100 s: no late player callback within 500 ms of it; the longest callback gap in the whole run was 21.9 ms, so the player never ran its output buffer dry
     shared break at source 1.706 s: no late player callback within 500 ms of it; the longest callback gap in the whole run was 21.9 ms, so the player never ran its output buffer dry
     shared break at source 1.798 s: no late player callback within 500 ms of it; the longest callback gap in the whole run was 21.9 ms, so the player never ran its output buffer dry
-  cable interference: none seen by the 1-second session poll (sounds shorter than a second can be missed; the analysis above is the check)
-  default playback device: not the cable (checked at start)
+  cable interference polling: not re-evaluated (measured live, not saved); the analysis above is the evidence
+  default playback device: not recorded for this run
   signal starts at source frame 0 (0.0 ms of the source's start never reached the captures: playback start-up); leading audio before the signal: 0 ms
   unmatched stretch: source 0.02 s (about 20:58:34 IST), 83 ms; also in the reference capture: True
   unmatched stretch: source 1.71 s (about 20:58:36 IST), 92 ms; also in the reference capture: True
@@ -62,18 +62,12 @@ measurements:
     shared break at source 0.017 s, 20:58:34.548 IST (to the second: 20:58:34): nearest reference xrun #1 at 20:58:34.532, 17 ms before it
     shared break at source 1.706 s, 20:58:36.237 IST (to the second: 20:58:36): nearest reference xrun #1 at 20:58:34.532, 1,706 ms before it
   reference capture (separate cpal + hound recorder outside the job; shares the audio engine, cable driver and cpal with the app): 2 breaks, unmatched 174.666666666667 ms, its overruns 0, xruns 1
-  breaks in the app recording: recorder's own 0; capture-chain (also in the reference, FAIL, investigate) 1; EXCUSED start-up repeats 1 (at source 100 ms, -1.6 ms)
+  breaks in the app recording: recorder's own 0; shared with the reference (upstream; see the upstream breaks section) 1; start-up repeats within the old allowance 1 (at source 100 ms, -1.6 ms)
   capture position breaks counted in the app's callback (device time not following on): 0
-  GPU check: 10 job processes, 0 processes in nvidia-smi, overlap 0
-  webview: killed WebView2 browser process 45228 at 20:59:15.663; display restarts reported: 1
+  GPU check: not re-evaluated (measured live, not saved); emulator-check.txt covers it
 
 progress:
-  20:58:33 recording in D:\STELMAR-Gate\webview-emu-low-20261109-205829\rec\2026-11-09\gate-webview-20261109-205829
-  20:58:34 rig pinned: job 0xf0000, player 0xc000, reference capture 0x3000, no overlap
-  20:58:50 job processes: 10; nvidia-smi processes: 0; job processes on the NVIDIA GPU: 0
-  20:59:15 killed WebView2 browser process 45228 at 20:59:15.663
-  21:00:16 audio 1.7 min, part 1, overrun samples 0, xruns 0, ring max 0.15%, recorder cpu 484 ms, in_sync lag 1105 ms
-  21:01:16 audio 2.7 min, part 1, overrun samples 0, xruns 0, ring max 0.15%, recorder cpu 687 ms, in_sync lag 1010 ms
+  re-evaluated from the saved run D:\STELMAR-Gate\webview-emu-low-20261109-205829
 
 emulation log:
   profile=emu-low
@@ -100,23 +94,5 @@ decode (Media Foundation source reader, the decoder Windows players use):
   audio/part-0001.wav: header 185400 ms, decoded 185400 ms, playable True
 
 app log for this run (warnings, errors, session lines):
-  2026-11-09T15:28:31.449569Z  INFO main app started version="0.1.0" pid=28656 gate_hooks=true
-  2026-11-09T15:28:31.451571Z  WARN main gate hooks active (development build, gate-hooks feature)
-  2026-11-09T15:28:31.451732Z  INFO main display guard installed window="main"
-  2026-11-09T15:28:31.996742Z  INFO wb-gate session recording dir="D:\\STELMAR-Gate\\webview-emu-low-20261109-205829\\rec\\2026-11-09\\gate-webview-20261109-205829" device="CABLE Output (VB-Audio Virtual Cable)" rate=48000 channels=2 resumed=false
-  2026-11-09T15:28:31.996772Z  WARN wb-gate gate: session started dir="D:\\STELMAR-Gate\\webview-emu-low-20261109-205829\\rec\\2026-11-09\\gate-webview-20261109-205829"
-  2026-11-09T15:29:15.693921Z ERROR    main WebView2 process failed window="main" kind=Browser recording=true
-  2026-11-09T15:29:16.456248Z  INFO    main display guard installed window="main-2"
-  2026-11-09T15:29:16.456284Z  WARN    main display recovered in a new window new="main-2" old="main"
-  2026-11-09T15:31:37.446630Z  INFO wb-events part closed part=1 start_ms=0 duration_ms=185400
-  2026-11-09T15:31:37.578885Z  INFO   wb-gate session stopped dir=D:\STELMAR-Gate\webview-emu-low-20261109-205829\rec\2026-11-09\gate-webview-20261109-205829 parts=1 audio_ms=185400 overrun_samples=0 xruns=0 mirror_all_match=true
-  2026-11-09T15:31:37.580767Z  WARN   wb-gate gate: stop file seen; session stopped; exiting
 
 audio and reports: D:\STELMAR-Gate\webview-emu-low-20261109-205829 (not in the repository)
-
-Notes (added 9 Nov 2026 after reading this run, for comparison with LatencyMon):
-- Shared breaks, wall clock IST (computed from the player's first callback, 20:58:34.5319, plus the source position): source 0.017 s at 20:58:34.548 (83 ms unmatched), and source 1.706 s at 20:58:36.237 with the 12.08 ms repeat at 1.798 s, 20:58:36.33. The app and the reference capture show the same breaks at the same source positions.
-- The reference capture's single xrun is at 20:58:34.532 on its first packet (0 callbacks, 0 frames in), within 1 ms of the player's first callback. It logged no xrun at either break, and the app counted none.
-- The WebView2 browser process was killed at 20:59:15.663, 41 s after the breaks.
-- Player: 0 late callbacks, longest gap between render callbacks 21.9 ms, 64 gaps of 20 ms or more, none of 30 ms or more.
-

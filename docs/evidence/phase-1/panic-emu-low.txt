@@ -1,27 +1,22 @@
-﻿source: commit a4bfa8f with uncommitted or untracked changes (the build hashes below identify the code)
+﻿source: commit d3eaf02
 build: stelmar-voice-workbench.exe sha256 1bbf39e5884849ffab144de3026e25ee5519c37266e6dd55c0d4a6c369a698d0 (built 2026-11-09 16:17)
-build: wb-testbench.exe sha256 69d891e783541d071b2ebd86e8a7427720b1af9efe9dcc6a10b1b31fe33839fd (built 2026-11-09 16:17)
-build: wb-emulate.exe sha256 f61b04a3286fa48385964912740b5253f2edfd2b92161fd914230f15cf980316 (built 2026-11-08 18:07)
-gate: phase1-panic-emu-low
+build: wb-testbench.exe sha256 da71e91c47760b8bd629e016a201efa7e56f51340f29d57955c9f408f7842e18 (built 2026-11-09 21:39)
+build: wb-emulate.exe sha256 dc7d7a9896433e012375cc42c69047a5c6231bedeef64fedf81b81525fce4d94 (built 2026-11-09 20:32)
+gate: phase1-panic-emu-low (re-evaluated from saved data)
 started: 2026-11-09 16:18:10 +05:30
+note: evaluation redone from the saved recording and reports of the run in D:\STELMAR-Gate\panic-emu-low-20261109-161810 with the current analyser; re-scored under the recording-gate rule of 9 Nov 2026 (docs/PLAN.md section 12) with -FromRun, from the saved run in D:\STELMAR-Gate\panic-emu-low-20261109-161810 (started 2026-11-09T16:18:10+05:30, ended 16:21:35 IST); the build under test is the final gate build, stelmar-voice-workbench.exe sha256 1bbf39e5884849ffab144de3026e25ee5519c37266e6dd55c0d4a6c369a698d0 (built 2026-11-09 16:17, unchanged since). Only what the saved data holds is re-evaluated; the live app log, GPU check, cable polling and overlay checks of the original run are not repeated and its own evidence stands for them.
 machine: Legion
 emulation profile: emu-low
-overlay tools closed: yes (RTSS.exe and MSIAfterburner.exe not running when the gate started)
-overlay tools at the end: none running
-Track B paused: D:\Projects\stelmar-gate.lock held for the whole run (removed in a finally block)
-Track B busy lock: D:\Projects\stelmar-eval-busy.lock absent at start
+overlay tools closed: checked by the original run before it started (the gate refuses to start otherwise); not saved, not re-checked
+Track B paused: not re-evaluated (the original run's gate code takes D:\Projects\stelmar-gate.lock; whether it was held is not in the saved data)
 free RAM: 18.4 GB at start (needs 14 GB), 18.3 GB at end
 app build: target\gate\stelmar-voice-workbench.exe (cargo profile gate, features gate-hooks + custom-protocol)
-verdict: PASS (PROVISIONAL: emulated)
+verdict: INVALID (no verdict; the run must be repeated)
 
 checks:
   [x] reference capture ran cleanly (its own ring overruns 0)
-  [x] no dropped or silent audio caused by the recorder (0 breaks not in the reference; silent gaps 0.0 ms)
-  [x] no capture-chain breaks beyond one start-up repeat (0; excused start-up repeats 1)
+  [x] fidelity: the app's recording equals the reference capture sample for sample, one fixed offset per run (differing frames 0, reference audio without an app recording 0 frames)
   [x] recorded duration within 1 s of the source
-  [x] recording equals the source except next to an excused start-up repeat (unexplained 0 ms of 21.333333333333332 ms)
-  [x] channel 1 matches the source too
-  [x] no other program played into the cable
   [x] zero ring-buffer overruns
   [x] driver xruns: none, or one within 2 s of the stream start with zero loss around it (xruns 0, excused 0)
   [x] zero samples dropped by the writer
@@ -29,10 +24,19 @@ checks:
   [x] every part decodes in Media Foundation
   [x] mirror SHA-256 equals the originals
   [x] player had no underruns (source played cleanly)
-  [x] no job process on the NVIDIA GPU
   [x] panic in the command boundary returned an error
   [x] panic on a plain thread happened
   [x] panic inside the recorder thread: it restarted once and continued in a new part
+
+recording rule (9 Nov 2026): fidelity decides PASS or FAIL; upstream breaks are reported; a run with limits exceeded is INVALID (docs/PLAN.md section 12)
+fidelity: app compared with the reference capture over 88,45,920 frames (184.3 s) in 1 run(s) of the app; differing frames 0; reference audio the app has no recording of 0 frame(s); audio only the app has 0 frame(s); restart gaps 0 frame(s)
+  run 1: app frames 0 to 8905920, one fixed offset 52800 frames (found by a stretch of the reference); compared 8845920, differing 0, largest difference 0
+upstream breaks (between the source and the reference capture; reported, not gated): 1 in 3.1 minutes of audio, 3.3 per 10 minutes
+  at source 0.479 s, 16:18:16.671 IST: repeat 10.4 ms, skipped 0.0 ms, unmatched 21.3 ms; no reference xrun logged; late player callbacks within 500 ms: 0
+player callbacks: no late-callback data in play.json
+validity: INVALID (no verdict; the run must be repeated)
+  - the player recorded no late-callback data (a player before 9 Nov 2026 20:34), so an upstream break cannot be attributed
+  - 1 upstream break(s) in 3.1 minutes of audio is 3.3 per 10 minutes (limit 1)
 
 measurements:
   source: 3.0 min of known noise, 48 kHz stereo, played by wb-testbench into 'CABLE Input' from outside the job
@@ -43,21 +47,21 @@ measurements:
   app process CPU (main process; WebView2 processes not counted): 7.2 s = 0.96% of the job's 4 logical processors (3.85% of one core)
   mirror: 6 files compared, all equal: True (mirror on the same machine, separate drive pending: C: instead of an external SSD)
   player: 8640000 frames of 8640000, underrun callbacks 0, render thread priority mmcss, output buffer fixed 4800 frames (100 ms)
-  cable interference: none seen by the 1-second session poll (sounds shorter than a second can be missed; the analysis above is the check)
-  default playback device: not the cable (checked at start)
+  rig placement: not pinned (native profile) or not recorded for this run
+  player late callbacks: not recorded for this run (an earlier player)
+  cable interference polling: not re-evaluated (measured live, not saved); the analysis above is the evidence
+  default playback device: not recorded for this run
   signal starts at source frame 0 (0.0 ms of the source's start never reached the captures: playback start-up); leading audio before the signal: 0 ms
   unmatched stretch: source 0.48 s (about 16:18:16 IST), 21 ms; also in the reference capture: True
+  reference xruns: 1 (no per-xrun list: an earlier reference capture)
   reference capture (separate cpal + hound recorder outside the job; shares the audio engine, cable driver and cpal with the app): 1 breaks, unmatched 21.3333333333333 ms, its overruns 0, xruns 1
-  breaks in the app recording: recorder's own 0; capture-chain (also in the reference, FAIL, investigate) 0; EXCUSED start-up repeats 1 (at source 500 ms, -10.4 ms)
+  breaks in the app recording: recorder's own 0; shared with the reference (upstream; see the upstream breaks section) 0; start-up repeats within the old allowance 1 (at source 500 ms, -10.4 ms)
   capture position breaks counted in the app's callback (device time not following on): 0
-  GPU check: 10 job processes, 0 processes in nvidia-smi, overlap 0
+  GPU check: not re-evaluated (measured live, not saved); emulator-check.txt covers it
   panic injection: {"at":"2026-11-09T16:19:14.0618792+05:30","boundary_result":"Err(\"Internal error in gate_panic. Recording is not affected. Details are in the app log.\")","thread_panicked":true}
 
 progress:
-  16:18:15 recording in D:\STELMAR-Gate\panic-emu-low-20261109-161810\rec\2026-11-09\gate-panic-20261109-161810
-  16:18:33 job processes: 10; nvidia-smi processes: 0; job processes on the NVIDIA GPU: 0
-  16:19:34 audio 1.3 min, part 1, overrun samples 0, xruns 0, ring max 0.10%, recorder cpu 531 ms, in_sync lag 1010 ms
-  16:20:35 audio 2.3 min, part 2, overrun samples 0, xruns 0, ring max 0.10%, recorder cpu 1000 ms, in_sync lag 1010 ms
+  re-evaluated from the saved run D:\STELMAR-Gate\panic-emu-low-20261109-161810
 
 emulation log:
   profile=emu-low
@@ -84,21 +88,5 @@ decode (Media Foundation source reader, the decoder Windows players use):
   audio/part-0002.wav: header 85440 ms, decoded 85440 ms, playable True
 
 app log for this run (warnings, errors, session lines):
-  2026-11-09T10:48:13.598223Z  INFO main app started version="0.1.0" pid=48620 gate_hooks=true
-  2026-11-09T10:48:13.600411Z  WARN main gate hooks active (development build, gate-hooks feature)
-  2026-11-09T10:48:13.600519Z  INFO main display guard installed window="main"
-  2026-11-09T10:48:14.032536Z  INFO wb-gate session recording dir="D:\\STELMAR-Gate\\panic-emu-low-20261109-161810\\rec\\2026-11-09\\gate-panic-20261109-161810" device="CABLE Output (VB-Audio Virtual Cable)" rate=48000 channels=2 resumed=false
-  2026-11-09T10:48:14.032562Z  WARN wb-gate gate: session started dir="D:\\STELMAR-Gate\\panic-emu-low-20261109-161810\\rec\\2026-11-09\\gate-panic-20261109-161810"
-  2026-11-09T10:49:14.061074Z ERROR tokio-rt-worker panic: gate hook: simulated panic in a command handler thread="tokio-rt-worker" location="src-tauri\\src\\gate.rs:222"
-  2026-11-09T10:49:14.061345Z ERROR         wb-gate panic caught at the command boundary: gate hook: simulated panic in a command handler command="gate_panic"
-  2026-11-09T10:49:14.061595Z ERROR   wb-gate-panic panic: gate hook: simulated panic on a plain thread thread="wb-gate-panic" location="src-tauri\\src\\gate.rs:226"
-  2026-11-09T10:49:14.061888Z  WARN         wb-gate gate: panics injected at="2026-11-09T16:19:14.0618792+05:30" boundary=Err("Internal error in gate_panic. Recording is not affected. Details are in the app log.") thread=Ok(true)
-  2026-11-09T10:49:54.155394Z  WARN         wb-gate gate: recorder panic injected at="2026-11-09T16:19:54.1553748+05:30" sent=true
-  2026-11-09T10:49:54.161560Z ERROR     wb-recorder panic: injected recorder panic before writing audio (test hook) thread="wb-recorder" location="crates\\wb-recorder\\src\\recorder.rs:843"
-  2026-11-09T10:49:54.163751Z ERROR       wb-events The recorder hit an internal error and continues in a new part: injected recorder panic before writing audio (test hook) source="recorder"
-  2026-11-09T10:49:54.186448Z  INFO       wb-events part closed part=1 start_ms=0 duration_ms=100100
-  2026-11-09T10:51:19.608637Z  INFO       wb-events part closed part=2 start_ms=100100 duration_ms=85440
-  2026-11-09T10:51:19.723132Z  INFO         wb-gate session stopped dir=D:\STELMAR-Gate\panic-emu-low-20261109-161810\rec\2026-11-09\gate-panic-20261109-161810 parts=2 audio_ms=185540 overrun_samples=0 xruns=0 mirror_all_match=true
-  2026-11-09T10:51:19.725510Z  WARN         wb-gate gate: stop file seen; session stopped; exiting
 
 audio and reports: D:\STELMAR-Gate\panic-emu-low-20261109-161810 (not in the repository)

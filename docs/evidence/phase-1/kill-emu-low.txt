@@ -136,3 +136,6 @@ app log for this run (recovery, session, warnings):
   2026-11-09T11:04:12.212693Z  WARN          wb-gate gate: stop file seen; session stopped; exiting
 
 audio and reports: D:\STELMAR-Gate\kill-emu-low-20261109-162504 (not in the repository)
+
+Note (added 9 Nov 2026): this run was scored again under the recording-gate rule of 9 Nov 2026 (docs/PLAN.md section 12); see rescored/kill-emu-low-162504.txt. Result under the rule: INVALID (no verdict; repeat needed), because the player of this run recorded no late-callback data (it was force-stopped and wrote no report). The fidelity part is clean: each of the 6 runs of the app equals the reference capture sample for sample after its own fixed offset (24,990,976 frames compared, 0 differing), and there are 0 upstream breaks in 9.1 minutes. The checks above (loss at each kill, parts playable before repair, Resume, parts.json, mirror, xruns) stand from this run.
+

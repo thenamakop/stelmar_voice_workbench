@@ -1,0 +1,100 @@
+﻿source: commit d3eaf02
+build: stelmar-voice-workbench.exe sha256 1bbf39e5884849ffab144de3026e25ee5519c37266e6dd55c0d4a6c369a698d0 (built 2026-11-09 16:17)
+build: wb-testbench.exe sha256 da71e91c47760b8bd629e016a201efa7e56f51340f29d57955c9f408f7842e18 (built 2026-11-09 21:39)
+build: wb-emulate.exe sha256 dc7d7a9896433e012375cc42c69047a5c6231bedeef64fedf81b81525fce4d94 (built 2026-11-09 20:32)
+gate: phase1-soak-emu-low (re-evaluated from saved data)
+started: 2026-11-09 17:44:31 +05:30
+note: evaluation redone from the saved recording and reports of the run in D:\STELMAR-Gate\soak-emu-low-20261109-174432 with the current analyser; re-scored under the recording-gate rule of 9 Nov 2026 (docs/PLAN.md section 12) with -FromRun, from the saved run in D:\STELMAR-Gate\soak-emu-low-20261109-174432 (started 2026-11-09T17:44:31+05:30, ended 19:45:12 IST); the build under test is the final gate build, stelmar-voice-workbench.exe sha256 1bbf39e5884849ffab144de3026e25ee5519c37266e6dd55c0d4a6c369a698d0 (built 2026-11-09 16:17, unchanged since). Only what the saved data holds is re-evaluated; the live app log, GPU check, cable polling and overlay checks of the original run are not repeated and its own evidence stands for them.
+machine: Legion
+emulation profile: emu-low
+overlay tools closed: checked by the original run before it started (the gate refuses to start otherwise); not saved, not re-checked
+Track B paused: not re-evaluated (the original run's gate code takes D:\Projects\stelmar-gate.lock; whether it was held is not in the saved data)
+free RAM: 18.2 GB at start (needs 14 GB), 18.1 GB at end
+app build: target\gate\stelmar-voice-workbench.exe (cargo profile gate, features gate-hooks + custom-protocol)
+verdict: INVALID (no verdict; the run must be repeated)
+
+checks:
+  [x] reference capture ran cleanly (its own ring overruns 0)
+  [x] fidelity: the app's recording equals the reference capture sample for sample, one fixed offset per run (differing frames 0, reference audio without an app recording 0 frames)
+  [x] recorded duration within 1 s of the source
+  [x] zero ring-buffer overruns
+  [x] driver xruns: none, or one within 2 s of the stream start with zero loss around it (xruns 0, excused 0)
+  [x] zero samples dropped by the writer
+  [x] capture thread at MMCSS priority (mmcss)
+  [x] no recorder restarts
+  [x] every part decodes in Media Foundation
+  [x] mirror SHA-256 equals the originals
+  [x] player had no underruns (source played cleanly)
+  [x] app process CPU under 5% of the job's processors
+
+recording rule (9 Nov 2026): fidelity decides PASS or FAIL; upstream breaks are reported; a run with limits exceeded is INVALID (docs/PLAN.md section 12)
+fidelity: app compared with the reference capture over 34,57,85,760 frames (7,203.9 s) in 1 run(s) of the app; differing frames 0; reference audio the app has no recording of 0 frame(s); audio only the app has 0 frame(s); restart gaps 0 frame(s)
+  run 1: app frames 0 to 345888480, one fixed offset 61440 frames (found by a stretch of the reference); compared 345785760, differing 0, largest difference 0
+upstream breaks (between the source and the reference capture; reported, not gated): 1 in 120.1 minutes of audio, 0.1 per 10 minutes
+  at source 84.907 s, 17:46:01.351 IST: repeat 11.6 ms, skipped 0.0 ms, unmatched 93.3 ms; no reference xrun logged; late player callbacks within 500 ms: 0
+player callbacks: no late-callback data in play.json
+validity: INVALID (no verdict; the run must be repeated)
+  - the player recorded no late-callback data (a player before 9 Nov 2026 20:34), so an upstream break cannot be attributed
+
+measurements:
+  source: 120.0 min of known noise, 48 kHz stereo, played by wb-testbench into 'CABLE Input' from outside the job
+  recorded content: 7,200.012 s against source 7,200.000 s (difference 11.6 ms); discontinuities 1; silent gaps 0.0 ms; unmatched 93.3 ms; lowest block correlation 1.0000
+  parts: 13; audio 7,206.0 s; overrun samples 0; driver xruns 0; samples dropped by the writer 0; recorder restarts 0
+  priorities: recorder thread mmcss, capture thread mmcss; ring buffer 20 s, highest fill 0.30%
+  recorder thread CPU: 56.81 s over 7,210 s = 0.788% of one core
+  app process CPU (main process; WebView2 processes not counted): 310.6 s = 1.08% of the job's 4 logical processors (4.31% of one core)
+  mirror: 17 files compared, all equal: True (mirror on the same machine, separate drive pending: C: instead of an external SSD)
+  player: 345600000 frames of 345600000, underrun callbacks 0, render thread priority mmcss, output buffer fixed 4800 frames (100 ms)
+  rig placement: not pinned (native profile) or not recorded for this run
+  player late callbacks: not recorded for this run (an earlier player)
+  cable interference polling: not re-evaluated (measured live, not saved); the analysis above is the evidence
+  default playback device: not recorded for this run
+  signal starts at source frame 0 (0.0 ms of the source's start never reached the captures: playback start-up); leading audio before the signal: 0 ms
+  unmatched stretch: source 84.91 s (about 17:46:01 IST), 93 ms; also in the reference capture: True
+  reference xruns: 1 (no per-xrun list: an earlier reference capture)
+  reference capture (separate cpal + hound recorder outside the job; shares the audio engine, cable driver and cpal with the app): 1 breaks, unmatched 93.3333333333333 ms, its overruns 0, xruns 1
+  breaks in the app recording: recorder's own 0; shared with the reference (upstream; see the upstream breaks section) 1; start-up repeats within the old allowance 0 
+  capture position breaks counted in the app's callback (device time not following on): 3
+  GPU check: not re-evaluated (measured live, not saved); emulator-check.txt covers it
+
+progress:
+  re-evaluated from the saved run D:\STELMAR-Gate\soak-emu-low-20261109-174432
+
+emulation log:
+  profile=emu-low
+  cores: class 0: 16 cores / 16 threads; class 1: 8 cores / 16 threads
+  affinity_mask=0xf0000 logical_processors=4 chosen=[16, 17, 18, 19] efficiency_classes=[0, 0, 0, 0]
+  job_memory_limit_bytes=11811160064
+  vulkan[0] Intel(R) RaptorLake-S Mobile Graphics Controller vendor=0x8086 integrated=true luid=f0cb2b1800000000 driver=Intel Corporation 101.7092
+  vulkan[1] NVIDIA GeForce RTX 4070 Laptop GPU vendor=0x10de integrated=false luid=87908c1900000000 driver=NVIDIA 621.14
+  vulkan[2] Intel(R) RaptorLake-S Mobile Graphics Controller vendor=0x8086 integrated=true luid=e2af020000000000 driver=Intel Corporation 101.7092
+  note: 2 Intel integrated Vulkan devices listed (different LUIDs or unknown: check the drivers); exposing only index 0
+  env WB_EMULATE=emu-low
+  env WB_EMULATE_REPORTED_RAM_BYTES=17179869184
+  env WB_EMULATE_JOB_MEMORY_BYTES=11811160064
+  env WB_EMULATE_LOGICAL_PROCESSORS=4
+  env CUDA_VISIBLE_DEVICES=-1
+  env GGML_VK_VISIBLE_DEVICES=0
+  command: powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:\Projects\stelmar_voice_workbench\scripts\gates\recorder-gate-inner.ps1 -Exe D:\Projects\stelmar_voice_workbench\target\gate\stelmar-voice-workbench.exe -ResultFile D:\STELMAR-Gate\soak-emu-low-20261109-174432\inner.json
+
+discontinuities:
+  {"at_ms":87409.72916666667,"source_ms":85000.0,"part":1,"source_jump_frames":-556,"source_jump_ms":-11.583333333333334}
+
+decode (Media Foundation source reader, the decoder Windows players use):
+  audio/part-0001.wav: header 600000 ms, decoded 600000 ms, playable True
+  audio/part-0002.wav: header 600000 ms, decoded 600000 ms, playable True
+  audio/part-0003.wav: header 600000 ms, decoded 600000 ms, playable True
+  audio/part-0004.wav: header 600000 ms, decoded 600000 ms, playable True
+  audio/part-0005.wav: header 600000 ms, decoded 600000 ms, playable True
+  audio/part-0006.wav: header 600000 ms, decoded 600000 ms, playable True
+  audio/part-0007.wav: header 600000 ms, decoded 600000 ms, playable True
+  audio/part-0008.wav: header 600000 ms, decoded 600000 ms, playable True
+  audio/part-0009.wav: header 600000 ms, decoded 600000 ms, playable True
+  audio/part-0010.wav: header 600000 ms, decoded 600000 ms, playable True
+  audio/part-0011.wav: header 600000 ms, decoded 600000 ms, playable True
+  audio/part-0012.wav: header 600000 ms, decoded 600000 ms, playable True
+  audio/part-0013.wav: header 6010 ms, decoded 6010 ms, playable True
+
+app log for this run (warnings, errors, session lines):
+
+audio and reports: D:\STELMAR-Gate\soak-emu-low-20261109-174432 (not in the repository)

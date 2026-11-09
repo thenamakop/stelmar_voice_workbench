@@ -1,0 +1,19 @@
+﻿re-scored: kill-emu-low-162504 under the recording-gate rule of 9 Nov 2026 (docs/PLAN.md section 12)
+run folder: D:/STELMAR-Gate/kill-emu-low-20261109-162504
+build: stelmar-voice-workbench.exe sha256 1bbf39e5884849ffab144de3026e25ee5519c37266e6dd55c0d4a6c369a698d0 (final gate build); wb-testbench.exe sha256 da71e91c47760b8bd629e016a201efa7e56f51340f29d57955c9f408f7842e18
+note: only the rule's part is re-scored (fidelity, upstream breaks, validity). The other checks of this gate (loss at each kill, parts playable before repair, Resume offered, parts.json, mirror, xruns) need data the original run did not save; its own evidence stands for them. 
+verdict under the rule: INVALID (no verdict; the run must be repeated)
+
+recording rule (9 Nov 2026): fidelity decides PASS or FAIL; upstream breaks are reported; a run with limits exceeded is INVALID (docs/PLAN.md section 12)
+fidelity: app compared with the reference capture over 2,49,90,976 frames (520.6 s) in 6 run(s) of the app; differing frames 0; reference audio the app has no recording of 0 frame(s); audio only the app has 0 frame(s); restart gaps 1012064 frame(s)
+  reference audio after the app's last frame: 46560 frame(s), not judged (this gate stops the app before the player, by design)
+  run 1: app frames 0 to 5751168, one fixed offset -289440 frames (found by a stretch of the app); compared 5751168, differing 0, largest difference 0
+  run 2: app frames 5751168 to 10105792, one fixed offset -508512 frames (found by a stretch of the app); compared 4354624, differing 0, largest difference 0
+  run 3: app frames 10105792 to 15854560, one fixed offset -720128 frames (found by a stretch of the app); compared 5748768, differing 0, largest difference 0
+  run 4: app frames 15854560 to 19623072, one fixed offset -875840 frames (found by a stretch of the app); compared 3768512, differing 0, largest difference 0
+  run 5: app frames 19623072 to 23493376, one fixed offset -1082688 frames (found by a stretch of the app); compared 3870304, differing 0, largest difference 0
+  run 6: app frames 23493376 to 24990976, one fixed offset -1301504 frames (found by a stretch of the app); compared 1497600, differing 0, largest difference 0
+upstream breaks (between the source and the reference capture; reported, not gated): 0 in 9.1 minutes of audio, 0.0 per 10 minutes
+player callbacks: no late-callback data in play.json
+validity: INVALID (no verdict; the run must be repeated)
+  - the player recorded no late-callback data (a player before 9 Nov 2026 20:34), so an upstream break cannot be attributed
