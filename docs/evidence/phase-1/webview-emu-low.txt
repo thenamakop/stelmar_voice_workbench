@@ -1,25 +1,25 @@
-﻿source: commit a4bfa8f with uncommitted or untracked changes (the build hashes below identify the code)
+﻿source: commit 77a06da with uncommitted or untracked changes (the build hashes below identify the code)
 build: stelmar-voice-workbench.exe sha256 1bbf39e5884849ffab144de3026e25ee5519c37266e6dd55c0d4a6c369a698d0 (built 2026-11-09 16:17)
 build: wb-testbench.exe sha256 69d891e783541d071b2ebd86e8a7427720b1af9efe9dcc6a10b1b31fe33839fd (built 2026-11-09 16:17)
 build: wb-emulate.exe sha256 f61b04a3286fa48385964912740b5253f2edfd2b92161fd914230f15cf980316 (built 2026-11-08 18:07)
 gate: phase1-webview-emu-low
-started: 2026-11-09 16:21:36 +05:30
+started: 2026-11-09 16:47:20 +05:30
 machine: Legion
 emulation profile: emu-low
 overlay tools closed: yes (RTSS.exe and MSIAfterburner.exe not running when the gate started)
 overlay tools at the end: none running
 Track B paused: D:\Projects\stelmar-gate.lock held for the whole run (removed in a finally block)
 Track B busy lock: D:\Projects\stelmar-eval-busy.lock absent at start
-free RAM: 18.3 GB at start (needs 14 GB), 18 GB at end
+free RAM: 18 GB at start (needs 14 GB), 18 GB at end
 app build: target\gate\stelmar-voice-workbench.exe (cargo profile gate, features gate-hooks + custom-protocol)
-verdict: FAIL
+verdict: PASS (PROVISIONAL: emulated)
 
 checks:
   [x] reference capture ran cleanly (its own ring overruns 0)
   [x] no dropped or silent audio caused by the recorder (0 breaks not in the reference; silent gaps 0.0 ms)
-  [ ] no capture-chain breaks beyond one start-up repeat (1; excused start-up repeats 0)
+  [x] no capture-chain breaks beyond one start-up repeat (0; excused start-up repeats 0)
   [x] recorded duration within 1 s of the source
-  [ ] recording equals the source except next to an excused start-up repeat (unexplained 21.333 ms of 21.333333333333332 ms)
+  [x] recording equals the source except next to an excused start-up repeat (unexplained 0 ms of 0.0 ms)
   [x] channel 1 matches the source too
   [x] no other program played into the cable
   [x] zero ring-buffer overruns
@@ -35,29 +35,28 @@ checks:
 
 measurements:
   source: 3.0 min of known noise, 48 kHz stereo, played by wb-testbench into 'CABLE Input' from outside the job
-  recorded content: 180.010 s against source 180.000 s (difference 10.4 ms); discontinuities 1; silent gaps 0.0 ms; unmatched 21.3 ms; lowest block correlation 1.0000
-  parts: 1; audio 184.8 s; overrun samples 0; driver xruns 0; samples dropped by the writer 0; recorder restarts 0
+  recorded content: 179.922 s against source 180.000 s (difference -78.3 ms); discontinuities 0; silent gaps 0.0 ms; unmatched 0.0 ms; lowest block correlation 1.0000
+  parts: 1; audio 185.7 s; overrun samples 0; driver xruns 0; samples dropped by the writer 0; recorder restarts 0
   priorities: recorder thread mmcss, capture thread mmcss; ring buffer 20 s, highest fill 0.10%
-  recorder thread CPU: 1.20 s over 186 s = 0.648% of one core
-  app process CPU (main process; WebView2 processes not counted): 5.3 s = 0.71% of the job's 4 logical processors (2.83% of one core)
+  recorder thread CPU: 1.17 s over 187 s = 0.627% of one core
+  app process CPU (main process; WebView2 processes not counted): 7.3 s = 0.97% of the job's 4 logical processors (3.90% of one core)
   mirror: 5 files compared, all equal: True (mirror on the same machine, separate drive pending: C: instead of an external SSD)
   player: 8640000 frames of 8640000, underrun callbacks 0, render thread priority mmcss, output buffer fixed 4800 frames (100 ms)
   cable interference: none seen by the 1-second session poll (sounds shorter than a second can be missed; the analysis above is the check)
   default playback device: not the cable (checked at start)
-  signal starts at source frame 0 (0.0 ms of the source's start never reached the captures: playback start-up); leading audio before the signal: 0 ms
-  unmatched stretch: source 51.98 s (about 16:22:33 IST), 21 ms; also in the reference capture: True
-  reference capture (separate cpal + hound recorder outside the job; shares the audio engine, cable driver and cpal with the app): 1 breaks, unmatched 21.3333333333333 ms, its overruns 0, xruns 1
-  breaks in the app recording: recorder's own 0; capture-chain (also in the reference, FAIL, investigate) 1; EXCUSED start-up repeats 0 
+  signal starts at source frame 3756 (78.3 ms of the source's start never reached the captures: playback start-up); leading audio before the signal: 2,467 ms
+  reference capture (separate cpal + hound recorder outside the job; shares the audio engine, cable driver and cpal with the app): 0 breaks, unmatched 0 ms, its overruns 0, xruns 1
+  breaks in the app recording: recorder's own 0; capture-chain (also in the reference, FAIL, investigate) 0; EXCUSED start-up repeats 0 
   capture position breaks counted in the app's callback (device time not following on): 0
-  GPU check: 11 job processes, 0 processes in nvidia-smi, overlap 0
-  webview: killed WebView2 browser process 45336 at 16:22:23.761; display restarts reported: 1
+  GPU check: 10 job processes, 0 processes in nvidia-smi, overlap 0
+  webview: killed WebView2 browser process 40684 at 16:48:07.216; display restarts reported: 1
 
 progress:
-  16:21:40 recording in D:\STELMAR-Gate\webview-emu-low-20261109-162136\rec\2026-11-09\gate-webview-20261109-162136
-  16:21:58 job processes: 11; nvidia-smi processes: 0; job processes on the NVIDIA GPU: 0
-  16:22:23 killed WebView2 browser process 45336 at 16:22:23.761
-  16:23:24 audio 1.7 min, part 1, overrun samples 0, xruns 0, ring max 0.10%, recorder cpu 703 ms, in_sync lag 1010 ms
-  16:24:25 audio 2.8 min, part 1, overrun samples 0, xruns 0, ring max 0.10%, recorder cpu 1093 ms, in_sync lag 1010 ms
+  16:47:23 recording in D:\STELMAR-Gate\webview-emu-low-20261109-164720\rec\2026-11-09\gate-webview-20261109-164720
+  16:47:42 job processes: 10; nvidia-smi processes: 0; job processes on the NVIDIA GPU: 0
+  16:48:07 killed WebView2 browser process 40684 at 16:48:07.216
+  16:49:08 audio 1.7 min, part 1, overrun samples 0, xruns 0, ring max 0.10%, recorder cpu 703 ms, in_sync lag 1095 ms
+  16:50:08 audio 2.8 min, part 1, overrun samples 0, xruns 0, ring max 0.10%, recorder cpu 1046 ms, in_sync lag 1010 ms
 
 emulation log:
   profile=emu-low
@@ -74,25 +73,24 @@ emulation log:
   env WB_EMULATE_LOGICAL_PROCESSORS=4
   env CUDA_VISIBLE_DEVICES=-1
   env GGML_VK_VISIBLE_DEVICES=0
-  command: powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:\Projects\stelmar_voice_workbench\scripts\gates\recorder-gate-inner.ps1 -Exe D:\Projects\stelmar_voice_workbench\target\gate\stelmar-voice-workbench.exe -ResultFile D:\STELMAR-Gate\webview-emu-low-20261109-162136\inner.json
+  command: powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:\Projects\stelmar_voice_workbench\scripts\gates\recorder-gate-inner.ps1 -Exe D:\Projects\stelmar_voice_workbench\target\gate\stelmar-voice-workbench.exe -ResultFile D:\STELMAR-Gate\webview-emu-low-20261109-164720\inner.json
 
 discontinuities:
-  {"at_ms":54278.979166666664,"source_ms":52000.0,"part":1,"source_jump_frames":-501,"source_jump_ms":-10.4375}
 
 decode (Media Foundation source reader, the decoder Windows players use):
-  audio/part-0001.wav: header 184760 ms, decoded 184760 ms, playable True
+  audio/part-0001.wav: header 185730 ms, decoded 185730 ms, playable True
 
 app log for this run (warnings, errors, session lines):
-  2026-11-09T10:51:38.961590Z  INFO main app started version="0.1.0" pid=50800 gate_hooks=true
-  2026-11-09T10:51:38.963543Z  WARN main gate hooks active (development build, gate-hooks feature)
-  2026-11-09T10:51:38.963666Z  INFO main display guard installed window="main"
-  2026-11-09T10:51:39.350018Z  INFO wb-gate session recording dir="D:\\STELMAR-Gate\\webview-emu-low-20261109-162136\\rec\\2026-11-09\\gate-webview-20261109-162136" device="CABLE Output (VB-Audio Virtual Cable)" rate=48000 channels=2 resumed=false
-  2026-11-09T10:51:39.350046Z  WARN wb-gate gate: session started dir="D:\\STELMAR-Gate\\webview-emu-low-20261109-162136\\rec\\2026-11-09\\gate-webview-20261109-162136"
-  2026-11-09T10:52:23.797845Z ERROR    main WebView2 process failed window="main" kind=Browser recording=true
-  2026-11-09T10:52:24.448143Z  INFO    main display guard installed window="main-2"
-  2026-11-09T10:52:24.448181Z  WARN    main display recovered in a new window new="main-2" old="main"
-  2026-11-09T10:54:44.158227Z  INFO wb-events part closed part=1 start_ms=0 duration_ms=184760
-  2026-11-09T10:54:44.272288Z  INFO   wb-gate session stopped dir=D:\STELMAR-Gate\webview-emu-low-20261109-162136\rec\2026-11-09\gate-webview-20261109-162136 parts=1 audio_ms=184760 overrun_samples=0 xruns=0 mirror_all_match=true
-  2026-11-09T10:54:44.274020Z  WARN   wb-gate gate: stop file seen; session stopped; exiting
+  2026-11-09T11:17:22.291977Z  INFO main app started version="0.1.0" pid=24176 gate_hooks=true
+  2026-11-09T11:17:22.294036Z  WARN main gate hooks active (development build, gate-hooks feature)
+  2026-11-09T11:17:22.294131Z  INFO main display guard installed window="main"
+  2026-11-09T11:17:22.711631Z  INFO wb-gate session recording dir="D:\\STELMAR-Gate\\webview-emu-low-20261109-164720\\rec\\2026-11-09\\gate-webview-20261109-164720" device="CABLE Output (VB-Audio Virtual Cable)" rate=48000 channels=2 resumed=false
+  2026-11-09T11:17:22.711659Z  WARN wb-gate gate: session started dir="D:\\STELMAR-Gate\\webview-emu-low-20261109-164720\\rec\\2026-11-09\\gate-webview-20261109-164720"
+  2026-11-09T11:18:07.252601Z ERROR    main WebView2 process failed window="main" kind=Browser recording=true
+  2026-11-09T11:18:07.892476Z  INFO    main display guard installed window="main-2"
+  2026-11-09T11:18:07.892510Z  WARN    main display recovered in a new window new="main-2" old="main"
+  2026-11-09T11:20:28.492548Z  INFO wb-events part closed part=1 start_ms=0 duration_ms=185730
+  2026-11-09T11:20:28.609253Z  INFO   wb-gate session stopped dir=D:\STELMAR-Gate\webview-emu-low-20261109-164720\rec\2026-11-09\gate-webview-20261109-164720 parts=1 audio_ms=185730 overrun_samples=0 xruns=0 mirror_all_match=true
+  2026-11-09T11:20:28.611291Z  WARN   wb-gate gate: stop file seen; session stopped; exiting
 
-audio and reports: D:\STELMAR-Gate\webview-emu-low-20261109-162136 (not in the repository)
+audio and reports: D:\STELMAR-Gate\webview-emu-low-20261109-164720 (not in the repository)
