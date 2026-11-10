@@ -291,7 +291,7 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
     try { [void]$fs.Seek($logStart, 'Begin'); $sr = New-Object System.IO.StreamReader($fs); $appLog = $sr.ReadToEnd() -split "`r?`n" } finally { $fs.Dispose() }
   }
   [pscustomobject]@{
-    Run = $run; SessionDir = $sessionDir; Source = $source; Report = $report; Inner = $innerRes; Play = $playRes
+    Run = $run; SessionDir = $sessionDir; Source = $source; Report = $report; Inner = $innerRes; Play = $playRes; EmuExit = $emu.ExitCode
     Compare = (Read-Json (Join-Path $run 'compare.json')); CompareError = $(if ($cmp.ExitCode -ne 0) { (@($cmp.Error) + @($cmp.Output)) -join ' ' } else { $null })
     Stress = $stressRes; Analysis = $analysis; Decode = $decode; Progress = $progress; AppLog = $appLog
     NvOverlap = $nvOverlap; JobPids = $jobPids; NvPids = $nvPids; WebviewKill = $webviewKill; Interference = @(ConvertTo-WbArray $interference)
@@ -392,6 +392,7 @@ $lines += ("  parts: {0}; audio {1:n1} s; overrun samples {2}; driver xruns {3};
 $lines += ("  priorities: recorder thread {0}, capture thread {1}; ring buffer {2} s, highest fill {3:n2}%" -f $r.LastStatus.recorder.priority, $r.LastStatus.recorder.capture_priority, $r.LastStatus.recorder.ring_seconds, $r.LastStatus.recorder.ring_max_fill_pct)
 $lines += ("  recorder thread CPU: {0:n2} s over {1:n0} s = {2:n3}% of one core" -f ($rec.recorder_cpu_ms / 1000.0), $wall, $recCpuPctCore)
 $lines += ("  app process CPU (main process; WebView2 processes not counted): {0:n1} s = {1:n2}% of the job's {2} logical processors ({3:n2}% of one core)" -f $r.Inner.app_cpu_seconds, $appCpuPctMachine, $logical, $appCpuPctCore)
+$lines += ("  exit codes (information, not gated): the app {0} (read inside the job), wb-emulate {1} (the app's code, since the 10 Nov fix)" -f $r.Inner.app_exit_code, $r.EmuExit)
 $lines += ("  mirror: {0} files compared, all equal: {1} (mirror on the same machine, separate drive pending: C: instead of an external SSD)" -f @($stopped.mirror.files).Count, $stopped.mirror.all_match)
 $lines += ("  player: {0} frames of {1}, underrun callbacks {2}, render thread priority {3}, output buffer {4}" -f $r.Play.frames_played, $r.Play.frames_in_file, $r.Play.underrun_callbacks, $r.Play.render_priority, $r.Play.buffer)
 $lines += Get-WbRigLines -Rig $r.Rig -Play $r.Play -Reference $r.Reference
