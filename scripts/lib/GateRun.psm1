@@ -354,16 +354,23 @@ function ConvertTo-WbArray {
 }
 
 # The driver-xrun rule (approved 9 Nov 2026). Each stream start while audio is already flowing counts one xrun
-# in cpal (which packet Windows flags is not proven; the callback count at the xrun is not recorded): every app start in
-# the kill test counts exactly one, in its first second, with nothing lost around it. So:
+# in cpal (which packet Windows flags is not proven): every app start in the kill test counts exactly one, in its
+# first second, with nothing lost around it. So:
 #   Allowed: ONE driver xrun per run (per stream start or restart), no later than $WindowMs after
 #            that run's first audio, and only when the sample comparison shows zero loss and
 #            duplication ($LossFree: no break of the recording other than the restarts, no silent
 #            gap, no unmatched audio). It is reported, not gated.
 #   FAIL:    more than one xrun in a run, any xrun after the window, any xrun together with loss
 #            or duplication, and any ring overrun or dropped sample at all.
-# The offsets come from the session's own `gap` events, which carry the audio time at which the
-# counters were seen to move (never earlier than the xrun, so the offset is an upper bound).
+# Two kinds of `gap` event carry the xruns, and the recorder writes both:
+#   cause=xrun n=.. callback=.. frames=.. audio_ms=.. qpc=.. qpc_hz=..   (since 10 Nov 2026) one per xrun, written when
+#            the error callback fires: the callback count, the audio position and the QPC tick are exact.
+#   overrun_samples+N xruns+N dropped_samples+N (totals ..)              the counters, seen to move about a second
+#            later (the audio time is an upper bound). The same xruns again, so a run that has `cause=xrun` events
+#            counts those and uses the counter events only for the overrun and dropped-sample checks, plus any
+#            xruns they count beyond the `cause=xrun` events (the recorder caps how many it writes to session.json).
+#            A session from before 10 Nov has only the counter events and is read as it always was.
+# `cause=position_break` events (the audio clock jumped) are listed in PositionBreaks and are not part of the xrun rule.
 function Get-WbXrunVerdict {
   param(
     [Parameter(Mandatory = $true)] [string]$SessionDir,
@@ -371,30 +378,62 @@ function Get-WbXrunVerdict {
     [int]$WindowMs = 2000
   )
   $meta = (Get-Content -LiteralPath (Join-Path $SessionDir 'session.json') -Raw) | ConvertFrom-Json
-  $runStart = $null
-  $runXruns = 0
-  $total = 0
-  $excused = @()
   $problems = @()
+  $positionBreaks = @()
+  $runs = New-Object System.Collections.Generic.List[object]
+  $cur = $null
   foreach ($e in @($meta.events)) {
-    if ($e.kind -eq 'audio_started') { $runStart = [double]$e.audio_ms; $runXruns = 0; continue }
-    if ($e.kind -ne 'gap') { continue }
-    if (-not ((Test-WbHasProperty $e 'detail') -and ($e.detail -match 'overrun_samples\+(\d+) xruns\+(\d+) dropped_samples\+(\d+)'))) {
-      $problems += "a gap event at audio $($e.audio_ms) ms could not be read"
+    if ($e.kind -eq 'audio_started') {
+      $cur = [pscustomobject]@{ Start = [double]$e.audio_ms; Cause = (New-Object System.Collections.Generic.List[object]); Counter = (New-Object System.Collections.Generic.List[object]) }
+      $runs.Add($cur)
       continue
     }
-    $overrun = [int64]$Matches[1]; $xr = [int64]$Matches[2]; $dropped = [int64]$Matches[3]
-    if ($overrun -gt 0 -or $dropped -gt 0) { $problems += "$overrun overrun and $dropped dropped samples at audio $($e.audio_ms) ms" }
-    if ($xr -le 0) { continue }
-    $total += $xr
-    $runXruns += $xr
-    $offset = $(if ($null -ne $runStart) { [double]$e.audio_ms - $runStart } else { [double]::PositiveInfinity })
-    if ($runXruns -gt 1) { $problems += "more than one driver xrun in one run (audio $($e.audio_ms) ms)" }
-    elseif ($offset -gt $WindowMs) { $problems += "a driver xrun $([math]::Round($offset)) ms after the stream started (limit $WindowMs ms), audio $($e.audio_ms) ms" }
-    elseif (-not $LossFree) { $problems += "a driver xrun with loss or duplication in the recording, audio $($e.audio_ms) ms" }
-    else { $excused += [pscustomobject]@{ AudioMs = [double]$e.audio_ms; OffsetMs = $offset } }
+    if ($e.kind -ne 'gap') { continue }
+    if ($null -eq $cur) {
+      # A gap before any audio_started: measured from nothing, so it can never be inside a window.
+      $cur = [pscustomobject]@{ Start = $null; Cause = (New-Object System.Collections.Generic.List[object]); Counter = (New-Object System.Collections.Generic.List[object]) }
+      $runs.Add($cur)
+    }
+    $detail = $(if (Test-WbHasProperty $e 'detail') { [string]$e.detail } else { '' })
+    if ($detail -match 'overrun_samples\+(\d+) xruns\+(\d+) dropped_samples\+(\d+)') {
+      $overrun = [int64]$Matches[1]; $xr = [int64]$Matches[2]; $dropped = [int64]$Matches[3]
+      if ($overrun -gt 0 -or $dropped -gt 0) { $problems += "$overrun overrun and $dropped dropped samples at audio $($e.audio_ms) ms" }
+      if ($xr -gt 0) { $cur.Counter.Add([pscustomobject]@{ AudioMs = [double]$e.audio_ms; Xruns = $xr }) }
+    }
+    elseif ($detail -match '^cause=xrun n=(\d+) callback=(\d+) frames=(\d+) audio_ms=(\d+) qpc=(\d+) qpc_hz=(\d+)') {
+      $cur.Cause.Add([pscustomobject]@{ N = [int64]$Matches[1]; Callback = [int64]$Matches[2]; Frames = [int64]$Matches[3]; AudioMs = [double]$Matches[4]; Qpc = [int64]$Matches[5]; QpcHz = [int64]$Matches[6] })
+    }
+    elseif ($detail -match '^cause=position_break callback=(\d+) frames=(\d+) audio_ms=(\d+)') {
+      $positionBreaks += [pscustomobject]@{ AudioMs = [double]$Matches[3]; Callback = [int64]$Matches[1]; Frames = [int64]$Matches[2] }
+    }
+    else {
+      $problems += "a gap event at audio $($e.audio_ms) ms could not be read"
+    }
   }
-  [pscustomobject]@{ Pass = ($problems.Count -eq 0); TotalXruns = $total; Excused = @($excused); Problems = @($problems) }
+  $total = 0
+  $excused = @()
+  foreach ($run in $runs) {
+    # Every xrun of this run as (audio time, how exact, callback, qpc).
+    $items = @()
+    foreach ($c in $run.Cause) { $items += [pscustomobject]@{ AudioMs = $c.AudioMs; Exact = $true; Callback = $c.Callback; Qpc = $c.Qpc } }
+    $counted = [int64]0
+    foreach ($c in $run.Counter) { $counted += $c.Xruns }
+    $extra = $counted - $run.Cause.Count
+    if ($extra -gt 0) {
+      # xruns the counters saw that no `cause=xrun` event describes (an older session, or the event cap): place them at the counter's time.
+      foreach ($c in $run.Counter) { for ($i = 0; $i -lt $c.Xruns -and $extra -gt 0; $i++) { $items += [pscustomobject]@{ AudioMs = $c.AudioMs; Exact = $false; Callback = $null; Qpc = $null }; $extra-- } }
+    }
+    $n = 0
+    foreach ($it in $items) {
+      $n++; $total++
+      $offset = $(if ($null -ne $run.Start) { $it.AudioMs - $run.Start } else { [double]::PositiveInfinity })
+      if ($n -gt 1) { $problems += "more than one driver xrun in one run (audio $($it.AudioMs) ms)" }
+      elseif ($offset -gt $WindowMs) { $problems += "a driver xrun $([math]::Round($offset)) ms after the stream started (limit $WindowMs ms), audio $($it.AudioMs) ms" }
+      elseif (-not $LossFree) { $problems += "a driver xrun with loss or duplication in the recording, audio $($it.AudioMs) ms" }
+      else { $excused += [pscustomobject]@{ AudioMs = $it.AudioMs; OffsetMs = $offset; Exact = $it.Exact; Callback = $it.Callback; Qpc = $it.Qpc } }
+    }
+  }
+  [pscustomobject]@{ Pass = ($problems.Count -eq 0); TotalXruns = $total; Excused = @($excused); Problems = @($problems); PositionBreaks = @($positionBreaks) }
 }
 
 # True when $Obj has a member called $Name (safe under strict mode, also for an object with no

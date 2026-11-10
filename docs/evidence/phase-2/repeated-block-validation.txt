@@ -1,6 +1,6 @@
 ﻿Repeated-block and zero-gap detectors against the recorded gate sessions (Phase 2)
 machine: Legion. Reads saved recordings only: nothing was recorded or timed, so no lock, overlay check or Track B pause applies.
-source: commit 0fc22fd with uncommitted or untracked changes (the build hash below identifies the code)
+source: commit 2cc7850 with uncommitted or untracked changes (the build hash below identifies the code)
 build: wb-testbench.exe sha256 11e1a6c9bd3af2d7fce03813c835e7ad7e64a02f669558c3eaad1950dc5215b9
 recordings: D:\STELMAR-Gate (the runs of the Phase 1 gates, not in the repository)
 
@@ -16,12 +16,12 @@ detectors (the code the recorder thread runs; crates/wb-recorder/src/repeat.rs a
 
 SECTION 1: the runs of the final Phase 1 sequence (10 Nov 2026, 02:48 to 05:37), in full
 
-run kill-emu-low-20261110-025549: 8.9 minutes of audio in 21 part(s), 6 run(s) of the app; scanned in 0.5 s
+run kill-emu-low-20261110-025549: 8.9 minutes of audio in 21 part(s), 6 run(s) of the app; scanned in 0.6 s
   detections: repeated_block 0; zero_gap 1
     zero_gap at app audio 383,954.6 ms (part 14): 551 frames of zeros = 11.5 ms
 live detector check (not gated in Phase 2; any miss or false alarm stops the run sequence for a decision before the speed tables):
   rule: a shared upstream break is matched when a repeated_block or zero_gap event of the app's session.json lies within +-50 ms of the break's span in the app's audio time (the span runs from the break's source position, mapped through the app analysis, to the end of its unmatched stretch); an event with no shared break is a false alarm
-  shared upstream breaks found by the harness: 1; matched 1; missed 0; before the app began recording 0; events with no shared break (false alarms) 0
+  shared upstream breaks found by the harness: 1; matched 1; missed 0; before the app began recording 0; events with no shared break (false alarms) 0; lead-in events (before the first source sample that reached the recording) 0
     break at source 398.627 s, app audio 383,953.9 to 384,027.3 ms: MATCHED by zero_gap at 383,954.6 ms (len_frames=551 len_ms=11.5)
   app counters after the PositionCheck fix: not available (the report is from a build before Phase 2)
 
@@ -30,7 +30,7 @@ run load-emu-low-20261110-030551: 30.1 minutes of audio in 4 part(s), 1 run(s) o
     zero_gap at app audio 287,916.9 ms (part 1): 537 frames of zeros = 11.2 ms
 live detector check (not gated in Phase 2; any miss or false alarm stops the run sequence for a decision before the speed tables):
   rule: a shared upstream break is matched when a repeated_block or zero_gap event of the app's session.json lies within +-50 ms of the break's span in the app's audio time (the span runs from the break's source position, mapped through the app analysis, to the end of its unmatched stretch); an event with no shared break is a false alarm
-  shared upstream breaks found by the harness: 1; matched 1; missed 0; before the app began recording 0; events with no shared break (false alarms) 0
+  shared upstream breaks found by the harness: 1; matched 1; missed 0; before the app began recording 0; events with no shared break (false alarms) 0; lead-in events (before the first source sample that reached the recording) 0
     break at source 285.217 s, app audio 287,916.6 to 287,977.9 ms: MATCHED by zero_gap at 287,916.9 ms (len_frames=537 len_ms=11.2)
   app counters after the PositionCheck fix: not available (the report is from a build before Phase 2)
 
@@ -39,16 +39,16 @@ run panic-emu-low-20261110-024854: 3.1 minutes of audio in 2 part(s), 1 run(s) o
     zero_gap at app audio 2,346.6 ms (part 1): 490 frames of zeros = 10.2 ms
 live detector check (not gated in Phase 2; any miss or false alarm stops the run sequence for a decision before the speed tables):
   rule: a shared upstream break is matched when a repeated_block or zero_gap event of the app's session.json lies within +-50 ms of the break's span in the app's audio time (the span runs from the break's source position, mapped through the app analysis, to the end of its unmatched stretch); an event with no shared break is a false alarm
-  shared upstream breaks found by the harness: 1; matched 1; missed 0; before the app began recording 0; events with no shared break (false alarms) 0
+  shared upstream breaks found by the harness: 1; matched 1; missed 0; before the app began recording 0; events with no shared break (false alarms) 0; lead-in events (before the first source sample that reached the recording) 0
     break at source 0.019 s, app audio 2,346.7 to 2,428.0 ms: MATCHED by zero_gap at 2,346.6 ms (len_frames=490 len_ms=10.2)
   app counters after the PositionCheck fix: not available (the report is from a build before Phase 2)
 
-run soak-emu-low-20261110-033628: 120.1 minutes of audio in 13 part(s), 1 run(s) of the app; scanned in 6.9 s
+run soak-emu-low-20261110-033628: 120.1 minutes of audio in 13 part(s), 1 run(s) of the app; scanned in 7.7 s
   detections: repeated_block 0; zero_gap 1
     zero_gap at app audio 2,677.7 ms (part 1): 500 frames of zeros = 10.4 ms
 live detector check (not gated in Phase 2; any miss or false alarm stops the run sequence for a decision before the speed tables):
   rule: a shared upstream break is matched when a repeated_block or zero_gap event of the app's session.json lies within +-50 ms of the break's span in the app's audio time (the span runs from the break's source position, mapped through the app analysis, to the end of its unmatched stretch); an event with no shared break is a false alarm
-  shared upstream breaks found by the harness: 1; matched 1; missed 0; before the app began recording 0; events with no shared break (false alarms) 0
+  shared upstream breaks found by the harness: 1; matched 1; missed 0; before the app began recording 0; events with no shared break (false alarms) 0; lead-in events (before the first source sample that reached the recording) 0
     break at source 0.037 s, app audio 2,677.8 to 2,740.4 ms: MATCHED by zero_gap at 2,677.7 ms (len_frames=500 len_ms=10.4)
   app counters after the PositionCheck fix: not available (the report is from a build before Phase 2)
 
@@ -57,59 +57,67 @@ run webview-emu-low-20261110-025222: 3.1 minutes of audio in 1 part(s), 1 run(s)
     zero_gap at app audio 2,476.9 ms (part 1): 530 frames of zeros = 11.0 ms
 live detector check (not gated in Phase 2; any miss or false alarm stops the run sequence for a decision before the speed tables):
   rule: a shared upstream break is matched when a repeated_block or zero_gap event of the app's session.json lies within +-50 ms of the break's span in the app's audio time (the span runs from the break's source position, mapped through the app analysis, to the end of its unmatched stretch); an event with no shared break is a false alarm
-  shared upstream breaks found by the harness: 1; matched 1; missed 0; before the app began recording 0; events with no shared break (false alarms) 0
+  shared upstream breaks found by the harness: 1; matched 1; missed 0; before the app began recording 0; events with no shared break (false alarms) 0; lead-in events (before the first source sample that reached the recording) 0
     break at source 0.028 s, app audio 2,476.7 to 2,548.7 ms: MATCHED by zero_gap at 2,476.9 ms (len_frames=530 len_ms=11)
   app counters after the PositionCheck fix: not available (the report is from a build before Phase 2)
 
 SECTION 2: every gate recording on disk (9 Nov and earlier runs were recorded by the Phase 1 recorder; the detectors read the saved audio)
-  run | audio min | repeated_block | zero_gap | shared breaks | matched | missed | before recording began | false alarms
-  kill-emu-low-20261109-002516 | 10.8 | 0 | 0 | 1 | 0 | 0 | 1 | 0
-  kill-emu-low-20261109-063243 | 8.9 | 0 | 0 | 1 | 0 | 0 | 1 | 0
-  kill-emu-low-20261109-091535 | 9.1 | 0 | 0 | 0 | 0 | 0 | 0 | 0
-  kill-emu-low-20261109-141104 | 7.9 | 0 | 0 | 0 | 0 | 0 | 0 | 0
-  kill-emu-low-20261109-162504 | 8.7 | 0 | 0 | 0 | 0 | 0 | 0 | 0
-  kill-emu-low-20261109-221340 | 2.5 | 0 | 0 | 0 | 0 | 0 | 0 | 0
-  kill-emu-low-20261110-025549 | 8.9 | 0 | 1 | 1 | 1 | 0 | 0 | 0
-  load-emu-low-20261109-003659 | 30.1 | 0 | 2 | 2 | 1 | 1 | 0 | 1
-  load-emu-low-20261109-064220 | 30.1 | 0 | 1 | 1 | 1 | 0 | 0 | 0
-  load-emu-low-20261109-171412 | 30.1 | 0 | 1 | 0 | 0 | 0 | 0 | 1
-  load-emu-low-20261110-030551 | 30.1 | 0 | 1 | 1 | 1 | 0 | 0 | 0
-  panic-emu-low-20261108-142137 | 3.1 | 0 | 0 | n/a | n/a | n/a | n/a | n/a
-  panic-emu-low-20261108-144644 | 3.1 | 0 | 1 | n/a | n/a | n/a | n/a | n/a
-  panic-emu-low-20261108-145133 | 3.1 | 0 | 0 | n/a | n/a | n/a | n/a | n/a
-  panic-emu-low-20261108-180811 | 3.1 | 0 | 0 | n/a | n/a | n/a | n/a | n/a
-  panic-emu-low-20261109-001734 | 3.1 | 0 | 0 | 0 | 0 | 0 | 0 | 0
-  panic-emu-low-20261109-062608 | 3.1 | 0 | 1 | 1 | 1 | 0 | 0 | 0
-  panic-emu-low-20261109-143727 | 3.1 | 0 | 0 | 0 | 0 | 0 | 0 | 0
-  panic-emu-low-20261109-144102 | 3.1 | 0 | 1 | 1 | 1 | 0 | 0 | 0
-  panic-emu-low-20261109-161810 | 3.1 | 0 | 1 | 1 | 1 | 0 | 0 | 0
-  panic-emu-low-20261109-221025 | 3.1 | 0 | 0 | 0 | 0 | 0 | 0 | 0
-  panic-emu-low-20261110-024854 | 3.1 | 0 | 1 | 1 | 1 | 0 | 0 | 0
-  soak-emu-low-20261108-174229 | 21.3 | 0 | 0 | n/a | n/a | n/a | n/a | n/a
-  soak-emu-low-20261109-010716 | 120.1 | 0 | 0 | 2 | 0 | 2 | 0 | 0
-  soak-emu-low-20261109-071240 | 120.1 | 0 | 1 | 1 | 1 | 0 | 0 | 0
-  soak-emu-low-20261109-174432 | 120.1 | 0 | 1 | 1 | 1 | 0 | 0 | 0
-  soak-emu-low-20261110-033628 | 120.1 | 0 | 1 | 1 | 1 | 0 | 0 | 0
-  soak-emu-low-20261110-125636 | 10.1 | 0 | 1 | 1 | 1 | 0 | 0 | 0
-  webview-emu-low-20261108-181122 | 3.1 | 0 | 1 | n/a | n/a | n/a | n/a | n/a
-  webview-emu-low-20261109-002047 | 3.1 | 0 | 1 | 1 | 1 | 0 | 0 | 0
-  webview-emu-low-20261109-062920 | 3.1 | 0 | 1 | 1 | 1 | 0 | 0 | 0
-  webview-emu-low-20261109-162136 | 3.1 | 0 | 1 | 1 | 1 | 0 | 0 | 0
-  webview-emu-low-20261109-164720 | 3.1 | 0 | 0 | 0 | 0 | 0 | 0 | 0
-  webview-emu-low-20261109-203405 | 3.1 | 0 | 1 | 1 | 1 | 0 | 0 | 0
-  webview-emu-low-20261109-205829 | 3.1 | 0 | 2 | 2 | 2 | 0 | 0 | 0
-  webview-emu-low-20261110-025222 | 3.1 | 0 | 1 | 1 | 1 | 0 | 0 | 0
-  total | 747.9 min (12.5 h) | 0 | 23 | 24 | 19 | 3 | 2 | 2 (of which 0 lie inside a break of the app-vs-source analysis)
+  run | audio min | repeated_block | zero_gap | shared breaks | matched | missed | before recording began | false alarms | lead-in events
+  kill-emu-low-20261109-002516 | 10.8 | 0 | 0 | 1 | 0 | 0 | 1 | 0 | 0
+  kill-emu-low-20261109-063243 | 8.9 | 0 | 0 | 1 | 0 | 0 | 1 | 0 | 0
+  kill-emu-low-20261109-091535 | 9.1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+  kill-emu-low-20261109-141104 | 7.9 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+  kill-emu-low-20261109-162504 | 8.7 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+  kill-emu-low-20261109-221340 | 2.5 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+  kill-emu-low-20261110-025549 | 8.9 | 0 | 1 | 1 | 1 | 0 | 0 | 0 | 0
+  kill-emu-low-20261111-012050 | 9.3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+  load-emu-low-20261109-003659 | 30.1 | 0 | 2 | 2 | 1 | 1 | 0 | 0 | 1
+  load-emu-low-20261109-064220 | 30.1 | 0 | 1 | 1 | 1 | 0 | 0 | 0 | 0
+  load-emu-low-20261109-171412 | 30.1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 1
+  load-emu-low-20261110-030551 | 30.1 | 0 | 1 | 1 | 1 | 0 | 0 | 0 | 0
+  load-emu-low-20261111-013115 | 30.1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+  panic-emu-low-20261108-142137 | 3.1 | 0 | 0 | n/a | n/a | n/a | n/a | n/a | n/a
+  panic-emu-low-20261108-144644 | 3.1 | 0 | 1 | n/a | n/a | n/a | n/a | n/a | n/a
+  panic-emu-low-20261108-145133 | 3.1 | 0 | 0 | n/a | n/a | n/a | n/a | n/a | n/a
+  panic-emu-low-20261108-180811 | 3.1 | 0 | 0 | n/a | n/a | n/a | n/a | n/a | n/a
+  panic-emu-low-20261109-001734 | 3.1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+  panic-emu-low-20261109-062608 | 3.1 | 0 | 1 | 1 | 1 | 0 | 0 | 0 | 0
+  panic-emu-low-20261109-143727 | 3.1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+  panic-emu-low-20261109-144102 | 3.1 | 0 | 1 | 1 | 1 | 0 | 0 | 0 | 0
+  panic-emu-low-20261109-161810 | 3.1 | 0 | 1 | 1 | 1 | 0 | 0 | 0 | 0
+  panic-emu-low-20261109-221025 | 3.1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+  panic-emu-low-20261110-024854 | 3.1 | 0 | 1 | 1 | 1 | 0 | 0 | 0 | 0
+  panic-emu-low-20261111-011320 | 3.1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+  soak-emu-low-20261108-174229 | 21.3 | 0 | 0 | n/a | n/a | n/a | n/a | n/a | n/a
+  soak-emu-low-20261109-010716 | 120.1 | 0 | 0 | 2 | 0 | 2 | 0 | 0 | 0
+  soak-emu-low-20261109-071240 | 120.1 | 0 | 1 | 1 | 1 | 0 | 0 | 0 | 0
+  soak-emu-low-20261109-174432 | 120.1 | 0 | 1 | 1 | 1 | 0 | 0 | 0 | 0
+  soak-emu-low-20261110-033628 | 120.1 | 0 | 1 | 1 | 1 | 0 | 0 | 0 | 0
+  soak-emu-low-20261110-125636 | 10.1 | 0 | 1 | 1 | 1 | 0 | 0 | 0 | 0
+  soak-emu-low-20261111-020139 | 120.1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 1
+  webview-emu-low-20261108-181122 | 3.1 | 0 | 1 | n/a | n/a | n/a | n/a | n/a | n/a
+  webview-emu-low-20261109-002047 | 3.1 | 0 | 1 | 1 | 1 | 0 | 0 | 0 | 0
+  webview-emu-low-20261109-062920 | 3.1 | 0 | 1 | 1 | 1 | 0 | 0 | 0 | 0
+  webview-emu-low-20261109-162136 | 3.1 | 0 | 1 | 1 | 1 | 0 | 0 | 0 | 0
+  webview-emu-low-20261109-164720 | 3.1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+  webview-emu-low-20261109-203405 | 3.1 | 0 | 1 | 1 | 1 | 0 | 0 | 0 | 0
+  webview-emu-low-20261109-205829 | 3.1 | 0 | 2 | 2 | 2 | 0 | 0 | 0 | 0
+  webview-emu-low-20261110-025222 | 3.1 | 0 | 1 | 1 | 1 | 0 | 0 | 0 | 0
+  webview-emu-low-20261111-011633 | 3.1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0
+  total | 913.6 min (15.2 h) | 0 | 24 | 24 | 19 | 3 | 2 | 0 (of which 0 lie inside a break of the app-vs-source analysis) | 3
 
 misses and false alarms in section 2 are listed below, with the reason where it is known:
   load-emu-low-20261109-003659: MISS at source 373.251 s (app audio 375,869.5 to 376,164.1 ms; unmatched 295 ms, repeat 0.0 ms)
-  load-emu-low-20261109-003659: FALSE ALARM zero_gap at 2,638.9 ms (len_frames=438 len_ms=9.1); this run's test signal starts at 2,668.1 ms after 2,638.9 ms of leading audio
-  load-emu-low-20261109-171412: FALSE ALARM zero_gap at 2,551.3 ms (len_frames=512 len_ms=10.7); this run's test signal starts at 2,643.1 ms after 100.0 ms of leading audio
+  load-emu-low-20261109-003659: LEAD-IN zero_gap at 2,638.9 ms (len_frames=438 len_ms=9.1), 29.2 ms before the first source sample that reached the recording (app audio 2,668.1 ms); not a false alarm
+  load-emu-low-20261109-171412: LEAD-IN zero_gap at 2,551.3 ms (len_frames=512 len_ms=10.7), 91.8 ms before the first source sample that reached the recording (app audio 2,643.1 ms); not a false alarm
   soak-emu-low-20261109-010716: MISS at source 2,960.068 s (app audio 2,962,467.2 to 2,962,792.5 ms; unmatched 325 ms, repeat 0.0 ms)
   soak-emu-low-20261109-010716: MISS at source 2,999.200 s (app audio 3,001,599.2 to 3,001,896.5 ms; unmatched 297 ms, repeat 0.0 ms)
+  soak-emu-low-20261111-020139: LEAD-IN zero_gap at 2,456.1 ms (len_frames=514 len_ms=10.7), 91.6 ms before the first source sample that reached the recording (app audio 2,547.6 ms); not a false alarm
 
-reading (what the numbers say):
-  section 1: all 5 shared breaks of the final Phase 1 sequence (panic, webview, kill, load, soak) are marked by a zero_gap within a few milliseconds of the start of their span; 0 repeated_block and 0 false alarms in 2.8 hours of audio (165.3 minutes).
-  section 2, false alarms: both are zero gaps of 9 to 11 ms in the cable's start-up region, within 100 ms of the point where the test signal starts (listed above with the signal start). They are real dropouts of the same kind as the shared breaks, in the stale audio the cable replays before the signal; the harness does not count that region. No zero gap or repeat was found inside the test signal where the harness saw no break, in 12.3 hours.
-  section 2, misses: three breaks are unmatched stretches of 295 to 325 ms with no repeat (a sound mixed into the cable, consistent with the notification chimes recorded in docs/GATES.md for the 9 Nov runs), not one-period dropouts. Two short dropouts (77 and 80 frames, 1.6 and 1.7 ms: webview-emu-low-20261109-205829 and the Phase 2 diagnostic soak) were missed when the minimum was 2 ms; it is 1 ms now and both are matched. 2 more breaks lie before the app began recording and cannot be seen by any recorder.
-  the repeated_block detector found nothing in any real recording: it is covered by unit tests on spliced noise (crates/wb-recorder/src/repeat.rs) and through the recorder thread (crates/wb-recorder/tests/repeat_and_marks.rs), and stays as a defence against a true repeat, which the sample-level data above show has not occurred.
+reading (what the numbers say; updated 11 Nov 2026 after Night 1, which added the 11 Nov runs and the lead-in class):
+  section 1 (the 10 Nov sequence the plan names: panic 0.019 s, webview 0.028 s, kill 398.627 s, load 285.217 s, soak 0.037 s): 5 of 5 shared breaks are marked by a zero_gap within a few milliseconds of the start of their span, 0 missed, 0 false alarms, in 165.3 minutes (2.8 hours) of audio. The 2-hour soak of that sequence has its one zero_gap at its one break and nothing else.
+  WHAT CAUGHT THEM: the zero_gap detector, not the repeated_block detector. repeated_block found nothing in any of the 913.6 minutes on disk (0 detections). It is covered by unit tests on spliced noise (crates/wb-recorder/src/repeat.rs) and through the recorder thread (crates/wb-recorder/tests/repeat_and_marks.rs), and stays as a defence against a true repeat, which no recording here contains; it has not been shown to work on a real recording.
+  section 2, all runs on disk: 24 shared breaks found by the harness; 19 matched by a zero_gap, 3 missed, 2 before the app began recording; 0 false alarms; 3 lead-in events; 2 more zero gaps lie in 8 Nov runs that have no analysis to compare against (24 zero_gap detections in all: 19 + 3 + 2). Negative test: the five 2-hour soaks (10.0 hours of audio) and every other run produced no zero_gap and no repeat inside the test signal anywhere the harness saw no break.
+  lead-in events (3): zero gaps of 9 to 11 ms in the cable's start-up region, 29 to 92 ms before the first source sample that reached the recording, with no shared break (load 9 Nov 00:36, load 9 Nov 17:14, soak 11 Nov 02:01). They are the same kind of dropout as the shared breaks, in the stale audio the cable replays before the signal; the source is not checked there. Before 11 Nov the two earlier ones were counted as false alarms (2); the rule of 11 Nov 2026 reports them as lead-in.
+  section 2, misses (3): unmatched stretches of 295 to 325 ms with no repeat and no run of zeros (a sound mixed into the cable, consistent with the notification chimes recorded in docs/GATES.md for the 9 Nov runs), not one-period dropouts; no detector on exact repeats or exact zeros could mark them. Two short dropouts (77 and 80 frames, 1.6 and 1.7 ms: webview-emu-low-20261109-205829 and the Phase 2 diagnostic soak) were missed when the minimum was 2 ms; it is 1 ms now and both are matched. 2 more breaks lie before the app began recording and cannot be seen by any recorder.
+  the 11 Nov (Night 1) runs: 0 shared breaks and 0 zero_gap events in the signal of all five (the one zero_gap in the soak is a lead-in event): nothing to catch, nothing falsely marked.

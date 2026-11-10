@@ -99,16 +99,16 @@ foreach ($res in $full) {
 }
 $lines += ''
 $lines += 'SECTION 2: every gate recording on disk (9 Nov and earlier runs were recorded by the Phase 1 recorder; the detectors read the saved audio)'
-$lines += '  run | audio min | repeated_block | zero_gap | shared breaks | matched | missed | before recording began | false alarms'
-$tot = [pscustomobject]@{ Min = 0.0; Blocks = 0; Gaps = 0; Breaks = 0; Matched = 0; Missed = 0; Before = 0; False = 0; FalseReal = 0 }
+$lines += '  run | audio min | repeated_block | zero_gap | shared breaks | matched | missed | before recording began | false alarms | lead-in events'
+$tot = [pscustomobject]@{ Min = 0.0; Blocks = 0; Gaps = 0; Breaks = 0; Matched = 0; Missed = 0; Before = 0; False = 0; FalseReal = 0; Lead = 0 }
 foreach ($res in $results) {
   $c = $res.Check
   $b = $(if ($c) { @($c.Rows).Count } else { -1 })
-  $lines += ("  {0} | {1:n1} | {2} | {3} | {4} | {5} | {6} | {7} | {8}" -f $res.Name, ($res.Scan.audio_seconds / 60.0), @($res.Scan.blocks).Count, @($res.Scan.zero_gaps).Count, $(if ($c) { $b } else { 'n/a' }), $(if ($c) { $c.Matched } else { 'n/a' }), $(if ($c) { $c.Missed } else { 'n/a' }), $(if ($c) { $c.BeforeRecording } else { 'n/a' }), $(if ($c) { @($c.FalseAlarms).Count } else { 'n/a' }))
+  $lines += ("  {0} | {1:n1} | {2} | {3} | {4} | {5} | {6} | {7} | {8} | {9}" -f $res.Name, ($res.Scan.audio_seconds / 60.0), @($res.Scan.blocks).Count, @($res.Scan.zero_gaps).Count, $(if ($c) { $b } else { 'n/a' }), $(if ($c) { $c.Matched } else { 'n/a' }), $(if ($c) { $c.Missed } else { 'n/a' }), $(if ($c) { $c.BeforeRecording } else { 'n/a' }), $(if ($c) { @($c.FalseAlarms).Count } else { 'n/a' }), $(if ($c) { @($c.LeadIn).Count } else { 'n/a' }))
   $tot.Min += $res.Scan.audio_seconds / 60.0; $tot.Blocks += @($res.Scan.blocks).Count; $tot.Gaps += @($res.Scan.zero_gaps).Count
-  if ($c) { $tot.Breaks += $b; $tot.Matched += $c.Matched; $tot.Missed += $c.Missed; $tot.Before += $c.BeforeRecording; $tot.False += @($c.FalseAlarms).Count; $tot.FalseReal += @($c.FalseAlarms | Where-Object { $_.InAppAnalysis }).Count }
+  if ($c) { $tot.Breaks += $b; $tot.Matched += $c.Matched; $tot.Missed += $c.Missed; $tot.Before += $c.BeforeRecording; $tot.False += @($c.FalseAlarms).Count; $tot.FalseReal += @($c.FalseAlarms | Where-Object { $_.InAppAnalysis }).Count; $tot.Lead += @($c.LeadIn).Count }
 }
-$lines += ("  total | {0:n1} min ({1:n1} h) | {2} | {3} | {4} | {5} | {6} | {7} | {8} (of which {9} lie inside a break of the app-vs-source analysis)" -f $tot.Min, ($tot.Min / 60.0), $tot.Blocks, $tot.Gaps, $tot.Breaks, $tot.Matched, $tot.Missed, $tot.Before, $tot.False, $tot.FalseReal)
+$lines += ("  total | {0:n1} min ({1:n1} h) | {2} | {3} | {4} | {5} | {6} | {7} | {8} (of which {9} lie inside a break of the app-vs-source analysis) | {10}" -f $tot.Min, ($tot.Min / 60.0), $tot.Blocks, $tot.Gaps, $tot.Breaks, $tot.Matched, $tot.Missed, $tot.Before, $tot.False, $tot.FalseReal, $tot.Lead)
 $lines += ''
 $lines += 'misses and false alarms in section 2 are listed below, with the reason where it is known:'
 $any = $false
@@ -119,6 +119,10 @@ foreach ($res in $results) {
     $any = $true
     $lines += ("  {0}: MISS at source {1:n3} s (app audio {2:n1} to {3:n1} ms; unmatched {4:n0} ms, repeat {5:n1} ms)" -f $res.Name, ($row.SourceMs / 1000.0), $row.AppStartMs, $row.AppEndMs, $row.UnmatchedMs, $row.RepeatMs)
   }
+  foreach ($e in @($c.LeadIn)) {
+    $any = $true
+    $lines += ("  {0}: LEAD-IN {1} at {2:n1} ms ({3}), {4:n1} ms before the first source sample that reached the recording (app audio {5:n1} ms); not a false alarm" -f $res.Name, $e.kind, [double]$e.audio_ms, $e.detail, [double]$e.BeforeSourceMs, [double]$c.LeadInEndMs)
+  }
   foreach ($e in @($c.FalseAlarms)) {
     $any = $true
     $start = $(if ($res.Analysis) { "; this run's test signal starts at {0:n1} ms after {1:n1} ms of leading audio" -f [double]$res.Analysis.content_start_ms, [double]$res.Analysis.leading_junk_ms } else { '' })
@@ -128,11 +132,13 @@ foreach ($res in $results) {
 if (-not $any) { $lines += '  none' }
 
 $lines += ''
-$lines += 'reading (what the numbers say):'
-$lines += '  section 1: all 5 shared breaks of the final Phase 1 sequence (panic, webview, kill, load, soak) are marked by a zero_gap within a few milliseconds of the start of their span; 0 repeated_block and 0 false alarms in 2.8 hours of audio (165.3 minutes).'
-$lines += '  section 2, false alarms: both are zero gaps of 9 to 11 ms in the cable''s start-up region, within 100 ms of the point where the test signal starts (listed above with the signal start). They are real dropouts of the same kind as the shared breaks, in the stale audio the cable replays before the signal; the harness does not count that region. No zero gap or repeat was found inside the test signal where the harness saw no break, in 12.3 hours.'
-$lines += '  section 2, misses: three breaks are unmatched stretches of 295 to 325 ms with no repeat (a sound mixed into the cable, consistent with the notification chimes recorded in docs/GATES.md for the 9 Nov runs), not one-period dropouts. Two short dropouts (77 and 80 frames, 1.6 and 1.7 ms: webview-emu-low-20261109-205829 and the Phase 2 diagnostic soak) were missed when the minimum was 2 ms; it is 1 ms now and both are matched. 2 more breaks lie before the app began recording and cannot be seen by any recorder.'
-$lines += '  the repeated_block detector found nothing in any real recording: it is covered by unit tests on spliced noise (crates/wb-recorder/src/repeat.rs) and through the recorder thread (crates/wb-recorder/tests/repeat_and_marks.rs), and stays as a defence against a true repeat, which the sample-level data above show has not occurred.'
+$lines += 'reading (what the numbers say; updated 11 Nov 2026 after Night 1, which added the 11 Nov runs and the lead-in class):'
+$lines += '  section 1 (the 10 Nov sequence the plan names: panic 0.019 s, webview 0.028 s, kill 398.627 s, load 285.217 s, soak 0.037 s): 5 of 5 shared breaks are marked by a zero_gap within a few milliseconds of the start of their span, 0 missed, 0 false alarms, in 165.3 minutes (2.8 hours) of audio. The 2-hour soak of that sequence has its one zero_gap at its one break and nothing else.'
+$lines += '  WHAT CAUGHT THEM: the zero_gap detector, not the repeated_block detector. repeated_block found nothing in any of the 913.6 minutes on disk (0 detections). It is covered by unit tests on spliced noise (crates/wb-recorder/src/repeat.rs) and through the recorder thread (crates/wb-recorder/tests/repeat_and_marks.rs), and stays as a defence against a true repeat, which no recording here contains; it has not been shown to work on a real recording.'
+$lines += '  section 2, all runs on disk: 24 shared breaks found by the harness; 19 matched by a zero_gap, 3 missed, 2 before the app began recording; 0 false alarms; 3 lead-in events; 2 more zero gaps lie in 8 Nov runs that have no analysis to compare against (24 zero_gap detections in all: 19 + 3 + 2). Negative test: the five 2-hour soaks (10.0 hours of audio) and every other run produced no zero_gap and no repeat inside the test signal anywhere the harness saw no break.'
+$lines += '  lead-in events (3): zero gaps of 9 to 11 ms in the cable''s start-up region, 29 to 92 ms before the first source sample that reached the recording, with no shared break (load 9 Nov 00:36, load 9 Nov 17:14, soak 11 Nov 02:01). They are the same kind of dropout as the shared breaks, in the stale audio the cable replays before the signal; the source is not checked there. Before 11 Nov the two earlier ones were counted as false alarms (2); the rule of 11 Nov 2026 reports them as lead-in.'
+$lines += '  section 2, misses (3): unmatched stretches of 295 to 325 ms with no repeat and no run of zeros (a sound mixed into the cable, consistent with the notification chimes recorded in docs/GATES.md for the 9 Nov runs), not one-period dropouts; no detector on exact repeats or exact zeros could mark them. Two short dropouts (77 and 80 frames, 1.6 and 1.7 ms: webview-emu-low-20261109-205829 and the Phase 2 diagnostic soak) were missed when the minimum was 2 ms; it is 1 ms now and both are matched. 2 more breaks lie before the app began recording and cannot be seen by any recorder.'
+$lines += '  the 11 Nov (Night 1) runs: 0 shared breaks and 0 zero_gap events in the signal of all five (the one zero_gap in the soak is a lead-in event): nothing to catch, nothing falsely marked.'
 
 Write-WbEvidence -Path $OutFile -Lines $lines -MachineLabel $Machine
 Write-Host "wrote $OutFile"

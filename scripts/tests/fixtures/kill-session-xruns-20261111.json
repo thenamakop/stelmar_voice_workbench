@@ -1,0 +1,113 @@
+{
+ "note": "Events of kind audio_started and gap only, copied unchanged from the session.json of the kill gate run kill-emu-low-20261111-012050 (Night 1, 11 Nov 2026, emu-low): six app starts, each with one cause=xrun event and one counter event. Nothing else of the session is kept.",
+ "events": [
+  {
+   "at": "2026-11-11T01:20:55.8560473+05:30",
+   "audio_ms": 0,
+   "kind": "audio_started",
+   "detail": "CABLE Output (VB-Audio Virtual Cable) 48000 Hz 2 ch"
+  },
+  {
+   "at": "2026-11-11T01:20:55.8681024+05:30",
+   "audio_ms": 0,
+   "kind": "gap",
+   "detail": "cause=xrun n=1 callback=0 frames=0 audio_ms=0 qpc=820239985771 qpc_hz=10000000"
+  },
+  {
+   "at": "2026-11-11T01:20:56.8206907+05:30",
+   "audio_ms": 970,
+   "kind": "gap",
+   "detail": "overrun_samples+0 xruns+1 dropped_samples+0 (totals 0, 1, 0)"
+  },
+  {
+   "at": "2026-11-11T01:22:59.317361+05:30",
+   "audio_ms": 119700,
+   "kind": "audio_started",
+   "detail": "CABLE Output (VB-Audio Virtual Cable) 48000 Hz 2 ch"
+  },
+  {
+   "at": "2026-11-11T01:22:59.3298251+05:30",
+   "audio_ms": 119700,
+   "kind": "gap",
+   "detail": "cause=xrun n=1 callback=0 frames=0 audio_ms=119700 qpc=821474573984 qpc_hz=10000000"
+  },
+  {
+   "at": "2026-11-11T01:23:00.2762614+05:30",
+   "audio_ms": 120660,
+   "kind": "gap",
+   "detail": "overrun_samples+0 xruns+1 dropped_samples+0 (totals 0, 1, 0)"
+  },
+  {
+   "at": "2026-11-11T01:25:03.3170159+05:30",
+   "audio_ms": 240430,
+   "kind": "audio_started",
+   "detail": "CABLE Output (VB-Audio Virtual Cable) 48000 Hz 2 ch"
+  },
+  {
+   "at": "2026-11-11T01:25:03.3298209+05:30",
+   "audio_ms": 240430,
+   "kind": "gap",
+   "detail": "cause=xrun n=1 callback=0 frames=0 audio_ms=240430 qpc=822714574024 qpc_hz=10000000"
+  },
+  {
+   "at": "2026-11-11T01:25:04.2518055+05:30",
+   "audio_ms": 241370,
+   "kind": "gap",
+   "detail": "overrun_samples+0 xruns+1 dropped_samples+0 (totals 0, 1, 0)"
+  },
+  {
+   "at": "2026-11-11T01:27:07.0186398+05:30",
+   "audio_ms": 360396,
+   "kind": "audio_started",
+   "detail": "CABLE Output (VB-Audio Virtual Cable) 48000 Hz 2 ch"
+  },
+  {
+   "at": "2026-11-11T01:27:07.0312699+05:30",
+   "audio_ms": 360396,
+   "kind": "gap",
+   "detail": "cause=xrun n=1 callback=0 frames=0 audio_ms=360396 qpc=823951673518 qpc_hz=10000000"
+  },
+  {
+   "at": "2026-11-11T01:27:07.983739+05:30",
+   "audio_ms": 361356,
+   "kind": "gap",
+   "detail": "overrun_samples+0 xruns+1 dropped_samples+0 (totals 0, 1, 0)"
+  },
+  {
+   "at": "2026-11-11T01:28:26.6416131+05:30",
+   "audio_ms": 436152,
+   "kind": "audio_started",
+   "detail": "CABLE Output (VB-Audio Virtual Cable) 48000 Hz 2 ch"
+  },
+  {
+   "at": "2026-11-11T01:28:26.653845+05:30",
+   "audio_ms": 436152,
+   "kind": "gap",
+   "detail": "cause=xrun n=1 callback=0 frames=0 audio_ms=436152 qpc=824747877058 qpc_hz=10000000"
+  },
+  {
+   "at": "2026-11-11T01:28:27.5921551+05:30",
+   "audio_ms": 437102,
+   "kind": "gap",
+   "detail": "overrun_samples+0 xruns+1 dropped_samples+0 (totals 0, 1, 0)"
+  },
+  {
+   "at": "2026-11-11T01:29:58.241751+05:30",
+   "audio_ms": 524330,
+   "kind": "audio_started",
+   "detail": "CABLE Output (VB-Audio Virtual Cable) 48000 Hz 2 ch"
+  },
+  {
+   "at": "2026-11-11T01:29:58.2538262+05:30",
+   "audio_ms": 524330,
+   "kind": "gap",
+   "detail": "cause=xrun n=1 callback=0 frames=0 audio_ms=524330 qpc=825663887804 qpc_hz=10000000"
+  },
+  {
+   "at": "2026-11-11T01:29:59.2105819+05:30",
+   "audio_ms": 525300,
+   "kind": "gap",
+   "detail": "overrun_samples+0 xruns+1 dropped_samples+0 (totals 0, 1, 0)"
+  }
+ ]
+}

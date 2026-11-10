@@ -9,7 +9,12 @@
     * a shared break is MATCHED when an event lies within +-ToleranceMs of the break's span in the
       app's audio time. The span runs from the break's source position, mapped to the app's audio
       clock through the app analysis, to the end of its unmatched stretch (or its repeat/skip);
-    * an event with no shared break is a FALSE ALARM;
+    * an event with no shared break is a FALSE ALARM, unless it lies before the first source
+      sample that reached the recording (the analysis's content_start_ms, on the app's audio clock):
+      then it is a LEAD-IN event, the cable's stale audio or start-up before the test signal begins,
+      where the source is not what the recorder was checked against. A lead-in event is reported,
+      not counted as a false alarm (11 Nov 2026: the soak's zero_gap at 2,457.0 ms, 90.6 ms before
+      the first source sample at 2,547.6 ms);
     * a shared break with no event is a MISS.
 
   Not gated in Phase 2: the evidence reports every miss and false alarm, and the run sequence stops
@@ -89,10 +94,20 @@ function Get-WbDetectorMatches {
     }
   }
   $appSpans = @(Get-WbAppAnalysisSpans -Analysis $Analysis)
+  # Where the first source sample that reached the recording falls on the app's audio clock
+  # (content_start_ms; the soak's was 2,547.6 ms, 89.3 ms of the source's start never arrived). A run
+  # that began recording part way into the source (the kill run) has 0 here: no event is a lead-in.
+  $leadInEnd = $null
+  if (Test-DetHas $Analysis 'content_start_ms') { $leadInEnd = [double]$Analysis.content_start_ms }
   $false_alarms = @()
+  $lead_in = @()
   for ($i = 0; $i -lt $marks.Count; $i++) {
     if ($used.ContainsKey($i)) { continue }
     $t = [double]$marks[$i].audio_ms
+    if ($null -ne $leadInEnd -and $t -lt $leadInEnd) {
+      $lead_in += [pscustomobject]@{ kind = $marks[$i].kind; audio_ms = $t; detail = $marks[$i].detail; BeforeSourceMs = ($leadInEnd - $t) }
+      continue
+    }
     $near = @($appSpans | Where-Object { $t -ge $_.StartMs - $ToleranceMs -and $t -le $_.EndMs + $ToleranceMs })
     $false_alarms += [pscustomobject]@{
       kind = $marks[$i].kind
@@ -110,6 +125,8 @@ function Get-WbDetectorMatches {
     Missed = @($rows | Where-Object { -not $_.Matched -and -not $_.BeforeRecording }).Count
     BeforeRecording = @($rows | Where-Object { $_.BeforeRecording -and -not $_.Matched }).Count
     FalseAlarms = $false_alarms
+    LeadIn = $lead_in
+    LeadInEndMs = $leadInEnd
     EventCount = $marks.Count
   }
 }
@@ -122,7 +139,7 @@ function Get-WbDetectorLines {
   $lines = @()
   $lines += 'live detector check (not gated in Phase 2; any miss or false alarm stops the run sequence for a decision before the speed tables):'
   $lines += ("  rule: a shared upstream break is matched when a repeated_block or zero_gap event of the app's session.json lies within +-{0:n0} ms of the break's span in the app's audio time (the span runs from the break's source position, mapped through the app analysis, to the end of its unmatched stretch); an event with no shared break is a false alarm" -f $Check.ToleranceMs)
-  $lines += ("  shared upstream breaks found by the harness: {0}; matched {1}; missed {2}; before the app began recording {3}; events with no shared break (false alarms) {4}" -f @($Check.Rows).Count, $Check.Matched, $Check.Missed, $Check.BeforeRecording, @($Check.FalseAlarms).Count)
+  $lines += ("  shared upstream breaks found by the harness: {0}; matched {1}; missed {2}; before the app began recording {3}; events with no shared break (false alarms) {4}; lead-in events (before the first source sample that reached the recording) {5}" -f @($Check.Rows).Count, $Check.Matched, $Check.Missed, $Check.BeforeRecording, @($Check.FalseAlarms).Count, @($Check.LeadIn).Count)
   foreach ($r in @($Check.Rows)) {
     $what = $(if ($r.Matched) { 'MATCHED by ' + ((@($r.Events) | ForEach-Object { "$($_.kind) at {0:n1} ms ($($_.detail))" -f [double]$_.audio_ms }) -join '; ') } elseif ($r.BeforeRecording) { 'BEFORE THE APP BEGAN RECORDING: the break is in the source before the first recorded sample, so no recorder could see it (not counted as a miss)' } else { ('MISSED: no repeated_block or zero_gap event in the span (unmatched {0:n0} ms, repeat {1:n1} ms)' -f $r.UnmatchedMs, $r.RepeatMs) })
     $lines += ("    break at source {0:n3} s, app audio {1:n1} to {2:n1} ms: {3}" -f ($r.SourceMs / 1000.0), $r.AppStartMs, $r.AppEndMs, $what)
@@ -130,6 +147,9 @@ function Get-WbDetectorLines {
   foreach ($e in @($Check.FalseAlarms)) {
     $why = $(if ((Test-DetHas $e 'InAppAnalysis') -and $e.InAppAnalysis) { '; the app-vs-source analysis has a break at this place too, so the event is real but the harness did not count it as shared with the reference capture' } else { '' })
     $lines += ("    FALSE ALARM: {0} at {1:n1} ms ({2}){3}" -f $e.kind, [double]$e.audio_ms, $e.detail, $why)
+  }
+  foreach ($e in @($Check.LeadIn)) {
+    $lines += ("    LEAD-IN: {0} at {1:n1} ms ({2}), {3:n1} ms before the first source sample that reached the recording (app audio {4:n1} ms); the cable's start-up before the test signal, not a false alarm" -f $e.kind, [double]$e.audio_ms, $e.detail, [double]$e.BeforeSourceMs, [double]$Check.LeadInEndMs)
   }
   if ($null -ne $Rec -and (Test-DetHas $Rec 'timestamp_outliers')) {
     $lines += ("  app counters after the PositionCheck fix: position breaks {0} (device time left the predicted line for 3 callbacks in a row), timestamp outliers {1} (came back; no audio affected), old pairwise flags {2} (what the rule before the fix counted: each outlier twice); repeated_block events {3}; zero_gap events {4}" -f $Rec.position_breaks, $Rec.timestamp_outliers, $Rec.position_pair_flags, $Rec.repeated_blocks, $Rec.zero_gaps)

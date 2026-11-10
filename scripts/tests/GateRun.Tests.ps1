@@ -168,6 +168,38 @@ Check 'dropped samples fail' (-not $v.Pass -and ($v.Problems -join ' ') -match '
 $v = Get-WbXrunVerdict -SessionDir (New-XrunSession 'x-garbled' @($start0, @(970, 'gap', 'something else')))
 Check 'a gap event that cannot be read fails instead of being skipped' (-not $v.Pass)
 
+# The `cause=xrun` events the recorder has written since 10 Nov 2026 (callback count, audio position, QPC), next to the
+# counter events. The first fixture is the real session of the Night 1 kill run (6 app starts, 11 Nov 2026), events
+# copied unchanged; that gate failed only because this reader rejected the new events.
+function New-CauseXrun([int]$N, [int]$Callback, [double]$AudioMs) { "cause=xrun n=$N callback=$Callback frames=0 audio_ms=$([int64]$AudioMs) qpc=820239985771 qpc_hz=10000000" }
+$realDir = Join-Path $tmp 'x-real-kill'
+New-Item -ItemType Directory -Force -Path $realDir | Out-Null
+Copy-Item -LiteralPath (Join-Path $here 'fixtures\kill-session-xruns-20261111.json') -Destination (Join-Path $realDir 'session.json')
+$v = Get-WbXrunVerdict -SessionDir $realDir
+Check 'the real kill session (6 starts, cause=xrun plus counter events) passes with 6 excused and no problems' ($v.Pass -and $v.TotalXruns -eq 6 -and @($v.Excused).Count -eq 6 -and @($v.Problems).Count -eq 0)
+Check 'the real kill session: every excused xrun is exact, at callback 0, offset 0 ms, with its QPC tick' (@($v.Excused | Where-Object { $_.Exact -and $_.Callback -eq 0 -and $_.OffsetMs -eq 0 -and $_.Qpc -gt 0 }).Count -eq 6)
+$v = Get-WbXrunVerdict -SessionDir $realDir -LossFree $false
+Check 'the real kill session fails when the recording shows loss' (-not $v.Pass -and @($v.Problems).Count -eq 6)
+
+$v = Get-WbXrunVerdict -SessionDir (New-XrunSession 'x-cause-only' @($start0, @(0, 'gap', (New-CauseXrun 1 0 0))))
+Check 'a cause=xrun event alone counts one xrun, exact, at the stream start' ($v.Pass -and $v.TotalXruns -eq 1 -and $v.Excused[0].Exact -and $v.Excused[0].OffsetMs -eq 0)
+$v = Get-WbXrunVerdict -SessionDir (New-XrunSession 'x-cause-and-counter' @($start0, @(0, 'gap', (New-CauseXrun 1 0 0)), @(970, 'gap', $oneXrun)))
+Check 'a cause=xrun event and the counter event of the same xrun count once, not twice' ($v.Pass -and $v.TotalXruns -eq 1)
+$v = Get-WbXrunVerdict -SessionDir (New-XrunSession 'x-cause-late' @($start0, @(5000, 'gap', (New-CauseXrun 1 400 5000))))
+Check 'a cause=xrun event after 2 s fails, with its exact offset' (-not $v.Pass -and ($v.Problems -join ' ') -match '5000 ms after the stream started')
+$v = Get-WbXrunVerdict -SessionDir (New-XrunSession 'x-cause-two' @($start0, @(0, 'gap', (New-CauseXrun 1 0 0)), @(900, 'gap', (New-CauseXrun 2 90 900)), @(970, 'gap', 'overrun_samples+0 xruns+2 dropped_samples+0 (totals 0, 2, 0)')))
+Check 'two cause=xrun events in one run fail' (-not $v.Pass -and $v.TotalXruns -eq 2 -and ($v.Problems -join ' ') -match 'more than one')
+$v = Get-WbXrunVerdict -SessionDir (New-XrunSession 'x-cause-capped' @($start0, @(0, 'gap', (New-CauseXrun 1 0 0)), @(970, 'gap', 'overrun_samples+0 xruns+2 dropped_samples+0 (totals 0, 2, 0)')))
+Check 'xruns the counters saw beyond the cause=xrun events (the event cap) still count and fail' (-not $v.Pass -and $v.TotalXruns -eq 2)
+$v = Get-WbXrunVerdict -SessionDir (New-XrunSession 'x-cause-overrun' @($start0, @(0, 'gap', (New-CauseXrun 1 0 0)), @(970, 'gap', 'overrun_samples+480 xruns+1 dropped_samples+0 (totals 480, 1, 0)')))
+Check 'with cause=xrun events present the counter events still fail on overrun samples' (-not $v.Pass -and ($v.Problems -join ' ') -match '480 overrun')
+$v = Get-WbXrunVerdict -SessionDir (New-XrunSession 'x-cause-restarts' @($start0, @(0, 'gap', (New-CauseXrun 1 0 0)), @(970, 'gap', $oneXrun), $start1, @(120000, 'gap', (New-CauseXrun 2 0 120000)), @(120970, 'gap', $oneXrun)))
+Check 'one cause=xrun per stream start across restarts passes' ($v.Pass -and $v.TotalXruns -eq 2 -and @($v.Excused).Count -eq 2)
+$v = Get-WbXrunVerdict -SessionDir (New-XrunSession 'x-position-break' @($start0, @(30000, 'gap', 'cause=position_break callback=3000 frames=1440000 audio_ms=30000 ts_ns=1 dev_ns=2 pair_diff_ns=3')))
+Check 'a cause=position_break gap event is reported in PositionBreaks and is not an xrun problem' ($v.Pass -and $v.TotalXruns -eq 0 -and @($v.PositionBreaks).Count -eq 1 -and $v.PositionBreaks[0].AudioMs -eq 30000)
+$v = Get-WbXrunVerdict -SessionDir (New-XrunSession 'x-unknown-cause' @($start0, @(970, 'gap', 'cause=something_new n=1')))
+Check 'an unknown cause=... gap event still fails as unreadable' (-not $v.Pass)
+
 # ---- The gates run from any folder, and a native command's stderr cannot end them ------------
 # A 3-hour load run and a 2-hour soak ended at their evidence step: the launcher was started from
 # the user's home folder, `git rev-parse 2>$null` printed "fatal: not a git repository", and

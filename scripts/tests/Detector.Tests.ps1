@@ -76,5 +76,22 @@ Check 'lines give the position counters after the fix' ($text -match 'position b
 $old = (Get-WbDetectorLines -Check $m -Rec ([pscustomobject]@{ position_breaks = 3 })) -join "`n"
 Check 'a report from an older build says the counters are not available' ($old -match 'not available')
 
+# Lead-in (11 Nov 2026 soak): a zero_gap at 2,457.0 ms, before the first source sample that reached the
+# recording (content_start_ms 2,547.6458 ms; 89.3 ms of the source's start never arrived) and with no
+# shared break, is a lead-in event and not a false alarm. Numbers are the soak run's own.
+$soak = [pscustomobject]@{ sample_rate = 48000; content_start_ms = 2547.6458333333335; content_first_source_frame = 4286; discontinuities = @(); unmatched_ranges = @() }
+$soakEv = [pscustomobject]@{ kind = 'zero_gap'; audio_ms = 2457.0; detail = 'start_frame=117892 len_frames=514 len_ms=10.7 rate=48000' }
+$m = Get-WbDetectorMatches -Breaks @() -Analysis $soak -Events @($soakEv)
+Check 'the soak zero_gap at 2,457 ms is a lead-in event, not a false alarm' (@($m.LeadIn).Count -eq 1 -and @($m.FalseAlarms).Count -eq 0 -and $m.EventCount -eq 1)
+Check 'the lead-in event is 90.6 ms before the first source sample that reached the recording' ([math]::Abs($m.LeadIn[0].BeforeSourceMs - 90.6458) -lt 0.001 -and [math]::Abs($m.LeadInEndMs - 2547.6458) -lt 0.001)
+$text = (Get-WbDetectorLines -Check $m -Rec $null) -join "`n"
+Check 'the evidence counts it as lead-in, 0 false alarms, and names it' ($text -match 'false alarms\) 0; lead-in events \(before the first source sample that reached the recording\) 1' -and $text -match 'LEAD-IN: zero_gap at 2,457\.0 ms .*90\.6 ms before the first source sample' -and $text -cnotmatch 'FALSE ALARM:')
+$m = Get-WbDetectorMatches -Breaks @() -Analysis $soak -Events @((Ev 'zero_gap' 2547.7))
+Check 'an event after the first source sample with no shared break stays a false alarm' (@($m.FalseAlarms).Count -eq 1 -and @($m.LeadIn).Count -eq 0)
+$m = Get-WbDetectorMatches -Breaks @((Brk 18.667 81.333)) -Analysis $panic -Events @((Ev 'zero_gap' 1000.0), (Ev 'zero_gap' 2346.583))
+Check 'an event inside a shared break span is matched whatever the lead-in rule says' ($m.Matched -eq 1 -and @($m.LeadIn).Count -eq 1)
+$m = Get-WbDetectorMatches -Breaks @() -Analysis $kill -Events @((Ev 'zero_gap' 10.0))
+Check 'a run that began part way into the source (content start 0) has no lead-in' (@($m.LeadIn).Count -eq 0 -and @($m.FalseAlarms).Count -eq 1)
+
 if ($fails) { Write-Host "$fails failed"; exit 1 }
 Write-Host 'Detector tests passed'
