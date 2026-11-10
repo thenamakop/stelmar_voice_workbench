@@ -53,11 +53,24 @@ Check 'the force-kill run break is matched through the restarts' ($m.Matched -eq
 # The later restarts (after the break) do not shift it.
 Check 'jumps after the break are not applied to it' ([math]::Abs((Get-WbAppOffsetMs -Analysis $kill -SourceMs 100.0) - (0 - 193956.0 * 1000.0 / 48000.0)) -lt 0.001)
 
+# A break in the source before the app began recording is not a miss: no recorder could see it.
+$kill2 = [pscustomobject]@{ sample_rate = 48000; content_start_ms = 0.0; content_first_source_frame = 193956; discontinuities = @() }
+$m = Get-WbDetectorMatches -Breaks @((Brk 37.0 62.0)) -Analysis $kill2 -Events @()
+Check 'a break before the first recorded sample is reported separately, not as a miss' ($m.Missed -eq 0 -and $m.BeforeRecording -eq 1 -and $m.Rows[0].BeforeRecording)
+
+# A false alarm that the app's own analysis (recording against source) also shows is marked as real.
+$withBreak = [pscustomobject]@{ sample_rate = 48000; content_start_ms = 2328.02; content_first_source_frame = 0
+  discontinuities = @((Disc 100.0 -10.2)); unmatched_ranges = @([pscustomobject]@{ source_ms = 18.667; ms = 81.333 }) }
+$m = Get-WbDetectorMatches -Breaks @() -Analysis $withBreak -Events @((Ev 'zero_gap' 2350.0), (Ev 'zero_gap' 90000.0))
+Check 'a false alarm inside a break of the app analysis is marked, one in clean audio is not' ($m.FalseAlarms.Count -eq 2 -and $m.FalseAlarms[0].InAppAnalysis -and -not $m.FalseAlarms[1].InAppAnalysis)
+$text = (Get-WbDetectorLines -Check $m -Rec $null) -join "`n"
+Check 'the evidence says why such an event is real' ($text -match 'FALSE ALARM: zero_gap at 2,350\.0 ms .*app-vs-source analysis has a break at this place too')
+
 # Evidence lines.
 $rec = [pscustomobject]@{ position_breaks = 0; timestamp_outliers = 2; position_pair_flags = 4; repeated_blocks = 0; zero_gaps = 1 }
 $m = Get-WbDetectorMatches -Breaks @((Brk 18.667 81.333)) -Analysis $panic -Events @((Ev 'zero_gap' 2346.583), (Ev 'repeated_block' 90000.0))
 $text = (Get-WbDetectorLines -Check $m -Rec $rec) -join "`n"
-Check 'lines state the counts' ($text -match 'found by the harness: 1; matched 1; missed 0; events with no shared break \(false alarms\) 1')
+Check 'lines state the counts' ($text -match 'found by the harness: 1; matched 1; missed 0; before the app began recording 0; events with no shared break \(false alarms\) 1')
 Check 'lines name a false alarm' ($text -match 'FALSE ALARM: repeated_block at 90,000\.0 ms')
 Check 'lines give the position counters after the fix' ($text -match 'position breaks 0 .* timestamp outliers 2 .* old pairwise flags 4 .* zero_gap events 1')
 $old = (Get-WbDetectorLines -Check $m -Rec ([pscustomobject]@{ position_breaks = 3 })) -join "`n"

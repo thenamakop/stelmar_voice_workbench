@@ -38,6 +38,23 @@ function Get-WbAppOffsetMs {
   $offset
 }
 
+# The breaks the app's own analysis (the recording against the source) found, as spans of the app's
+# audio time: each discontinuity at its position and each unmatched stretch with its length.
+function Get-WbAppAnalysisSpans {
+  param($Analysis)
+  $spans = @()
+  foreach ($d in @($Analysis.discontinuities)) {
+    if ($null -eq $d) { continue }
+    $spans += [pscustomobject]@{ Kind = 'discontinuity'; StartMs = [double]$d.at_ms; EndMs = [double]$d.at_ms }
+  }
+  foreach ($u in @($Analysis.unmatched_ranges)) {
+    if ($null -eq $u) { continue }
+    $start = [double]$u.source_ms + (Get-WbAppOffsetMs -Analysis $Analysis -SourceMs ([double]$u.source_ms))
+    $spans += [pscustomobject]@{ Kind = 'unmatched'; StartMs = $start; EndMs = $start + [double]$u.ms }
+  }
+  $spans
+}
+
 # Lines up the harness's shared breaks with the recorder's events.
 #   Breaks:   output of Get-WbUpstreamBreaks (SourceMs, UnmatchedMs, RepeatMs, SkippedMs)
 #   Analysis: analysis.json (the app's recording against the source)
@@ -63,17 +80,35 @@ function Get-WbDetectorMatches {
       SourceMs = [double]$b.SourceMs
       AppStartMs = $start
       AppEndMs = $end
+      UnmatchedMs = [double]$b.UnmatchedMs
+      RepeatMs = [double]$b.RepeatMs
+      # The break happened in the source before the app began recording: no recorder could see it.
+      BeforeRecording = ($end + $ToleranceMs -lt 0)
       Matched = ($hits.Count -gt 0)
       Events = @($hits | ForEach-Object { $marks[$_] })
     }
   }
+  $appSpans = @(Get-WbAppAnalysisSpans -Analysis $Analysis)
   $false_alarms = @()
-  for ($i = 0; $i -lt $marks.Count; $i++) { if (-not $used.ContainsKey($i)) { $false_alarms += $marks[$i] } }
+  for ($i = 0; $i -lt $marks.Count; $i++) {
+    if ($used.ContainsKey($i)) { continue }
+    $t = [double]$marks[$i].audio_ms
+    $near = @($appSpans | Where-Object { $t -ge $_.StartMs - $ToleranceMs -and $t -le $_.EndMs + $ToleranceMs })
+    $false_alarms += [pscustomobject]@{
+      kind = $marks[$i].kind
+      audio_ms = $t
+      detail = $marks[$i].detail
+      # The app's own analysis (recording against source) has a break there too: the event is real,
+      # the harness just did not count it as shared with the reference capture.
+      InAppAnalysis = ($near.Count -gt 0)
+    }
+  }
   [pscustomobject]@{
     ToleranceMs = $ToleranceMs
     Rows = $rows
     Matched = @($rows | Where-Object { $_.Matched }).Count
-    Missed = @($rows | Where-Object { -not $_.Matched }).Count
+    Missed = @($rows | Where-Object { -not $_.Matched -and -not $_.BeforeRecording }).Count
+    BeforeRecording = @($rows | Where-Object { $_.BeforeRecording -and -not $_.Matched }).Count
     FalseAlarms = $false_alarms
     EventCount = $marks.Count
   }
@@ -87,13 +122,14 @@ function Get-WbDetectorLines {
   $lines = @()
   $lines += 'live detector check (not gated in Phase 2; any miss or false alarm stops the run sequence for a decision before the speed tables):'
   $lines += ("  rule: a shared upstream break is matched when a repeated_block or zero_gap event of the app's session.json lies within +-{0:n0} ms of the break's span in the app's audio time (the span runs from the break's source position, mapped through the app analysis, to the end of its unmatched stretch); an event with no shared break is a false alarm" -f $Check.ToleranceMs)
-  $lines += ("  shared upstream breaks found by the harness: {0}; matched {1}; missed {2}; events with no shared break (false alarms) {3}" -f @($Check.Rows).Count, $Check.Matched, $Check.Missed, @($Check.FalseAlarms).Count)
+  $lines += ("  shared upstream breaks found by the harness: {0}; matched {1}; missed {2}; before the app began recording {3}; events with no shared break (false alarms) {4}" -f @($Check.Rows).Count, $Check.Matched, $Check.Missed, $Check.BeforeRecording, @($Check.FalseAlarms).Count)
   foreach ($r in @($Check.Rows)) {
-    $what = $(if ($r.Matched) { 'MATCHED by ' + ((@($r.Events) | ForEach-Object { "$($_.kind) at {0:n1} ms ($($_.detail))" -f [double]$_.audio_ms }) -join '; ') } else { 'MISSED: no repeated_block or zero_gap event in the span' })
+    $what = $(if ($r.Matched) { 'MATCHED by ' + ((@($r.Events) | ForEach-Object { "$($_.kind) at {0:n1} ms ($($_.detail))" -f [double]$_.audio_ms }) -join '; ') } elseif ($r.BeforeRecording) { 'BEFORE THE APP BEGAN RECORDING: the break is in the source before the first recorded sample, so no recorder could see it (not counted as a miss)' } else { ('MISSED: no repeated_block or zero_gap event in the span (unmatched {0:n0} ms, repeat {1:n1} ms)' -f $r.UnmatchedMs, $r.RepeatMs) })
     $lines += ("    break at source {0:n3} s, app audio {1:n1} to {2:n1} ms: {3}" -f ($r.SourceMs / 1000.0), $r.AppStartMs, $r.AppEndMs, $what)
   }
   foreach ($e in @($Check.FalseAlarms)) {
-    $lines += ("    FALSE ALARM: {0} at {1:n1} ms ({2})" -f $e.kind, [double]$e.audio_ms, $e.detail)
+    $why = $(if ((Test-DetHas $e 'InAppAnalysis') -and $e.InAppAnalysis) { '; the app-vs-source analysis has a break at this place too, so the event is real but the harness did not count it as shared with the reference capture' } else { '' })
+    $lines += ("    FALSE ALARM: {0} at {1:n1} ms ({2}){3}" -f $e.kind, [double]$e.audio_ms, $e.detail, $why)
   }
   if ($null -ne $Rec -and (Test-DetHas $Rec 'timestamp_outliers')) {
     $lines += ("  app counters after the PositionCheck fix: position breaks {0} (device time left the predicted line for 3 callbacks in a row), timestamp outliers {1} (came back; no audio affected), old pairwise flags {2} (what the rule before the fix counted: each outlier twice); repeated_block events {3}; zero_gap events {4}" -f $Rec.position_breaks, $Rec.timestamp_outliers, $Rec.position_pair_flags, $Rec.repeated_blocks, $Rec.zero_gaps)
@@ -103,4 +139,4 @@ function Get-WbDetectorLines {
   $lines
 }
 
-Export-ModuleMember -Function Get-WbAppOffsetMs, Get-WbDetectorMatches, Get-WbDetectorLines
+Export-ModuleMember -Function Get-WbAppOffsetMs, Get-WbAppAnalysisSpans, Get-WbDetectorMatches, Get-WbDetectorLines
