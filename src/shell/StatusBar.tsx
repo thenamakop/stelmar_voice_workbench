@@ -24,7 +24,7 @@ export function StatusBar({ items, trailing, trailingMono }: StatusBarProps) {
         overflow: "hidden",
       }}
     >
-      <span style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--paper-0)" }}>
+      <span style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--paper-0)", flex: "none" }}>
         <i
           aria-hidden="true"
           style={{ width: 7, height: 7, borderRadius: 999, background: "var(--green-500)" }}
@@ -32,10 +32,21 @@ export function StatusBar({ items, trailing, trailingMono }: StatusBarProps) {
         Offline · no network connections
       </span>
       {items.map((item, i) => (
-        <span key={i}>{item}</span>
+        <span key={i} style={{ flex: "none" }}>
+          {item}
+        </span>
       ))}
       {trailing && (
-        <span style={{ marginLeft: "auto", fontFamily: trailingMono ? "var(--font-mono)" : undefined }}>
+        <span
+          title={typeof trailing === "string" ? trailing : undefined}
+          style={{
+            marginLeft: "auto",
+            minWidth: 0,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            fontFamily: trailingMono ? "var(--font-mono)" : undefined,
+          }}
+        >
           {trailing}
         </span>
       )}

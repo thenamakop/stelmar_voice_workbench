@@ -1,0 +1,231 @@
+// A mocked Tauri bridge for Vitest and the Playwright build (src/test/e2e-entry.ts): answers every
+// app command with fixture data, so screens render as they would on a machine. Fixture numbers
+// are placeholders, like the mockups'.
+import type {
+  InputDevice,
+  MirrorStatus,
+  PartRecord,
+  RecorderStatus,
+  RecoveredSession,
+  SessionInfo,
+  Settings,
+  Snapshot,
+} from "../ipc";
+
+export type MockState = "idle" | "recording" | "input_lost" | "recovery";
+
+export interface MockOptions {
+  /** capability.json exists (or the lookup fails with this error). */
+  profile?: boolean | Error;
+  state?: MockState;
+  /** Commands seen, in order (for assertions). */
+  calls?: string[];
+}
+
+export const INPUTS: InputDevice[] = [
+  {
+    id: "wasapi:{line-1}",
+    name: "USB interface · Line 1",
+    is_default: true,
+    sample_rate: 48000,
+    channels: 2,
+    sample_format: "f32",
+  },
+  {
+    id: "wasapi:{mic}",
+    name: "Microphone Array",
+    is_default: false,
+    sample_rate: 48000,
+    channels: 2,
+    sample_format: "f32",
+  },
+];
+
+export const SETTINGS: Settings = {
+  recordings_root: "D:\\STELMAR-Transcripts",
+  backup_root: "E:\\STELMAR-Backup",
+  last_device_id: "wasapi:{line-1}",
+};
+
+const DIR = "D:\\STELMAR-Transcripts\\2027-02-08\\seminar-hall-b__parallel-track-sessions-i";
+
+export const SESSION: SessionInfo = {
+  dir: DIR,
+  title: "Parallel Track Sessions I",
+  hall: "Seminar Hall B",
+  scheduled: "08 FEB 2027 · 12:00–13:30 IST",
+  expected_languages: ["en", "hi"],
+  mode: "record_post",
+  opened_at: "2027-02-08T11:58:02+05:30",
+  input: {
+    device_name: "USB interface · Line 1",
+    device_id: "wasapi:{line-1}",
+    sample_rate: 48000,
+    channels: 2,
+    sample_format: "f32",
+  },
+  backup_root: "E:\\STELMAR-Backup",
+  resumed: false,
+};
+
+const PART_MS = 600_000;
+export const PARTS: PartRecord[] = [1, 2, 3, 4].map((n) => ({
+  part: n,
+  file: `audio/part-000${n}.wav`,
+  start_ms: (n - 1) * PART_MS,
+  duration_ms: PART_MS,
+  frames: 28_800_000,
+  sample_rate: 48000,
+  channels: 2,
+  sha256: "0".repeat(64),
+}));
+
+export function recorderStatus(state: RecorderStatus["state"] = "recording"): RecorderStatus {
+  return {
+    state,
+    session_dir: DIR,
+    audio_ms: 2_715_000,
+    part: state === "recording" ? 5 : null,
+    part_audio_ms: state === "recording" ? 315_000 : 0,
+    part_seconds: 600,
+    overrun_samples: 0,
+    xruns: 0,
+    dropped_samples: 0,
+    recorder_restarts: 0,
+    position_breaks: 0,
+    ring_seconds: 20,
+    ring_max_fill_pct: 0.4,
+    priority: "mmcss",
+    priority_note: null,
+    capture_priority: "mmcss",
+    awake: true,
+    disk_free_bytes: 388e9,
+    disk_warning: false,
+    input: SESSION.input,
+    input_lost_since: state === "input_lost" ? "2027-02-08T12:43:10+05:30" : null,
+    thread_cpu_ms: 2_100,
+    last_error: null,
+  };
+}
+
+export const MIRROR: MirrorStatus = {
+  state: "in_sync",
+  backup_dir: "E:\\STELMAR-Backup\\2027-02-08\\seminar-hall-b__parallel-track-sessions-i",
+  lag_ms: 0,
+  warn: false,
+  last_sync_at: "2027-02-08T12:43:17+05:30",
+  message: null,
+};
+
+export const RECOVERED: RecoveredSession = {
+  dir: DIR,
+  title: "Parallel Track Sessions I",
+  hall: "Seminar Hall B",
+  opened_at: "2027-02-08T11:58:02+05:30",
+  audio_ms: 2_473_000,
+  parts: 5,
+  repairs: [{ file: "part-0005.wav", already_valid: false, truncated_bytes: 2, frames: 3_504_000 }],
+  removed_empty: [],
+  quarantined: [],
+};
+
+function snapshot(state: MockState): Snapshot {
+  const base: Snapshot = {
+    session: null,
+    recorder: null,
+    mirror: null,
+    parts: [],
+    last_stop: null,
+    display_restarts: 0,
+    display_warning: null,
+  };
+  if (state === "recording" || state === "input_lost") {
+    return {
+      ...base,
+      session: SESSION,
+      recorder: recorderStatus(state === "input_lost" ? "input_lost" : "recording"),
+      mirror: MIRROR,
+      parts: state === "input_lost" ? PARTS.slice(0, 4) : PARTS,
+    };
+  }
+  return base;
+}
+
+type ChannelLike = { id: number };
+
+function emit(channel: ChannelLike, messages: unknown[], first = 0) {
+  const internals = (
+    window as unknown as { __TAURI_INTERNALS__?: { runCallback?: (id: number, data: unknown) => void } }
+  ).__TAURI_INTERNALS__;
+  messages.forEach((message, i) => internals?.runCallback?.(channel.id, { index: first + i, message }));
+}
+
+/** The mockIPC handler. */
+export function bridge(opts: MockOptions = {}) {
+  const state = opts.state ?? "idle";
+  let recording = state === "recording" || state === "input_lost";
+  return (cmd: string, payload?: unknown): unknown => {
+    const args = payload as Record<string, unknown> | undefined;
+    opts.calls?.push(cmd);
+    switch (cmd) {
+      case "has_capability_profile":
+        if (opts.profile instanceof Error) throw opts.profile;
+        return opts.profile ?? false;
+      case "list_inputs":
+        return INPUTS;
+      case "get_settings":
+        return SETTINGS;
+      case "save_settings":
+        return (args as { settings: Settings }).settings;
+      case "recorder_snapshot":
+        return recording
+          ? snapshot(state === "idle" || state === "recovery" ? "recording" : state)
+          : snapshot("idle");
+      case "recovery_list":
+        return { done: true, sessions: state === "recovery" ? [RECOVERED] : [], failed: [] };
+      case "subscribe_events": {
+        const channel = (args as { onEvent: ChannelLike }).onEvent;
+        if (recording) {
+          // A level reading, then recorder and mirror status every second, as the app sends them.
+          // Channel messages carry an increasing index per channel.
+          let next = 0;
+          const send = (message: unknown) => emit(channel, [message], next++);
+          setTimeout(() => send({ kind: "level", rms_dbfs: -21, peak_dbfs: -11, clipped: false }), 50);
+          const status = recorderStatus(state === "input_lost" ? "input_lost" : "recording");
+          setInterval(() => {
+            send({ kind: "recorder_status", ...status });
+            send({ kind: "mirror_status", ...MIRROR });
+          }, 1000);
+        }
+        return null;
+      }
+      case "start_session": {
+        recording = true;
+        const req = (args as { request: { title: string; hall?: string | null } }).request;
+        return { ...SESSION, title: req.title, hall: req.hall ?? null, scheduled: null };
+      }
+      case "recover_session":
+        recording = (args as { action: string }).action === "resume";
+        return recording ? { ...SESSION, resumed: true } : null;
+      case "pause":
+      case "resume":
+        return null;
+      case "stop_session":
+        recording = false;
+        return {
+          recorder: {
+            session_dir: DIR,
+            parts: PARTS,
+            audio_ms: 2_715_000,
+            overrun_samples: 0,
+            xruns: 0,
+            recorder_cpu_ms: 2100,
+            manifest_files: 7,
+          },
+          mirror: { backup_dir: MIRROR.backup_dir, files: [], all_match: true, message: null },
+        };
+      default:
+        throw new Error(`mock bridge: command ${cmd} is not mocked`);
+    }
+  };
+}

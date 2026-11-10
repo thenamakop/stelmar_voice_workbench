@@ -1,0 +1,32 @@
+﻿Negative controls for the fidelity check (9 Nov 2026, after Amendment 1)
+Input: the app recording of the 16:47 webview run (8,915,040 frames, 1 part) and its reference capture.
+Each altered copy changes the app recording in the middle of the run (frame 4,457,520); the copies are not committed.
+Scored with scripts/gates/rescore-run.ps1 (wb-testbench compare, one fixed offset, no re-alignment, then Get-WbRunVerdict).
+
+control: the unaltered recording
+  verdict under the rule: PASS
+  fidelity: app compared with the reference capture over 88,43,040 frames (184.2 s) in 1 run(s) of the app; differing frames 0; reference audio the app has no recording of 0 frame(s); audio only the app has 0 frame(s); restart gaps 0 frame(s)
+  run 1: app frames 0 to 8915040, one fixed offset 61440 frames (found by a stretch of the reference); compared 8843040, differing 0, largest difference 0
+
+(i) one frame deleted
+  verdict under the rule: FAIL
+  fidelity: app compared with the reference capture over 88,43,040 frames (184.2 s) in 1 run(s) of the app; differing frames 4297649; reference audio the app has no recording of 0 frame(s); audio only the app has 0 frame(s); restart gaps 0 frame(s)
+  run 1: app frames 0 to 8915039, one fixed offset 61440 frames (found by a stretch of the reference); compared 8843040, differing 4297649, largest difference 16381
+  differs at reference frame 4396080 (app frame 4457520) for 4297649 frame(s)
+  - the app's recording differs from the reference capture in 4297649 frame(s)
+
+(ii) one frame duplicated
+  verdict under the rule: FAIL
+  fidelity: app compared with the reference capture over 88,43,040 frames (184.2 s) in 1 run(s) of the app; differing frames 4297649; reference audio the app has no recording of 0 frame(s); audio only the app has 0 frame(s); restart gaps 0 frame(s)
+  run 1: app frames 0 to 8915041, one fixed offset 61440 frames (found by a stretch of the reference); compared 8843040, differing 4297649, largest difference 16381
+  differs at reference frame 4396081 (app frame 4457521) for 4297649 frame(s)
+  - the app's recording differs from the reference capture in 4297649 frame(s)
+
+(iii) one sample changed by 1 (channel 1)
+  verdict under the rule: FAIL
+  fidelity: app compared with the reference capture over 88,43,040 frames (184.2 s) in 1 run(s) of the app; differing frames 1; reference audio the app has no recording of 0 frame(s); audio only the app has 0 frame(s); restart gaps 0 frame(s)
+  run 1: app frames 0 to 8915040, one fixed offset 61440 frames (found by a stretch of the reference); compared 8843040, differing 1, largest difference 1
+  differs at reference frame 4396080 (app frame 4457520) for 1 frame(s)
+  - the app's recording differs from the reference capture in 1 frame(s)
+
+Result: the control scores PASS; all three altered copies score FAIL. The two that shift the audio (a frame deleted or duplicated) differ from the altered frame to the end because there is no re-alignment; the single changed sample differs in exactly 1 frame.

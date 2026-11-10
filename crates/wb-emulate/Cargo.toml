@@ -1,0 +1,28 @@
+[package]
+name = "wb-emulate"
+description = "Development only: runs a command inside a Job Object that emulates a test laptop on the Legion. Never bundled."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+ash = { version = "0.38", default-features = false, features = ["loaded", "std"] }
+serde_json.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true, features = [
+  "std",
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_System_JobObjects",
+  "Win32_System_LibraryLoader",
+  "Win32_System_Memory",
+  "Win32_System_SystemInformation",
+  "Win32_System_Threading",
+] }
+
+[lints]
+workspace = true

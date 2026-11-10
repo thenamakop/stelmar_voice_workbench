@@ -1,0 +1,30 @@
+gate-hooks must never reach an installer (Phase 1, offline-auditor request)
+date: 2026-11-09 (IST)
+machine: Legion
+source: commit 8247a2e (phase-1-audio-and-backup)
+overlay tools closed: yes
+
+Rule (src-tauri/build.rs): the `gate-hooks` cargo feature builds only when the profile directory
+above `build` in OUT_DIR is `gate` (plain cargo, `--profile gate`, scripts/gates/build-gate.ps1) and
+no TAURI_ENV_PLATFORM, TAURI_ENV_DEBUG or TAURI_ENV_TARGET_TRIPLE variable is set (the Tauri CLI,
+which makes installers, sets them).
+
+1. pnpm tauri build --features gate-hooks            (release installer build)
+   result: REFUSED, exit code 1
+   error: failed to run custom build command for `stelmar-voice-workbench v0.1.0`
+   error: the gate-hooks feature builds only with plain cargo and --profile gate (scripts/gates/build-gate.ps1), never in an installer build
+
+2. pnpm tauri build --debug --features gate-hooks    (debug installer build)
+   result: REFUSED, exit code 1
+   error: the gate-hooks feature builds only with plain cargo and --profile gate (scripts/gates/build-gate.ps1), never in an installer build
+
+3. cargo build -p stelmar-voice-workbench --profile gate --features "gate-hooks custom-protocol"   (control: the allowed way)
+   result: Finished `gate` profile [optimized] target(s) in 57.98s
+
+Also checked: cargo build -p stelmar-voice-workbench --release --features gate-hooks and the
+debug equivalent are refused with the same message (8 Nov 2026 and 9 Nov 2026).
+
+Note: the control build rewrote target\gate\stelmar-voice-workbench.exe after the Tauri CLI runs, so
+its SHA-256 (6df8f489f033...) differs from the one in the gate evidence (9adb5dfa1f3c..., the binary
+that was tested). The recorder source did not change in between; the gate pack rebuilds with
+scripts/gates/build-gate.ps1 and records the hash of the binary it runs.

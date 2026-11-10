@@ -1,15 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { mockIPC } from "@tauri-apps/api/mocks";
 import { App } from "./App";
 import { initialRoute } from "./routes";
+import { bridge } from "./test/mockBridge";
+import type { MockState } from "./test/mockBridge";
 
-function mockProfile(result: boolean | Error) {
-  mockIPC((cmd) => {
-    if (cmd !== "has_capability_profile") throw new Error(`unexpected command ${cmd}`);
-    if (result instanceof Error) throw result;
-    return result;
-  });
+function mockProfile(result: boolean | Error, state: MockState = "idle", calls?: string[]) {
+  mockIPC(bridge({ profile: result, state, calls }));
 }
 
 describe("first launch", () => {
@@ -89,5 +87,76 @@ describe("navigation", () => {
     expect(hindi.getAttribute("lang")).toBe("hi");
     const mixed = screen.getByText(/main finding/);
     expect(mixed.getAttribute("dir")).toBe("auto");
+  });
+});
+
+describe("recording", () => {
+  it("starts a session from the Record screen and shows the recording state", async () => {
+    const calls: string[] = [];
+    mockProfile(true, "idle", calls);
+    render(<App />);
+    await screen.findByRole("heading", { name: "Sessions" });
+    fireEvent.click(screen.getByRole("button", { name: "Record" }));
+    const start = await screen.findByRole("button", { name: "Start Session" });
+    await waitFor(() => expect((start as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(start);
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText(/Session title/), { target: { value: "Keynote" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Start Recording" }));
+    expect(await screen.findByRole("heading", { name: "Keynote" })).toBeTruthy();
+    expect(calls).toContain("start_session");
+    expect(screen.getByRole("button", { name: "Stop Session" })).toBeTruthy();
+    expect(screen.getByText("Rec")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Stop Session" }));
+    expect(await screen.findByText("Session stopped")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "No Session Open" })).toBeTruthy();
+  });
+
+  it("opens on Record with clock, parts, meter and backup while a session records", async () => {
+    mockProfile(true, "recording");
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Parallel Track Sessions I" })).toBeTruthy();
+    expect(screen.getByLabelText("Recorded time").textContent).toBe("00:45:15");
+    const parts = screen.getByLabelText("Parts");
+    expect(within(parts).getAllByText("Waiting")).toHaveLength(4);
+    expect(within(parts).getByText("Recording")).toBeTruthy();
+    expect(within(parts).getByText("40:00–")).toBeTruthy();
+    expect(screen.getByText("part-0005.wav")).toBeTruthy();
+    expect(screen.getByText("In sync")).toBeTruthy();
+    expect(screen.getByRole("meter", { name: "Input level" })).toBeTruthy();
+    expect(screen.getByText("Queue: no jobs · disk 388 GB free")).toBeTruthy();
+  });
+
+  it("shows the input-lost banner", async () => {
+    mockProfile(true, "input_lost");
+    render(<App />);
+    expect((await screen.findByRole("alert")).textContent).toMatch(/Input lost/);
+    expect(screen.getAllByText("Input lost").length).toBeGreaterThan(0);
+  });
+
+  it("offers Resume and Close for a session left open by a crash", async () => {
+    const calls: string[] = [];
+    mockProfile(true, "recovery", calls);
+    render(<App />);
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Resume This Session?")).toBeTruthy();
+    expect(within(dialog).getByText(/1 part header repaired/)).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Resume Recording" }));
+    await waitFor(() => expect(calls).toContain("recover_session"));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("saves the backup folder from Settings", async () => {
+    const calls: string[] = [];
+    mockProfile(true, "idle", calls);
+    render(<App />);
+    await screen.findByRole("heading", { name: "Sessions" });
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    const backup = (await screen.findByLabelText(/Backup folder/)) as HTMLInputElement;
+    await waitFor(() => expect(backup.value).toBe(String.raw`E:\STELMAR-Backup`));
+    fireEvent.change(backup, { target: { value: String.raw`F:\Backup` } });
+    fireEvent.click(screen.getByRole("button", { name: "Save Folders" }));
+    expect(await screen.findByText("Folders saved")).toBeTruthy();
+    expect(calls).toContain("save_settings");
   });
 });

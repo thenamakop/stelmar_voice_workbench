@@ -1,7 +1,22 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Main window: core window events and the app's own commands only. No plugins.",
-  "windows": ["main"],
-  "permissions": ["core:event:default", "core:window:default", "allow-has-capability-profile"]
+  "description": "Main window (and its replacements after a WebView2 failure): core window events and the app's own commands only. No plugins.",
+  "windows": ["main", "main-*"],
+  "permissions": [
+    "core:event:default",
+    "core:window:default",
+    "allow-has-capability-profile",
+    "allow-list-inputs",
+    "allow-get-settings",
+    "allow-save-settings",
+    "allow-start-session",
+    "allow-pause",
+    "allow-resume",
+    "allow-stop-session",
+    "allow-subscribe-events",
+    "allow-recorder-snapshot",
+    "allow-recovery-list",
+    "allow-recover-session"
+  ]
 }

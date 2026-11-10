@@ -1,0 +1,31 @@
+[package]
+name = "wb-recorder"
+description = "Crash-safe WAV recorder, parts index, mirror and session folders for the STELMAR Voice Workbench"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+cpal.workspace = true
+hound.workspace = true
+ringbuf.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+time.workspace = true
+tracing.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true, features = [
+  "std",
+  "Win32_Foundation",
+  "Win32_Storage_FileSystem",
+  "Win32_System_Power",
+  "Win32_System_Threading",
+] }
+
+[lints]
+workspace = true

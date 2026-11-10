@@ -1,6 +1,13 @@
 [workspace]
 resolver = "3"
-members = ["src-tauri", "crates/wb-protocol", "crates/wb-engine"]
+members = [
+  "src-tauri",
+  "crates/wb-protocol",
+  "crates/wb-engine",
+  "crates/wb-recorder",
+  "crates/wb-emulate",
+  "crates/wb-testbench",
+]
 
 [workspace.package]
 version = "0.1.0"
@@ -10,21 +17,48 @@ license = "UNLICENSED"
 publish = false
 
 [workspace.dependencies]
+anyhow = "1"
+cpal = "0.18"
+hound = "3.5"
+ringbuf = "0.6"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+sha2 = "0.10"
 thiserror = "2"
+time = { version = "0.3", features = ["formatting", "parsing", "macros"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std", "ansi"] }
 wb-protocol = { path = "crates/wb-protocol" }
+wb-recorder = { path = "crates/wb-recorder" }
+# Same version as Tauri 2.11 uses, so the app links one copy. Features are chosen per crate; never
+# enable Win32_Networking, Web or Networking (scripts/check-http-crates.mjs fails the build).
+windows = { version = "0.61", default-features = false }
 
 [workspace.lints.rust]
-unsafe_code = "forbid"
+# Denied everywhere. Only modules named `win.rs` may allow it, each listed in docs/UNSAFE.md, and
+# every unsafe block holds one operation with a SAFETY comment (the clippy lints below).
+unsafe_code = "deny"
 
 [workspace.lints.clippy]
 unwrap_used = "deny"
 expect_used = "deny"
+undocumented_unsafe_blocks = "deny"
+multiple_unsafe_ops_per_block = "deny"
 
 [profile.release]
 codegen-units = 1
 lto = true
 opt-level = 3
-panic = "abort"
+# Unwind, not abort: a panic in a command handler or the UI glue must not end the process while
+# the recorder thread is writing (PLAN non-negotiable 2). Panics are caught at the Tauri command
+# boundary; the recorder runs on its own thread and shares no lock with other threads.
+panic = "unwind"
 strip = true
+
+# Gate runs (soak, load, kill): optimised like release, built quicker, and the only profile the
+# app's `gate-hooks` feature may be built with (src-tauri/build.rs). Output: target\gate.
+[profile.gate]
+inherits = "release"
+lto = false
+codegen-units = 16
+strip = false

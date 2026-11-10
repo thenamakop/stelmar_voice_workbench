@@ -38,7 +38,7 @@ Before the first run: set the Legion's GPU mode to Hybrid in Lenovo Vantage (or 
 | Optimistic for CPU speed | Efficiency cores on the Legion run at higher sustained clocks, on better cooling, than a 15 to 28 W laptop | Speed gates under emulation need 25% headroom: RTF ≤ 0.75 where the gate says 1.0, ≤ 0.26 where it says 0.35 |
 | Pessimistic for integrated-GPU speed | The 14900HX's UHD graphics is weaker than Iris Xe, Arc or Radeon 680M/780M | Hybrid gains measured here are a floor, not an estimate |
 | Exact for memory rules | The job limit enforces the budget | Same thresholds (3 GB free to start, pause under 2 GB) |
-| Good for recorder safety | Overruns depend mostly on priority and core contention, which the affinity mask reproduces | Same gate: zero overruns |
+| Partly good for recorder safety | The affinity mask reproduces contention for the app's own threads, but the Windows audio engine (`audiodg.exe`) and the audio driver run outside the job, on the Legion's other cores | Same gate: zero overruns and zero driver xruns; the load test also stresses every core outside the job. The laptops' own runs remain the real test |
 | Blind to other drivers and thermals | Only one integrated GPU and one chassis are available | These gates stay DEFERRED until the laptops arrive |
 
 ## 3. Gate statuses

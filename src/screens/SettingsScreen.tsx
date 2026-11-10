@@ -1,8 +1,45 @@
-import { Card, Input, Select, Switch } from "../ds";
-import { MainWithSide, Overline, PageHead } from "../shell/layout";
+import { useState } from "react";
+import { Button, Card, Input, Select, Switch } from "../ds";
+import type { ToastTone } from "../ds";
+import type { Recorder } from "../recording/useRecorder";
+import { MainWithSide, Note, Overline, PageHead } from "../shell/layout";
 
-// Settings placeholder. Each setting is wired in the phase that needs it.
-export function SettingsScreen() {
+// Settings. Phase 1 wires the folders (recordings and backup); the rest is wired in the phase that
+// needs it. Folders are typed as full paths: a folder picker would need a Tauri plugin, and the
+// app ships none.
+
+export interface SettingsScreenProps {
+  recorder: Recorder;
+  notify: (toast: { tone: ToastTone; title: string; message?: string }) => void;
+}
+
+export function SettingsScreen({ recorder, notify }: SettingsScreenProps) {
+  const current = recorder.settings;
+  // Edits in progress; null fields show the saved value.
+  const [draft, setDraft] = useState<{ recordings: string | null; backup: string | null }>({
+    recordings: null,
+    backup: null,
+  });
+  const recordings = draft.recordings ?? current?.recordings_root ?? "";
+  const backup = draft.backup ?? current?.backup_root ?? "";
+  const setRecordings = (v: string) => setDraft((d) => ({ ...d, recordings: v }));
+  const setBackup = (v: string) => setDraft((d) => ({ ...d, backup: v }));
+  const recording = !!recorder.snapshot?.session;
+  const changed =
+    !!current &&
+    (recordings !== current.recordings_root || (backup.trim() || null) !== (current.backup_root ?? null));
+
+  const save = async () => {
+    if (!current) return;
+    const ok = await recorder.saveSettings({
+      ...current,
+      recordings_root: recordings.trim(),
+      backup_root: backup.trim() || null,
+    });
+    if (ok) setDraft({ recordings: null, backup: null });
+    if (ok) notify({ tone: "success", title: "Folders saved", message: "They apply from the next session." });
+  };
+
   return (
     <>
       <PageHead
@@ -25,10 +62,25 @@ export function SettingsScreen() {
             <Input
               label="Recordings folder"
               placeholder="D:\STELMAR-Transcripts"
-              disabled
-              hint="Chosen in a later update"
+              value={recordings}
+              onChange={(e) => setRecordings(e.target.value)}
+              disabled={!current}
+              hint="Full path. Each session gets a dated folder here."
             />
-            <Select label="Backup drive" placeholder="Not set" options={[]} disabled />
+            <Input
+              label="Backup folder"
+              placeholder="E:\STELMAR-Backup"
+              value={backup}
+              onChange={(e) => setBackup(e.target.value)}
+              disabled={!current}
+              hint="On a second drive. Every session is copied here while it records. Leave empty for none."
+            />
+            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+              <Button size="sm" disabled={!changed || recorder.busy} onClick={() => void save()}>
+                Save Folders
+              </Button>
+              {recording && <Note>The session that is recording keeps its folders.</Note>}
+            </div>
           </Card>
           <Card style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <Overline>Glossary</Overline>

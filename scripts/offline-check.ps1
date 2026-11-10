@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Phase 0 gate "Shell opens with no network": starts the release build, times how long the window
   takes to appear and to render, checks that it is not blank, and saves screenshots and a log.
@@ -36,6 +36,7 @@
   powershell -ExecutionPolicy Bypass -File .\scripts\offline-check.ps1 -Diagnose
   powershell -ExecutionPolicy Bypass -File .\scripts\offline-check.ps1 -Label online -Machine Legion
   powershell -ExecutionPolicy Bypass -File .\scripts\offline-check.ps1 -Label offline -Machine Legion
+  (-OutDir defaults to docs\evidence\phase-<n> for the current phase branch, never phase-0 on a later phase.)
 #>
 [CmdletBinding()]
 param(
@@ -53,8 +54,16 @@ param(
 $ErrorActionPreference = 'Stop'
 # Windows PowerShell 5.1 leaves $PSScriptRoot empty in param defaults, so resolve defaults here.
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
+Import-Module (Join-Path $here 'lib\PsEnv.psm1') -Force
+Set-WbCleanPSModulePath
 if (-not $Exe) { $Exe = Join-Path $here '..\target\release\stelmar-voice-workbench.exe' }
-if (-not $OutDir) { $OutDir = Join-Path $here '..\docs\evidence\phase-0' }
+# The evidence folder defaults to the current phase's (from the branch name phase-<n>-...), never to
+# an earlier phase: an earlier phase's evidence must not be overwritten. Pass -OutDir to override.
+if (-not $OutDir) {
+  $branch = (& git -C $here rev-parse --abbrev-ref HEAD 2>$null)
+  if ($branch -match '^phase-(\d+[a-z]?)-') { $OutDir = Join-Path $here ('..\docs\evidence\phase-' + $Matches[1]) }
+  else { throw "Cannot tell the current phase from the branch name '$branch'. Pass -OutDir (for example docs\evidence\phase-1)." }
+}
 Import-Module (Join-Path $here 'lib\NetworkState.psm1') -Force
 Import-Module (Join-Path $here 'lib\Redact.psm1') -Force
 
@@ -71,7 +80,7 @@ function Get-CheckedNetworkState {
 
 if ($Diagnose) {
   $net = Get-CheckedNetworkState
-  $net.Lines | ForEach-Object { Write-Host $_ }
+  $net.Lines | ForEach-Object { Write-Host ($_ | ConvertTo-WbRedacted -MachineLabel $Machine) }
   exit 0
 }
 if (-not $Label) { throw 'Give -Label online or -Label offline (or -Diagnose).' }
@@ -82,7 +91,8 @@ $Exe = (Resolve-Path $Exe).Path
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 $OutDir = (Resolve-Path $OutDir).Path
 $log = [System.Collections.Generic.List[string]]::new()
-function Say([string]$line) { Write-Host $line; $log.Add($line) }
+# The console gets the same redacted text as the log (user name, profile path, computer name).
+function Say([string]$line) { Write-Host ($line | ConvertTo-WbRedacted -MachineLabel $Machine); $log.Add($line) }
 
 # Clean stop between runs (AppProcess.psm1): close the window, force-kill what is left including every
 # msedgewebview2.exe for the app's user data folder, and wait until none remain. A relaunch while the
@@ -143,7 +153,7 @@ function Invoke-Run([int]$Index, [string]$ScreenshotName) {
 $logFile = Join-Path $OutDir "offline-check-$Label.txt"
 $net = Get-CheckedNetworkState
 Say "STELMAR Voice Workbench offline check: $Label"
-Say "Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')   Machine: $env:COMPUTERNAME   Windows $([Environment]::OSVersion.Version)"
+Say "Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')   Machine: $Machine   Windows $([Environment]::OSVersion.Version)"
 Say "Exe: $Exe ($((Get-Item $Exe).LastWriteTime.ToString('yyyy-MM-dd HH:mm')))"
 foreach ($line in $net.Lines) { Say $line }
 if ($Label -eq 'offline' -and $net.Result.State -eq 'Online') {
