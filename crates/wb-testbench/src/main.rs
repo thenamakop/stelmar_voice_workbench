@@ -11,6 +11,7 @@
 //! wb-testbench compare  --app SESSION --reference DIR [--reference-signal-start-ms N] [--app-signal-start-ms N] [--reference-tail ignore] [--report R.json]   fidelity: app vs reference
 //! wb-testbench capture  --device "CABLE Output" --dir DIR --stop-file F [--go-file G] [--report R.json]
 //!                       independent reference capture (to tell source-chain glitches from the recorder's)
+//! wb-testbench scan-repeats --session DIR [--report R.json]   run the recorder's repeated-block detector over a recorded session
 //! wb-testbench stress   [--threads N] [--gpu "UHD"] [--seconds N] [--stop-file F] [--report R.json]
 //! ```
 //!
@@ -21,6 +22,7 @@ mod analyse;
 mod compare;
 mod play;
 mod redact;
+mod scan;
 mod reference;
 mod signal;
 mod stress;
@@ -305,6 +307,28 @@ fn run() -> Result<()> {
                 info.sample_rate,
             )?;
             output(&args, &a)
+        }
+        "scan-repeats" => {
+            let report = scan::scan(Path::new(args.get("session")?))?;
+            output(&args, &report)
+        }
+        "lag-scan" => {
+            let v = scan::lag_scan(
+                Path::new(args.get("session")?),
+                args.num("from-ms", 0.0)?,
+                args.num("to-ms", 5000.0)?,
+                args.num("min-lag", 1)?,
+                args.num("max-lag", 2000)?,
+            )?;
+            output(&args, &v)
+        }
+        "frames" => {
+            let v = scan::dump_frames(
+                Path::new(args.get("session")?),
+                args.num("at-ms", 0.0)?,
+                args.num("count", 64)?,
+            )?;
+            output(&args, &v)
         }
         "decode" => decode(&args),
         "parts-check" => parts_check(&args),
