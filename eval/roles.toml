@@ -1,0 +1,51 @@
+# Decoding settings per role (docs/PLAN.md section 6). The harness passes them to the engine exactly,
+# so evaluation numbers match the app. Thread counts here are for evaluation runs on the Legion; on
+# the room machines they come from capability.json, never from this file.
+#
+# glossary: Phase 5 fills it (STELMAR, BML Munjal University, speaker names, track keywords, Latin
+# script) and tests it on the local sets; it stays empty for the public sets, whose vocabulary it
+# does not cover.
+#
+# timestamps = false everywhere: segment times come from the audio clock and VAD, never from model
+# timestamps (PLAN section 5), and fine-tunes trained without timestamp tokens (vasista22) hallucinate
+# when decoded with them (found in Phase 5a: hindi-small 67.8% WER with timestamps on FLEURS hi).
+
+[near-live]
+timestamps = false
+beam_size = 1                # greedy
+best_of = 1
+temperature_fallback = false
+previous_text_context = false
+vad = true
+max_chunk_s = 15.0           # one VAD utterance
+threads = 8
+
+[rolling]
+timestamps = false
+beam_size = 5
+best_of = 5
+temperature_fallback = true
+previous_text_context = true  # previous segment in the same language
+vad = true
+max_chunk_s = 15.0            # sentence-sized chunks in multi-language sessions (30 s otherwise)
+threads = 8
+
+[night]
+timestamps = false
+beam_size = 5
+best_of = 5
+temperature_fallback = true
+previous_text_context = true
+vad = true
+max_chunk_s = 15.0
+threads = 8
+
+[live]
+timestamps = false
+beam_size = 5                 # finals; partials are greedy
+best_of = 5
+temperature_fallback = true
+previous_text_context = true
+vad = true
+max_chunk_s = 25.0
+threads = 8

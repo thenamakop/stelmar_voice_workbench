@@ -1,0 +1,155 @@
+# Every evaluation run. `eval/run.py all` runs the ones without a summary yet and regenerates
+# eval/results/TABLES.md. Phase 5 adds the full candidate grid and the local sets.
+#
+# Run keys: setup, dataset, role, engine (whisper-cli | wb-engine), limit, lang_mode (fixed | detect),
+# langs (expected session languages for detect), glossary, fixture, name, needs = "phase-2".
+
+# ------------------------------------------------------------------------------------------- setups
+[setups.medium]
+models = { "*" = "medium" }
+
+[setups.small]
+models = { "*" = "small" }
+
+# Per-language routing: English chunks to stock medium, Hindi chunks to a Hindi fine-tune.
+[setups.route-en-medium-hi-indicwhisper]
+models = { en = "medium", hi = "indicwhisper-hi-q8_0" }
+detector = "medium"
+
+# ------------------------------------------------- Phase 5a Verification: wb-engine against whisper-cli
+# whisper medium, 20 FLEURS clips per language, rolling settings, language given (single-language session).
+
+[[run]]
+name = "verify-cli-medium-fleurs-en"
+setup = "medium"
+dataset = "fleurs-en"
+role = "rolling"
+engine = "whisper-cli"
+limit = 20
+
+[[run]]
+name = "verify-cli-medium-fleurs-hi"
+setup = "medium"
+dataset = "fleurs-hi"
+role = "rolling"
+engine = "whisper-cli"
+limit = 20
+
+[[run]]
+name = "verify-cli-medium-fleurs-ur"
+setup = "medium"
+dataset = "fleurs-ur"
+role = "rolling"
+engine = "whisper-cli"
+limit = 20
+
+[[run]]
+name = "verify-wb-medium-fleurs-en"
+setup = "medium"
+dataset = "fleurs-en"
+role = "rolling"
+engine = "wb-engine"
+limit = 20
+needs = "phase-2"
+
+[[run]]
+name = "verify-wb-medium-fleurs-hi"
+setup = "medium"
+dataset = "fleurs-hi"
+role = "rolling"
+engine = "wb-engine"
+limit = 20
+needs = "phase-2"
+
+[[run]]
+name = "verify-wb-medium-fleurs-ur"
+setup = "medium"
+dataset = "fleurs-ur"
+role = "rolling"
+engine = "wb-engine"
+limit = 20
+needs = "phase-2"
+
+# The comparison is valid only when wb-engine bundles the same whisper.cpp version as whisper-cli
+# (eval/README.md); the table prints both versions.
+[[compare]]
+a = "verify-cli-medium-fleurs-en"
+b = "verify-wb-medium-fleurs-en"
+max_wer_points = 3.0
+
+[[compare]]
+a = "verify-cli-medium-fleurs-hi"
+b = "verify-wb-medium-fleurs-hi"
+max_wer_points = 3.0
+
+[[compare]]
+a = "verify-cli-medium-fleurs-ur"
+b = "verify-wb-medium-fleurs-ur"
+max_wer_points = 3.0
+
+# --------------------------------------------------- Phase 5a smoke runs of the converted candidates
+# 20 clips each, to catch a broken conversion (garbage, wrong script) before Phase 5's full grid.
+
+[[run]]
+name = "smoke-hindi-small-q8_0-fleurs-hi"
+setup = "hindi-small-q8_0"
+dataset = "fleurs-hi"
+role = "near-live"
+engine = "whisper-cli"
+limit = 20
+
+[[run]]
+name = "smoke-hindi-medium-q8_0-fleurs-hi"
+setup = "hindi-medium-q8_0"
+dataset = "fleurs-hi"
+role = "rolling"
+engine = "whisper-cli"
+limit = 20
+
+[[run]]
+name = "smoke-indicwhisper-hi-q8_0-fleurs-hi"
+setup = "indicwhisper-hi-q8_0"
+dataset = "fleurs-hi"
+role = "rolling"
+engine = "whisper-cli"
+limit = 20
+
+[[run]]
+name = "smoke-vaani-hi-q8_0-fleurs-hi"
+setup = "vaani-hi-q8_0"
+dataset = "fleurs-hi"
+role = "rolling"
+engine = "whisper-cli"
+limit = 20
+
+[[run]]
+name = "smoke-indicwhisper-ur-q8_0-fleurs-ur"
+setup = "indicwhisper-ur-q8_0"
+dataset = "fleurs-ur"
+role = "rolling"
+engine = "whisper-cli"
+limit = 20
+
+[[run]]
+name = "smoke-hinglish-q5_0-coshe"
+setup = "hinglish-q5_0"
+dataset = "coshe-eval"
+role = "night"
+engine = "whisper-cli"
+limit = 20
+
+[[run]]
+name = "smoke-medium-coshe"
+setup = "medium"
+dataset = "coshe-eval"
+role = "night"
+engine = "whisper-cli"
+limit = 20
+
+[[run]]
+name = "smoke-hinglish-q8_0-coshe"
+setup = "hinglish-q8_0"
+dataset = "coshe-eval"
+role = "night"
+engine = "whisper-cli"
+limit = 20

@@ -1,0 +1,38 @@
+# Development-time evaluation and model-conversion environment (Phase 5a).
+# Never bundled with the app. Create it with: uv sync --project eval
+[project]
+name = "stelmar-eval"
+version = "0.1.0"
+description = "STELMAR Voice Workbench: evaluation harness, data and model-conversion scripts (development only)"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "jiwer>=3.1,<5",
+    "numpy>=2.2,<3",
+    "soundfile>=0.13",
+    "soxr>=0.5",
+    "pyarrow>=19",
+    "huggingface_hub>=0.34",
+    "tomli-w>=1.2",
+    # Conversion only (whisper.cpp's convert-h5-to-ggml.py loads the checkpoint with transformers).
+    "torch>=2.7",
+    "transformers>=4.53,<5",
+    "safetensors>=0.5",
+    "pytest>=8.3",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "heavy: decodes audio or runs whisper.cpp; waits for the Track A gate lock first",
+]
