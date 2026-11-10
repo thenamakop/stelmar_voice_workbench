@@ -300,9 +300,15 @@ pub fn run(
                 out::warn(
                     "segment_dropped",
                     format!(
-                        "chunk {chunk_no} ({} to {} ms) dropped by a guard: {reason:?}",
+                        "chunk {chunk_no} ({} to {} ms) dropped by a guard: {reason:?} (compression ratio {:.2}, average log-probability {:.2}, no-speech {:.2}, speech share {:.2}, {} characters, {} words)",
                         abs(c.start_ms),
-                        abs(c.end_ms)
+                        abs(c.end_ms),
+                        metrics.compression_ratio,
+                        metrics.avg_logprob,
+                        metrics.no_speech_prob,
+                        metrics.speech_ratio,
+                        t.chars().count(),
+                        t.split_whitespace().count()
                     ),
                 );
                 // A dropped chunk must not poison the next prompt.

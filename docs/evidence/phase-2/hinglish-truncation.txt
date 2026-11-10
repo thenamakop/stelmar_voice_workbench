@@ -1,0 +1,23 @@
+Hinglish on 20 CoSHE-Eval clips through wb-engine batch (Phase 2, 10 Nov 2026)
+
+Gate (docs/GATES.md, 5a to 2): 0 truncated and 0 broken utterances. RESULT: FAIL (broken 0, truncated 3). Stopped; not re-run, engine not changed.
+
+Setup: Legion native, 8 threads, wb-engine 0.1.0 avx2 (whisper.cpp v1.9.5 commit d1be6fde11ac, portable AVX2, flash attention on), model hinglish-q5_0 (Trelis/whisper-hinglish-preview at eab1188f..., converted and quantised here; both steps deterministic, see model-determinism.txt), role night (beam 5, best-of 5, temperature fallback, previous-text context on), language given per clip (oracle, as in the 5a smoke run), the same 20 clips as the 5a smoke run (limit 20 of coshe-eval). Track B idle, overlay tools closed, no build running.
+
+Result of the run (eval/run.py, phase2-wb-hinglish-q5_0-coshe)
+- WER 18.1, CER 14.1 (5a smoke run, whisper-cli: WER 11.6, CER 8.0, 0 truncated).
+- Broken (U+FFFD) utterances: 0. Truncated utterances (speech lost): 3 of 20: audio_1444, audio_908, audio_37.
+- Speed (information): RTF 3.09 at 8 threads on this machine.
+
+Cause, from the engine's own warnings on those three clips (a diagnostic decode of each, same settings; the engine's segment_dropped warning now carries the guard's numbers, no text)
+The engine's guard (PLAN section 6: drop a segment whose compression ratio is over 2.4) removed whole chunks:
+| clip | chunk (ms) | compression ratio | avg log-prob | words | what it was |
+| audio_1444 | 28,990 to 42,830 | 2.78 (2.53 without context) | -0.02 | 38 | real speech: a sentence said twice. whisper-cli on the same chunk gives the same text and ratio 2.53; the reference text of the whole clip itself has ratio 2.43 |
+| audio_908 | 25,050 to 32,610 | 4.23 | -0.21 | 26 | repetition loop (many short words) |
+| audio_908 | 32,610 to 46,730 | 5.45, hit the token limit | -0.27 | 56 | repetition loop |
+| audio_37 | 90 to 13,350 | 10.00, hit the token limit, ended inside a character | -0.13 | 37 | repetition loop |
+So there are two separate defects:
+1. The 2.4 threshold comes from English text. Devanagari costs three UTF-8 bytes per character with two of them nearly constant, so ordinary Hindi, and especially Hinglish, compresses better than English; legitimate speech goes over 2.4 (audio_1444). That is a Latin-only shortcut in a guard (AGENTS.md non-negotiable 6).
+2. Genuine loops (ratio 4 to 10) are dropped instead of retried, so the speech in that chunk is lost. whisper-cli's 5a run never showed loops because its previous-text prompt was corrupted on Windows (every Devanagari character became "?", see wer-comparison.txt), so the loops appear only with correct context.
+
+Not decided here: PLAN section 6 says "drop a segment ... when the compression ratio is over 2.4"; changing the guard (script-neutral ratio, and a retry before dropping) changes a PLAN decision and is for the owner to approve.

@@ -225,6 +225,17 @@ role = "night"
 engine = "whisper-cli"
 limit = 20
 
+# Phase 2 truncation check (docs/GATES.md, 5a to 2): the same 20 CoSHE-Eval clips, model and role as the
+# 5a smoke run of whisper-cli, decoded by wb-engine batch. Closed when 0 truncated and 0 broken utterances.
+[[run]]
+name = "phase2-wb-hinglish-q5_0-coshe"
+setup = "hinglish-q5_0"
+dataset = "coshe-eval"
+role = "night"
+engine = "wb-engine"
+limit = 20
+needs = "phase-2"
+
 # The parity gate.
 [[compare]]
 a = "verify-clichunks-medium-fleurs-en"

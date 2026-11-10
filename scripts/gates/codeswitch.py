@@ -92,6 +92,7 @@ def bit_reversal_order(n: int) -> list[int]:
 
 
 def engine_chunks(wav: Path, out: Path) -> list[dict]:
+    out.parent.mkdir(parents=True, exist_ok=True)
     r = subprocess.run([str(ENGINE), "chunks", "--file", str(wav), "--out", str(out)], capture_output=True, text=True)
     if r.returncode != 0:
         raise SystemExit(f"wb-engine chunks failed ({r.returncode}): {r.stderr[-400:]}")
@@ -99,6 +100,7 @@ def engine_chunks(wav: Path, out: Path) -> list[dict]:
 
 
 def engine_batch(wav: Path, out: Path, langs: str, models: str) -> list[dict]:
+    out.parent.mkdir(parents=True, exist_ok=True)
     r = subprocess.run(
         [str(ENGINE), "batch", "--file", str(wav), "--models", models, "--langs", langs, "--out", str(out)],
         capture_output=True, text=True,
