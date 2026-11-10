@@ -44,39 +44,250 @@ pub struct StreamCounters {
     /// Priority of the audio driver's capture thread: 0 not yet known, 1 MMCSS "Pro Audio",
     /// 2 THREAD_PRIORITY_HIGHEST, 3 normal.
     pub capture_priority: AtomicU8,
-    /// Callbacks whose device capture time did not advance by the frames delivered before them
-    /// (a jump or repeat on the capture side, even when the driver reports no xrun).
+    /// Capture position breaks: the device capture time left the line the frames delivered so
+    /// far predict and stayed off it for [`BREAK_CALLBACKS`] callbacks in a row (a jump or a
+    /// repeat on the capture side, even when the driver reports no xrun).
     pub position_breaks: AtomicU64,
+    /// Single timestamps (or runs shorter than a break) that left the line and came back: jitter
+    /// in the timestamp, not in the audio. Reported, never gated.
+    pub timestamp_outliers: AtomicU64,
+    /// What the old pairwise check would have counted: each callback compared with the one before
+    /// it, so one outlier counts twice (out and back). Kept for the diagnostic only.
+    pub position_pair_flags: AtomicU64,
+    /// Frames the data callback has delivered (including any it could not fit in the ring).
+    pub frames: AtomicU64,
 }
 
-/// Checks that each callback's capture timestamp advances by the frames of the one before.
-/// Arithmetic only: safe for the audio callback.
-struct PositionCheck {
+/// A driver xrun, as the error callback saw it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct XrunMark {
+    /// Data callbacks received before the error callback ran.
+    pub callbacks: u64,
+    /// Frames delivered before it.
+    pub frames: u64,
+    /// `QueryPerformanceCounter` ticks when the error callback ran (0 where unavailable).
+    pub qpc: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PositionKind {
+    /// Counted in `position_breaks`.
+    Break,
+    /// Counted in `timestamp_outliers`.
+    Outlier,
+    /// Counted in `position_pair_flags`.
+    PairFlag,
+}
+
+/// A position-check finding, for session.log and the diagnostic.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PositionMark {
+    pub kind: PositionKind,
+    /// Index of the data callback it was found in (0 is the first).
+    pub callback: u64,
+    /// Frames delivered before that callback.
+    pub frames: u64,
+    /// Capture time of that callback in ns since the first callback.
+    pub ts_ns: i64,
+    /// How far it was from the line the earlier frames predict (the anchored check), in ns.
+    pub dev_ns: i64,
+    /// How far it was from the previous callback's timestamp plus that callback's frames (the old
+    /// pairwise check), in ns.
+    pub pair_diff_ns: i64,
+}
+
+/// Callbacks in a row that must stay off the predicted line for it to be a break.
+pub const BREAK_CALLBACKS: u8 = 3;
+const MIN_TOLERANCE_NS: i64 = 2_000_000;
+
+/// What the anchored check made of one callback.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PositionVerdict {
+    /// On the line.
+    Ok,
+    /// Off the line; not yet known whether it comes back.
+    Deviating,
+    /// Off the line for [`BREAK_CALLBACKS`] callbacks in a row: the audio clock moved.
+    Break { dev_ns: i64 },
+    /// Was off the line for `callbacks` callbacks (fewer than a break) and is back on it.
+    Outlier { dev_ns: i64, callbacks: u8 },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PositionStep {
+    pub verdict: PositionVerdict,
+    /// This callback's distance from the predicted line, in ns.
+    pub dev_ns: i64,
+    /// Set when the old pairwise check would have flagged this callback (its distance, in ns).
+    pub pair_flag: Option<i64>,
+}
+
+/// Checks that the capture timestamps follow the frames delivered.
+///
+/// The pairwise check this replaces compared each callback with the one before it, so a single
+/// late timestamp was flagged twice (out and back) although no audio was affected: the 10 Nov
+/// 2026 runs counted 8 breaks (webview 2, load 2, soak 4) while the recordings equalled the
+/// reference capture exactly. This one keeps the line the delivered frames predict. A callback
+/// that is back on the line after a short excursion is an outlier; one that stays off it for
+/// [`BREAK_CALLBACKS`] callbacks in a row is a break and the line is re-drawn from there. While
+/// callbacks are on the line the prediction is re-anchored to each one, so a slow clock drift
+/// never accumulates. Arithmetic only: safe for the audio callback.
+#[derive(Debug, Clone)]
+pub struct PositionTracker {
     rate: u64,
-    last: Option<(cpal::StreamInstant, u64)>,
+    /// Where the next callback should be, in ns since the first one.
+    expected: Option<i64>,
+    pending: u8,
+    pending_dev: i64,
+    /// The previous callback, for the old pairwise check: (timestamp ns, frames).
+    prev: Option<(i64, u64)>,
+}
+
+impl PositionTracker {
+    pub fn new(rate: u32) -> Self {
+        Self {
+            rate: u64::from(rate.max(1)),
+            expected: None,
+            pending: 0,
+            pending_dev: 0,
+            prev: None,
+        }
+    }
+
+    fn frames_ns(&self, frames: u64) -> i64 {
+        (u128::from(frames) * 1_000_000_000 / u128::from(self.rate)) as i64
+    }
+
+    /// `ts_ns` is the callback's capture time in ns since the first callback; `frames` how many
+    /// frames it delivered.
+    #[inline]
+    pub fn check(&mut self, ts_ns: i64, frames: u64) -> PositionStep {
+        let period = self.frames_ns(frames);
+        let tol = MIN_TOLERANCE_NS.max(period / 4);
+
+        let mut pair_flag = None;
+        if let Some((prev_ts, prev_frames)) = self.prev {
+            let prev_period = self.frames_ns(prev_frames);
+            let diff = ts_ns - prev_ts - prev_period;
+            if diff.abs() > MIN_TOLERANCE_NS && diff.abs() > prev_period / 4 {
+                pair_flag = Some(diff);
+            }
+        }
+        self.prev = Some((ts_ns, frames));
+
+        let Some(expected) = self.expected else {
+            self.expected = Some(ts_ns + period);
+            return PositionStep {
+                verdict: PositionVerdict::Ok,
+                dev_ns: 0,
+                pair_flag,
+            };
+        };
+        let dev = ts_ns - expected;
+        let verdict = if dev.abs() <= tol {
+            let v = if self.pending > 0 {
+                PositionVerdict::Outlier {
+                    dev_ns: self.pending_dev,
+                    callbacks: self.pending,
+                }
+            } else {
+                PositionVerdict::Ok
+            };
+            self.pending = 0;
+            self.expected = Some(ts_ns + period);
+            v
+        } else if self.pending > 0 && (dev - self.pending_dev).abs() <= tol {
+            self.pending += 1;
+            if self.pending >= BREAK_CALLBACKS {
+                self.pending = 0;
+                self.expected = Some(ts_ns + period);
+                PositionVerdict::Break { dev_ns: dev }
+            } else {
+                self.expected = Some(expected + period);
+                PositionVerdict::Deviating
+            }
+        } else {
+            // A first excursion, or one that differs from the pending one: the pending one was
+            // an outlier that did not come back to the line before the next one began.
+            let v = if self.pending > 0 {
+                PositionVerdict::Outlier {
+                    dev_ns: self.pending_dev,
+                    callbacks: self.pending,
+                }
+            } else {
+                PositionVerdict::Deviating
+            };
+            self.pending = 1;
+            self.pending_dev = dev;
+            self.expected = Some(expected + period);
+            v
+        };
+        PositionStep {
+            verdict,
+            dev_ns: dev,
+            pair_flag,
+        }
+    }
+}
+
+/// Wraps [`PositionTracker`] for the data callback: converts the stream timestamp, counts, and
+/// leaves a mark in a ring for the recorder thread. Allocation-free.
+struct PositionCheck {
+    tracker: PositionTracker,
+    first: Option<cpal::StreamInstant>,
+    marks: HeapProd<PositionMark>,
 }
 
 impl PositionCheck {
-    fn new(rate: u32) -> Self {
+    fn new(rate: u32, marks: HeapProd<PositionMark>) -> Self {
         Self {
-            rate: u64::from(rate.max(1)),
-            last: None,
+            tracker: PositionTracker::new(rate),
+            first: None,
+            marks,
         }
     }
 
     #[inline]
     fn check(&mut self, info: &cpal::InputCallbackInfo, frames: u64, counters: &StreamCounters) {
         let ts = info.timestamp().capture;
-        if let Some((prev, prev_frames)) = self.last {
-            let expected = u128::from(prev_frames) * 1_000_000_000 / u128::from(self.rate);
-            let actual = ts.saturating_duration_since(prev).as_nanos();
-            let diff = actual.abs_diff(expected);
-            // Timestamps jitter a little; a break is more than 2 ms and a quarter of a period.
-            if diff > 2_000_000 && diff > expected / 4 {
-                counters.position_breaks.fetch_add(1, Ordering::Relaxed);
+        let first = *self.first.get_or_insert(ts);
+        let ts_ns = if ts >= first {
+            ts.saturating_duration_since(first).as_nanos() as i64
+        } else {
+            -(first.saturating_duration_since(ts).as_nanos() as i64)
+        };
+        let callback = counters.callbacks.load(Ordering::Relaxed);
+        let delivered = counters.frames.load(Ordering::Relaxed);
+        let step = self.tracker.check(ts_ns, frames);
+        let mut mark = |kind: PositionKind, counter: &AtomicU64, dev_ns: i64, pair_diff_ns: i64| {
+            counter.fetch_add(1, Ordering::Relaxed);
+            let _ = self.marks.try_push(PositionMark {
+                kind,
+                callback,
+                frames: delivered,
+                ts_ns,
+                dev_ns,
+                pair_diff_ns,
+            });
+        };
+        let pair = step.pair_flag.unwrap_or(0);
+        match step.verdict {
+            PositionVerdict::Break { dev_ns } => {
+                mark(PositionKind::Break, &counters.position_breaks, dev_ns, pair)
             }
+            PositionVerdict::Outlier { dev_ns, .. } => {
+                mark(PositionKind::Outlier, &counters.timestamp_outliers, dev_ns, pair)
+            }
+            PositionVerdict::Ok | PositionVerdict::Deviating => {}
         }
-        self.last = Some((ts, frames));
+        if let Some(diff) = step.pair_flag {
+            mark(
+                PositionKind::PairFlag,
+                &counters.position_pair_flags,
+                step.dev_ns,
+                diff,
+            );
+        }
     }
 }
 
@@ -111,6 +322,10 @@ pub struct StreamHandle {
     pub capacity: usize,
     /// Device buffer the stream opened with: "fixed 100 ms" or "device default".
     pub buffer: &'static str,
+    /// Driver xruns with their position, left by the error callback (none for a manual handle).
+    pub xrun_log: Option<HeapCons<XrunMark>>,
+    /// Position-check findings left by the data callback (none for a manual handle).
+    pub position_log: Option<HeapCons<PositionMark>>,
 }
 
 impl StreamHandle {
@@ -126,10 +341,45 @@ impl StreamHandle {
                 counters: Arc::new(StreamCounters::default()),
                 capacity,
                 buffer: "manual",
+                xrun_log: None,
+                position_log: None,
             },
         )
     }
 }
+
+/// What `StreamHandle::manual_with_marks` returns besides the handle: producers for the audio
+/// ring and for the xrun and position rings (tests of the recorder's mark logging).
+#[doc(hidden)]
+pub struct ManualProducers {
+    pub audio: HeapProd<f32>,
+    pub xruns: HeapProd<XrunMark>,
+    pub positions: HeapProd<PositionMark>,
+}
+
+impl StreamHandle {
+    /// Like [`StreamHandle::manual`], with xrun and position rings the caller can fill.
+    #[doc(hidden)]
+    pub fn manual_with_marks(input: InputInfo, seconds: u32) -> (ManualProducers, Self) {
+        let (audio, mut handle) = Self::manual(input, seconds);
+        let (xruns, xrun_cons) = HeapRb::<XrunMark>::new(MARK_RING).split();
+        let (positions, position_cons) = HeapRb::<PositionMark>::new(MARK_RING).split();
+        handle.xrun_log = Some(xrun_cons);
+        handle.position_log = Some(position_cons);
+        (
+            ManualProducers {
+                audio,
+                xruns,
+                positions,
+            },
+            handle,
+        )
+    }
+}
+
+/// Slots in the xrun and position rings: far more than a healthy stream ever leaves between two
+/// looks of the recorder thread (about 4 a second); a full ring drops the mark, never blocks.
+const MARK_RING: usize = 256;
 
 /// An input device for the device picker.
 #[derive(Debug, Clone, Serialize)]
@@ -289,6 +539,9 @@ fn push_frames<T: Copy>(
             .overrun_samples
             .fetch_add(dropped as u64, Ordering::Relaxed);
     }
+    counters
+        .frames
+        .fetch_add((data.len() / channels) as u64, Ordering::Relaxed);
     counters.callbacks.fetch_add(1, Ordering::Relaxed);
 }
 
@@ -309,11 +562,20 @@ fn try_open(
     let (mut prod, consumer) = HeapRb::<f32>::new(capacity).split();
     let counters = Arc::new(StreamCounters::default());
 
+    let (mut xrun_prod, xrun_cons) = HeapRb::<XrunMark>::new(MARK_RING).split();
+    let (position_prod, position_cons) = HeapRb::<PositionMark>::new(MARK_RING).split();
     let err_counters = Arc::clone(&counters);
     let on_error = move |err: cpal::Error| {
         let kind = match err.kind() {
             ErrorKind::Xrun => {
+                // Where it happened: the data callbacks and frames before it, and the clock.
+                let mark = XrunMark {
+                    callbacks: err_counters.callbacks.load(Ordering::Relaxed),
+                    frames: err_counters.frames.load(Ordering::Relaxed),
+                    qpc: crate::sys::qpc_ticks(),
+                };
                 err_counters.xruns.fetch_add(1, Ordering::Relaxed);
+                let _ = xrun_prod.try_push(mark);
                 return;
             }
             ErrorKind::DeviceNotAvailable => 1,
@@ -329,7 +591,7 @@ fn try_open(
 
     let cb = Arc::clone(&counters);
     let mut registered = false;
-    let mut position = PositionCheck::new(config.sample_rate);
+    let mut position = PositionCheck::new(config.sample_rate, position_prod);
     let timeout = Some(Duration::from_secs(5));
     let stream = match format {
         SampleFormat::F32 => device.build_input_stream::<f32, _, _>(
@@ -391,6 +653,8 @@ fn try_open(
             counters,
             capacity,
             buffer: buffer_label,
+            xrun_log: Some(xrun_cons),
+            position_log: Some(position_cons),
         },
     ))
 }
@@ -618,5 +882,147 @@ fn capture_loop(
         if wait_stop(stop, RETRY_INTERVAL) {
             return;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const MS: i64 = 1_000_000;
+    /// 480 frames at 48 kHz.
+    const PERIOD: i64 = 10 * MS;
+
+    #[derive(Default, Debug)]
+    struct Tally {
+        breaks: u32,
+        outliers: u32,
+        pair_flags: u32,
+    }
+
+    /// Runs a timeline of (timestamp offset from nominal, frames) through the tracker.
+    fn run(steps: &[(i64, u64)]) -> Tally {
+        let mut tracker = PositionTracker::new(48_000);
+        let mut t = Tally::default();
+        let mut nominal = 0i64;
+        for &(offset, frames) in steps {
+            let step = tracker.check(nominal + offset, frames);
+            match step.verdict {
+                PositionVerdict::Break { .. } => t.breaks += 1,
+                PositionVerdict::Outlier { .. } => t.outliers += 1,
+                _ => {}
+            }
+            if step.pair_flag.is_some() {
+                t.pair_flags += 1;
+            }
+            nominal += frames as i64 * 1_000_000_000 / 48_000;
+        }
+        t
+    }
+
+    fn steady(n: usize) -> Vec<(i64, u64)> {
+        (0..n).map(|_| (0, 480)).collect()
+    }
+
+    #[test]
+    fn steady_callbacks_with_small_jitter_are_quiet() {
+        let steps: Vec<(i64, u64)> = (0..2_000)
+            .map(|i| (((i * 7919) % 9) as i64 * 100_000 - 400_000, 480))
+            .collect();
+        let t = run(&steps);
+        assert_eq!((t.breaks, t.outliers, t.pair_flags), (0, 0, 0));
+    }
+
+    #[test]
+    fn one_late_timestamp_is_one_outlier_where_the_pair_check_counted_two() {
+        // Callback 100 reports a time 4 ms late; the next one is back on the line. Nothing in the
+        // audio moved. The old check flagged both pairs (out and back).
+        let mut steps = steady(300);
+        steps[100].0 = 4 * MS;
+        let t = run(&steps);
+        assert_eq!(t.breaks, 0);
+        assert_eq!(t.outliers, 1);
+        assert_eq!(t.pair_flags, 2);
+    }
+
+    #[test]
+    fn two_late_timestamps_in_a_row_are_still_an_outlier() {
+        let mut steps = steady(300);
+        steps[100].0 = 4 * MS;
+        steps[101].0 = 4 * MS;
+        let t = run(&steps);
+        assert_eq!((t.breaks, t.outliers), (0, 1));
+    }
+
+    #[test]
+    fn a_skip_of_20_ms_that_stays_is_one_break() {
+        // The device clock jumps forward 20 ms (audio was skipped) and keeps going from there.
+        let mut steps = steady(300);
+        for s in steps.iter_mut().skip(100) {
+            s.0 = 20 * MS;
+        }
+        let t = run(&steps);
+        assert_eq!((t.breaks, t.outliers), (1, 0));
+        assert_eq!(t.pair_flags, 1);
+    }
+
+    #[test]
+    fn a_repeat_where_the_clock_steps_back_is_one_break() {
+        let mut steps = steady(300);
+        for s in steps.iter_mut().skip(100) {
+            s.0 = -10 * MS;
+        }
+        let t = run(&steps);
+        assert_eq!((t.breaks, t.outliers), (1, 0));
+    }
+
+    #[test]
+    fn a_break_re_anchors_so_the_next_one_is_counted_separately() {
+        let mut steps = steady(600);
+        for s in steps.iter_mut().skip(100) {
+            s.0 = 20 * MS;
+        }
+        for s in steps.iter_mut().skip(300) {
+            s.0 = 45 * MS;
+        }
+        let t = run(&steps);
+        assert_eq!((t.breaks, t.outliers), (2, 0));
+    }
+
+    #[test]
+    fn a_clock_drift_of_100_ppm_over_ten_minutes_is_not_a_break() {
+        // 60,000 callbacks of 10 ms; the device clock runs 100 ppm fast, so each timestamp is 1 us
+        // earlier than the last one's prediction. 60 ms of drift in all.
+        let steps: Vec<(i64, u64)> = (0..60_000).map(|i| (-(i as i64) * 1_000, 480)).collect();
+        let t = run(&steps);
+        assert_eq!((t.breaks, t.outliers, t.pair_flags), (0, 0, 0));
+    }
+
+    #[test]
+    fn callbacks_of_uneven_size_are_not_breaks() {
+        // WASAPI hands over whatever has accumulated: 441, 480, 528 frames and so on.
+        let sizes = [441u64, 480, 528, 480, 432, 480, 480, 528];
+        let steps: Vec<(i64, u64)> = (0..800).map(|i| (0, sizes[i % sizes.len()])).collect();
+        let t = run(&steps);
+        assert_eq!((t.breaks, t.outliers, t.pair_flags), (0, 0, 0));
+    }
+
+    #[test]
+    fn two_different_excursions_in_a_row_are_two_outliers() {
+        let mut steps = steady(300);
+        steps[100].0 = 5 * MS;
+        steps[101].0 = -5 * MS;
+        let t = run(&steps);
+        assert_eq!(t.breaks, 0);
+        assert_eq!(t.outliers, 2);
+    }
+
+    #[test]
+    fn a_new_stream_starts_from_nothing() {
+        // A restart builds a new tracker: its first callback is on the line by definition.
+        let mut tracker = PositionTracker::new(48_000);
+        let step = tracker.check(123 * MS, 480);
+        assert_eq!(step.verdict, PositionVerdict::Ok);
+        let _ = PERIOD;
     }
 }

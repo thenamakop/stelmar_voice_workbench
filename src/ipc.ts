@@ -44,6 +44,10 @@ export interface RecorderStatus {
   dropped_samples: number;
   recorder_restarts: number;
   position_breaks: number;
+  timestamp_outliers: number;
+  position_pair_flags: number;
+  repeated_blocks: number;
+  zero_gaps: number;
   ring_seconds: number;
   ring_max_fill_pct: number;
   priority: "mmcss" | "highest" | "normal";

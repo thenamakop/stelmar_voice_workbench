@@ -219,3 +219,28 @@ mod tests {
         Ok(())
     }
 }
+
+/// `QueryPerformanceCounter` ticks now (0 where unavailable). Cheap, and safe to call from the
+/// driver's error callback: it does not allocate or lock.
+pub fn qpc_ticks() -> u64 {
+    #[cfg(windows)]
+    {
+        crate::win::qpc_ticks()
+    }
+    #[cfg(not(windows))]
+    {
+        0
+    }
+}
+
+/// Ticks per second of [`qpc_ticks`] (0 where unavailable).
+pub fn qpc_hz() -> u64 {
+    #[cfg(windows)]
+    {
+        crate::win::qpc_hz()
+    }
+    #[cfg(not(windows))]
+    {
+        0
+    }
+}

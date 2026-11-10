@@ -26,10 +26,12 @@ use ringbuf::traits::{Consumer, Observer};
 use serde::Serialize;
 
 use crate::Error;
-use crate::capture::{RING_SECONDS, StreamHandle};
+use crate::capture::{PositionKind, RING_SECONDS, StreamHandle};
+use crate::dropout::{DropoutDetector, ZeroGap};
 use crate::events::{Event, Notice, NoticeLevel, RecState, RecorderStatus};
 use crate::level::LevelMeter;
 use crate::parts::{self, AUDIO_DIR, PartRecord, PartsIndex};
+use crate::repeat::{RepeatDetector, RepeatedBlock};
 use crate::session::{self, InputInfo, SessionMeta};
 use crate::sys::{self, AwakeGuard};
 use crate::util::{now_ist, rfc3339};
@@ -52,6 +54,14 @@ const COUNTER_EVENT_INTERVAL: Duration = Duration::from_secs(1);
 const GAP_EVENT_INTERVAL: Duration = Duration::from_secs(30);
 /// Warn below this much free space on the recording drive.
 pub const DISK_WARN_BYTES: u64 = 20 * 1_000_000_000;
+/// `session.json` keeps at most this many xrun events and this many repeated-block events per
+/// session (it is rewritten whole each time); `session.log` and the counters get every one.
+const MAX_XRUN_EVENTS: usize = 50;
+const MAX_REPEAT_EVENTS: usize = 200;
+/// Events that are not urgent are written to `session.json` at most this often.
+const META_SAVE_INTERVAL: Duration = Duration::from_secs(2);
+/// A repeated block raises a Toast at most this often.
+const REPEAT_NOTICE_INTERVAL: Duration = Duration::from_secs(60);
 
 pub enum RecorderMsg {
     /// A new input stream (first open or reconnect). Always starts a new part.
@@ -96,8 +106,16 @@ pub struct StopReport {
     pub audio_ms: u64,
     pub overrun_samples: u64,
     pub xruns: u64,
-    /// Capture callbacks whose device time did not follow on from the previous one.
+    /// Capture position breaks: the device time left the line the frames predict and stayed off.
     pub position_breaks: u64,
+    /// Single late timestamps that came back (no audio affected); reported, never gated.
+    pub timestamp_outliers: u64,
+    /// What the old pairwise check would have counted (diagnostic only).
+    pub position_pair_flags: u64,
+    /// Repeated blocks found in the recorded audio (`repeated_block` events in session.json).
+    pub repeated_blocks: u64,
+    /// Zero gaps found in the recorded audio (`zero_gap` events in session.json).
+    pub zero_gaps: u64,
     /// Samples taken from the ring that could not be written (disk full, drive gone).
     pub dropped_samples: u64,
     /// Panics caught inside the recorder thread.
@@ -360,6 +378,25 @@ struct Recorder {
     overruns_before: u64,
     xruns_before: u64,
     position_breaks_before: u64,
+    timestamp_outliers_before: u64,
+    pair_flags_before: u64,
+    /// Detector for repeated blocks in the recorded audio (one per stream).
+    repeat: Option<RepeatDetector>,
+    /// Detector for zero gaps (short digital silence inside live audio), one per stream.
+    dropout: Option<DropoutDetector>,
+    zero_gaps: u64,
+    zero_gap_events_in_meta: usize,
+    last_zero_gap_notice: Option<Instant>,
+    repeated_blocks: u64,
+    repeat_events_in_meta: usize,
+    last_repeat_notice: Option<Instant>,
+    /// Frames taken from the open stream's ring so far (to place xrun marks on the audio clock).
+    stream_popped_frames: u64,
+    xrun_seq: u64,
+    xrun_events_in_meta: usize,
+    /// `session.json` has events not yet saved.
+    meta_dirty: bool,
+    last_meta_save: Instant,
     dropped_samples: u64,
     logged_overruns: u64,
     logged_xruns: u64,
@@ -449,6 +486,21 @@ fn run(cfg: RecorderConfig, rx: &Receiver<RecorderMsg>, events: Sender<Event>) {
         overruns_before: 0,
         xruns_before: 0,
         position_breaks_before: 0,
+        timestamp_outliers_before: 0,
+        pair_flags_before: 0,
+        repeat: None,
+        dropout: None,
+        zero_gaps: 0,
+        zero_gap_events_in_meta: 0,
+        last_zero_gap_notice: None,
+        repeated_blocks: 0,
+        repeat_events_in_meta: 0,
+        last_repeat_notice: None,
+        stream_popped_frames: 0,
+        xrun_seq: 0,
+        xrun_events_in_meta: 0,
+        meta_dirty: false,
+        last_meta_save: now,
         dropped_samples: 0,
         logged_overruns: 0,
         logged_xruns: 0,
@@ -519,8 +571,12 @@ impl Recorder {
             }
         }
         self.drain();
+        self.drain_marks();
         self.watch_for_silence();
         let now = Instant::now();
+        if self.meta_dirty && now.duration_since(self.last_meta_save) >= META_SAVE_INTERVAL {
+            self.save_meta();
+        }
         if now.duration_since(t.flush) >= FLUSH_INTERVAL {
             t.flush = now;
             if now.duration_since(t.sync) >= SYNC_INTERVAL {
@@ -644,6 +700,8 @@ impl Recorder {
     }
 
     fn save_meta(&mut self) {
+        self.meta_dirty = false;
+        self.last_meta_save = Instant::now();
         if let Err(e) = session::save_meta(&self.dir, &self.meta) {
             self.error(format!("Could not write session.json: {e}"));
         }
@@ -664,12 +722,20 @@ impl Recorder {
             self.overruns_before += old.counters.overrun_samples.load(Ordering::Relaxed);
             self.xruns_before += old.counters.xruns.load(Ordering::Relaxed);
             self.position_breaks_before += old.counters.position_breaks.load(Ordering::Relaxed);
+            self.timestamp_outliers_before +=
+                old.counters.timestamp_outliers.load(Ordering::Relaxed);
+            self.pair_flags_before += old.counters.position_pair_flags.load(Ordering::Relaxed);
         }
         self.meter = None;
+        self.repeat = None;
+        self.dropout = None;
+        self.stream_popped_frames = 0;
     }
 
     fn lose_input(&mut self, reason: String) {
         self.drain();
+        self.drain_marks();
+        self.finish_repeat();
         self.close_part();
         self.take_stream();
         if self.input_ok || self.input_lost_since.is_none() {
@@ -684,12 +750,19 @@ impl Recorder {
             RecorderMsg::Stream(handle) => {
                 // Finish the old stream's audio in its own part.
                 self.drain();
+                self.drain_marks();
+                self.finish_repeat();
                 self.close_part();
                 self.take_stream();
                 self.meter = Some(LevelMeter::new(
                     handle.input.sample_rate,
                     handle.input.channels,
                     20,
+                ));
+                self.repeat = Some(RepeatDetector::new(handle.input.channels));
+                self.dropout = Some(DropoutDetector::new(
+                    handle.input.channels,
+                    handle.input.sample_rate,
                 ));
                 let restored = self.had_stream && !self.input_ok;
                 let input = handle.input.clone();
@@ -716,6 +789,8 @@ impl Recorder {
             RecorderMsg::Pause => {
                 if !self.paused {
                     self.drain();
+                    self.drain_marks();
+                    self.finish_repeat();
                     self.close_part();
                     self.paused = true;
                     self.event("paused", None);
@@ -800,6 +875,7 @@ impl Recorder {
             if n == 0 {
                 return;
             }
+            self.stream_popped_frames += (n / usize::from(stream.input.channels.max(1))) as u64;
             let full = n == self.scratch.len();
             self.batch_len = n;
             self.batch_done = 0;
@@ -882,6 +958,10 @@ impl Recorder {
             );
             session::append_log(&self.dir, at, &format!("audio_started audio_ms={audio_ms}"));
             self.save_meta();
+        }
+        if *done == 0 {
+            // Once per batch, before it is written; not again when a restart finishes the batch.
+            self.feed_repeat(samples, input.sample_rate);
         }
         let part_frames = u64::from(self.part_seconds) * u64::from(input.sample_rate);
         while *done < samples.len() {
@@ -1162,6 +1242,205 @@ impl Recorder {
                 .map_or(0, |s| s.counters.position_breaks.load(Ordering::Relaxed))
     }
 
+    fn timestamp_outliers(&self) -> u64 {
+        self.timestamp_outliers_before
+            + self
+                .stream
+                .as_ref()
+                .map_or(0, |s| s.counters.timestamp_outliers.load(Ordering::Relaxed))
+    }
+
+    fn position_pair_flags(&self) -> u64 {
+        self.pair_flags_before
+            + self
+                .stream
+                .as_ref()
+                .map_or(0, |s| s.counters.position_pair_flags.load(Ordering::Relaxed))
+    }
+
+    /// Shows the batch about to be written to the repeated-block and zero-gap detectors.
+    fn feed_repeat(&mut self, samples: &[f32], rate: u32) {
+        let origin_ms = self.audio_ms();
+        if let Some(det) = self.repeat.as_mut() {
+            let first_frame = det.frames_seen();
+            let mut found: Vec<RepeatedBlock> = Vec::new();
+            det.push(samples, |b| found.push(b));
+            for b in found {
+                self.note_repeated_block(b, first_frame, origin_ms, rate);
+            }
+        }
+        if let Some(det) = self.dropout.as_mut() {
+            let first_frame = det.frames_seen();
+            let mut found: Vec<ZeroGap> = Vec::new();
+            det.push(samples, |g| found.push(g));
+            for g in found {
+                self.note_zero_gap(g, first_frame, origin_ms, rate);
+            }
+        }
+    }
+
+    /// Ends a repeat the detector is still following (stream change, pause, Stop). Call after
+    /// everything drained has been written, so the audio clock and the detector agree.
+    fn finish_repeat(&mut self) {
+        let rate = self
+            .stream
+            .as_ref()
+            .map_or(0, |s| s.input.sample_rate);
+        let audio_ms = self.audio_ms();
+        if let Some(det) = self.dropout.as_mut() {
+            det.flush();
+            det.reset();
+        }
+        let Some(det) = self.repeat.as_mut() else {
+            return;
+        };
+        let seen = det.frames_seen();
+        let mut found: Vec<RepeatedBlock> = Vec::new();
+        det.flush(|b| found.push(b));
+        det.reset();
+        for b in found {
+            self.note_repeated_block(b, seen, audio_ms, rate);
+        }
+    }
+
+    /// Records a repeated block: `session.log` always, `session.json` up to a limit, and a Toast
+    /// at most once a minute. `ref_frame` and `ref_ms` are one point on the detector's frame
+    /// count and the audio clock, from which the block's audio time is worked out.
+    fn note_repeated_block(&mut self, b: RepeatedBlock, ref_frame: u64, ref_ms: u64, rate: u32) {
+        let rate = i64::from(rate.max(1));
+        let offset = b.start_frame as i64 - ref_frame as i64;
+        let at_ms = (ref_ms as i64 + offset * 1000 / rate).max(0) as u64;
+        self.repeated_blocks += 1;
+        let detail = format!(
+            "start_frame={} len_frames={} lag_frames={} level_dbfs={:.1} rate={rate}",
+            b.start_frame, b.len, b.lag, b.level_dbfs
+        );
+        let now = now_ist();
+        session::append_log(
+            &self.dir,
+            now,
+            &format!("repeated_block audio_ms={at_ms} {detail}"),
+        );
+        if self.repeat_events_in_meta < MAX_REPEAT_EVENTS {
+            self.repeat_events_in_meta += 1;
+            self.meta
+                .push_event(now, at_ms, "repeated_block", Some(detail));
+            self.meta_dirty = true;
+        }
+        let due = self
+            .last_repeat_notice
+            .is_none_or(|t| t.elapsed() >= REPEAT_NOTICE_INTERVAL);
+        if due {
+            self.last_repeat_notice = Some(Instant::now());
+            let _ = self.events.send(Notice::event(
+                NoticeLevel::Warning,
+                "recorder",
+                "The audio input repeated a block of samples (the driver or the audio engine, not the recorder). It is recorded as received and marked in session.json.",
+            ));
+        }
+    }
+
+    /// Records a zero gap (a run of exact digital silence inside live audio, one WASAPI period
+    /// long on the Legion): `session.log` always, `session.json` up to a limit, a Toast at most
+    /// once a minute. The audio is recorded as received.
+    fn note_zero_gap(&mut self, g: ZeroGap, ref_frame: u64, ref_ms: u64, rate: u32) {
+        let rate = i64::from(rate.max(1));
+        let offset = g.start_frame as i64 - ref_frame as i64;
+        let at_ms = (ref_ms as i64 + offset * 1000 / rate).max(0) as u64;
+        self.zero_gaps += 1;
+        let detail = format!(
+            "start_frame={} len_frames={} len_ms={:.1} rate={rate}",
+            g.start_frame,
+            g.len,
+            f64::from(g.len) * 1000.0 / rate as f64
+        );
+        let now = now_ist();
+        session::append_log(&self.dir, now, &format!("zero_gap audio_ms={at_ms} {detail}"));
+        if self.zero_gap_events_in_meta < MAX_REPEAT_EVENTS {
+            self.zero_gap_events_in_meta += 1;
+            self.meta.push_event(now, at_ms, "zero_gap", Some(detail));
+            self.meta_dirty = true;
+        }
+        let due = self
+            .last_zero_gap_notice
+            .is_none_or(|t| t.elapsed() >= REPEAT_NOTICE_INTERVAL);
+        if due {
+            self.last_zero_gap_notice = Some(Instant::now());
+            let _ = self.events.send(Notice::event(
+                NoticeLevel::Warning,
+                "recorder",
+                "The audio input delivered a short stretch of digital silence in the middle of the sound (the driver or the audio engine, not the recorder). It is recorded as received and marked in session.json.",
+            ));
+        }
+    }
+
+    /// Reads the xrun and position marks the capture callbacks left and logs them with their
+    /// place on the audio clock.
+    fn drain_marks(&mut self) {
+        let mut xruns = Vec::new();
+        let mut positions = Vec::new();
+        let mut rate = 0u32;
+        if let Some(s) = self.stream.as_mut() {
+            rate = s.input.sample_rate;
+            if let Some(c) = s.xrun_log.as_mut() {
+                while let Some(m) = c.try_pop() {
+                    xruns.push(m);
+                }
+            }
+            if let Some(c) = s.position_log.as_mut() {
+                while let Some(m) = c.try_pop() {
+                    positions.push(m);
+                }
+            }
+        }
+        if xruns.is_empty() && positions.is_empty() {
+            return;
+        }
+        let rate = u64::from(rate.max(1));
+        let now_audio = self.audio_ms();
+        let popped = self.stream_popped_frames;
+        let hz = sys::qpc_hz();
+        let now = now_ist();
+        // Frames the stream has delivered but this thread has not taken yet are behind `popped`:
+        // an estimate of the mark's place on the audio clock, good to the ring's read-ahead.
+        let place = |frames: u64| -> u64 {
+            let behind = popped.saturating_sub(frames);
+            now_audio.saturating_sub(behind * 1000 / rate)
+        };
+        for m in xruns {
+            self.xrun_seq += 1;
+            let at_ms = place(m.frames);
+            let detail = format!(
+                "cause=xrun n={} callback={} frames={} audio_ms={at_ms} qpc={} qpc_hz={hz}",
+                self.xrun_seq, m.callbacks, m.frames, m.qpc
+            );
+            session::append_log(&self.dir, now, &format!("gap {detail}"));
+            if self.xrun_events_in_meta < MAX_XRUN_EVENTS {
+                self.xrun_events_in_meta += 1;
+                self.meta.push_event(now, at_ms, "gap", Some(detail));
+                self.meta_dirty = true;
+            }
+        }
+        for m in positions {
+            let at_ms = place(m.frames);
+            let kind = match m.kind {
+                PositionKind::Break => "position_break",
+                PositionKind::Outlier => "timestamp_outlier",
+                PositionKind::PairFlag => "position_pair_flag",
+            };
+            let detail = format!(
+                "{kind} callback={} frames={} audio_ms={at_ms} ts_ns={} dev_ns={} pair_diff_ns={}",
+                m.callback, m.frames, m.ts_ns, m.dev_ns, m.pair_diff_ns
+            );
+            session::append_log(&self.dir, now, &detail);
+            if m.kind == PositionKind::Break && self.xrun_events_in_meta < MAX_XRUN_EVENTS {
+                self.xrun_events_in_meta += 1;
+                self.meta.push_event(now, at_ms, "gap", Some(format!("cause={detail}")));
+                self.meta_dirty = true;
+            }
+        }
+    }
+
     fn counters(&self) -> (u64, u64) {
         let (o, x) = self.stream.as_ref().map_or((0, 0), |s| {
             (
@@ -1233,6 +1512,10 @@ impl Recorder {
             dropped_samples: self.dropped_samples,
             recorder_restarts: self.restarts,
             position_breaks: self.position_breaks(),
+            timestamp_outliers: self.timestamp_outliers(),
+            position_pair_flags: self.position_pair_flags(),
+            repeated_blocks: self.repeated_blocks,
+            zero_gaps: self.zero_gaps,
             ring_seconds: RING_SECONDS,
             ring_max_fill_pct: self.max_fill_pct,
             priority: self.priority.mode,
@@ -1268,9 +1551,15 @@ impl Recorder {
         self.drain();
         self.flush_carry_at_stop();
         self.close_part();
+        self.drain_marks();
+        self.finish_repeat();
         self.log_counters_now();
         let (overrun_samples, xruns) = self.counters();
         let position_breaks = self.position_breaks();
+        let timestamp_outliers = self.timestamp_outliers();
+        let position_pair_flags = self.position_pair_flags();
+        let repeated_blocks = self.repeated_blocks;
+        let zero_gaps = self.zero_gaps;
         let cpu = sys::thread_cpu_ms();
         let final_status = self.status(RecState::Stopped);
         self.take_stream();
@@ -1297,6 +1586,10 @@ impl Recorder {
             overrun_samples,
             xruns,
             position_breaks,
+            timestamp_outliers,
+            position_pair_flags,
+            repeated_blocks,
+            zero_gaps,
             dropped_samples: self.dropped_samples,
             recorder_restarts: self.restarts,
             recorder_cpu_ms: cpu,
