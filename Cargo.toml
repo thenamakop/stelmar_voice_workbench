@@ -8,6 +8,7 @@ members = [
   "crates/wb-machine",
   "crates/wb-models",
   "crates/wb-recorder",
+  "crates/wb-supervisor",
   "crates/wb-emulate",
   "crates/wb-testbench",
 ]
@@ -15,7 +16,7 @@ members = [
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 license = "UNLICENSED"
 publish = false
 
@@ -36,6 +37,7 @@ wb-machine = { path = "crates/wb-machine" }
 wb-models = { path = "crates/wb-models" }
 wb-protocol = { path = "crates/wb-protocol" }
 wb-recorder = { path = "crates/wb-recorder" }
+wb-supervisor = { path = "crates/wb-supervisor" }
 # Same version as Tauri 2.11 uses, so the app links one copy. Features are chosen per crate; never
 # enable Win32_Networking, Web or Networking (scripts/check-http-crates.mjs fails the build).
 windows = { version = "0.61", default-features = false }
@@ -68,3 +70,7 @@ inherits = "release"
 lto = false
 codegen-units = 16
 strip = false
+
+# whisper.cpp v1.9.5 is vendored (third_party/README.md): the published whisper-rs-sys bundles 1.8.3.
+[patch.crates-io]
+whisper-rs-sys = { path = "third_party/whisper-rs-sys" }

@@ -112,7 +112,8 @@ pub fn is_arabic(c: char) -> bool {
 }
 
 pub fn is_latin(c: char) -> bool {
-    c.is_ascii_alphabetic() || matches!(c, '\u{00C0}'..='\u{024F}' if c != '\u{00D7}' && c != '\u{00F7}')
+    c.is_ascii_alphabetic()
+        || matches!(c, '\u{00C0}'..='\u{024F}' if c != '\u{00D7}' && c != '\u{00F7}')
 }
 
 /// Counts the letters of each script. Combining marks (vowel signs, nukta, Arabic diacritics) belong
@@ -122,7 +123,9 @@ pub fn script_counts(text: &str) -> ScriptCounts {
     for c in text.chars() {
         if is_devanagari(c) {
             // Digits and the danda are not letters.
-            if c.is_alphabetic() || matches!(c, '\u{0900}'..='\u{0903}' | '\u{093A}'..='\u{094F}' | '\u{0951}'..='\u{0957}' | '\u{0962}'..='\u{0963}') {
+            if c.is_alphabetic()
+                || matches!(c, '\u{0900}'..='\u{0903}' | '\u{093A}'..='\u{094F}' | '\u{0951}'..='\u{0957}' | '\u{0962}'..='\u{0963}')
+            {
                 n.devanagari += 1;
             }
         } else if is_arabic(c) {
@@ -235,7 +238,11 @@ mod tests {
     fn urdu_is_kept_whole_at_every_cut_too() {
         let bytes = URDU.as_bytes();
         for cut in 0..=bytes.len() {
-            assert_eq!(join_utf8(&[&bytes[..cut], &bytes[cut..]]).text, URDU, "cut at byte {cut}");
+            assert_eq!(
+                join_utf8(&[&bytes[..cut], &bytes[cut..]]).text,
+                URDU,
+                "cut at byte {cut}"
+            );
         }
     }
 
@@ -298,16 +305,31 @@ mod tests {
     #[test]
     fn output_in_the_wrong_script_is_caught() {
         // Hindi speech written in Latin letters, English speech in Devanagari, Urdu in Devanagari.
-        assert!(script_contradicts("hi", &script_counts("namaste doston aaj hum baat karenge")));
-        assert!(script_contradicts("en", &script_counts("नमस्ते दोस्तों आज हम बात करेंगे")));
+        assert!(script_contradicts(
+            "hi",
+            &script_counts("namaste doston aaj hum baat karenge")
+        ));
+        assert!(script_contradicts(
+            "en",
+            &script_counts("नमस्ते दोस्तों आज हम बात करेंगे")
+        ));
         assert!(script_contradicts("ur", &script_counts("यह एक टेस्ट है")));
         // Right scripts, including Hindi with English words.
         assert!(!script_contradicts("hi", &script_counts(HINDI)));
-        assert!(!script_contradicts("hi", &script_counts("आज हम STELMAR के session में बात करेंगे")));
+        assert!(!script_contradicts(
+            "hi",
+            &script_counts("आज हम STELMAR के session में बात करेंगे")
+        ));
         assert!(!script_contradicts("ur", &script_counts(URDU)));
-        assert!(!script_contradicts("en", &script_counts("Welcome everyone")));
+        assert!(!script_contradicts(
+            "en",
+            &script_counts("Welcome everyone")
+        ));
         // Too short to judge, and a language with no expected script.
         assert!(!script_contradicts("hi", &script_counts("ok")));
-        assert!(!script_contradicts("fr", &script_counts("bonjour tout le monde")));
+        assert!(!script_contradicts(
+            "fr",
+            &script_counts("bonjour tout le monde")
+        ));
     }
 }

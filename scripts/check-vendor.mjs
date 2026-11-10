@@ -40,7 +40,10 @@ export function treeHash(root) {
   return { hash: h.digest("hex"), files: files.length };
 }
 
-if (import.meta.url === `file://${process.argv[1].split(sep).join("/")}` || process.argv[1]?.endsWith("check-vendor.mjs")) {
+if (
+  import.meta.url === `file://${process.argv[1].split(sep).join("/")}` ||
+  process.argv[1]?.endsWith("check-vendor.mjs")
+) {
   if (!existsSync(TREE)) {
     console.error(`check-vendor: ${TREE} does not exist`);
     process.exit(1);

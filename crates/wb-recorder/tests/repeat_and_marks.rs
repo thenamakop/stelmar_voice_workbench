@@ -92,7 +92,10 @@ fn recorded(dir: &std::path::Path) -> Result<Vec<i16>, Box<dyn std::error::Error
     Ok(out)
 }
 
-fn events_of(dir: &std::path::Path, kind: &str) -> Result<Vec<session::SessionEvent>, wb_recorder::Error> {
+fn events_of(
+    dir: &std::path::Path,
+    kind: &str,
+) -> Result<Vec<session::SessionEvent>, wb_recorder::Error> {
     Ok(session::load_meta(dir)?
         .events
         .into_iter()
@@ -101,7 +104,8 @@ fn events_of(dir: &std::path::Path, kind: &str) -> Result<Vec<session::SessionEv
 }
 
 #[test]
-fn a_repeated_block_in_the_audio_is_marked_at_its_audio_time_and_recorded_as_received() -> TestResult {
+fn a_repeated_block_in_the_audio_is_marked_at_its_audio_time_and_recorded_as_received() -> TestResult
+{
     let (_root, dir, rec, _events) = setup("repeat-marked")?;
     let (mut prod, handle) = StreamHandle::manual(input(), 20);
     rec.send(RecorderMsg::Stream(handle))?;
@@ -117,7 +121,10 @@ fn a_repeated_block_in_the_audio_is_marked_at_its_audio_time_and_recorded_as_rec
     assert_eq!(report.repeated_blocks, 1);
     assert_eq!(report.dropped_samples, 0);
     // The recording holds exactly what arrived, repeat included.
-    assert!(recorded(&dir)? == audio, "the recording differs from the input");
+    assert!(
+        recorded(&dir)? == audio,
+        "the recording differs from the input"
+    );
 
     let marked = events_of(&dir, "repeated_block")?;
     assert_eq!(marked.len(), 1, "{marked:?}");
@@ -160,7 +167,11 @@ fn a_repeat_at_the_end_of_the_recording_is_flushed_at_stop() -> TestResult {
     assert_eq!(report.repeated_blocks, 1);
     let marked = events_of(&dir, "repeated_block")?;
     assert_eq!(marked.len(), 1);
-    assert!((marked[0].audio_ms as i64 - 2_000).abs() <= 2, "{:?}", marked[0]);
+    assert!(
+        (marked[0].audio_ms as i64 - 2_000).abs() <= 2,
+        "{:?}",
+        marked[0]
+    );
     Ok(())
 }
 
@@ -188,7 +199,11 @@ fn an_xrun_is_logged_with_its_callback_count_audio_position_and_qpc() -> TestRes
     let gaps = events_of(&dir, "gap")?;
     let xrun = gaps
         .iter()
-        .find(|e| e.detail.as_deref().is_some_and(|d| d.starts_with("cause=xrun")))
+        .find(|e| {
+            e.detail
+                .as_deref()
+                .is_some_and(|d| d.starts_with("cause=xrun"))
+        })
         .ok_or("no xrun gap event")?;
     let detail = xrun.detail.clone().unwrap_or_default();
     assert!(detail.contains("n=1 callback=50 frames=8000"), "{detail}");
@@ -215,8 +230,16 @@ fn position_findings_reach_the_log_and_only_breaks_reach_session_json() -> TestR
         dev_ns: 4_000_000,
         pair_diff_ns: 4_000_000,
     };
-    assert!(p.positions.try_push(mark(PositionKind::Outlier, 10)).is_ok());
-    assert!(p.positions.try_push(mark(PositionKind::PairFlag, 10)).is_ok());
+    assert!(
+        p.positions
+            .try_push(mark(PositionKind::Outlier, 10))
+            .is_ok()
+    );
+    assert!(
+        p.positions
+            .try_push(mark(PositionKind::PairFlag, 10))
+            .is_ok()
+    );
     assert!(p.positions.try_push(mark(PositionKind::Break, 11)).is_ok());
     std::thread::sleep(Duration::from_millis(150));
     rec.stop()?;
@@ -254,10 +277,17 @@ fn a_zero_gap_in_the_audio_is_marked_at_its_audio_time_and_recorded_as_received(
     assert_eq!(report.zero_gaps, 1);
     assert_eq!(report.repeated_blocks, 0);
     assert_eq!(report.dropped_samples, 0);
-    assert!(recorded(&dir)? == audio, "the recording differs from the input");
+    assert!(
+        recorded(&dir)? == audio,
+        "the recording differs from the input"
+    );
     let marked = events_of(&dir, "zero_gap")?;
     assert_eq!(marked.len(), 1, "{marked:?}");
-    assert!((marked[0].audio_ms as i64 - 2_000).abs() <= 2, "{:?}", marked[0]);
+    assert!(
+        (marked[0].audio_ms as i64 - 2_000).abs() <= 2,
+        "{:?}",
+        marked[0]
+    );
     let detail = marked[0].detail.clone().unwrap_or_default();
     assert!(detail.contains("len_frames=160"), "{detail}");
     let log = std::fs::read_to_string(dir.join("session.log"))?;

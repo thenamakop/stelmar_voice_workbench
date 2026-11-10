@@ -291,11 +291,11 @@ impl Closer {
                 let mut changed = false;
                 for rec in index.parts.iter_mut().filter(|r| r.needs_repair) {
                     let path = dir.join(&rec.file);
-                    if wav::repair_header(&path).is_ok() {
-                        if let Ok(fixed) = parts::record_for_file(&dir, rec.part, rec.start_ms) {
-                            *rec = fixed;
-                            changed = true;
-                        }
+                    if wav::repair_header(&path).is_ok()
+                        && let Ok(fixed) = parts::record_for_file(&dir, rec.part, rec.start_ms)
+                    {
+                        *rec = fixed;
+                        changed = true;
                     }
                 }
                 if changed {
@@ -1134,10 +1134,10 @@ impl Recorder {
                 .as_ref()
                 .map(|s| s.input.clone())
                 .or_else(|| self.meta.input.clone());
-            if let Some(input) = input {
-                if matches!(self.open_part(&input), OpenResult::Opened) {
-                    self.write_carry();
-                }
+            if let Some(input) = input
+                && matches!(self.open_part(&input), OpenResult::Opened)
+            {
+                self.write_carry();
             }
         }
         if !self.carry.is_empty() {
@@ -1151,10 +1151,10 @@ impl Recorder {
     }
 
     fn with_writer(&mut self, f: fn(&mut PartWriter) -> Result<(), Error>) {
-        if let Some(w) = self.writer.as_mut() {
-            if let Err(e) = f(w) {
-                self.write_failed(e);
-            }
+        if let Some(w) = self.writer.as_mut()
+            && let Err(e) = f(w)
+        {
+            self.write_failed(e);
         }
     }
 
@@ -1252,10 +1252,9 @@ impl Recorder {
 
     fn position_pair_flags(&self) -> u64 {
         self.pair_flags_before
-            + self
-                .stream
-                .as_ref()
-                .map_or(0, |s| s.counters.position_pair_flags.load(Ordering::Relaxed))
+            + self.stream.as_ref().map_or(0, |s| {
+                s.counters.position_pair_flags.load(Ordering::Relaxed)
+            })
     }
 
     /// Shows the batch about to be written to the repeated-block and zero-gap detectors.
@@ -1282,10 +1281,7 @@ impl Recorder {
     /// Ends a repeat the detector is still following (stream change, pause, Stop). Call after
     /// everything drained has been written, so the audio clock and the detector agree.
     fn finish_repeat(&mut self) {
-        let rate = self
-            .stream
-            .as_ref()
-            .map_or(0, |s| s.input.sample_rate);
+        let rate = self.stream.as_ref().map_or(0, |s| s.input.sample_rate);
         let audio_ms = self.audio_ms();
         if let Some(det) = self.dropout.as_mut() {
             det.flush();
@@ -1355,7 +1351,11 @@ impl Recorder {
             f64::from(g.len) * 1000.0 / rate as f64
         );
         let now = now_ist();
-        session::append_log(&self.dir, now, &format!("zero_gap audio_ms={at_ms} {detail}"));
+        session::append_log(
+            &self.dir,
+            now,
+            &format!("zero_gap audio_ms={at_ms} {detail}"),
+        );
         if self.zero_gap_events_in_meta < MAX_REPEAT_EVENTS {
             self.zero_gap_events_in_meta += 1;
             self.meta.push_event(now, at_ms, "zero_gap", Some(detail));
@@ -1435,7 +1435,8 @@ impl Recorder {
             session::append_log(&self.dir, now, &detail);
             if m.kind == PositionKind::Break && self.xrun_events_in_meta < MAX_XRUN_EVENTS {
                 self.xrun_events_in_meta += 1;
-                self.meta.push_event(now, at_ms, "gap", Some(format!("cause={detail}")));
+                self.meta
+                    .push_event(now, at_ms, "gap", Some(format!("cause={detail}")));
                 self.meta_dirty = true;
             }
         }

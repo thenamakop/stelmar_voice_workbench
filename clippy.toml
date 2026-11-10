@@ -1,0 +1,3 @@
+# Tests may unwrap and expect (a failing test should simply fail); production code may not (AGENTS.md).
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true

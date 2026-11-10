@@ -184,7 +184,8 @@ mod tests {
         let mut v = Vec::with_capacity(frames * ch);
         for f in 0..frames {
             for c in 0..ch {
-                let r = splitmix(seed ^ (f as u64).wrapping_mul(0x100_0000_01B3) ^ ((c as u64) << 56));
+                let r =
+                    splitmix(seed ^ (f as u64).wrapping_mul(0x100_0000_01B3) ^ ((c as u64) << 56));
                 let q = ((r >> 32) as u32 % 16_384) as i32 - 8_192;
                 // Never exactly zero: the noise floor of a real input.
                 let q = if q == 0 { 1 } else { q };
@@ -215,7 +216,13 @@ mod tests {
         let mut audio = noise(96_000, 2, 1);
         zero_out(&mut audio, 2, 40_000, 490);
         let found = scan(&audio, 2, 480);
-        assert_eq!(found, vec![ZeroGap { start_frame: 40_000, len: 490 }]);
+        assert_eq!(
+            found,
+            vec![ZeroGap {
+                start_frame: 40_000,
+                len: 490
+            }]
+        );
     }
 
     #[test]
@@ -291,6 +298,9 @@ mod tests {
     #[test]
     fn documented_limits_match_48_khz() {
         let d = DropoutDetector::new(1, 48_000);
-        assert_eq!((d.min_zero as usize, d.max_zero as usize), (MIN_ZERO, MAX_ZERO));
+        assert_eq!(
+            (d.min_zero as usize, d.max_zero as usize),
+            (MIN_ZERO, MAX_ZERO)
+        );
     }
 }

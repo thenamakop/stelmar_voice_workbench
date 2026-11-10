@@ -275,9 +275,12 @@ impl PositionCheck {
             PositionVerdict::Break { dev_ns } => {
                 mark(PositionKind::Break, &counters.position_breaks, dev_ns, pair)
             }
-            PositionVerdict::Outlier { dev_ns, .. } => {
-                mark(PositionKind::Outlier, &counters.timestamp_outliers, dev_ns, pair)
-            }
+            PositionVerdict::Outlier { dev_ns, .. } => mark(
+                PositionKind::Outlier,
+                &counters.timestamp_outliers,
+                dev_ns,
+                pair,
+            ),
             PositionVerdict::Ok | PositionVerdict::Deviating => {}
         }
         if let Some(diff) = step.pair_flag {
@@ -487,10 +490,10 @@ pub fn list_inputs() -> Result<Vec<InputDevice>, Error> {
 /// plugged back into another USB port comes back with a new endpoint id).
 fn find_device(id: &str, name: Option<&str>) -> Option<cpal::Device> {
     let host = host();
-    if let Ok(parsed) = id.parse::<DeviceId>() {
-        if let Some(d) = host.device_by_id(&parsed) {
-            return Some(d);
-        }
+    if let Ok(parsed) = id.parse::<DeviceId>()
+        && let Some(d) = host.device_by_id(&parsed)
+    {
+        return Some(d);
     }
     let devices: Vec<cpal::Device> = host.input_devices().ok()?.collect();
     if let Some(d) = devices.iter().find(|d| device_id_string(d) == id) {

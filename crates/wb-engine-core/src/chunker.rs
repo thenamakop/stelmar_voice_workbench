@@ -34,7 +34,11 @@ impl Chunk {
     /// Share of the chunk the VAD called speech (PLAN section 6: under 0.3 is dropped).
     pub fn speech_ratio(&self) -> f64 {
         let d = self.duration_s();
-        if d <= 0.0 { 0.0 } else { (self.speech_s / d).min(1.0) }
+        if d <= 0.0 {
+            0.0
+        } else {
+            (self.speech_s / d).min(1.0)
+        }
     }
 }
 
@@ -81,7 +85,8 @@ fn quietest_cut(samples: &[f32], rate: u32, from_s: f64, to_s: f64) -> f64 {
     let mut best = (f32::MAX, to_s);
     let mut at = lo;
     while at + frame <= hi {
-        let energy: f32 = samples[at..at + frame].iter().map(|s| s.abs()).sum::<f32>() / frame as f32;
+        let energy: f32 =
+            samples[at..at + frame].iter().map(|s| s.abs()).sum::<f32>() / frame as f32;
         if energy < best.0 {
             best = (energy, (at + frame / 2) as f64 / f64::from(rate));
         }
@@ -97,11 +102,22 @@ fn split_long(s: Speech, samples: &[f32], rate: u32, p: &Params) -> Vec<Speech> 
     let mut start = s.start_s;
     while s.end_s - start > p.max_chunk_s - 2.0 * p.pad_s {
         let limit = start + p.max_chunk_s - 2.0 * p.pad_s;
-        let cut = quietest_cut(samples, rate, (limit - p.forced_cut_window_s).max(start + 1.0), limit);
-        out.push(Speech { start_s: start, end_s: cut });
+        let cut = quietest_cut(
+            samples,
+            rate,
+            (limit - p.forced_cut_window_s).max(start + 1.0),
+            limit,
+        );
+        out.push(Speech {
+            start_s: start,
+            end_s: cut,
+        });
         start = cut;
     }
-    out.push(Speech { start_s: start, end_s: s.end_s });
+    out.push(Speech {
+        start_s: start,
+        end_s: s.end_s,
+    });
     out
 }
 
@@ -164,11 +180,21 @@ pub fn chunks(speech: &[Speech], samples: &[f32], rate: u32, p: &Params) -> Vec<
         let start = pieces[a].0.start_s;
         let end = pieces[b].0.end_s;
         let speech_s: f64 = pieces[a..=b].iter().map(|(s, _)| s.end_s - s.start_s).sum();
-        let prev_end = if gi == 0 { 0.0 } else { pieces[groups[gi - 1].1].0.end_s };
-        let next_start = groups.get(gi + 1).map_or(total_s, |&(na, _)| pieces[na].0.start_s);
+        let prev_end = if gi == 0 {
+            0.0
+        } else {
+            pieces[groups[gi - 1].1].0.end_s
+        };
+        let next_start = groups
+            .get(gi + 1)
+            .map_or(total_s, |&(na, _)| pieces[na].0.start_s);
         // Half the gap to a neighbour at most, so padding never overlaps the next chunk.
-        let pad_before = p.pad_s.min((start - prev_end).max(0.0) / if gi == 0 { 1.0 } else { 2.0 });
-        let pad_after = p.pad_s.min((next_start - end).max(0.0) / if gi + 1 == groups.len() { 1.0 } else { 2.0 });
+        let pad_before = p
+            .pad_s
+            .min((start - prev_end).max(0.0) / if gi == 0 { 1.0 } else { 2.0 });
+        let pad_after = p
+            .pad_s
+            .min((next_start - end).max(0.0) / if gi + 1 == groups.len() { 1.0 } else { 2.0 });
         let s_ms = ((start - pad_before).max(0.0) * 1000.0).round() as u64;
         let e_ms = (((end + pad_after).min(total_s)) * 1000.0).round() as u64;
         if e_ms > s_ms {
@@ -190,7 +216,10 @@ mod tests {
     const RATE: u32 = 16_000;
 
     fn s(a: f64, b: f64) -> Speech {
-        Speech { start_s: a, end_s: b }
+        Speech {
+            start_s: a,
+            end_s: b,
+        }
     }
 
     /// Noise with a quiet stretch from `quiet_from` to `quiet_to` seconds.
@@ -212,7 +241,12 @@ mod tests {
     fn short_phrases_with_a_sentence_pause_become_separate_chunks() {
         let samples = audio(20.0, None);
         // 4 s of speech, a 0.6 s pause, 5 s of speech.
-        let c = chunks(&[s(0.5, 4.5), s(5.1, 10.1)], &samples, RATE, &Params::default());
+        let c = chunks(
+            &[s(0.5, 4.5), s(5.1, 10.1)],
+            &samples,
+            RATE,
+            &Params::default(),
+        );
         assert_eq!(c.len(), 2, "{c:?}");
         assert!(c[0].end_ms <= c[1].start_ms);
         assert!(c.iter().all(|x| x.duration_s() <= 15.0));
@@ -222,7 +256,9 @@ mod tests {
     fn pieces_without_a_sentence_pause_are_merged_up_to_the_limit() {
         let samples = audio(30.0, None);
         // Five 2.5 s phrases with 0.15 s breaks between them: shorter than a sentence pause.
-        let speech: Vec<Speech> = (0..5).map(|i| s(f64::from(i) * 2.65, f64::from(i) * 2.65 + 2.5)).collect();
+        let speech: Vec<Speech> = (0..5)
+            .map(|i| s(f64::from(i) * 2.65, f64::from(i) * 2.65 + 2.5))
+            .collect();
         let c = chunks(&speech, &samples, RATE, &Params::default());
         assert_eq!(c.len(), 1, "{c:?}");
         assert!(c[0].duration_s() <= 15.0);
@@ -264,14 +300,19 @@ mod tests {
     #[test]
     fn chunks_cover_all_the_speech_and_do_not_overlap() {
         let samples = audio(80.0, None);
-        let speech: Vec<Speech> = (0..14).map(|i| s(f64::from(i) * 5.5 + 1.0, f64::from(i) * 5.5 + 5.0)).collect();
+        let speech: Vec<Speech> = (0..14)
+            .map(|i| s(f64::from(i) * 5.5 + 1.0, f64::from(i) * 5.5 + 5.0))
+            .collect();
         let c = chunks(&speech, &samples, RATE, &Params::default());
         for w in c.windows(2) {
             assert!(w[0].end_ms <= w[1].start_ms, "overlap: {w:?}");
         }
         for sp in &speech {
             let (a, b) = ((sp.start_s * 1000.0) as u64, (sp.end_s * 1000.0) as u64);
-            assert!(c.iter().any(|x| x.start_ms <= a + 1 && x.end_ms + 1 >= b), "speech {sp:?} not covered by {c:?}");
+            assert!(
+                c.iter().any(|x| x.start_ms <= a + 1 && x.end_ms + 1 >= b),
+                "speech {sp:?} not covered by {c:?}"
+            );
         }
         assert!(c.iter().all(|x| x.duration_s() <= 15.0));
     }
@@ -279,7 +320,12 @@ mod tests {
     #[test]
     fn padding_is_clipped_to_the_audio_and_the_neighbours() {
         let samples = audio(10.0, None);
-        let c = chunks(&[s(0.05, 4.0), s(4.2, 9.98)], &samples, RATE, &Params::default());
+        let c = chunks(
+            &[s(0.05, 4.0), s(4.2, 9.98)],
+            &samples,
+            RATE,
+            &Params::default(),
+        );
         assert_eq!(c[0].start_ms, 0);
         assert!(c.last().map_or(0, |x| x.end_ms) <= 10_000);
         for w in c.windows(2) {
@@ -297,17 +343,27 @@ mod tests {
     #[test]
     fn a_30_second_limit_for_single_language_sessions_gives_longer_chunks() {
         let samples = audio(40.0, None);
-        let speech: Vec<Speech> = (0..8).map(|i| s(f64::from(i) * 3.2, f64::from(i) * 3.2 + 3.0)).collect();
-        let p = Params { max_chunk_s: 30.0, ..Params::default() };
+        let speech: Vec<Speech> = (0..8)
+            .map(|i| s(f64::from(i) * 3.2, f64::from(i) * 3.2 + 3.0))
+            .collect();
+        let p = Params {
+            max_chunk_s: 30.0,
+            ..Params::default()
+        };
         let c = chunks(&speech, &samples, RATE, &p);
         assert!(c.iter().all(|x| x.duration_s() <= 30.0));
-        assert!(c.iter().any(|x| x.duration_s() > 15.0) || c.len() >= 1);
+        assert!(c.iter().any(|x| x.duration_s() > 15.0) || !c.is_empty());
     }
 
     #[test]
     fn speech_ratio_reflects_the_pauses_inside_a_chunk() {
         let samples = audio(20.0, None);
-        let c = chunks(&[s(0.5, 3.0), s(3.1, 6.0)], &samples, RATE, &Params::default());
+        let c = chunks(
+            &[s(0.5, 3.0), s(3.1, 6.0)],
+            &samples,
+            RATE,
+            &Params::default(),
+        );
         assert_eq!(c.len(), 1);
         assert!(c[0].speech_ratio() > 0.8 && c[0].speech_ratio() <= 1.0);
     }
@@ -319,23 +375,49 @@ mod greedy_tests {
 
     #[test]
     fn greedy_merging_ignores_sentence_pauses_like_the_evaluation_harness() {
-        let samples: Vec<f32> = (0..16_000usize * 30).map(|i| ((i * 7919) % 200) as f32 / 400.0 - 0.25).collect();
+        let samples: Vec<f32> = (0..16_000usize * 30)
+            .map(|i| ((i * 7919) % 200) as f32 / 400.0 - 0.25)
+            .collect();
         // Four 4 s phrases with 0.8 s pauses: sentence mode makes four chunks, greedy two (the first
         // three phrases fit in 15 s, the fourth does not).
         let speech = [
-            Speech { start_s: 0.5, end_s: 4.5 },
-            Speech { start_s: 5.3, end_s: 9.3 },
-            Speech { start_s: 10.1, end_s: 14.1 },
-            Speech { start_s: 14.9, end_s: 18.9 },
+            Speech {
+                start_s: 0.5,
+                end_s: 4.5,
+            },
+            Speech {
+                start_s: 5.3,
+                end_s: 9.3,
+            },
+            Speech {
+                start_s: 10.1,
+                end_s: 14.1,
+            },
+            Speech {
+                start_s: 14.9,
+                end_s: 18.9,
+            },
         ];
         let sentence = chunks(&speech, &samples, 16_000, &Params::default());
         assert_eq!(sentence.len(), 4, "{sentence:?}");
-        let greedy_params = Params { sentence_split: false, ..Params::default() };
+        let greedy_params = Params {
+            sentence_split: false,
+            ..Params::default()
+        };
         let greedy = chunks(&speech, &samples, 16_000, &greedy_params);
         assert_eq!(greedy.len(), 2, "{greedy:?}");
         assert!(greedy.iter().all(|c| c.duration_s() <= 15.0));
         // Never past the limit even when greedy.
-        let long: Vec<Speech> = (0..10).map(|i| Speech { start_s: f64::from(i) * 4.0, end_s: f64::from(i) * 4.0 + 3.5 }).collect();
-        assert!(chunks(&long, &samples, 16_000, &greedy_params).iter().all(|c| c.duration_s() <= 15.0));
+        let long: Vec<Speech> = (0..10)
+            .map(|i| Speech {
+                start_s: f64::from(i) * 4.0,
+                end_s: f64::from(i) * 4.0 + 3.5,
+            })
+            .collect();
+        assert!(
+            chunks(&long, &samples, 16_000, &greedy_params)
+                .iter()
+                .all(|c| c.duration_s() <= 15.0)
+        );
     }
 }

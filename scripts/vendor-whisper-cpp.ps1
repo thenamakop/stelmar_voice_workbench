@@ -8,7 +8,7 @@
   1. shallow-clones the tag into a scratch folder,
   2. refuses any commit other than -ExpectedCommit,
   3. copies only what the build needs (the same list whisper-rs-sys 0.15 ships): CMakeLists.txt,
-     LICENSE, cmake/, include/whisper.h, src/, ggml/CMakeLists.txt, ggml/cmake/, ggml/include/*.h,
+     LICENSE, cmake/, include/, src/, ggml/CMakeLists.txt, ggml/cmake/, ggml/include/*.h,
      ggml/src/, bindings/CMakeLists.txt and bindings/javascript/package-tmpl.json. No models,
      samples, examples, tests, scripts or binaries,
   4. prints the tree hash (scripts/check-vendor.mjs) to put in third_party/README.md.
@@ -48,7 +48,7 @@ try {
     @{ From = 'CMakeLists.txt'; File = $true },
     @{ From = 'LICENSE'; File = $true },
     @{ From = 'cmake'; File = $false },
-    @{ From = 'include\whisper.h'; File = $true },
+    @{ From = 'include'; File = $false },
     @{ From = 'src'; File = $false },
     @{ From = 'ggml\CMakeLists.txt'; File = $true },
     @{ From = 'ggml\cmake'; File = $false },
@@ -62,6 +62,13 @@ try {
     $to = Join-Path $dest $it.From
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $to) | Out-Null
     Copy-Item -LiteralPath $src -Destination $to -Recurse -Force
+  }
+  # Backends this project never builds (each is switched on by a CMake option we leave off): dropped,
+  # so the tree holds only what the four engine variants (CPU, Vulkan, CUDA) compile.
+  $unused = @('ggml-blas', 'ggml-cann', 'ggml-et', 'ggml-hexagon', 'ggml-hip', 'ggml-metal', 'ggml-musa', 'ggml-opencl', 'ggml-openvino', 'ggml-rpc', 'ggml-sycl', 'ggml-virtgpu', 'ggml-webgpu', 'ggml-zdnn', 'ggml-zendnn')
+  foreach ($u in $unused) {
+    $p = Join-Path (Join-Path $dest 'ggml\src') $u
+    if (Test-Path -LiteralPath $p) { Remove-Item -LiteralPath $p -Recurse -Force }
   }
   # ggml/include/*.h only (headers, no subfolders).
   $gi = Join-Path $dest 'ggml\include'

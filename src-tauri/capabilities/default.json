@@ -17,6 +17,8 @@
     "allow-subscribe-events",
     "allow-recorder-snapshot",
     "allow-recovery-list",
-    "allow-recover-session"
+    "allow-recover-session",
+    "allow-list-engines",
+    "allow-recheck-registry"
   ]
 }

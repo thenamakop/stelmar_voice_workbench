@@ -22,8 +22,8 @@ mod analyse;
 mod compare;
 mod play;
 mod redact;
-mod scan;
 mod reference;
+mod scan;
 mod signal;
 mod stress;
 #[cfg(windows)]

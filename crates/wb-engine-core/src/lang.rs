@@ -61,7 +61,10 @@ impl Detection {
     }
 
     pub fn prob_of(&self, lang: &str) -> f32 {
-        self.probs.iter().find(|(l, _)| l == lang).map_or(0.0, |(_, p)| *p)
+        self.probs
+            .iter()
+            .find(|(l, _)| l == lang)
+            .map_or(0.0, |(_, p)| *p)
     }
 }
 
@@ -128,14 +131,23 @@ pub fn decide(
     rules: &Rules,
 ) -> Plan {
     if let Some(l) = locked {
-        return Plan::Single { lang: l.to_string(), reason: Reason::Locked };
+        return Plan::Single {
+            lang: l.to_string(),
+            reason: Reason::Locked,
+        };
     }
     if languages.len() <= 1 {
         let lang = languages.first().cloned().unwrap_or_else(|| "en".into());
-        return Plan::Single { lang, reason: Reason::OnlyLanguage };
+        return Plan::Single {
+            lang,
+            reason: Reason::OnlyLanguage,
+        };
     }
     let Some((best, best_p)) = det.best().cloned() else {
-        return Plan::Single { lang: languages[0].clone(), reason: Reason::OnlyLanguage };
+        return Plan::Single {
+            lang: languages[0].clone(),
+            reason: Reason::OnlyLanguage,
+        };
     };
     // Rule 3: short and unsure.
     if duration_s < rules.short_chunk_s && best_p < rules.short_chunk_sure {
@@ -145,10 +157,13 @@ pub fn decide(
             (None, Some(b)) => Some(b),
             (None, None) => None,
         };
-        if let Some(l) = pick {
-            if languages.iter().any(|x| x == l) {
-                return Plan::Single { lang: l.to_string(), reason: Reason::Neighbours };
-            }
+        if let Some(l) = pick
+            && languages.iter().any(|x| x == l)
+        {
+            return Plan::Single {
+                lang: l.to_string(),
+                reason: Reason::Neighbours,
+            };
         }
     }
     let second = det.second().cloned();
@@ -158,18 +173,27 @@ pub fn decide(
         .iter()
         .find(|(l, p)| l != "en" && *p >= rules.not_english_at)
         .map(|(l, _)| l.clone());
-    if best == "en" {
-        if let Some(other) = other_strong {
-            return Plan::Single { lang: other, reason: Reason::NotEnglish };
-        }
+    if best == "en"
+        && let Some(other) = other_strong
+    {
+        return Plan::Single {
+            lang: other,
+            reason: Reason::NotEnglish,
+        };
     }
     // Rule 4: too close to call.
-    if let Some((second_lang, second_p)) = second {
-        if best_p - second_p < rules.close_margin {
-            return Plan::Both { first: best, second: second_lang };
-        }
+    if let Some((second_lang, second_p)) = second
+        && best_p - second_p < rules.close_margin
+    {
+        return Plan::Both {
+            first: best,
+            second: second_lang,
+        };
     }
-    Plan::Single { lang: best, reason: Reason::Detected }
+    Plan::Single {
+        lang: best,
+        reason: Reason::Detected,
+    }
 }
 
 /// One candidate of a both-ways decode.
@@ -186,8 +210,15 @@ pub struct Candidate {
 /// Picks between the two decodes of an uncertain chunk: a usable result beats an unusable one, a
 /// right script beats a wrong one, English loses when the other language scored 0.5 or more, and
 /// otherwise the higher average log-probability wins.
-pub fn pick_better<'a>(a: &'a Candidate, b: &'a Candidate, det: &Detection, rules: &Rules) -> &'a Candidate {
-    let en_barred = |c: &Candidate, other: &Candidate| c.lang == "en" && det.prob_of(&other.lang) >= rules.not_english_at;
+pub fn pick_better<'a>(
+    a: &'a Candidate,
+    b: &'a Candidate,
+    det: &Detection,
+    rules: &Rules,
+) -> &'a Candidate {
+    let en_barred = |c: &Candidate, other: &Candidate| {
+        c.lang == "en" && det.prob_of(&other.lang) >= rules.not_english_at
+    };
     let rank = |c: &Candidate, other: &Candidate| -> (u8, u8, u8) {
         (
             u8::from(!c.empty),
@@ -211,12 +242,20 @@ mod tests {
     }
 
     fn det(en: f32, hi: f32, ur: f32) -> Detection {
-        let raw = vec![("en".to_string(), en), ("hi".to_string(), hi), ("ur".to_string(), ur)];
+        let raw = vec![
+            ("en".to_string(), en),
+            ("hi".to_string(), hi),
+            ("ur".to_string(), ur),
+        ];
         Detection::restrict(&raw, &langs(&["en", "hi", "ur"]))
     }
 
     fn det2(en: f32, hi: f32) -> Detection {
-        let raw = vec![("en".to_string(), en), ("hi".to_string(), hi), ("ur".to_string(), 0.3)];
+        let raw = vec![
+            ("en".to_string(), en),
+            ("hi".to_string(), hi),
+            ("ur".to_string(), 0.3),
+        ];
         Detection::restrict(&raw, &langs(&["en", "hi"]))
     }
 
@@ -237,41 +276,89 @@ mod tests {
         assert!((d.probs.iter().map(|p| p.1).sum::<f32>() - 1.0).abs() < 1e-6);
         // Nothing known: equal shares, session order.
         let none = Detection::restrict(&[], &langs(&["en", "hi"]));
-        assert_eq!(none.probs, vec![("en".to_string(), 0.5), ("hi".to_string(), 0.5)]);
+        assert_eq!(
+            none.probs,
+            vec![("en".to_string(), 0.5), ("hi".to_string(), 0.5)]
+        );
     }
 
     #[test]
     fn the_operators_lock_wins_until_detection_is_restored() {
         let log = vec![
-            LangLogEntry { audio_ms: 10_000, lang: Some("hi".into()) },
-            LangLogEntry { audio_ms: 50_000, lang: None },
-            LangLogEntry { audio_ms: 70_000, lang: Some("ur".into()) },
+            LangLogEntry {
+                audio_ms: 10_000,
+                lang: Some("hi".into()),
+            },
+            LangLogEntry {
+                audio_ms: 50_000,
+                lang: None,
+            },
+            LangLogEntry {
+                audio_ms: 70_000,
+                lang: Some("ur".into()),
+            },
         ];
         assert_eq!(locked_language(&log, 5_000), None);
         assert_eq!(locked_language(&log, 10_000), Some("hi"));
         assert_eq!(locked_language(&log, 49_999), Some("hi"));
-        assert_eq!(locked_language(&log, 50_000), None, "Alt+4 returns to detection");
+        assert_eq!(
+            locked_language(&log, 50_000),
+            None,
+            "Alt+4 returns to detection"
+        );
         assert_eq!(locked_language(&log, 90_000), Some("ur"));
         // The log may arrive unsorted.
         let shuffled = vec![log[2].clone(), log[0].clone(), log[1].clone()];
         assert_eq!(locked_language(&shuffled, 60_000), None);
         let d = det(0.9, 0.05, 0.05);
-        let plan = decide(&d, 8.0, Some("hi"), None, None, &langs(&["en", "hi", "ur"]), &Rules::default());
+        let plan = decide(
+            &d,
+            8.0,
+            Some("hi"),
+            None,
+            None,
+            &langs(&["en", "hi", "ur"]),
+            &Rules::default(),
+        );
         assert_eq!(single(&plan), Some(("hi", Reason::Locked)));
     }
 
     #[test]
     fn a_session_with_one_language_decodes_in_it() {
         let d = det2(0.1, 0.9);
-        let plan = decide(&d, 8.0, None, None, None, &langs(&["en"]), &Rules::default());
+        let plan = decide(
+            &d,
+            8.0,
+            None,
+            None,
+            None,
+            &langs(&["en"]),
+            &Rules::default(),
+        );
         assert_eq!(single(&plan), Some(("en", Reason::OnlyLanguage)));
     }
 
     #[test]
     fn a_clear_chunk_is_decoded_in_its_language() {
-        let en = decide(&det2(0.9, 0.05), 6.0, None, Some("hi"), None, &langs(&["en", "hi"]), &Rules::default());
+        let en = decide(
+            &det2(0.9, 0.05),
+            6.0,
+            None,
+            Some("hi"),
+            None,
+            &langs(&["en", "hi"]),
+            &Rules::default(),
+        );
         assert_eq!(single(&en), Some(("en", Reason::Detected)));
-        let hi = decide(&det2(0.05, 0.9), 6.0, None, Some("en"), None, &langs(&["en", "hi"]), &Rules::default());
+        let hi = decide(
+            &det2(0.05, 0.9),
+            6.0,
+            None,
+            Some("en"),
+            None,
+            &langs(&["en", "hi"]),
+            &Rules::default(),
+        );
         assert_eq!(single(&hi), Some(("hi", Reason::Detected)));
     }
 
@@ -281,36 +368,118 @@ mod tests {
         // 1.2 s, best 0.7 (< 0.8): takes the language both neighbours agree on, then the previous.
         let d = det2(0.7, 0.3);
         let r = Rules::default();
-        assert_eq!(single(&decide(&d, 1.2, None, Some("hi"), Some("hi"), &l, &r)), Some(("hi", Reason::Neighbours)));
-        assert_eq!(single(&decide(&d, 1.2, None, Some("hi"), Some("en"), &l, &r)), Some(("hi", Reason::Neighbours)));
-        assert_eq!(single(&decide(&d, 1.2, None, None, Some("hi"), &l, &r)), Some(("hi", Reason::Neighbours)));
+        assert_eq!(
+            single(&decide(&d, 1.2, None, Some("hi"), Some("hi"), &l, &r)),
+            Some(("hi", Reason::Neighbours))
+        );
+        assert_eq!(
+            single(&decide(&d, 1.2, None, Some("hi"), Some("en"), &l, &r)),
+            Some(("hi", Reason::Neighbours))
+        );
+        assert_eq!(
+            single(&decide(&d, 1.2, None, None, Some("hi"), &l, &r)),
+            Some(("hi", Reason::Neighbours))
+        );
         // No neighbours: its own best guess (0.7 vs 0.3 is a clear margin).
-        assert_eq!(single(&decide(&d, 1.2, None, None, None, &l, &r)), Some(("en", Reason::Detected)));
+        assert_eq!(
+            single(&decide(&d, 1.2, None, None, None, &l, &r)),
+            Some(("en", Reason::Detected))
+        );
         // Sure enough (>= 0.8): keeps its own language even when short.
         let sure = det2(0.85, 0.15);
-        assert_eq!(single(&decide(&sure, 1.2, None, Some("hi"), Some("hi"), &l, &r)), Some(("en", Reason::Detected)));
+        assert_eq!(
+            single(&decide(&sure, 1.2, None, Some("hi"), Some("hi"), &l, &r)),
+            Some(("en", Reason::Detected))
+        );
         // Long enough: detection stands.
-        assert_eq!(single(&decide(&d, 2.5, None, Some("hi"), Some("hi"), &l, &r)), Some(("en", Reason::Detected)));
+        assert_eq!(
+            single(&decide(&d, 2.5, None, Some("hi"), Some("hi"), &l, &r)),
+            Some(("en", Reason::Detected))
+        );
     }
 
     #[test]
     fn chunks_within_02_are_decoded_both_ways() {
         let l = langs(&["en", "hi"]);
-        let plan = decide(&det2(0.55, 0.45), 6.0, None, None, None, &l, &Rules::default());
-        assert_eq!(plan, Plan::Both { first: "en".into(), second: "hi".into() });
-        let plan = decide(&det2(0.42, 0.58), 6.0, None, None, None, &l, &Rules::default());
-        assert_eq!(plan, Plan::Both { first: "hi".into(), second: "en".into() });
+        let plan = decide(
+            &det2(0.55, 0.45),
+            6.0,
+            None,
+            None,
+            None,
+            &l,
+            &Rules::default(),
+        );
+        assert_eq!(
+            plan,
+            Plan::Both {
+                first: "en".into(),
+                second: "hi".into()
+            }
+        );
+        let plan = decide(
+            &det2(0.42, 0.58),
+            6.0,
+            None,
+            None,
+            None,
+            &l,
+            &Rules::default(),
+        );
+        assert_eq!(
+            plan,
+            Plan::Both {
+                first: "hi".into(),
+                second: "en".into()
+            }
+        );
         // 0.65 vs 0.35: a margin of 0.3 is clear.
-        assert_eq!(single(&decide(&det2(0.65, 0.35), 6.0, None, None, None, &l, &Rules::default())), Some(("en", Reason::Detected)));
+        assert_eq!(
+            single(&decide(
+                &det2(0.65, 0.35),
+                6.0,
+                None,
+                None,
+                None,
+                &l,
+                &Rules::default()
+            )),
+            Some(("en", Reason::Detected))
+        );
         // A margin just over 0.2 (0.61 vs 0.39) is not within 0.2.
-        assert_eq!(single(&decide(&det2(0.61, 0.39), 6.0, None, None, None, &l, &Rules::default())), Some(("en", Reason::Detected)));
+        assert_eq!(
+            single(&decide(
+                &det2(0.61, 0.39),
+                6.0,
+                None,
+                None,
+                None,
+                &l,
+                &Rules::default()
+            )),
+            Some(("en", Reason::Detected))
+        );
     }
 
     #[test]
     fn three_languages_compare_the_two_best() {
         let l = langs(&["en", "hi", "ur"]);
-        let plan = decide(&det(0.1, 0.45, 0.4), 6.0, None, None, None, &l, &Rules::default());
-        assert_eq!(plan, Plan::Both { first: "hi".into(), second: "ur".into() });
+        let plan = decide(
+            &det(0.1, 0.45, 0.4),
+            6.0,
+            None,
+            None,
+            None,
+            &l,
+            &Rules::default(),
+        );
+        assert_eq!(
+            plan,
+            Plan::Both {
+                first: "hi".into(),
+                second: "ur".into()
+            }
+        );
     }
 
     #[test]
@@ -327,25 +496,54 @@ mod tests {
     fn the_better_decode_wins_unless_it_is_unusable_or_in_the_wrong_script() {
         let d = det2(0.55, 0.45);
         let r = Rules::default();
-        let en = Candidate { lang: "en".into(), avg_logprob: -0.4, wrong_script: false, empty: false };
-        let hi = Candidate { lang: "hi".into(), avg_logprob: -0.6, wrong_script: false, empty: false };
+        let en = Candidate {
+            lang: "en".into(),
+            avg_logprob: -0.4,
+            wrong_script: false,
+            empty: false,
+        };
+        let hi = Candidate {
+            lang: "hi".into(),
+            avg_logprob: -0.6,
+            wrong_script: false,
+            empty: false,
+        };
         assert_eq!(pick_better(&en, &hi, &d, &r).lang, "en");
-        let hi_better = Candidate { avg_logprob: -0.2, ..hi.clone() };
+        let hi_better = Candidate {
+            avg_logprob: -0.2,
+            ..hi.clone()
+        };
         assert_eq!(pick_better(&en, &hi_better, &d, &r).lang, "hi");
         // Order does not matter.
         assert_eq!(pick_better(&hi_better, &en, &d, &r).lang, "hi");
         // A better score in the wrong script loses: Hindi speech "decoded" as Latin letters.
-        let hi_wrong = Candidate { avg_logprob: -0.1, wrong_script: true, ..hi.clone() };
+        let hi_wrong = Candidate {
+            avg_logprob: -0.1,
+            wrong_script: true,
+            ..hi.clone()
+        };
         assert_eq!(pick_better(&en, &hi_wrong, &d, &r).lang, "en");
         // An empty decode loses.
-        let hi_empty = Candidate { avg_logprob: -0.01, empty: true, ..hi.clone() };
+        let hi_empty = Candidate {
+            avg_logprob: -0.01,
+            empty: true,
+            ..hi.clone()
+        };
         assert_eq!(pick_better(&en, &hi_empty, &d, &r).lang, "en");
         // English barred (Hindi at 0.6) loses even with the better score.
         let strong_hi = det2(0.4, 0.6);
-        let en_good = Candidate { avg_logprob: -0.1, ..en.clone() };
+        let en_good = Candidate {
+            avg_logprob: -0.1,
+            ..en.clone()
+        };
         assert_eq!(pick_better(&en_good, &hi, &strong_hi, &r).lang, "hi");
         // A tie goes to the first.
-        let same = Candidate { lang: "hi".into(), avg_logprob: -0.4, wrong_script: false, empty: false };
+        let same = Candidate {
+            lang: "hi".into(),
+            avg_logprob: -0.4,
+            wrong_script: false,
+            empty: false,
+        };
         assert_eq!(pick_better(&en, &same, &d, &r).lang, "en");
     }
 }

@@ -180,11 +180,7 @@ impl RepeatDetector {
             n += 1;
         }
         if n >= WINDOW {
-            self.run = Some(Run {
-                lag,
-                len: n,
-                sumsq,
-            });
+            self.run = Some(Run { lag, len: n, sumsq });
         }
     }
 
@@ -226,7 +222,8 @@ mod tests {
         let mut v = Vec::with_capacity(frames * ch);
         for f in 0..frames {
             for c in 0..ch {
-                let r = splitmix(seed ^ (f as u64).wrapping_mul(0x100_0000_01B3) ^ ((c as u64) << 56));
+                let r =
+                    splitmix(seed ^ (f as u64).wrapping_mul(0x100_0000_01B3) ^ ((c as u64) << 56));
                 let q = ((r >> 32) as u32 % 65_536) as i32 - 32_768;
                 v.push((q as f32 / 32_768.0) * peak);
             }

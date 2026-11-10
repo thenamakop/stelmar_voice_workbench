@@ -91,7 +91,8 @@ pub fn job_memory_limit() -> Option<u64> {
 fn job_process_ids() -> Vec<u32> {
     const MAX: usize = 512;
     // The list structure is followed by room for MAX ids; u64 storage keeps it aligned.
-    let bytes = std::mem::size_of::<JOBOBJECT_BASIC_PROCESS_ID_LIST>() + MAX * std::mem::size_of::<usize>();
+    let bytes =
+        std::mem::size_of::<JOBOBJECT_BASIC_PROCESS_ID_LIST>() + MAX * std::mem::size_of::<usize>();
     let mut buf = vec![0u64; bytes.div_ceil(8)];
     // SAFETY: `buf` is zeroed, aligned and at least `bytes` long, which the query is told.
     let ok = unsafe {
@@ -113,8 +114,9 @@ fn job_process_ids() -> Vec<u32> {
     (0..in_list.min(MAX))
         .filter_map(|i| {
             let o = 8 + i * 8;
-            raw.get(o..o + 8)
-                .map(|b| u64::from_le_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]]) as u32)
+            raw.get(o..o + 8).map(|b| {
+                u64::from_le_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]]) as u32
+            })
         })
         .collect()
 }

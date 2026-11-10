@@ -12,6 +12,8 @@ const COMMANDS: &[&str] = &[
     "recorder_snapshot",
     "recovery_list",
     "recover_session",
+    "list_engines",
+    "recheck_registry",
 ];
 
 fn main() {

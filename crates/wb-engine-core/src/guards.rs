@@ -121,15 +121,23 @@ const SILENCE_PHRASES: &[&str] = &[
 ];
 
 /// Credits whisper models write over music or silence; any text that starts with one is a hallucination.
-const SILENCE_PREFIXES: &[&str] = &["subtitles by", "subtitled by", "transcribed by", "translated by"];
+const SILENCE_PREFIXES: &[&str] = &[
+    "subtitles by",
+    "subtitled by",
+    "transcribed by",
+    "translated by",
+];
 
 pub fn is_silence_phrase(text: &str) -> bool {
     let t: String = text
         .trim()
-        .trim_matches(|c: char| c.is_ascii_punctuation() || c == '।' || c == '۔' || c.is_whitespace())
+        .trim_matches(|c: char| {
+            c.is_ascii_punctuation() || c == '।' || c == '۔' || c.is_whitespace()
+        })
         .to_lowercase();
     !t.is_empty()
-        && (SILENCE_PHRASES.contains(&t.as_str()) || SILENCE_PREFIXES.iter().any(|p| t.starts_with(p)))
+        && (SILENCE_PHRASES.contains(&t.as_str())
+            || SILENCE_PREFIXES.iter().any(|p| t.starts_with(p)))
 }
 
 /// Flags to attach to a kept segment (they are not reasons to drop it).
@@ -153,50 +161,100 @@ mod tests {
     use crate::text::script_counts;
 
     fn m(avg: f32, nsp: f32, cr: f32, speech: f32) -> Metrics {
-        Metrics { avg_logprob: avg, no_speech_prob: nsp, compression_ratio: cr, speech_ratio: speech }
+        Metrics {
+            avg_logprob: avg,
+            no_speech_prob: nsp,
+            compression_ratio: cr,
+            speech_ratio: speech,
+        }
     }
 
     #[test]
     fn the_three_drop_rules_match_the_plan() {
         assert_eq!(drop_reason(&m(-0.3, 0.1, 1.5, 0.9)), None);
-        assert_eq!(drop_reason(&m(-0.3, 0.1, 1.5, 0.29)), Some(DropReason::LittleSpeech));
-        assert_eq!(drop_reason(&m(-0.3, 0.1, 1.5, 0.3)), None, "0.3 is not under 0.3");
+        assert_eq!(
+            drop_reason(&m(-0.3, 0.1, 1.5, 0.29)),
+            Some(DropReason::LittleSpeech)
+        );
+        assert_eq!(
+            drop_reason(&m(-0.3, 0.1, 1.5, 0.3)),
+            None,
+            "0.3 is not under 0.3"
+        );
         // no-speech needs both conditions.
-        assert_eq!(drop_reason(&m(-1.2, 0.7, 1.5, 0.9)), Some(DropReason::NoSpeech));
+        assert_eq!(
+            drop_reason(&m(-1.2, 0.7, 1.5, 0.9)),
+            Some(DropReason::NoSpeech)
+        );
         assert_eq!(drop_reason(&m(-0.5, 0.7, 1.5, 0.9)), None);
         assert_eq!(drop_reason(&m(-1.2, 0.5, 1.5, 0.9)), None);
-        assert_eq!(drop_reason(&m(-0.3, 0.1, 2.5, 0.9)), Some(DropReason::Compression));
-        assert_eq!(drop_reason(&m(-0.3, 0.1, 2.4, 0.9)), None, "2.4 is not over 2.4");
+        assert_eq!(
+            drop_reason(&m(-0.3, 0.1, 2.5, 0.9)),
+            Some(DropReason::Compression)
+        );
+        assert_eq!(
+            drop_reason(&m(-0.3, 0.1, 2.4, 0.9)),
+            None,
+            "2.4 is not over 2.4"
+        );
     }
 
     #[test]
     fn a_loop_compresses_better_than_speech() {
         let speech = "Welcome to the opening session of STELMAR 2027. Today we will talk about how the programme is organised and who will speak in each hall.";
         let looped = "thank you thank you thank you thank you thank you thank you thank you thank you thank you thank you thank you thank you";
-        assert!(compression_ratio(speech) < 2.0, "{}", compression_ratio(speech));
-        assert!(compression_ratio(looped) > COMPRESSION_ABOVE, "{}", compression_ratio(looped));
+        assert!(
+            compression_ratio(speech) < 2.0,
+            "{}",
+            compression_ratio(speech)
+        );
+        assert!(
+            compression_ratio(looped) > COMPRESSION_ABOVE,
+            "{}",
+            compression_ratio(looped)
+        );
         assert_eq!(compression_ratio(""), 1.0);
         // Hindi text compresses like speech, not like a loop.
-        let hindi = "नमस्ते दोस्तों, आज हम स्टेलमार के उद्घाटन सत्र के बारे में बात करेंगे और बताएंगे कि हर हॉल में कौन बोलेगा।";
-        assert!(compression_ratio(hindi) < COMPRESSION_ABOVE, "{}", compression_ratio(hindi));
+        let hindi =
+            "नमस्ते दोस्तों, आज हम स्टेलमार के उद्घाटन सत्र के बारे में बात करेंगे और बताएंगे कि हर हॉल में कौन बोलेगा।";
+        assert!(
+            compression_ratio(hindi) < COMPRESSION_ABOVE,
+            "{}",
+            compression_ratio(hindi)
+        );
     }
 
     #[test]
     fn repeated_phrases_are_found_and_ordinary_repeats_are_not() {
-        assert!(has_repetition("so then so then so then so then so then we left"));
+        assert!(has_repetition(
+            "so then so then so then so then so then we left"
+        ));
         assert!(has_repetition("no no no no no no no no stop"));
         assert!(has_repetition("यह है यह है यह है यह है यह है"));
         assert!(!has_repetition("no no no that is not what I said"));
-        assert!(!has_repetition("we went to the market and then we went to the station and then home"));
+        assert!(!has_repetition(
+            "we went to the market and then we went to the station and then home"
+        ));
         assert!(!has_repetition(""));
     }
 
     #[test]
     fn known_silence_phrases_are_recognised_in_three_languages() {
-        for t in ["Thanks for watching!", " thank you for watching. ", "Subtitles by the Amara.org community", "देखने के लिए धन्यवाद।", "دیکھنے کے لیے شکریہ۔"] {
+        for t in [
+            "Thanks for watching!",
+            " thank you for watching. ",
+            "Subtitles by the Amara.org community",
+            "देखने के लिए धन्यवाद।",
+            "دیکھنے کے لیے شکریہ۔",
+        ] {
             assert!(is_silence_phrase(t), "{t}");
         }
-        for t in ["Thanks for coming to the session", "Please subscribe to the newsletter at the desk", "", "।"] {
+        for t in [
+            "Thanks for coming to the session",
+            "Please subscribe to the newsletter at the desk",
+            "",
+            "।",
+        ] {
             assert!(!is_silence_phrase(t), "{t}");
         }
     }
@@ -204,18 +262,30 @@ mod tests {
     #[test]
     fn flags_cover_loops_silence_phrases_and_the_wrong_script() {
         let t = "namaste doston aaj hum baat karenge";
-        assert_eq!(flags(t, "hi", &script_counts(t)), vec![SegmentFlag::WrongScript]);
+        assert_eq!(
+            flags(t, "hi", &script_counts(t)),
+            vec![SegmentFlag::WrongScript]
+        );
         let loop_t = "go go go go go go go go go";
-        assert_eq!(flags(loop_t, "en", &script_counts(loop_t)), vec![SegmentFlag::Repetition]);
+        assert_eq!(
+            flags(loop_t, "en", &script_counts(loop_t)),
+            vec![SegmentFlag::Repetition]
+        );
         let ok = "Welcome everyone";
         assert!(flags(ok, "en", &script_counts(ok)).is_empty());
         let both = "Thanks for watching";
-        assert_eq!(flags(both, "en", &script_counts(both)), vec![SegmentFlag::SilencePhrase]);
+        assert_eq!(
+            flags(both, "en", &script_counts(both)),
+            vec![SegmentFlag::SilencePhrase]
+        );
     }
 
     #[test]
     fn drop_reasons_map_to_protocol_flags() {
-        assert_eq!(DropReason::Compression.flag(), SegmentFlag::CompressionRatio);
+        assert_eq!(
+            DropReason::Compression.flag(),
+            SegmentFlag::CompressionRatio
+        );
         assert_eq!(DropReason::LittleSpeech.flag(), SegmentFlag::NoSpeech);
     }
 }

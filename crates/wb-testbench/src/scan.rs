@@ -197,7 +197,13 @@ pub struct LagMatch {
 /// For the audio-clock window `[from_ms, to_ms)` of a session, the lags (1..=`max_lag` frames) with
 /// the longest runs where a frame equals the one `lag` frames before, best first. Reads channel 0
 /// and checks channel 1 over the winning run.
-pub fn lag_scan(session: &Path, from_ms: f64, to_ms: f64, min_lag: usize, max_lag: usize) -> Result<Vec<LagMatch>> {
+pub fn lag_scan(
+    session: &Path,
+    from_ms: f64,
+    to_ms: f64,
+    min_lag: usize,
+    max_lag: usize,
+) -> Result<Vec<LagMatch>> {
     let index = parts::load(session)?;
     let mut frames: Vec<[i16; 2]> = Vec::new();
     let mut rate = 48_000u32;
@@ -213,7 +219,9 @@ pub fn lag_scan(session: &Path, from_ms: f64, to_ms: f64, min_lag: usize, max_la
         let ch = usize::from(spec.channels.max(1));
         let first = ((from_ms - part.start_ms as f64).max(0.0) * f64::from(rate) / 1000.0) as usize;
         let last = ((to_ms - part.start_ms as f64) * f64::from(rate) / 1000.0) as usize;
-        let all: Vec<i16> = reader.samples::<i16>().collect::<std::result::Result<_, _>>()?;
+        let all: Vec<i16> = reader
+            .samples::<i16>()
+            .collect::<std::result::Result<_, _>>()?;
         for f in first..last.min(all.len() / ch) {
             frames.push([all[f * ch], if ch > 1 { all[f * ch + 1] } else { 0 }]);
         }
@@ -265,8 +273,11 @@ pub fn dump_frames(session: &Path, at_ms: f64, count: usize) -> Result<Vec<[i16;
         let mut reader = hound::WavReader::open(session.join(&part.file))?;
         let spec = reader.spec();
         let ch = usize::from(spec.channels.max(1));
-        let first = ((at_ms - part.start_ms as f64) * f64::from(spec.sample_rate) / 1000.0) as usize;
-        let all: Vec<i16> = reader.samples::<i16>().collect::<std::result::Result<_, _>>()?;
+        let first =
+            ((at_ms - part.start_ms as f64) * f64::from(spec.sample_rate) / 1000.0) as usize;
+        let all: Vec<i16> = reader
+            .samples::<i16>()
+            .collect::<std::result::Result<_, _>>()?;
         for f in first..(first + count).min(all.len() / ch) {
             out.push([all[f * ch], if ch > 1 { all[f * ch + 1] } else { 0 }]);
         }

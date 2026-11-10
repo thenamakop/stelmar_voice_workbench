@@ -1,6 +1,7 @@
 import { Badge, Button, Switch } from "../ds";
 import { px } from "../ds/units";
 import { MainWithSide, Note, PageHead, Section, SideCard, Table } from "../shell/layout";
+import { EnginesSection, ModelsSection, useRegistry } from "./RegistrySections";
 import { liveUnavailableReason } from "./liveReason";
 
 // System screen placeholder per design/mockups/system-check.html. The system check itself arrives
@@ -12,6 +13,7 @@ export interface SystemScreenProps {
 const HARDWARE = ["Processor", "Memory", "Graphics", "Storage and power", "Audio input"];
 
 export function SystemScreen({ hasProfile }: SystemScreenProps) {
+  const registry = useRegistry();
   return (
     <>
       <PageHead
@@ -86,6 +88,8 @@ export function SystemScreen({ hasProfile }: SystemScreenProps) {
             ]}
           />
         </Section>
+        <EnginesSection registry={registry} />
+        <ModelsSection registry={registry} />
       </MainWithSide>
     </>
   );

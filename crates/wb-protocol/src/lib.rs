@@ -45,7 +45,9 @@ pub struct ModelRef {
 pub enum Device {
     Cpu,
     /// The GPU with this index in the engine's own (de-duplicated) device list from `info`.
-    Gpu { index: u32 },
+    Gpu {
+        index: u32,
+    },
 }
 
 /// Decoding settings of a role (PLAN section 6).
@@ -134,6 +136,10 @@ pub struct BenchRequest {
     pub threads: u32,
     /// Runs after the warm-up; the median is reported.
     pub runs: u32,
+    /// If the warm-up run is slower than this real-time factor, make one timed run instead of `runs`
+    /// (the speed tables mark such a cell "impractical: single run").
+    #[serde(default)]
+    pub single_run_above_rtf: Option<f64>,
     #[serde(default)]
     pub settings: Settings,
 }
@@ -316,9 +322,15 @@ pub struct BackendDevice {
     /// Adapter driver version, when the OS reports it.
     #[serde(default)]
     pub driver_version: Option<String>,
-    /// Another entry of the raw list described this same physical adapter; it was dropped.
+    /// Entries of the raw list that described this same physical adapter and were dropped.
     #[serde(default)]
     pub duplicates_dropped: u32,
+    /// For an integrated GPU: the system memory it can use (it shares RAM with the CPU).
+    #[serde(default)]
+    pub shared_memory_bytes: Option<u64>,
+    /// The adapter's name as Windows (DXGI) reports it, when it could be matched.
+    #[serde(default)]
+    pub adapter_name: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -423,9 +435,19 @@ pub enum Event {
     Info(Box<InfoReport>),
     Bench(Box<BenchReport>),
     /// Voice activity from `live` (decoding arrives in Phase 7).
-    Vad { start_ms: u64, end_ms: u64 },
-    Warning { code: String, message: String },
-    Error { code: String, message: String, fatal: bool },
+    Vad {
+        start_ms: u64,
+        end_ms: u64,
+    },
+    Warning {
+        code: String,
+        message: String,
+    },
+    Error {
+        code: String,
+        message: String,
+        fatal: bool,
+    },
     Done(DoneSummary),
 }
 
@@ -463,7 +485,10 @@ mod tests {
     #[test]
     fn hello_is_the_first_line_and_names_the_version() -> Result<(), serde_json::Error> {
         let line = Event::Hello(Hello::new("0.1.0")).to_line()?;
-        assert!(line.starts_with(r#"{"event":"hello","protocol":1,"engine_version":"0.1.0""#), "{line}");
+        assert!(
+            line.starts_with(r#"{"event":"hello","protocol":1,"engine_version":"0.1.0""#),
+            "{line}"
+        );
         match Event::from_line(&line)? {
             Event::Hello(h) => assert_eq!(h.protocol, PROTOCOL_VERSION),
             other => panic!("not a hello: {other:?}"),
@@ -472,7 +497,8 @@ mod tests {
     }
 
     #[test]
-    fn a_hello_from_an_older_engine_without_the_new_fields_still_reads() -> Result<(), serde_json::Error> {
+    fn a_hello_from_an_older_engine_without_the_new_fields_still_reads()
+    -> Result<(), serde_json::Error> {
         let h: Hello = serde_json::from_str(r#"{"protocol":0,"engine_version":"0.1.0"}"#)?;
         assert_eq!(h.protocol, 0);
         assert!(h.whisper_cpp.is_none());
@@ -482,12 +508,30 @@ mod tests {
     #[test]
     fn requests_round_trip() -> Result<(), serde_json::Error> {
         let batch = Request::Batch(BatchRequest {
-            source: Source::Session { dir: "D:/S/day1/hall-a".into() },
-            units: vec![Unit { index: 0, start_ms: 0, end_ms: 300_000 }],
-            models_by_lang: BTreeMap::from([("en".into(), model("medium")), ("hi".into(), model("hindi-medium-q8_0"))]),
+            source: Source::Session {
+                dir: "D:/S/day1/hall-a".into(),
+            },
+            units: vec![Unit {
+                index: 0,
+                start_ms: 0,
+                end_ms: 300_000,
+            }],
+            models_by_lang: BTreeMap::from([
+                ("en".into(), model("medium")),
+                ("hi".into(), model("hindi-medium-q8_0")),
+            ]),
             vad_model: model("silero-v6.2.0"),
             languages: vec!["en".into(), "hi".into()],
-            lang_log: vec![LangLogEntry { audio_ms: 60_000, lang: Some("hi".into()) }, LangLogEntry { audio_ms: 120_000, lang: None }],
+            lang_log: vec![
+                LangLogEntry {
+                    audio_ms: 60_000,
+                    lang: Some("hi".into()),
+                },
+                LangLogEntry {
+                    audio_ms: 120_000,
+                    lang: None,
+                },
+            ],
             settings: Settings::default(),
             device: Device::Gpu { index: 1 },
             threads: 3,
@@ -514,6 +558,7 @@ mod tests {
                 device: Device::Cpu,
                 threads: 4,
                 runs: 3,
+                single_run_above_rtf: Some(2.0),
                 settings: Settings::default(),
             }),
         ] {
@@ -543,7 +588,11 @@ mod tests {
 
     #[test]
     fn a_segment_keeps_devanagari_and_urdu_text_exactly() -> Result<(), serde_json::Error> {
-        for text in ["नमस्ते, यह एक test है।", "یہ ایک ٹیسٹ ہے۔ STELMAR 2027", "mixed हिंदी and English"] {
+        for text in [
+            "नमस्ते, यह एक test है।",
+            "یہ ایک ٹیسٹ ہے۔ STELMAR 2027",
+            "mixed हिंदी and English",
+        ] {
             let seg = Event::Segment(SegmentEvent {
                 unit: 1,
                 chunk: 7,
@@ -559,7 +608,16 @@ mod tests {
                 compression_ratio: 1.4,
                 model: "hindi-medium-q8_0".into(),
                 decoded_both_ways: false,
-                detection: vec![LangProb { lang: "hi".into(), prob: 0.93 }, LangProb { lang: "en".into(), prob: 0.06 }],
+                detection: vec![
+                    LangProb {
+                        lang: "hi".into(),
+                        prob: 0.93,
+                    },
+                    LangProb {
+                        lang: "en".into(),
+                        prob: 0.06,
+                    },
+                ],
                 flags: vec![SegmentFlag::Truncated],
                 truncated: true,
             });
@@ -573,12 +631,38 @@ mod tests {
     #[test]
     fn every_event_is_one_json_line() -> Result<(), serde_json::Error> {
         let events = vec![
-            Event::Ready { device: Device::Cpu, device_name: "CPU".into(), threads: 4, models: vec!["medium".into()], load_s: 1.5 },
-            Event::Progress { unit: 0, committed_until_ms: 5_000, unit_end_ms: 300_000 },
-            Event::Vad { start_ms: 0, end_ms: 800 },
-            Event::Warning { code: "truncated".into(), message: "chunk 3 reached the token limit".into() },
-            Event::Error { code: "model".into(), message: "x\ny".into(), fatal: true },
-            Event::Done(DoneSummary { segments: 3, chunks: 3, audio_ms: 20_000, truncated_chunks: 0, elapsed_s: 4.0 }),
+            Event::Ready {
+                device: Device::Cpu,
+                device_name: "CPU".into(),
+                threads: 4,
+                models: vec!["medium".into()],
+                load_s: 1.5,
+            },
+            Event::Progress {
+                unit: 0,
+                committed_until_ms: 5_000,
+                unit_end_ms: 300_000,
+            },
+            Event::Vad {
+                start_ms: 0,
+                end_ms: 800,
+            },
+            Event::Warning {
+                code: "truncated".into(),
+                message: "chunk 3 reached the token limit".into(),
+            },
+            Event::Error {
+                code: "model".into(),
+                message: "x\ny".into(),
+                fatal: true,
+            },
+            Event::Done(DoneSummary {
+                segments: 3,
+                chunks: 3,
+                audio_ms: 20_000,
+                truncated_chunks: 0,
+                elapsed_s: 4.0,
+            }),
         ];
         for e in events {
             let line = e.to_line()?;
@@ -591,7 +675,10 @@ mod tests {
     #[test]
     fn the_device_names_are_stable() -> Result<(), serde_json::Error> {
         assert_eq!(serde_json::to_string(&Device::Cpu)?, r#"{"kind":"cpu"}"#);
-        assert_eq!(serde_json::to_string(&Device::Gpu { index: 2 })?, r#"{"kind":"gpu","index":2}"#);
+        assert_eq!(
+            serde_json::to_string(&Device::Gpu { index: 2 })?,
+            r#"{"kind":"gpu","index":2}"#
+        );
         Ok(())
     }
 }

@@ -180,10 +180,8 @@ pub fn core_masks(bytes: &[u8]) -> Vec<u64> {
             let mut mask = 0u64;
             for g in 0..usize::from(groups) {
                 let base = off + 32 + g * 16;
-                if let (Some(m), Some(group)) = (u64_at(bytes, base), u16_at(bytes, base + 8)) {
-                    if group == 0 {
-                        mask |= m;
-                    }
+                if let (Some(m), Some(0)) = (u64_at(bytes, base), u16_at(bytes, base + 8)) {
+                    mask |= m;
                 }
             }
             if mask != 0 {

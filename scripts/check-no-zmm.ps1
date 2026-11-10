@@ -17,12 +17,22 @@ param(
   [string]$Dumpbin
 )
 $ErrorActionPreference = 'Stop'
+Import-Module (Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) 'lib\PsEnv.psm1') -Force
+Set-WbCleanPSModulePath
+Set-WbInvariantCulture
 
 function Find-Dumpbin {
-  $roots = @($env:ProgramFiles, ${env:ProgramFiles(x86)}) | Where-Object { $_ }
-  foreach ($r in $roots) {
-    $vs = Join-Path $r 'Microsoft Visual Studio'
-    if (-not (Test-Path -LiteralPath $vs)) { continue }
+  # vswhere finds the Visual Studio / Build Tools install wherever it is (D:\Visual_Studio here).
+  $roots = @()
+  $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+  if (Test-Path -LiteralPath $vswhere) {
+    $roots += @(& $vswhere -products '*' -latest -property installationPath)
+  }
+  foreach ($r in @($env:ProgramFiles, ${env:ProgramFiles(x86)}) | Where-Object { $_ }) {
+    $roots += Join-Path $r 'Microsoft Visual Studio'
+  }
+  foreach ($vs in $roots) {
+    if (-not $vs -or -not (Test-Path -LiteralPath $vs)) { continue }
     $hit = Get-ChildItem -Path $vs -Recurse -Filter dumpbin.exe -ErrorAction SilentlyContinue |
       Where-Object { $_.FullName -match 'Hostx64\\x64' } | Sort-Object FullName -Descending | Select-Object -First 1
     if ($hit) { return $hit.FullName }

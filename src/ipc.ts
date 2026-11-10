@@ -193,3 +193,63 @@ export function subscribeEvents(onEvent: (event: AppEvent) => void): Promise<voi
   channel.onmessage = onEvent;
   return invoke<void>("subscribe_events", { onEvent: channel });
 }
+
+// ---- Engines and models (System screen) ---------------------------------------------------------
+
+export type EngineStateName = "checking" | "ok" | "cpu_mismatch" | "failed" | "timeout";
+
+export interface EngineDevice {
+  index: number;
+  backend: string;
+  name: string;
+  description: string;
+  kind: "cpu" | "gpu" | "igpu" | "accel" | "other";
+  total_memory_bytes: number;
+  free_memory_bytes: number;
+  driver_version: string | null;
+  duplicates_dropped: number;
+  shared_memory_bytes: number | null;
+  adapter_name: string | null;
+}
+
+export interface EngineRow {
+  variant: string;
+  file: string;
+  bytes: number;
+  state: EngineStateName;
+  message: string | null;
+  devices: EngineDevice[];
+  whisper_cpp: { version: string; commit: string; tree_sha256: string } | null;
+  backends: string[];
+  info_ms: number;
+}
+
+export type ModelStateName =
+  "checking" | "ok" | "missing" | "size_mismatch" | "hash_mismatch" | "no_checksum";
+
+export interface ModelRow {
+  id: string;
+  file: string;
+  bytes: number;
+  base: string;
+  quant: string;
+  languages: string[];
+  candidate_roles: string[];
+  validated_roles: string[];
+  licence: string;
+  state: ModelStateName;
+  message: string | null;
+}
+
+export interface RegistrySnapshot {
+  engines_dir: string | null;
+  engines: EngineRow[];
+  engines_done: boolean;
+  models_dir: string | null;
+  models: ModelRow[];
+  models_done: boolean;
+  manifest_error: string | null;
+}
+
+export const listEngines = () => invoke<RegistrySnapshot>("list_engines");
+export const recheckRegistry = () => invoke<void>("recheck_registry");

@@ -86,21 +86,36 @@ pub struct Manifest {
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("{}: {source}", path.display())]
-    Io { path: PathBuf, source: std::io::Error },
+    Io {
+        path: PathBuf,
+        source: std::io::Error,
+    },
     #[error("{}: not a valid model manifest: {source}", path.display())]
-    Parse { path: PathBuf, source: serde_json::Error },
+    Parse {
+        path: PathBuf,
+        source: serde_json::Error,
+    },
     #[error("model {0} is not in the manifest")]
     Unknown(String),
 }
 
 impl Manifest {
     pub fn load(path: &Path) -> Result<Self, Error> {
-        let text = fs::read_to_string(path).map_err(|source| Error::Io { path: path.to_path_buf(), source })?;
-        serde_json::from_str(&text).map_err(|source| Error::Parse { path: path.to_path_buf(), source })
+        let text = fs::read_to_string(path).map_err(|source| Error::Io {
+            path: path.to_path_buf(),
+            source,
+        })?;
+        serde_json::from_str(&text).map_err(|source| Error::Parse {
+            path: path.to_path_buf(),
+            source,
+        })
     }
 
     pub fn find(&self, id: &str) -> Result<&Entry, Error> {
-        self.models.iter().find(|m| m.id == id).ok_or_else(|| Error::Unknown(id.to_string()))
+        self.models
+            .iter()
+            .find(|m| m.id == id)
+            .ok_or_else(|| Error::Unknown(id.to_string()))
     }
 }
 
@@ -117,9 +132,15 @@ pub enum Status {
     Ok,
     Missing,
     /// The file is a different size than the manifest says (truncated or replaced).
-    SizeMismatch { expected: u64, actual: u64 },
+    SizeMismatch {
+        expected: u64,
+        actual: u64,
+    },
     /// The same size but other bytes.
-    HashMismatch { expected: String, actual: String },
+    HashMismatch {
+        expected: String,
+        actual: String,
+    },
     /// The manifest has no real SHA-256 for this entry yet, so nothing can be checked.
     NoChecksum,
 }
@@ -135,7 +156,9 @@ impl Status {
         match self {
             Self::Ok => "checksum matches".into(),
             Self::Missing => "file not found".into(),
-            Self::SizeMismatch { expected, actual } => format!("wrong size ({actual} bytes, expected {expected})"),
+            Self::SizeMismatch { expected, actual } => {
+                format!("wrong size ({actual} bytes, expected {expected})")
+            }
             Self::HashMismatch { .. } => "checksum does not match".into(),
             Self::NoChecksum => "no checksum in the manifest".into(),
         }
@@ -182,7 +205,10 @@ impl Cache {
 
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
         let tmp = path.with_extension("json.tmp");
-        fs::write(&tmp, serde_json::to_vec_pretty(self).map_err(std::io::Error::other)?)?;
+        fs::write(
+            &tmp,
+            serde_json::to_vec_pretty(self).map_err(std::io::Error::other)?,
+        )?;
         fs::rename(&tmp, path)
     }
 }
@@ -209,24 +235,39 @@ pub fn verify(dir: &Path, entry: &Entry, cache: &mut Cache, hashed: &mut bool) -
         return Status::NoChecksum;
     }
     if entry.bytes != 0 && meta.len() != entry.bytes {
-        return Status::SizeMismatch { expected: entry.bytes, actual: meta.len() };
+        return Status::SizeMismatch {
+            expected: entry.bytes,
+            actual: meta.len(),
+        };
     }
     let mtime = mtime_ns(&meta);
     let want = entry.sha256.to_ascii_lowercase();
-    if let Some(v) = cache.files.get(&entry.file) {
-        if v.size == meta.len() && v.mtime_ns == mtime && v.sha256 == want {
-            return Status::Ok;
-        }
+    if let Some(v) = cache.files.get(&entry.file)
+        && v.size == meta.len()
+        && v.mtime_ns == mtime
+        && v.sha256 == want
+    {
+        return Status::Ok;
     }
     *hashed = true;
     match sha256_file(&path) {
         Ok(actual) if actual == want => {
-            cache.files.insert(entry.file.clone(), Verified { size: meta.len(), mtime_ns: mtime, sha256: actual });
+            cache.files.insert(
+                entry.file.clone(),
+                Verified {
+                    size: meta.len(),
+                    mtime_ns: mtime,
+                    sha256: actual,
+                },
+            );
             Status::Ok
         }
         Ok(actual) => {
             cache.files.remove(&entry.file);
-            Status::HashMismatch { expected: want, actual }
+            Status::HashMismatch {
+                expected: want,
+                actual,
+            }
         }
         Err(_) => Status::Missing,
     }
@@ -234,7 +275,12 @@ pub fn verify(dir: &Path, entry: &Entry, cache: &mut Cache, hashed: &mut bool) -
 
 /// The path of a model the app may hand to an engine. Re-checks the file when its size or
 /// modification time changed since it was verified, and refuses any model that is not `Ok`.
-pub fn path_for_engine(dir: &Path, manifest: &Manifest, id: &str, cache: &mut Cache) -> Result<PathBuf, String> {
+pub fn path_for_engine(
+    dir: &Path,
+    manifest: &Manifest,
+    id: &str,
+    cache: &mut Cache,
+) -> Result<PathBuf, String> {
     let entry = manifest.find(id).map_err(|e| e.to_string())?;
     let mut hashed = false;
     let status = verify(dir, entry, cache, &mut hashed);
@@ -255,7 +301,11 @@ mod tests {
     struct Dir(PathBuf);
     impl Dir {
         fn new() -> Self {
-            let d = std::env::temp_dir().join(format!("wb-models-{}-{}", std::process::id(), N.fetch_add(1, Ordering::Relaxed)));
+            let d = std::env::temp_dir().join(format!(
+                "wb-models-{}-{}",
+                std::process::id(),
+                N.fetch_add(1, Ordering::Relaxed)
+            ));
             let _ = fs::remove_dir_all(&d);
             fs::create_dir_all(&d).expect("temp dir");
             Self(d)
@@ -268,7 +318,10 @@ mod tests {
     }
 
     fn sha(bytes: &[u8]) -> String {
-        Sha256::digest(bytes).iter().map(|b| format!("{b:02x}")).collect()
+        Sha256::digest(bytes)
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect()
     }
 
     fn entry(file: &str, bytes: &[u8]) -> Entry {
@@ -302,7 +355,11 @@ mod tests {
         let e = entry("a.bin", b"model bytes");
         let mut cache = Cache::default();
         assert_eq!(check(&d, &e, &mut cache), (Status::Ok, true));
-        assert_eq!(check(&d, &e, &mut cache), (Status::Ok, false), "second check uses the cache");
+        assert_eq!(
+            check(&d, &e, &mut cache),
+            (Status::Ok, false),
+            "second check uses the cache"
+        );
     }
 
     #[test]
@@ -317,7 +374,10 @@ mod tests {
         assert!(hashed, "a changed file is read again");
         assert!(matches!(status, Status::HashMismatch { .. }), "{status:?}");
         assert!(!status.is_ok());
-        assert!(!cache.files.contains_key("a.bin"), "a failed check leaves nothing in the cache");
+        assert!(
+            !cache.files.contains_key("a.bin"),
+            "a failed check leaves nothing in the cache"
+        );
     }
 
     #[test]
@@ -327,7 +387,13 @@ mod tests {
         let e = entry("a.bin", b"model bytes");
         let mut cache = Cache::default();
         let (status, hashed) = check(&d, &e, &mut cache);
-        assert_eq!(status, Status::SizeMismatch { expected: 11, actual: 5 });
+        assert_eq!(
+            status,
+            Status::SizeMismatch {
+                expected: 11,
+                actual: 5
+            }
+        );
         assert!(!hashed);
     }
 
@@ -338,7 +404,10 @@ mod tests {
         let mut cache = Cache::default();
         assert_eq!(check(&d, &e, &mut cache).0, Status::Missing);
         fs::create_dir_all(d.0.join("dir.bin")).expect("dir");
-        assert_eq!(check(&d, &entry("dir.bin", b"x"), &mut cache).0, Status::Missing);
+        assert_eq!(
+            check(&d, &entry("dir.bin", b"x"), &mut cache).0,
+            Status::Missing
+        );
     }
 
     #[test]
@@ -359,14 +428,24 @@ mod tests {
     fn the_engine_only_gets_a_path_for_a_verified_model() {
         let d = Dir::new();
         fs::write(d.0.join("a.bin"), b"model bytes").expect("write");
-        let manifest = Manifest { version: 2, models: vec![entry("a.bin", b"model bytes")] };
+        let manifest = Manifest {
+            version: 2,
+            models: vec![entry("a.bin", b"model bytes")],
+        };
         let mut cache = Cache::default();
-        assert_eq!(path_for_engine(&d.0, &manifest, "m", &mut cache), Ok(d.0.join("a.bin")));
+        assert_eq!(
+            path_for_engine(&d.0, &manifest, "m", &mut cache),
+            Ok(d.0.join("a.bin"))
+        );
         // Altered after it was verified (same size): refused on the next start.
         fs::write(d.0.join("a.bin"), b"model byteZ").expect("write");
         let err = path_for_engine(&d.0, &manifest, "m", &mut cache).unwrap_err();
         assert!(err.contains("checksum does not match"), "{err}");
-        assert!(path_for_engine(&d.0, &manifest, "unknown", &mut cache).unwrap_err().contains("not in the manifest"));
+        assert!(
+            path_for_engine(&d.0, &manifest, "unknown", &mut cache)
+                .unwrap_err()
+                .contains("not in the manifest")
+        );
     }
 
     #[test]
@@ -394,7 +473,12 @@ mod tests {
              "conversion":{"script":"scripts/models/convert_hf_whisper.py","settings":{"quant":"q8_0"},"deterministic":true}}]}"#;
         let m: Manifest = serde_json::from_str(text).expect("parse");
         assert_eq!(m.find("small").expect("small").bytes, 0);
-        let c = m.find("hindi-small-q8_0").expect("hindi").conversion.clone().expect("conversion");
+        let c = m
+            .find("hindi-small-q8_0")
+            .expect("hindi")
+            .conversion
+            .clone()
+            .expect("conversion");
         assert_eq!(c.deterministic, Some(true));
         assert_eq!(c.settings.get("quant").map(String::as_str), Some("q8_0"));
         assert!(m.find("missing").is_err());

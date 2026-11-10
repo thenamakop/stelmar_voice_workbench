@@ -21,3 +21,6 @@ public/icons/
 test-results/
 playwright-report/
 pnpm-lock.yaml
+
+# Vendored sources keep their bytes (third_party/README.md)
+third_party/

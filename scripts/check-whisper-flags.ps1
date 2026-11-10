@@ -29,7 +29,7 @@ $engineOptions = @('GGML_NATIVE', 'GGML_AVX', 'GGML_AVX2', 'GGML_FMA', 'GGML_F16
 # CMake's own variables.
 $builtin = @('BUILD_SHARED_LIBS')
 # Options of backends we do not build.
-$optional = @('WHISPER_COREML', 'WHISPER_COREML_ALLOW_FALLBACK', 'GGML_HIP', 'GGML_METAL', 'GGML_METAL_NDEBUG', 'GGML_METAL_EMBED_LIBRARY', 'GGML_BLAS', 'GGML_BLAS_VENDOR', 'GGML_SYCL', 'GGML_OPENMP')
+$optional = @('AMDGPU_TARGETS', 'BLAS_INCLUDE_DIRS', 'WHISPER_COREML', 'WHISPER_COREML_ALLOW_FALLBACK', 'GGML_HIP', 'GGML_METAL', 'GGML_METAL_NDEBUG', 'GGML_METAL_EMBED_LIBRARY', 'GGML_BLAS', 'GGML_BLAS_VENDOR', 'GGML_SYCL', 'GGML_OPENMP')
 
 $fromBuildRs = @(Select-String -LiteralPath $SysBuildRs -Pattern '\.define\("([A-Za-z0-9_]+)"' -AllMatches | ForEach-Object { $_.Matches } | ForEach-Object { $_.Groups[1].Value })
 $names = @($fromBuildRs + $engineOptions | Sort-Object -Unique)
@@ -40,7 +40,7 @@ $text = ($cmakeFiles | ForEach-Object { Get-Content -LiteralPath $_.FullName -Ra
 $missing = @()
 Write-Host ("whisper-rs-sys sets {0} option(s) itself; build-engines.ps1 sets {1}; checking {2} name(s) against {3} CMake file(s) of the vendored tree" -f $fromBuildRs.Count, $engineOptions.Count, $names.Count, $cmakeFiles.Count)
 foreach ($n in $names) {
-  if ($builtin -contains $n) { Write-Host ("  {0,-34} CMake builtin" -f $n); continue }
+  if ($builtin -contains $n -or $n -like 'CMAKE_*') { Write-Host ("  {0,-34} CMake variable" -f $n); continue }
   $esc = [regex]::Escape($n)
   $def = [regex]::Match($text, "(?im)^\s*(option|cmake_dependent_option|set)\s*\(\s*$esc\b")
   if ($def.Success) {
