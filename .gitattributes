@@ -7,3 +7,6 @@
 *.woff2 binary
 *.wav binary
 *.bin binary
+
+# Vendored sources keep their bytes exactly (the tree hash in third_party/README.md must match on every checkout).
+third_party/** -text

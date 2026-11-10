@@ -29,7 +29,7 @@ $script:OverlayNames = @('RTSS', 'MSIAfterburner')
 # is going: they take every core for minutes and would spoil a speed, load or soak measurement.
 # scripts/build-engines.ps1 holds this lock for the whole build; the process names catch any other
 # build, however it was started.
-$script:BuildLockPath = 'D:Projectsstelmar-build.lock'
+$script:BuildLockPath = 'D:\Projects\stelmar-build.lock'
 $script:BuildProcessNames = @('cargo', 'rustc', 'cl', 'link', 'cmake', 'ninja', 'nvcc', 'glslc', 'MSBuild', 'cicc', 'ptxas', 'fatbinary', 'nvlink')
 $script:Current = $null
 
