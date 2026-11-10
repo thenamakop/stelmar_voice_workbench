@@ -80,7 +80,7 @@ $lines = @(
   'Engines-only info check (Phase 2)',
   "date: $((Get-Date).ToString('yyyy-MM-dd HH:mm', [Globalization.CultureInfo]::InvariantCulture)) (IST on the Legion)",
   "PATH while running: $minPath (no cargo, cmake, CUDA, Vulkan SDK or Python)",
-  'overlay tools closed: ' + $(if ((Get-WbOverlayTools).Count -eq 0) { 'yes' } else { 'NO' }),
+  ('overlay tools closed: ' + $(if ((Get-WbOverlayTools).Count -eq 0) { 'yes' } else { 'NO' })),
   ''
 )
 $summary = @()
@@ -96,7 +96,7 @@ foreach ($v in $Variants) {
   if ($dumpbin) { $dlls = @(Get-ExtraDlls $src $dumpbin) }
   foreach ($d in $dlls) { if ($d -notlike 'MISSING:*') { Copy-Item $d $dir } }
   $size = (Get-ChildItem $dir -File | Measure-Object Length -Sum).Sum
-  $lines += "== $v : engines-only folder $(([math]::Round($size / 1MB, 1)).ToString([Globalization.CultureInfo]::InvariantCulture)) MB; extra DLLs: $(if ($dlls.Count) { ($dlls | ForEach-Object { Split-Path $_ -Leaf }) -join ', ' } else { 'none' })"
+  $lines += "== $v : engines-only folder $(([math]::Round($size / 1MB, 1)).ToString([Globalization.CultureInfo]::InvariantCulture)) MB; extra DLLs: $(if ($dlls.Count) { ($dlls | ForEach-Object { '{0} ({1} MB)' -f (Split-Path $_ -Leaf), ([math]::Round((Get-Item $_).Length / 1MB, 1)).ToString([Globalization.CultureInfo]::InvariantCulture) }) -join ', ' } else { 'none' })"
   foreach ($p in $Profiles) {
     $saved = $env:PATH
     $env:PATH = $minPath

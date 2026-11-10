@@ -1,0 +1,203 @@
+Engines-only info check (Phase 2)
+date: 2026-11-10 17:00 (IST on the Legion)
+PATH while running: C:\WINDOWS\System32;C:\WINDOWS (no cargo, cmake, CUDA, Vulkan SDK or Python)
+overlay tools closed: yes
+
+== avx2 : engines-only folder 3.5 MB; extra DLLs: none
+-- profile emu-low : exit code 0
+   whisper.cpp printed at runtime: v1.9.5 commit d1be6fde11ac6e0407606b4e42fe72d34add8037 tree e736b4c9a5be2bc0e9b294102e261fe69c2a439976652ff6107b0c361f8667fb
+   stderr: wb-emulate: profile=emu-low
+   stderr: wb-emulate: cores: class 0: 16 cores / 16 threads; class 1: 8 cores / 16 threads
+   stderr: wb-emulate: affinity_mask=0xf0000 logical_processors=4 chosen=[16, 17, 18, 19] efficiency_classes=[0, 0, 0, 0]
+   stderr: wb-emulate: job_memory_limit_bytes=11811160064
+   stderr: wb-emulate: vulkan[0] Intel(R) RaptorLake-S Mobile Graphics Controller vendor=0x8086 integrated=true luid=a546010000000000 driver=Intel Corporation 101.7092
+   stderr: wb-emulate: vulkan[1] NVIDIA GeForce RTX 4070 Laptop GPU vendor=0x10de integrated=false luid=ee6c010000000000 driver=NVIDIA 621.14
+   stderr: wb-emulate: vulkan[2] Intel(R) RaptorLake-S Mobile Graphics Controller vendor=0x8086 integrated=true luid=ea67020000000000 driver=Intel Corporation 101.7092
+   stderr: wb-emulate: note: 2 Intel integrated Vulkan devices listed (different LUIDs or unknown: check the drivers); exposing only index 0
+   stderr: wb-emulate: env WB_EMULATE=emu-low
+   stderr: wb-emulate: env WB_EMULATE_REPORTED_RAM_BYTES=17179869184
+   stderr: wb-emulate: env WB_EMULATE_JOB_MEMORY_BYTES=11811160064
+   stderr: wb-emulate: env WB_EMULATE_LOGICAL_PROCESSORS=4
+   stderr: wb-emulate: env CUDA_VISIBLE_DEVICES=-1
+   stderr: wb-emulate: env GGML_VK_VISIBLE_DEVICES=0
+   stderr: wb-emulate: command: D:\STELMAR-Gate\engines-only\avx2\wb-engine.exe info
+   backends: CPU; logical processors allowed 4; available RAM 11 GiB; raw device entries 1
+   device 0: CPU / Intel(R) Core(TM) i9-14900HX / cpu / 31.7 GiB / driver  / duplicates dropped 0
+   note: No GPU device is usable by this build (avx2). Adapters Windows lists: Intel(R) UHD Graphics (driver 32.0.101.7092); NVIDIA GeForce RTX 4070 Laptop GPU (driver 32.0.16.2114); Intel(R) UHD Graphics (driver 32.0.101.7092); Microsoft Basic Render Driver (driver 10.0.26100.9711)
+-- profile emu-mid : exit code 0
+   whisper.cpp printed at runtime: v1.9.5 commit d1be6fde11ac6e0407606b4e42fe72d34add8037 tree e736b4c9a5be2bc0e9b294102e261fe69c2a439976652ff6107b0c361f8667fb
+   stderr: wb-emulate: profile=emu-mid
+   stderr: wb-emulate: cores: class 0: 16 cores / 16 threads; class 1: 8 cores / 16 threads
+   stderr: wb-emulate: affinity_mask=0xff000f logical_processors=12 chosen=[0, 1, 2, 3, 16, 17, 18, 19, 20, 21, 22, 23] efficiency_classes=[1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0]
+   stderr: wb-emulate: job_memory_limit_bytes=11811160064
+   stderr: wb-emulate: vulkan[0] Intel(R) RaptorLake-S Mobile Graphics Controller vendor=0x8086 integrated=true luid=a546010000000000 driver=Intel Corporation 101.7092
+   stderr: wb-emulate: vulkan[1] NVIDIA GeForce RTX 4070 Laptop GPU vendor=0x10de integrated=false luid=ee6c010000000000 driver=NVIDIA 621.14
+   stderr: wb-emulate: vulkan[2] Intel(R) RaptorLake-S Mobile Graphics Controller vendor=0x8086 integrated=true luid=ea67020000000000 driver=Intel Corporation 101.7092
+   stderr: wb-emulate: note: 2 Intel integrated Vulkan devices listed (different LUIDs or unknown: check the drivers); exposing only index 0
+   stderr: wb-emulate: env WB_EMULATE=emu-mid
+   stderr: wb-emulate: env WB_EMULATE_REPORTED_RAM_BYTES=17179869184
+   stderr: wb-emulate: env WB_EMULATE_JOB_MEMORY_BYTES=11811160064
+   stderr: wb-emulate: env WB_EMULATE_LOGICAL_PROCESSORS=12
+   stderr: wb-emulate: env CUDA_VISIBLE_DEVICES=-1
+   stderr: wb-emulate: env GGML_VK_VISIBLE_DEVICES=0
+   stderr: wb-emulate: command: D:\STELMAR-Gate\engines-only\avx2\wb-engine.exe info
+   backends: CPU; logical processors allowed 12; available RAM 11 GiB; raw device entries 1
+   device 0: CPU / Intel(R) Core(TM) i9-14900HX / cpu / 31.7 GiB / driver  / duplicates dropped 0
+   note: No GPU device is usable by this build (avx2). Adapters Windows lists: Intel(R) UHD Graphics (driver 32.0.101.7092); NVIDIA GeForce RTX 4070 Laptop GPU (driver 32.0.16.2114); Intel(R) UHD Graphics (driver 32.0.101.7092); Microsoft Basic Render Driver (driver 10.0.26100.9711)
+-- profile native : exit code 0
+   whisper.cpp printed at runtime: v1.9.5 commit d1be6fde11ac6e0407606b4e42fe72d34add8037 tree e736b4c9a5be2bc0e9b294102e261fe69c2a439976652ff6107b0c361f8667fb
+   backends: CPU; logical processors allowed 32; available RAM 14.4 GiB; raw device entries 1
+   device 0: CPU / Intel(R) Core(TM) i9-14900HX / cpu / 31.7 GiB / driver  / duplicates dropped 0
+   note: No GPU device is usable by this build (avx2). Adapters Windows lists: Intel(R) UHD Graphics (driver 32.0.101.7092); NVIDIA GeForce RTX 4070 Laptop GPU (driver 32.0.16.2114); Intel(R) UHD Graphics (driver 32.0.101.7092); Microsoft Basic Render Driver (driver 10.0.26100.9711)
+
+== avx512 : engines-only folder 3.5 MB; extra DLLs: none
+-- profile emu-low : exit code 3
+   whisper.cpp printed at runtime: v1.9.5 commit d1be6fde11ac6e0407606b4e42fe72d34add8037 tree e736b4c9a5be2bc0e9b294102e261fe69c2a439976652ff6107b0c361f8667fb
+   error event: cpu_features: This engine build (avx512) needs CPU features this computer does not have: avx512f, avx512cd, avx512vl, avx512dq, avx512bw. Use the avx2 build, or run the system check, which picks a build that fits.
+   stderr: wb-emulate: profile=emu-low
+   stderr: wb-emulate: cores: class 0: 16 cores / 16 threads; class 1: 8 cores / 16 threads
+   stderr: wb-emulate: affinity_mask=0xf0000 logical_processors=4 chosen=[16, 17, 18, 19] efficiency_classes=[0, 0, 0, 0]
+   stderr: wb-emulate: job_memory_limit_bytes=11811160064
+   stderr: wb-emulate: vulkan[0] Intel(R) RaptorLake-S Mobile Graphics Controller vendor=0x8086 integrated=true luid=a546010000000000 driver=Intel Corporation 101.7092
+   stderr: wb-emulate: vulkan[1] NVIDIA GeForce RTX 4070 Laptop GPU vendor=0x10de integrated=false luid=ee6c010000000000 driver=NVIDIA 621.14
+   stderr: wb-emulate: vulkan[2] Intel(R) RaptorLake-S Mobile Graphics Controller vendor=0x8086 integrated=true luid=ea67020000000000 driver=Intel Corporation 101.7092
+   stderr: wb-emulate: note: 2 Intel integrated Vulkan devices listed (different LUIDs or unknown: check the drivers); exposing only index 0
+   stderr: wb-emulate: env WB_EMULATE=emu-low
+   stderr: wb-emulate: env WB_EMULATE_REPORTED_RAM_BYTES=17179869184
+   stderr: wb-emulate: env WB_EMULATE_JOB_MEMORY_BYTES=11811160064
+   stderr: wb-emulate: env WB_EMULATE_LOGICAL_PROCESSORS=4
+   stderr: wb-emulate: env CUDA_VISIBLE_DEVICES=-1
+   stderr: wb-emulate: env GGML_VK_VISIBLE_DEVICES=0
+   stderr: wb-emulate: command: D:\STELMAR-Gate\engines-only\avx512\wb-engine.exe info
+   stderr: wb-engine: This engine build (avx512) needs CPU features this computer does not have: avx512f, avx512cd, avx512vl, avx512dq, avx512bw. Use the avx2 build, or run the system check, which picks a build that fits.
+-- profile emu-mid : exit code 3
+   whisper.cpp printed at runtime: v1.9.5 commit d1be6fde11ac6e0407606b4e42fe72d34add8037 tree e736b4c9a5be2bc0e9b294102e261fe69c2a439976652ff6107b0c361f8667fb
+   error event: cpu_features: This engine build (avx512) needs CPU features this computer does not have: avx512f, avx512cd, avx512vl, avx512dq, avx512bw. Use the avx2 build, or run the system check, which picks a build that fits.
+   stderr: wb-emulate: profile=emu-mid
+   stderr: wb-emulate: cores: class 0: 16 cores / 16 threads; class 1: 8 cores / 16 threads
+   stderr: wb-emulate: affinity_mask=0xff000f logical_processors=12 chosen=[0, 1, 2, 3, 16, 17, 18, 19, 20, 21, 22, 23] efficiency_classes=[1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0]
+   stderr: wb-emulate: job_memory_limit_bytes=11811160064
+   stderr: wb-emulate: vulkan[0] Intel(R) RaptorLake-S Mobile Graphics Controller vendor=0x8086 integrated=true luid=a546010000000000 driver=Intel Corporation 101.7092
+   stderr: wb-emulate: vulkan[1] NVIDIA GeForce RTX 4070 Laptop GPU vendor=0x10de integrated=false luid=ee6c010000000000 driver=NVIDIA 621.14
+   stderr: wb-emulate: vulkan[2] Intel(R) RaptorLake-S Mobile Graphics Controller vendor=0x8086 integrated=true luid=ea67020000000000 driver=Intel Corporation 101.7092
+   stderr: wb-emulate: note: 2 Intel integrated Vulkan devices listed (different LUIDs or unknown: check the drivers); exposing only index 0
+   stderr: wb-emulate: env WB_EMULATE=emu-mid
+   stderr: wb-emulate: env WB_EMULATE_REPORTED_RAM_BYTES=17179869184
+   stderr: wb-emulate: env WB_EMULATE_JOB_MEMORY_BYTES=11811160064
+   stderr: wb-emulate: env WB_EMULATE_LOGICAL_PROCESSORS=12
+   stderr: wb-emulate: env CUDA_VISIBLE_DEVICES=-1
+   stderr: wb-emulate: env GGML_VK_VISIBLE_DEVICES=0
+   stderr: wb-emulate: command: D:\STELMAR-Gate\engines-only\avx512\wb-engine.exe info
+   stderr: wb-engine: This engine build (avx512) needs CPU features this computer does not have: avx512f, avx512cd, avx512vl, avx512dq, avx512bw. Use the avx2 build, or run the system check, which picks a build that fits.
+-- profile native : exit code 3
+   whisper.cpp printed at runtime: v1.9.5 commit d1be6fde11ac6e0407606b4e42fe72d34add8037 tree e736b4c9a5be2bc0e9b294102e261fe69c2a439976652ff6107b0c361f8667fb
+   error event: cpu_features: This engine build (avx512) needs CPU features this computer does not have: avx512f, avx512cd, avx512vl, avx512dq, avx512bw. Use the avx2 build, or run the system check, which picks a build that fits.
+   stderr: wb-engine: This engine build (avx512) needs CPU features this computer does not have: avx512f, avx512cd, avx512vl, avx512dq, avx512bw. Use the avx2 build, or run the system check, which picks a build that fits.
+
+== vulkan : engines-only folder 46.5 MB; extra DLLs: none
+-- profile emu-low : exit code 0
+   whisper.cpp printed at runtime: v1.9.5 commit d1be6fde11ac6e0407606b4e42fe72d34add8037 tree e736b4c9a5be2bc0e9b294102e261fe69c2a439976652ff6107b0c361f8667fb
+   stderr: wb-emulate: profile=emu-low
+   stderr: wb-emulate: cores: class 0: 16 cores / 16 threads; class 1: 8 cores / 16 threads
+   stderr: wb-emulate: affinity_mask=0xf0000 logical_processors=4 chosen=[16, 17, 18, 19] efficiency_classes=[0, 0, 0, 0]
+   stderr: wb-emulate: job_memory_limit_bytes=11811160064
+   stderr: wb-emulate: vulkan[0] Intel(R) RaptorLake-S Mobile Graphics Controller vendor=0x8086 integrated=true luid=a546010000000000 driver=Intel Corporation 101.7092
+   stderr: wb-emulate: vulkan[1] NVIDIA GeForce RTX 4070 Laptop GPU vendor=0x10de integrated=false luid=ee6c010000000000 driver=NVIDIA 621.14
+   stderr: wb-emulate: vulkan[2] Intel(R) RaptorLake-S Mobile Graphics Controller vendor=0x8086 integrated=true luid=ea67020000000000 driver=Intel Corporation 101.7092
+   stderr: wb-emulate: note: 2 Intel integrated Vulkan devices listed (different LUIDs or unknown: check the drivers); exposing only index 0
+   stderr: wb-emulate: env WB_EMULATE=emu-low
+   stderr: wb-emulate: env WB_EMULATE_REPORTED_RAM_BYTES=17179869184
+   stderr: wb-emulate: env WB_EMULATE_JOB_MEMORY_BYTES=11811160064
+   stderr: wb-emulate: env WB_EMULATE_LOGICAL_PROCESSORS=4
+   stderr: wb-emulate: env CUDA_VISIBLE_DEVICES=-1
+   stderr: wb-emulate: env GGML_VK_VISIBLE_DEVICES=0
+   stderr: wb-emulate: command: D:\STELMAR-Gate\engines-only\vulkan\wb-engine.exe info
+   stderr: ggml_vulkan: Found 1 Vulkan devices:
+   stderr: ggml_vulkan: 0 = Intel(R) RaptorLake-S Mobile Graphics Controller (Intel Corporation) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 32 | shared memory: 32768 | int dot: 1 | matrix cores: none
+   backends: Vulkan, CPU; logical processors allowed 4; available RAM 11 GiB; raw device entries 2
+   device 0: Vulkan / Intel(R) RaptorLake-S Mobile Graphics Controller / igpu / 15.9 GiB, shared with RAM up to 15.9 GiB / driver 32.0.101.7092 / duplicates dropped 0
+   device 1: CPU / Intel(R) Core(TM) i9-14900HX / cpu / 31.7 GiB / driver  / duplicates dropped 0
+-- profile emu-mid : exit code 0
+   whisper.cpp printed at runtime: v1.9.5 commit d1be6fde11ac6e0407606b4e42fe72d34add8037 tree e736b4c9a5be2bc0e9b294102e261fe69c2a439976652ff6107b0c361f8667fb
+   stderr: wb-emulate: profile=emu-mid
+   stderr: wb-emulate: cores: class 0: 16 cores / 16 threads; class 1: 8 cores / 16 threads
+   stderr: wb-emulate: affinity_mask=0xff000f logical_processors=12 chosen=[0, 1, 2, 3, 16, 17, 18, 19, 20, 21, 22, 23] efficiency_classes=[1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0]
+   stderr: wb-emulate: job_memory_limit_bytes=11811160064
+   stderr: wb-emulate: vulkan[0] Intel(R) RaptorLake-S Mobile Graphics Controller vendor=0x8086 integrated=true luid=a546010000000000 driver=Intel Corporation 101.7092
+   stderr: wb-emulate: vulkan[1] NVIDIA GeForce RTX 4070 Laptop GPU vendor=0x10de integrated=false luid=ee6c010000000000 driver=NVIDIA 621.14
+   stderr: wb-emulate: vulkan[2] Intel(R) RaptorLake-S Mobile Graphics Controller vendor=0x8086 integrated=true luid=ea67020000000000 driver=Intel Corporation 101.7092
+   stderr: wb-emulate: note: 2 Intel integrated Vulkan devices listed (different LUIDs or unknown: check the drivers); exposing only index 0
+   stderr: wb-emulate: env WB_EMULATE=emu-mid
+   stderr: wb-emulate: env WB_EMULATE_REPORTED_RAM_BYTES=17179869184
+   stderr: wb-emulate: env WB_EMULATE_JOB_MEMORY_BYTES=11811160064
+   stderr: wb-emulate: env WB_EMULATE_LOGICAL_PROCESSORS=12
+   stderr: wb-emulate: env CUDA_VISIBLE_DEVICES=-1
+   stderr: wb-emulate: env GGML_VK_VISIBLE_DEVICES=0
+   stderr: wb-emulate: command: D:\STELMAR-Gate\engines-only\vulkan\wb-engine.exe info
+   stderr: ggml_vulkan: Found 1 Vulkan devices:
+   stderr: ggml_vulkan: 0 = Intel(R) RaptorLake-S Mobile Graphics Controller (Intel Corporation) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 32 | shared memory: 32768 | int dot: 1 | matrix cores: none
+   backends: Vulkan, CPU; logical processors allowed 12; available RAM 11 GiB; raw device entries 2
+   device 0: Vulkan / Intel(R) RaptorLake-S Mobile Graphics Controller / igpu / 15.9 GiB, shared with RAM up to 15.9 GiB / driver 32.0.101.7092 / duplicates dropped 0
+   device 1: CPU / Intel(R) Core(TM) i9-14900HX / cpu / 31.7 GiB / driver  / duplicates dropped 0
+-- profile native : exit code 0
+   whisper.cpp printed at runtime: v1.9.5 commit d1be6fde11ac6e0407606b4e42fe72d34add8037 tree e736b4c9a5be2bc0e9b294102e261fe69c2a439976652ff6107b0c361f8667fb
+   stderr: ggml_vulkan: Found 2 Vulkan devices:
+   stderr: ggml_vulkan: 0 = Intel(R) RaptorLake-S Mobile Graphics Controller (Intel Corporation) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 32 | shared memory: 32768 | int dot: 1 | matrix cores: none
+   stderr: ggml_vulkan: 1 = NVIDIA GeForce RTX 4070 Laptop GPU (NVIDIA) | uma: 0 | fp16: 1 | bf16: 1 | fp4: 0 | warp size: 32 | shared memory: 49152 | int dot: 1 | matrix cores: NV_coopmat2v
+   backends: Vulkan, CPU; logical processors allowed 32; available RAM 14.4 GiB; raw device entries 3
+   device 0: Vulkan / Intel(R) RaptorLake-S Mobile Graphics Controller / igpu / 15.9 GiB, shared with RAM up to 15.9 GiB / driver 32.0.101.7092 / duplicates dropped 0
+   device 1: Vulkan / NVIDIA GeForce RTX 4070 Laptop GPU / gpu / 7.8 GiB / driver 32.0.16.2114 / duplicates dropped 0
+   device 2: CPU / Intel(R) Core(TM) i9-14900HX / cpu / 31.7 GiB / driver  / duplicates dropped 0
+
+== cuda : engines-only folder 598 MB; extra DLLs: cublas64_13.dll (52.7 MB), cublasLt64_13.dll (476 MB)
+-- profile emu-low : exit code 0
+   whisper.cpp printed at runtime: v1.9.5 commit d1be6fde11ac6e0407606b4e42fe72d34add8037 tree e736b4c9a5be2bc0e9b294102e261fe69c2a439976652ff6107b0c361f8667fb
+   stderr: wb-emulate: profile=emu-low
+   stderr: wb-emulate: cores: class 0: 16 cores / 16 threads; class 1: 8 cores / 16 threads
+   stderr: wb-emulate: affinity_mask=0xf0000 logical_processors=4 chosen=[16, 17, 18, 19] efficiency_classes=[0, 0, 0, 0]
+   stderr: wb-emulate: job_memory_limit_bytes=11811160064
+   stderr: wb-emulate: vulkan[0] Intel(R) RaptorLake-S Mobile Graphics Controller vendor=0x8086 integrated=true luid=a546010000000000 driver=Intel Corporation 101.7092
+   stderr: wb-emulate: vulkan[1] NVIDIA GeForce RTX 4070 Laptop GPU vendor=0x10de integrated=false luid=ee6c010000000000 driver=NVIDIA 621.14
+   stderr: wb-emulate: vulkan[2] Intel(R) RaptorLake-S Mobile Graphics Controller vendor=0x8086 integrated=true luid=ea67020000000000 driver=Intel Corporation 101.7092
+   stderr: wb-emulate: note: 2 Intel integrated Vulkan devices listed (different LUIDs or unknown: check the drivers); exposing only index 0
+   stderr: wb-emulate: env WB_EMULATE=emu-low
+   stderr: wb-emulate: env WB_EMULATE_REPORTED_RAM_BYTES=17179869184
+   stderr: wb-emulate: env WB_EMULATE_JOB_MEMORY_BYTES=11811160064
+   stderr: wb-emulate: env WB_EMULATE_LOGICAL_PROCESSORS=4
+   stderr: wb-emulate: env CUDA_VISIBLE_DEVICES=-1
+   stderr: wb-emulate: env GGML_VK_VISIBLE_DEVICES=0
+   stderr: wb-emulate: command: D:\STELMAR-Gate\engines-only\cuda\wb-engine.exe info
+   stderr: ggml_cuda_init: failed to initialize CUDA: no CUDA-capable device is detected
+   backends: CUDA, CPU; logical processors allowed 4; available RAM 10.7 GiB; raw device entries 1
+   device 0: CPU / Intel(R) Core(TM) i9-14900HX / cpu / 31.7 GiB / driver  / duplicates dropped 0
+   note: No GPU device is usable by this build (cuda). Adapters Windows lists: NVIDIA GeForce RTX 4070 Laptop GPU (driver 32.0.16.2114); Intel(R) UHD Graphics (driver 32.0.101.7092); Intel(R) UHD Graphics (driver 32.0.101.7092); Microsoft Basic Render Driver (driver 10.0.26100.9711)
+-- profile emu-mid : exit code 0
+   whisper.cpp printed at runtime: v1.9.5 commit d1be6fde11ac6e0407606b4e42fe72d34add8037 tree e736b4c9a5be2bc0e9b294102e261fe69c2a439976652ff6107b0c361f8667fb
+   stderr: wb-emulate: profile=emu-mid
+   stderr: wb-emulate: cores: class 0: 16 cores / 16 threads; class 1: 8 cores / 16 threads
+   stderr: wb-emulate: affinity_mask=0xff000f logical_processors=12 chosen=[0, 1, 2, 3, 16, 17, 18, 19, 20, 21, 22, 23] efficiency_classes=[1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0]
+   stderr: wb-emulate: job_memory_limit_bytes=11811160064
+   stderr: wb-emulate: vulkan[0] Intel(R) RaptorLake-S Mobile Graphics Controller vendor=0x8086 integrated=true luid=a546010000000000 driver=Intel Corporation 101.7092
+   stderr: wb-emulate: vulkan[1] NVIDIA GeForce RTX 4070 Laptop GPU vendor=0x10de integrated=false luid=ee6c010000000000 driver=NVIDIA 621.14
+   stderr: wb-emulate: vulkan[2] Intel(R) RaptorLake-S Mobile Graphics Controller vendor=0x8086 integrated=true luid=ea67020000000000 driver=Intel Corporation 101.7092
+   stderr: wb-emulate: note: 2 Intel integrated Vulkan devices listed (different LUIDs or unknown: check the drivers); exposing only index 0
+   stderr: wb-emulate: env WB_EMULATE=emu-mid
+   stderr: wb-emulate: env WB_EMULATE_REPORTED_RAM_BYTES=17179869184
+   stderr: wb-emulate: env WB_EMULATE_JOB_MEMORY_BYTES=11811160064
+   stderr: wb-emulate: env WB_EMULATE_LOGICAL_PROCESSORS=12
+   stderr: wb-emulate: env CUDA_VISIBLE_DEVICES=-1
+   stderr: wb-emulate: env GGML_VK_VISIBLE_DEVICES=0
+   stderr: wb-emulate: command: D:\STELMAR-Gate\engines-only\cuda\wb-engine.exe info
+   stderr: ggml_cuda_init: failed to initialize CUDA: no CUDA-capable device is detected
+   backends: CUDA, CPU; logical processors allowed 12; available RAM 10.7 GiB; raw device entries 1
+   device 0: CPU / Intel(R) Core(TM) i9-14900HX / cpu / 31.7 GiB / driver  / duplicates dropped 0
+   note: No GPU device is usable by this build (cuda). Adapters Windows lists: NVIDIA GeForce RTX 4070 Laptop GPU (driver 32.0.16.2114); Intel(R) UHD Graphics (driver 32.0.101.7092); Intel(R) UHD Graphics (driver 32.0.101.7092); Microsoft Basic Render Driver (driver 10.0.26100.9711)
+-- profile native : exit code 0
+   whisper.cpp printed at runtime: v1.9.5 commit d1be6fde11ac6e0407606b4e42fe72d34add8037 tree e736b4c9a5be2bc0e9b294102e261fe69c2a439976652ff6107b0c361f8667fb
+   stderr: ggml_cuda_init: found 1 CUDA devices (Total VRAM: 8187 MiB):
+   stderr: Device 0: NVIDIA GeForce RTX 4070 Laptop GPU, compute capability 8.9, VMM: yes, VRAM: 8187 MiB
+   backends: CUDA, CPU; logical processors allowed 32; available RAM 14.2 GiB; raw device entries 2
+   device 0: CUDA / NVIDIA GeForce RTX 4070 Laptop GPU / gpu / 8 GiB / driver 32.0.16.2114 / duplicates dropped 0
+   device 1: CPU / Intel(R) Core(TM) i9-14900HX / cpu / 31.7 GiB / driver  / duplicates dropped 0
+
+summary: avx2/emu-low exit 0; avx2/emu-mid exit 0; avx2/native exit 0; avx512/emu-low exit 3; avx512/emu-mid exit 3; avx512/native exit 3; vulkan/emu-low exit 0; vulkan/emu-mid exit 0; vulkan/native exit 0; cuda/emu-low exit 0; cuda/emu-mid exit 0; cuda/native exit 0

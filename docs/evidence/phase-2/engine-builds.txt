@@ -1,0 +1,81 @@
+Engine builds (Phase 2)
+date: 2026-11-10 16:59 (IST on the Legion)
+target root: D:\wbt; whisper.cpp tree hash pinned in third_party/README.md: e736b4c9a5be2bc0e9b294102e261fe69c2a439976652ff6107b0c361f8667fb
+every build: GGML_NATIVE=OFF, CMAKE_{C,CXX}_FLAGS_RELEASE=/O2 /Ob2 /DNDEBUG (checked in the CMake cache); no build ran during a timing-sensitive run (build lock)
+
+== avx2 : 123 s, 3.47 MB, SHA-256 48e91df6b658ed3cd8db130a58298e932f559e71b1db10b54ff4fcb759b038d1
+   whisper.cpp printed by the engine: v1.9.5 commit d1be6fde11ac6e0407606b4e42fe72d34add8037
+   tree hash printed by the engine: e736b4c9a5be2bc0e9b294102e261fe69c2a439976652ff6107b0c361f8667fb (equals the pin)
+   CMake cache:
+     GGML_NATIVE=OFF
+     GGML_AVX2=ON
+     GGML_F16C=ON
+     GGML_AVX=ON
+     GGML_FMA=ON
+     GGML_AVX512=OFF
+     GGML_CUDA=OFF
+     GGML_VULKAN=OFF
+     CMAKE_C_FLAGS_RELEASE=/O2 /Ob2 /DNDEBUG
+     CMAKE_CXX_FLAGS_RELEASE=/O2 /Ob2 /DNDEBUG
+   configure log lines:
+     -- Including CPU backend
+     -- Adding CPU backend variant ggml-cpu: /arch:AVX2 GGML_AVX2;GGML_FMA;GGML_F16C;__BMI2__;GGML_BMI2
+
+== avx512 : 165 s, 3.51 MB, SHA-256 4f31c18fc08ca548bf865be6385f879992bab521d0816b2b4f6de76986b0e51f
+   whisper.cpp printed by the engine: v1.9.5 commit d1be6fde11ac6e0407606b4e42fe72d34add8037
+   tree hash printed by the engine: e736b4c9a5be2bc0e9b294102e261fe69c2a439976652ff6107b0c361f8667fb (equals the pin)
+   CMake cache:
+     GGML_AVX=ON
+     GGML_F16C=ON
+     GGML_FMA=ON
+     GGML_AVX2=ON
+     GGML_NATIVE=OFF
+     GGML_AVX512=ON
+     GGML_CUDA=OFF
+     GGML_VULKAN=OFF
+     CMAKE_C_FLAGS_RELEASE=/O2 /Ob2 /DNDEBUG
+     CMAKE_CXX_FLAGS_RELEASE=/O2 /Ob2 /DNDEBUG
+   configure log lines:
+     -- Including CPU backend
+     -- Adding CPU backend variant ggml-cpu: /arch:AVX512 GGML_AVX512;__BMI2__;GGML_BMI2
+
+== vulkan : 237 s, 46.54 MB, SHA-256 661368160fb8385dc2514442f997b6ea04f1d26fd5ecef777d50c0cff08b5c72
+   whisper.cpp printed by the engine: v1.9.5 commit d1be6fde11ac6e0407606b4e42fe72d34add8037
+   tree hash printed by the engine: e736b4c9a5be2bc0e9b294102e261fe69c2a439976652ff6107b0c361f8667fb (equals the pin)
+   CMake cache:
+     GGML_AVX=ON
+     GGML_F16C=ON
+     GGML_FMA=ON
+     GGML_AVX2=ON
+     GGML_NATIVE=OFF
+     GGML_AVX512=OFF
+     GGML_CUDA=OFF
+     GGML_VULKAN=ON
+     CMAKE_C_FLAGS_RELEASE=/O2 /Ob2 /DNDEBUG
+     CMAKE_CXX_FLAGS_RELEASE=/O2 /Ob2 /DNDEBUG
+   configure log lines:
+     -- Including CPU backend
+     -- Adding CPU backend variant ggml-cpu: /arch:AVX2 GGML_AVX2;GGML_FMA;GGML_F16C;__BMI2__;GGML_BMI2
+     -- Including Vulkan backend
+
+== cuda : 948 s, 69.39 MB, SHA-256 4bb399a8c64119d1d245267a988b040351d3bd3585ee18f2c93a43708ed484f1
+   whisper.cpp printed by the engine: v1.9.5 commit d1be6fde11ac6e0407606b4e42fe72d34add8037
+   tree hash printed by the engine: e736b4c9a5be2bc0e9b294102e261fe69c2a439976652ff6107b0c361f8667fb (equals the pin)
+   CUDA architectures: 86-real;89
+   CMake cache:
+     GGML_AVX=ON
+     GGML_F16C=ON
+     GGML_FMA=ON
+     GGML_AVX2=ON
+     GGML_NATIVE=OFF
+     GGML_AVX512=OFF
+     GGML_CUDA=ON
+     GGML_VULKAN=OFF
+     CMAKE_C_FLAGS_RELEASE=/O2 /Ob2 /DNDEBUG
+     CMAKE_CXX_FLAGS_RELEASE=/O2 /Ob2 /DNDEBUG
+   configure log lines:
+     -- Including CPU backend
+     -- Adding CPU backend variant ggml-cpu: /arch:AVX2 GGML_AVX2;GGML_FMA;GGML_F16C;__BMI2__;GGML_BMI2
+     -- Including CUDA backend
+
+DLLs each engine needs beyond Windows, and the size of each engines-only folder: see engines-info.txt (scripts/gates/engines-only.ps1).
