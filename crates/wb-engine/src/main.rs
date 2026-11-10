@@ -218,6 +218,9 @@ fn settings_from_harness(v: &serde_json::Value) -> Settings {
     if let Some(x) = get("max_chunk_s").and_then(|x| x.as_f64()) {
         s.max_chunk_s = x as f32;
     }
+    if let Some(x) = get("flash_attn").and_then(|x| x.as_bool()) {
+        s.flash_attn = x;
+    }
     // Single-language evaluation merges speech greedily, as the harness's whisper-cli path does.
     s.sentence_split = false;
     s

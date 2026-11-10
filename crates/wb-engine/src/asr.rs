@@ -36,9 +36,15 @@ pub struct Model {
 
 impl Model {
     /// Loads a model on the CPU or on GPU number `gpu_ordinal` of ggml's list (see `devices.rs`).
-    pub fn load(model: &ModelRef, device: Device, gpu_ordinal: Option<u32>) -> Result<Self> {
+    pub fn load(
+        model: &ModelRef,
+        device: Device,
+        gpu_ordinal: Option<u32>,
+        flash_attn: bool,
+    ) -> Result<Self> {
         let started = Instant::now();
         let mut params = WhisperContextParameters::default();
+        params.flash_attn(flash_attn);
         match device {
             Device::Cpu => {
                 params.use_gpu(false);

@@ -1,0 +1,31 @@
+Speed parity: wb-engine against whisper-cli (Phase 2)
+date: 2026-11-10 17:45 IST; machine: Legion native (no emulation), 8 threads
+overlay tools closed: yes; no engine build running (checked at start); gate lock and busy lock held per process
+whisper-cli: whisper.cpp v1.9.5 commit d1be6fde11ac6e0407606b4e42fe72d34add8037 (OpenMP on, flash attention default on)
+wb-engine: wb-engine 0.1.0 (avx2, whisper.cpp v1.9.5 commit d1be6fde11ac tree e736b4c9a5be) (avx2, GGML_NATIVE=OFF, no OpenMP, flash attention on)
+model: medium f16, same file; settings: beam 5, best-of 5, temperature fallback True, no timestamps, no previous-text context for a single chunk; runs alternate cli/engine; 1 warm-up per side then 3 each
+clips: single-chunk FLEURS utterances from eval/clips/phase2-verify-fleurs.txt (sha256 7f42da223214dc...)
+
+clip | audio s | side | model load s | processing s | process wall s | chunks | text against whisper-cli
+fleurs-en/10031199 | 10.56 | whisper-cli | 1.39 | 11.50 | 13.05 | 1 | identical
+fleurs-en/10031199 | 10.56 | wb-engine   | 1.41 | 11.58 | 13.16 | 1 | (engine VAD alone: 0.11 s wall incl. start-up)
+fleurs-en/10894616 | 10.20 | whisper-cli | 1.30 | 12.53 | 14.00 | 1 | identical
+fleurs-en/10894616 | 10.20 | wb-engine   | 1.54 | 12.47 | 14.19 | 1 | (engine VAD alone: 0.09 s wall incl. start-up)
+fleurs-en/12596571 | 6.90 | whisper-cli | 1.45 | 11.31 | 12.93 | 1 | 2 of 15 words differ
+fleurs-en/12596571 | 6.90 | wb-engine   | 1.47 | 11.55 | 13.20 | 1 | (engine VAD alone: 0.08 s wall incl. start-up)
+fleurs-hi/10011266 | 9.12 | whisper-cli | 1.37 | 19.36 | 20.91 | 1 | 2 of 23 words differ
+fleurs-hi/10011266 | 9.12 | wb-engine   | 1.53 | 19.38 | 21.01 | 1 | (engine VAD alone: 0.08 s wall incl. start-up)
+fleurs-hi/11483002 | 12.24 | whisper-cli | 1.43 | 22.23 | 23.92 | 1 | 3 of 26 words differ
+fleurs-hi/11483002 | 12.24 | wb-engine   | 1.53 | 22.19 | 23.88 | 1 | (engine VAD alone: 0.10 s wall incl. start-up)
+fleurs-hi/12106180 | 9.18 | whisper-cli | 1.45 | 16.98 | 18.59 | 1 | identical
+fleurs-hi/12106180 | 9.18 | wb-engine   | 1.35 | 17.26 | 18.77 | 1 | (engine VAD alone: 0.08 s wall incl. start-up)
+
+wb-engine relative to whisper-cli (positive = engine slower), median over clips:
+  processing: +0.4%   model load: +4.3%   whole process: +0.9%
+
+Reading the result (10 Nov 2026)
+- Speed: the engine is within 1% of whisper-cli on processing time (+0.4%) and on the whole process (+0.9%); model load is +4.3% (about 0.1 s of 1.4 s). No clip is over 10% on any of the three timings, so there is no gap to explain. The 15.7 s against 13.6 s seen earlier on one clip was the unoptimised first build (before /O2) and an engine with flash attention off; neither applies to these builds.
+- A first run of this script gave the wrong picture for Hindi (the engine looked 40 to 75% slower): the script had left out the language flag, so whisper-cli decoded Hindi audio as English. The harness always passes -l; the script now does too. That run is not evidence.
+- Text: 3 of 6 clips differ by 2 or 3 words (rare-word spelling). Each side gives the same text on every repeat (3 runs each), so this is not randomness. whisper-cli decodes the whole clip including its leading and trailing silence, the engine only the VAD chunk. Checked on fleurs-en/12596571: whisper-cli given exactly the engine's chunk (630 to 6760 ms) returns the engine's text word for word. The 3-WER comparison cuts chunks for both sides with the harness's VAD step, so this effect is part of what that comparison measures.
+- OpenMP: whisper-cli is built with OpenMP, the engine without (ggml's own thread pool, no extra runtime DLL to ship). At 8 threads on this machine it makes no measurable difference. Not tested on the laptops (Speed table rows use the engine only).
+- Both builds: whisper.cpp v1.9.5 commit d1be6fde11ac, portable AVX2 (GGML_NATIVE=OFF); engine tree hash e736b4c9a5be.

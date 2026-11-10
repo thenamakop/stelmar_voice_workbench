@@ -80,6 +80,10 @@ pub struct Settings {
     /// Silero VAD speech-probability threshold and the shortest pause that ends a chunk.
     pub vad_threshold: f32,
     pub vad_min_silence_ms: u32,
+    /// Flash attention in whisper.cpp. On by default, as in whisper.cpp and whisper-cli; set off only to
+    /// compare speed or to work around a driver fault.
+    #[serde(default = "yes")]
+    pub flash_attn: bool,
 }
 
 impl Default for Settings {
@@ -98,6 +102,7 @@ impl Default for Settings {
             min_chunk_s: 2.0,
             vad_threshold: 0.5,
             vad_min_silence_ms: 100,
+            flash_attn: true,
         }
     }
 }

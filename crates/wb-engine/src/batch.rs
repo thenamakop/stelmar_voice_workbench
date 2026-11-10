@@ -36,7 +36,7 @@ impl Models {
             let idx = match by_id.get(&model.id) {
                 Some(i) => *i,
                 None => {
-                    loaded.push(Model::load(model, req.device, gpu_ordinal)?);
+                    loaded.push(Model::load(model, req.device, gpu_ordinal, req.settings.flash_attn)?);
                     by_id.insert(model.id.clone(), loaded.len() - 1);
                     loaded.len() - 1
                 }

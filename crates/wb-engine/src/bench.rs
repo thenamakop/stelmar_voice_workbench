@@ -57,7 +57,7 @@ pub fn run(
     let clip_seconds = pcm.len() as f64 / 16_000.0;
 
     let load_started = Instant::now();
-    let mut model = Model::load(&req.model, req.device, gpu_ordinal)?;
+    let mut model = Model::load(&req.model, req.device, gpu_ordinal, s.flash_attn)?;
     let mut vad = Vad::load(&req.vad_model.path, threads.min(4))?;
     let load_s = load_started.elapsed().as_secs_f64();
 
