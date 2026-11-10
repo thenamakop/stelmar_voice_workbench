@@ -218,6 +218,33 @@ $redirects = @(Get-ChildItem -Path (Join-Path $scriptRoot 'gates'), (Join-Path $
   Where-Object { (Get-Content -LiteralPath $_.FullName) | Where-Object { $_ -match '\s2>' -and $_ -notmatch '^\s*#' } })
 Check ('gate scripts redirect no native stderr themselves: ' + (($redirects | ForEach-Object { $_.Name }) -join ', ')) ($redirects.Count -eq 0)
 
+# ---- Nothing timing-sensitive runs while an engine build is running ---------------------------------
+$buildLock = Join-Path $tmp 'stelmar-build.lock'
+$none = @('no-such-process-wb-test')
+Check 'no build lock and no build process: nothing running' (@(Get-WbRunningBuilds -BuildLockPath $buildLock -ProcessNames $none).Count -eq 0)
+Set-Content -LiteralPath $buildLock -Value 'build=test' -Encoding ascii
+$threw = $false
+try { Assert-WbNoBuilds -BuildLockPath $buildLock -ProcessNames $none } catch { $threw = $true; $msg = $_.Exception.Message }
+Check 'the build lock stops a gate' ($threw -and $msg -match 'engine build is running' -and $msg -match 'exists')
+Remove-Item -LiteralPath $buildLock -Force
+# This very process stands in for a compiler: a process named like a build tool stops the gate too.
+$me = (Get-Process -Id $PID).ProcessName
+$threw = $false
+try { Assert-WbNoBuilds -BuildLockPath $buildLock -ProcessNames @($me) } catch { $threw = $true; $msg = $_.Exception.Message }
+Check 'a running build-tool process stops a gate' ($threw -and $msg -match 'pid')
+# Invoke-WbGate refuses to start, and does not run the body or take the gate lock.
+$ran = $false
+$lock = Join-Path $tmp 'gate.lock'
+$threw = $false
+try { Invoke-WbGate -Name 'build-guard-test' -LockPath $lock -BuildLockPath $buildLock -BuildProcessNames @($me) -Body { $script:ran = $true } } catch { $threw = $true }
+Check 'Invoke-WbGate refuses to start while a build runs, and takes no lock' ($threw -and -not $ran -and -not (Test-Path -LiteralPath $lock))
+# Without a build it runs, and the header says so.
+$ran = $false
+Invoke-WbGate -Name 'build-guard-test' -LockPath $lock -BuildLockPath $buildLock -BuildProcessNames $none -MinFreeRamGB 0 -Body { $script:ran = $true }
+Check 'Invoke-WbGate runs the body when no build is running' $ran
+$hdr = (Get-WbGateHeader -Machine 'test' -Profile 'emu-low') -join "`n"
+Check 'the evidence header says no engine build was running at the start and at the end' ($hdr -match 'engine builds: none running when the gate started' -and $hdr -match 'engine builds at the end: none running')
+
 Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
 
 if ($fails) { Write-Host "$fails failed"; exit 1 }

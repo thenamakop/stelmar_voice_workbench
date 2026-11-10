@@ -25,6 +25,12 @@ $script:TrackBBusyPath = 'D:\Projects\stelmar-eval-busy.lock'
 # Free RAM a gate needs before it starts: the 11 GiB emulation job plus headroom.
 $script:MinFreeRamGB = 14
 $script:OverlayNames = @('RTSS', 'MSIAfterburner')
+# Engine builds (cargo, CMake, the C++ and CUDA compilers) must not run while a timing-sensitive run
+# is going: they take every core for minutes and would spoil a speed, load or soak measurement.
+# scripts/build-engines.ps1 holds this lock for the whole build; the process names catch any other
+# build, however it was started.
+$script:BuildLockPath = 'D:Projectsstelmar-build.lock'
+$script:BuildProcessNames = @('cargo', 'rustc', 'cl', 'link', 'cmake', 'ninja', 'nvcc', 'glslc', 'MSBuild', 'cicc', 'ptxas', 'fatbinary', 'nvlink')
 $script:Current = $null
 
 function Get-WbOverlayTools {
@@ -35,6 +41,23 @@ function Assert-WbNoOverlayTools {
   $running = @(Get-WbOverlayTools)
   if ($running.Count -gt 0) {
     throw ("Overlay tools are running: " + ($running -join ', ') + ". Close RivaTuner Statistics Server and MSI Afterburner (including their tray icons), then run the gate again.")
+  }
+}
+
+# Engine builds that are running now: the build lock and any compiler or build-tool process.
+function Get-WbRunningBuilds {
+  param([string]$BuildLockPath = $script:BuildLockPath, [string[]]$ProcessNames = $script:BuildProcessNames)
+  $found = @()
+  if (Test-Path -LiteralPath $BuildLockPath) { $found += "$BuildLockPath exists" }
+  $found += @(Get-Process -Name $ProcessNames -ErrorAction SilentlyContinue | ForEach-Object { "$($_.ProcessName).exe (pid $($_.Id))" })
+  $found
+}
+
+function Assert-WbNoBuilds {
+  param([string]$BuildLockPath = $script:BuildLockPath, [string[]]$ProcessNames = $script:BuildProcessNames)
+  $running = @(Get-WbRunningBuilds -BuildLockPath $BuildLockPath -ProcessNames $ProcessNames)
+  if ($running.Count -gt 0) {
+    throw ("An engine build is running: " + ($running -join ', ') + ". Nothing timing-sensitive may run while a build is going; wait for it to finish, then run the gate again.")
   }
 }
 
@@ -54,9 +77,12 @@ function Invoke-WbGate {
     [int]$TrackBWaitMinutes = 30,
     [string]$TrackBBusyPath = $script:TrackBBusyPath,
     [int]$TrackBPollSeconds = 30,
-    [double]$MinFreeRamGB = $script:MinFreeRamGB
+    [double]$MinFreeRamGB = $script:MinFreeRamGB,
+    [string]$BuildLockPath = $script:BuildLockPath,
+    [string[]]$BuildProcessNames = $script:BuildProcessNames
   )
   Assert-WbNoOverlayTools
+  Assert-WbNoBuilds -BuildLockPath $BuildLockPath -ProcessNames $BuildProcessNames
   # Track B mid-run: wait (check every 30 s) up to 30 minutes, then stop and ask.
   $waitStart = Get-Date
   $waited = $false
@@ -82,7 +108,7 @@ function Invoke-WbGate {
   $started = Get-Date
   $lockText = "gate=$Name`r`nstarted=$($started.ToString('o'))`r`npid=$PID`r`n"
   Set-Content -LiteralPath $LockPath -Value $lockText -Encoding ascii
-  $script:Current = [pscustomobject]@{ Name = $Name; Started = $started; LockPath = $LockPath; OverlayAtEnd = $null; TrackBWait = $trackBWait; FreeRamStart = $freeStart; FreeRamEnd = $null; Error = $null; Note = $null }
+  $script:Current = [pscustomobject]@{ Name = $Name; Started = $started; LockPath = $LockPath; OverlayAtEnd = $null; BuildsAtEnd = $null; BuildLockPath = $BuildLockPath; TrackBWait = $trackBWait; FreeRamStart = $freeStart; FreeRamEnd = $null; Error = $null; Note = $null }
   try {
     & $Body
   } catch {
@@ -92,6 +118,7 @@ function Invoke-WbGate {
     throw
   } finally {
     $script:Current.OverlayAtEnd = @(Get-WbOverlayTools)
+    $script:Current.BuildsAtEnd = @(Get-WbRunningBuilds -BuildLockPath $BuildLockPath -ProcessNames $BuildProcessNames)
     $script:Current.FreeRamEnd = Get-WbFreeRamGB
     Remove-Item -LiteralPath $LockPath -Force -ErrorAction SilentlyContinue
   }
@@ -179,6 +206,18 @@ function Get-WbGateHeader {
       $lines += ('overlay tools at the end: RUNNING (' + ($c.OverlayAtEnd -join ', ') + ') - result not valid')
     } else {
       $lines += 'overlay tools at the end: none running'
+    }
+  }
+  if ($fromRun) {
+    $lines += 'engine builds: checked by the original run before it started (the gate refuses to start otherwise); not saved, not re-checked'
+  } else {
+    $lines += "engine builds: none running when the gate started ($($script:BuildLockPath) absent; no $(($script:BuildProcessNames | ForEach-Object { "$_.exe" }) -join ', ') process)"
+  }
+  if ($c -and $null -ne $c.BuildsAtEnd) {
+    if ($c.BuildsAtEnd.Count -gt 0) {
+      $lines += ('engine builds at the end: RUNNING (' + ($c.BuildsAtEnd -join ', ') + ') - timing may be spoiled; result not valid')
+    } else {
+      $lines += 'engine builds at the end: none running'
     }
   }
   if ($fromRun) {
@@ -406,4 +445,4 @@ function Write-WbGateCrashEvidence {
   Write-WbEvidence -Path $Path -Lines $lines -MachineLabel $Machine
 }
 
-Export-ModuleMember -Function Get-WbOverlayTools, Assert-WbNoOverlayTools, Invoke-WbGate, Get-WbGateHeader, ConvertTo-WbArg, Split-WbDiscontinuities, Get-WbUnexplainedUnmatchedMs, Test-WbGateData, Write-WbGateCrashEvidence, Get-WbFreeRamGB, Set-WbGateContext, Invoke-WbAnalyse, Test-WbHasProperty, Get-WbCableDefaultRoles, ConvertTo-WbArray, Get-WbXrunVerdict, Invoke-WbNative, Get-WbRepoRoot
+Export-ModuleMember -Function Get-WbOverlayTools, Get-WbRunningBuilds, Assert-WbNoBuilds, Assert-WbNoOverlayTools, Invoke-WbGate, Get-WbGateHeader, ConvertTo-WbArg, Split-WbDiscontinuities, Get-WbUnexplainedUnmatchedMs, Test-WbGateData, Write-WbGateCrashEvidence, Get-WbFreeRamGB, Set-WbGateContext, Invoke-WbAnalyse, Test-WbHasProperty, Get-WbCableDefaultRoles, ConvertTo-WbArray, Get-WbXrunVerdict, Invoke-WbNative, Get-WbRepoRoot
