@@ -20,7 +20,7 @@ param(
   [string]$Testbench,
   [string]$OutFile,
   # Runs listed in full (the ones the plan names); every other run on disk gets a table row.
-  [string]$FullDate = '20261110',
+  [string]$FullPattern = '-20261110-0\d{5}$',
   [string]$Machine = 'Legion'
 )
 $ErrorActionPreference = 'Stop'
@@ -66,7 +66,7 @@ $results = @()
 foreach ($r in $runs) {
   try { $res = Get-RunResult $r.FullName; if ($res) { $results += $res } } catch { Write-Warning "$($r.Name): $($_.Exception.Message)" }
 }
-$full = @($results | Where-Object { $_.Name -match "-$FullDate-" })
+$full = @($results | Where-Object { $_.Name -match $FullPattern })
 
 $lines = @()
 $lines += 'Repeated-block and zero-gap detectors against the recorded gate sessions (Phase 2)'
@@ -83,13 +83,13 @@ $lines += 'FINDING: the shared upstream breaks are not repeated blocks.'
 $lines += '  The gate evidence and docs/PLAN.md section 12 call the shared breaks "repeated blocks" because the harness reports a negative source jump of about one WASAPI period ("repeat 10.2 ms").'
 $lines += '  At the sample level every one of them is a run of exact digital zeros of 490 to 551 frames (10.2 to 11.5 ms) inserted into the noise signal: the recording holds 537 zero frames at app audio 287,916.9 ms in the load run, 490 at 2,346.6 ms in the panic run, and so on. The negative jump is the delay those inserted frames add to the recording.'
 $lines += '  Neither the player, the app nor the reference capture can tell it from the signal; all three record the zeros identically. No exact repeat (a stretch equal to the one before it at a lag of 2.7 to 100 ms) exists in any recording scanned.'
-$lines += '  So the recorder has two detectors: repeated_block (an exact repeat; unit-tested on spliced noise, found nowhere in the real recordings) and zero_gap (a run of 2 to 50 ms of exact zeros in every channel with live audio on both sides; found at every shared break).'
+$lines += '  So the recorder has two detectors: repeated_block (an exact repeat; unit-tested on spliced noise, found nowhere in the real recordings) and zero_gap (a run of 1 to 50 ms of exact zeros in every channel with live audio on both sides; found at every shared break).'
 $lines += ''
 $lines += 'detectors (the code the recorder thread runs; crates/wb-recorder/src/repeat.rs and dropout.rs):'
 $lines += '  repeated_block: a stretch of at least 256 frames equal sample for sample to the stretch lag frames before it (lag 128 to 4,800), RMS at least -60 dBFS, run length at most 2 x lag (longer is a periodic signal)'
-$lines += '  zero_gap: 2 to 50 ms of frames in which every channel is exactly 0.0, with at least half the frames not exactly zero in the 10 ms before and the 10 ms after'
+$lines += '  zero_gap: 1 to 50 ms of frames in which every channel is exactly 0.0, with at least half the frames not exactly zero in the 10 ms before and the 10 ms after'
 $lines += ''
-$lines += "SECTION 1: the runs of $FullDate (the final Phase 1 sequence), in full"
+$lines += "SECTION 1: the runs of the final Phase 1 sequence (10 Nov 2026, 02:48 to 05:37), in full"
 foreach ($res in $full) {
   $lines += ''
   $lines += "run $($res.Name): $([math]::Round($res.Scan.audio_seconds / 60.0, 1)) minutes of audio in $($res.Scan.parts) part(s), $($res.Scan.run_starts.Count) run(s) of the app; scanned in $([math]::Round($res.Scan.elapsed_s, 1)) s"
@@ -131,7 +131,7 @@ $lines += ''
 $lines += 'reading (what the numbers say):'
 $lines += '  section 1: all 5 shared breaks of the final Phase 1 sequence (panic, webview, kill, load, soak) are marked by a zero_gap within a few milliseconds of the start of their span; 0 repeated_block and 0 false alarms in 2.8 hours of audio (165.3 minutes).'
 $lines += '  section 2, false alarms: both are zero gaps of 9 to 11 ms in the cable''s start-up region, within 100 ms of the point where the test signal starts (listed above with the signal start). They are real dropouts of the same kind as the shared breaks, in the stale audio the cable replays before the signal; the harness does not count that region. No zero gap or repeat was found inside the test signal where the harness saw no break, in 12.3 hours.'
-$lines += '  section 2, misses: three are unmatched stretches of 295 to 325 ms with no repeat (a sound mixed into the cable, consistent with the notification chimes recorded in docs/GATES.md for the 9 Nov runs), not one-period dropouts; the fourth (webview-emu-low-20261109-205829) has a repeat of 1.6 ms (77 frames), below the 2 ms minimum of a zero gap. 2 more breaks lie before the app began recording and cannot be seen by any recorder.'
+$lines += '  section 2, misses: three breaks are unmatched stretches of 295 to 325 ms with no repeat (a sound mixed into the cable, consistent with the notification chimes recorded in docs/GATES.md for the 9 Nov runs), not one-period dropouts. Two short dropouts (77 and 80 frames, 1.6 and 1.7 ms: webview-emu-low-20261109-205829 and the Phase 2 diagnostic soak) were missed when the minimum was 2 ms; it is 1 ms now and both are matched. 2 more breaks lie before the app began recording and cannot be seen by any recorder.'
 $lines += '  the repeated_block detector found nothing in any real recording: it is covered by unit tests on spliced noise (crates/wb-recorder/src/repeat.rs) and through the recorder thread (crates/wb-recorder/tests/repeat_and_marks.rs), and stays as a defence against a true repeat, which the sample-level data above show has not occurred.'
 
 Write-WbEvidence -Path $OutFile -Lines $lines -MachineLabel $Machine

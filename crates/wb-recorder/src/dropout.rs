@@ -7,7 +7,7 @@
 //! the driver's discontinuity flag nor the capture timestamps see it, so the recorder looks for it
 //! in the audio.
 //!
-//! A zero gap is a run of [`MIN_ZERO`] to [`MAX_ZERO`] frames in which every channel is exactly
+//! A zero gap is a run of [`MIN_ZERO`] (1 ms) to [`MAX_ZERO`] (50 ms) frames in which every channel is exactly
 //! zero, with live audio on both sides: at least half the frames in the 10 ms before it and in the
 //! 10 ms after it are not exactly zero. What is not flagged:
 //!
@@ -23,13 +23,13 @@
 //! Allocation happens only in [`DropoutDetector::new`].
 
 /// Shortest and longest run of zeros that is reported, in milliseconds.
-const MIN_ZERO_MS: u64 = 2;
+const MIN_ZERO_MS: u64 = 1;
 const MAX_ZERO_MS: u64 = 50;
 /// Live audio is required in this many milliseconds on each side.
 const FLANK_MS: u64 = 10;
 
-/// Shortest run reported at 48 kHz, for documentation and tests.
-pub const MIN_ZERO: usize = 96;
+/// Shortest run reported at 48 kHz (1 ms), for documentation and tests.
+pub const MIN_ZERO: usize = 48;
 pub const MAX_ZERO: usize = 2_400;
 
 /// One zero gap found in the audio.
@@ -243,7 +243,7 @@ mod tests {
     #[test]
     fn silence_that_is_too_short_or_too_long_is_not_reported() {
         let mut audio = noise(200_000, 1, 4);
-        zero_out(&mut audio, 1, 30_000, 40); // under 2 ms
+        zero_out(&mut audio, 1, 30_000, 40); // under 1 ms
         zero_out(&mut audio, 1, 80_000, 3_000); // over 50 ms: a mute, not a dropout
         assert!(scan(&audio, 1, 480).is_empty());
     }
