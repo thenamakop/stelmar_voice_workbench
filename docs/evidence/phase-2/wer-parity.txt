@@ -1,0 +1,21 @@
+Parity of wb-engine and whisper-cli on identical audio (Phase 2, run 2 of 10 Nov 2026)
+Method: whisper-cli v1.9.5 decodes the exact chunks wb-engine cuts for each clip (wb-engine chunks --greedy, same chunker, Silero VAD v6.2.0 and 15 s limit as batch), same model (medium f16), beam 5, best-of 5, temperature fallback, no timestamps, 8 threads, flash attention on; previous-text context off on both sides (role parity: whisper-cli's --prompt argument is corrupted by Windows' ANSI command line for non-Latin scripts, see run 1 below); the engine is portable AVX2 (GGML_NATIVE=OFF). Limit: two-sided, 3.0 WER points.
+Clips: eval/clips/phase2-verify-fleurs.txt (sha256 7f42da223214dced467d9416e279f82f5aa83ff790def0ddc293f5111db6d3ef), 20 per language.
+
+language | whisper-cli WER | wb-engine WER | difference | limit | result | identical text | not identical | same chunks | broken text (cli / engine)
+en | 4.90 | 4.90 | 0.00 | 3.0 | PASS | 20 of 20 (100%) | 0 | 20 of 20 | 0 / 0
+hi | 47.51 | 47.51 | 0.00 | 3.0 | PASS | 20 of 20 (100%) | 0 | 20 of 20 | 0 / 0
+ur | 28.79 | 28.79 | 0.00 | 3.0 | PASS | 20 of 20 (100%) | 0 | 20 of 20 | 0 / 0
+
+gate (all three within 3.0 points, no broken text on either side): PASS
+
+en: utterances whose text is not identical (id prefix, reference words, differing words, same chunks): none
+hi: utterances whose text is not identical (id prefix, reference words, differing words, same chunks): none
+ur: utterances whose text is not identical (id prefix, reference words, differing words, same chunks): none
+
+Information, previous-text context on (English only: Latin text reaches whisper-cli intact), whisper-cli on the engine's chunks against the engine's rolling run: WER 4.90 against 4.90, difference 0.00; identical text 20 of 20; differing words per non-identical utterance: none
+
+Run 1 (as deployed, information only; not a parity measurement): each side with its own chunker, whisper-cli with the corrupted --prompt for non-Latin text
+  en: whisper-cli 4.90, wb-engine 4.90, difference 0.00; utterances with '??' or U+FFFD: cli 0, engine 0
+  hi: whisper-cli 51.69, wb-engine 47.91, difference 3.78; utterances with '??' or U+FFFD: cli 3, engine 0
+  ur: whisper-cli 32.03, wb-engine 28.96, difference 3.07; utterances with '??' or U+FFFD: cli 1, engine 0

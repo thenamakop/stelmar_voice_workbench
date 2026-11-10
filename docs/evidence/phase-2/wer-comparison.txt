@@ -1,27 +1,31 @@
 3-WER comparison: wb-engine against whisper-cli (Phase 2, 10 Nov 2026)
 
-Verdict from the harness (eval/run.py, limit 3.0 points, two-sided): en PASS, hi FAIL, ur FAIL.
-In both FAILs the ENGINE has the lower error rate. Not re-run, limit not changed; see "Reading the result" and the question it ends with.
+THE PARITY RESULT is in docs/evidence/phase-2/wer-parity.txt (run 2): both sides decode identical audio; en, hi and ur
+each have 20 of 20 utterances with identical text and a WER difference of 0.00 against the two-sided limit of 3.0: PASS.
 
-Setup
-- Machine: Legion native (no emulation), 8 threads for both sides; Track B idle; overlay tools closed; no engine build running (build lock absent, checked at the start of the speed-parity run and the build finished before this one started).
-- whisper-cli: whisper.cpp v1.9.5, commit d1be6fde11ac, portable AVX2 (eval/.tools). wb-engine 0.1.0 (avx2, whisper.cpp v1.9.5 commit d1be6fde11ac, tree e736b4c9a5be), portable AVX2, flash attention on (whisper-cli's default). The harness prints both and marks the comparison INVALID if they differ: they do not.
-- Model: medium f16 (models/ggml-medium.bin, sha256 6c14d5ad...), role rolling (beam 5, best-of 5, temperature fallback, no timestamps, previous-text context 200 characters), chunks of at most 15 s from Silero VAD v6.2.0 (whisper-cli's side cut by the harness with whisper-vad-speech-segments; the engine's side by its own chunker in greedy-merge mode).
-- Clips: exactly the 20 per language of Phase 5a, from eval/clips/phase2-verify-fleurs.txt (60 ids, sha256 7f42da223214dced467d9416e279f82f5aa83ff790def0ddc293f5111db6d3ef). The three FLEURS manifests were rebuilt from the HF cache at revision 70bb2e84b976 and their SHA-256 values equal docs/evidence/phase-5a/sources-phase-5a.md (fleurs-en 69f04997..., fleurs-hi 023f2119..., fleurs-ur 9aa8ad35...); select() gives the same 20 ids as the list.
+This file keeps RUN 1, which is NOT a parity measurement, and says why.
 
-Result (WER %, nukta kept for Hindi)
-| language | whisper-cli | wb-engine | difference (points, cli minus engine) | limit | harness result | cli truncated | engine truncated |
-| en | 4.9 | 4.9 | 0.00 | 3.0 | PASS | 0 | 0 |
-| hi | 51.7 (CER 25.3) | 47.9 (CER 19.8) | 3.78 | 3.0 | FAIL (engine better) | 4 | 1 |
-| ur | 32.0 (CER 13.8) | 29.0 (CER 9.8) | 3.07 | 3.0 | FAIL (engine better) | 1 | 0 |
-Wrong script: hi 0.9 on both sides; ur 0.0 on both; en Latin 0.0. Broken utterances 0 on both sides.
+Run 1: different chunkers and whisper-cli's corrupted --prompt; not a parity measurement
+Harness verdict (eval/run.py, two-sided limit 3.0): en PASS (0.00), hi FAIL (3.78), ur FAIL (3.07). In both FAILs the engine had the lower WER.
+Kept as information ("as deployed": each side with its own chunker). The comparison entries in eval/runs.toml are marked informational.
 
-Reading the result
-- Utterances with identical text on both sides: en 17 of 20 (3 differ by 2 words, rare-word spelling), hi 17 of 20, ur 18 of 20. Only 3 hi and 2 ur utterances differ, and all of them are the two-chunk utterances (longer than 15 s).
-- Hindi, the largest one (fleurs-hi 10798430, same chunk boundaries on both sides): whisper-cli's second chunk is the text "??? ??? ???", the engine's is 12 correct Devanagari words. Three hi utterances and one ur utterance of the whisper-cli run contain such "?" text; the engine's run has none. This is the carry-over item 2c: whisper-cli's JSON output splits a multi-byte character across tokens and prints "?", while the engine joins the raw segment bytes before decoding UTF-8. It is a defect of the reference side, not of the engine.
-- The remaining differences are chunk-boundary effects: in fleurs-hi 33253568 the boundary is at 11,400 ms (whisper-cli) against 11,295 ms (engine); in fleurs-ur 64116877 at 8,785 ms against 14,260 ms. The engine's chunker and the harness's VAD step cut at different pauses.
-- Speed parity and the text effect of chunk boundaries on single clips: docs/evidence/phase-2/speed-parity.txt (within 1% on processing time).
+Setup of run 1
+- Machine: Legion native (no emulation), 8 threads for both sides; Track B idle; overlay tools closed; no engine build running.
+- whisper-cli: whisper.cpp v1.9.5, commit d1be6fde11ac, portable AVX2. wb-engine 0.1.0 (avx2, whisper.cpp v1.9.5 commit d1be6fde11ac, tree e736b4c9a5be), portable AVX2, flash attention on (whisper-cli's default). The harness prints both and would mark the comparison INVALID if they differed; they did not.
+- Model medium f16 (sha256 6c14d5ad...), role rolling (beam 5, best-of 5, temperature fallback, no timestamps, previous-text context 200 characters), chunks of at most 15 s from Silero VAD v6.2.0: whisper-cli's side cut by the harness (whisper-vad-speech-segments), the engine's side by its own chunker.
+- Clips: eval/clips/phase2-verify-fleurs.txt (60 ids, sha256 7f42da223214dced467d9416e279f82f5aa83ff790def0ddc293f5111db6d3ef). The three FLEURS manifests were rebuilt from the HF cache at revision 70bb2e84b976 and their SHA-256 values equal docs/evidence/phase-5a/sources-phase-5a.md (fleurs-en 69f04997..., fleurs-hi 023f2119..., fleurs-ur 9aa8ad35...).
 
-What I did not do
-- No re-run, and no change to the limit or the clip list. The harness's rule "within 3 points" is two-sided; read one-sided (the engine is not worse than whisper-cli by more than 3 points) all three languages would pass, but that is a change of the gate's meaning and is yours to decide.
-- Not compared here: the same engine on the Intel iGPU and on the CPU under emu-low and emu-mid (gate row 6, a separate run).
+Result of run 1 (WER %, nukta kept for Hindi)
+| language | whisper-cli | wb-engine | difference | limit | harness result | utterances with "??" or U+FFFD (cli / engine) |
+| en | 4.9 | 4.9 | 0.00 | 3.0 | PASS | 0 / 0 |
+| hi | 51.7 (CER 25.3) | 47.9 (CER 19.8) | 3.78 | 3.0 | FAIL | 3 / 0 |
+| ur | 32.0 (CER 13.8) | 29.0 (CER 9.8) | 3.07 | 3.0 | FAIL | 1 / 0 |
+
+Why run 1 cannot show parity (two differences the gate is not about)
+1. Different chunkers. whisper-cli's side was cut by the harness's VAD step, the engine's by its own chunker; they cut at different pauses in 2 of the 5 utterances that differed (fleurs-hi 33253568: 11,400 ms against 11,295 ms; fleurs-ur 64116877: 8,785 ms against 14,260 ms).
+2. whisper-cli's corrupted --prompt. The harness passes the previous chunk's text to whisper-cli as a `--prompt` command-line argument. On Windows whisper-cli reads its command line in the ANSI code page, which turns every Devanagari or Arabic-script character of the prompt into "?". The model is then prompted with garbage and some chunks come out as "??? ??? ???" (fleurs-hi 10798430, second chunk: same chunk boundaries on both sides, 12 correct words from the engine). Shown on that chunk (not committed): no prompt gives correct Devanagari, an ASCII prompt gives correct Devanagari, a Devanagari prompt gives "??? ??? ??? ...". All output modes (stdout, -oj, -ojf, -otxt) give the same "???", so it is not an output-reading problem and not a split character in the output. The engine passes the context through the library, in UTF-8.
+   My first explanation in this file (a character split across segments in whisper-cli's JSON output) was wrong; the prompt is the cause.
+
+Run 2 (the parity measurement) removes both: whisper-cli decodes the exact chunks wb-engine cuts, and previous-text context is off on both sides (whisper-cli cannot carry it for non-Latin text on Windows). English with context on, on the same chunks, also matches (20 of 20 identical; information in wer-parity.txt).
+
+Consequence for Phase 5a numbers: docs/GATES.md (5a rows) and docs/evidence/phase-5a/tables-phase-5a.md now say that every 5a whisper-cli run with context (rolling, night) on Hindi, Urdu or CoSHE-Eval used the corrupted prompt, and Phase 5 scores every model through `wb-engine batch`.

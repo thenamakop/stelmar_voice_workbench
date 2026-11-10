@@ -44,7 +44,9 @@ from wbeval.common import (  # noqa: E402
     DATA_DIR, EVAL_DIR, REPO, RESULTS_DIR, WAIT_LOG, rel, set_below_normal_priority, setup_logging,
 )
 from wbeval.data import Utterance, load_manifest, read_sources  # noqa: E402
-from wbeval.engines import Engine, Settings, Setup, WbEngine, WhisperCli, segments_to_events  # noqa: E402
+from wbeval.engines import (  # noqa: E402
+    Engine, Settings, Setup, WbEngine, WhisperCli, WhisperCliOnEngineChunks, segments_to_events,
+)
 from wbeval.tools import whisper_cpp_info  # noqa: E402
 
 log = logging.getLogger("run")
@@ -93,6 +95,8 @@ def make_engine(name: str, fixture: str | None) -> Engine:
         return WhisperCli()
     if name == "wb-engine":
         return WbEngine(fixture_dir=Path(fixture) if fixture else None)
+    if name == "whisper-cli-engine-chunks":
+        return WhisperCliOnEngineChunks()
     raise SystemExit(f"unknown engine {name!r}")
 
 
@@ -442,7 +446,7 @@ def write_tables(results_dir: Path = RESULTS_DIR, runs_file: Path = RUNS_FILE) -
             va = a.get("whisper_cpp", {}).get("tag", "?")
             vb = b.get("engine", {}).get("whisper_cpp", {}).get("tag") or b.get("engine", {}).get("version", "?")
             lines.append(f"| {c['a']} | {c['b']} | {fmt_pct(a['wer'])} | {fmt_pct(b['wer'])} | {diff:.2f} | "
-                         f"{c['max_wer_points']} | {'PASS' if diff <= c['max_wer_points'] else 'FAIL'} | {va} / {vb} |")
+                         f"{c['max_wer_points']} | {('PASS' if diff <= c['max_wer_points'] else 'FAIL') if not c.get('informational') else 'information only (not a gate)'} | {va} / {vb} |")
     path = results_dir / "TABLES.md"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
