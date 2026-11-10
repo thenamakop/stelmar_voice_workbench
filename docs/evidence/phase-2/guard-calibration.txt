@@ -1,0 +1,45 @@
+Calibration of the loop threshold of the compression guard (Phase 2, 10 Nov 2026)
+measure `ratio`: characters per compressed byte, each distinct character first mapped to one byte (script-independent);
+measure `utf8`: whisper's UTF-8 byte measure, the one the guard used before, shown for comparison. Computed by the engine's own code.
+no transcript text below: counts, percentiles and numbers only
+
+References (all of them, none cut off): utterances; windows of 25 and 50 words stand in for chunks of at most 15 s
+set | cut | n | ratio p50 | p90 | p99 | p99.9 | max | utf8 p50 | p99 | max | utf8 over 2.4 (count, share)
+coshe-eval | whole | 1984 | 1.87 | 2.13 | 2.30 | 2.46 | 2.55 | 2.13 | 3.37 | 3.66 | 615 (31.0%)
+coshe-eval | w25 | 12230 | 1.33 | 1.46 | 1.61 | 1.78 | 2.00 | 1.39 | 2.01 | 2.77 | 6 (0.0%)
+coshe-eval | w50 | 5621 | 1.56 | 1.73 | 1.89 | 2.05 | 2.21 | 1.70 | 2.46 | 3.01 | 95 (1.7%)
+fleurs-en | whole | 647 | 1.31 | 1.47 | 1.64 | 1.74 | 1.74 | 1.22 | 1.56 | 1.63 | 0 (0.0%)
+fleurs-en | w25 | 207 | 1.37 | 1.44 | 1.51 | 1.69 | 1.69 | 1.28 | 1.44 | 1.58 | 0 (0.0%)
+fleurs-en | w50 | 5 | 1.56 | 1.58 | 1.60 | 1.60 | 1.60 | 1.50 | 1.52 | 1.52 | 0 (0.0%)
+fleurs-hi | whole | 418 | 1.20 | 1.37 | 1.55 | 1.65 | 1.65 | 1.86 | 2.50 | 2.77 | 13 (3.1%)
+fleurs-hi | w25 | 190 | 1.22 | 1.30 | 1.53 | 1.60 | 1.62 | 1.93 | 2.34 | 2.54 | 1 (0.5%)
+fleurs-hi | w50 | 7 | 1.40 | 1.49 | 1.54 | 1.54 | 1.54 | 2.33 | 2.57 | 2.58 | 3 (42.9%)
+fleurs-ur | whole | 299 | 1.30 | 1.46 | 1.64 | 1.75 | 1.76 | 1.50 | 1.96 | 2.11 | 0 (0.0%)
+fleurs-ur | w25 | 192 | 1.27 | 1.35 | 1.47 | 1.48 | 1.49 | 1.47 | 1.72 | 1.77 | 0 (0.0%)
+fleurs-ur | w50 | 11 | 1.49 | 1.70 | 1.74 | 1.74 | 1.74 | 1.77 | 2.04 | 2.05 | 0 (0.0%)
+
+highest `ratio` of any reference (whole or window, 20 characters or more): 2.554
+
+Known loops from the decode attempts of the three Hinglish clips (rule above): 6 attempts
+  audio_908:2:first | 104 characters | ratio 2.74 | utf8 4.23 | repetition guard 0
+  audio_908:2:a_no_context | 104 characters | ratio 2.74 | utf8 4.23 | repetition guard 0
+  audio_908:3:first | 231 characters | ratio 3.40 | utf8 5.45 | repetition guard 1
+  audio_908:3:a_no_context | 231 characters | ratio 3.40 | utf8 5.45 | repetition guard 1
+  audio_37:0:first | 214 characters | ratio 6.29 | utf8 10.00 | repetition guard 1
+  audio_37:0:a_no_context | 214 characters | ratio 6.29 | utf8 10.00 | repetition guard 1
+
+Other decode attempts (not loops by the rule): 18; ratio max 2.82, utf8 max 4.09; those over utf8 2.4:
+  audio_1444:2:first | 159 characters | ratio 1.77 | utf8 2.78
+  audio_908:2:b_half1 | 127 characters | ratio 2.82 | utf8 4.09
+  audio_908:4:first | 174 characters | ratio 1.44 | utf8 2.41
+
+Synthetic loops (a reference phrase of 1 to 6 words repeated 6 to 20 times), 60 per set: lowest ratio
+  synthetic-coshe-eval: lowest 2.00, median 5.70
+  synthetic-fleurs-en: lowest 1.64, median 6.04
+  synthetic-fleurs-hi: lowest 1.77, median 5.10
+  synthetic-fleurs-ur: lowest 2.46, median 5.67
+
+threshold: geometric middle of the highest reference (2.554) and the lowest known loop (2.737) = 2.64
+at 2.64: references flagged 0; known loops flagged 6 of 6; synthetic loops flagged 210 of 240 (lowest 1.64)
+threshold used by the engine: 2.64: references flagged 0; known loops flagged 6 of 6
+RESULT: separable

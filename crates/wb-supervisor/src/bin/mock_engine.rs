@@ -127,5 +127,7 @@ fn main() {
         audio_ms: chunks * 1000,
         truncated_chunks: 0,
         elapsed_s: 0.0,
+        retried_chunks: 0,
+        unclear_chunks: 0,
     }));
 }

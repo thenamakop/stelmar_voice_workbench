@@ -1,9 +1,17 @@
 //! Guards against hallucinated output (PLAN section 6, "Guards").
 //!
-//! A segment is dropped when the VAD speech ratio is under 0.3, when `no_speech_prob` is over 0.6
-//! with an average log-probability under -1.0, or when the compression ratio is over 2.4. Repeated
-//! n-grams, known silence phrases and output in the wrong script are flagged for review and never
-//! reach captions.
+//! A chunk is dropped (with an event) when the VAD speech ratio is under 0.3 or when `no_speech_prob` is
+//! over 0.6 with an average log-probability under -1.0. A chunk whose text looks like a loop (the
+//! script-independent compression ratio over `COMPRESSION_ABOVE`) or that reached the token limit is
+//! retried before anything is given up (`wb-engine`'s ladder, PLAN section 6, changed 10 Nov 2026).
+//! Repeated n-grams, known silence phrases and output in the wrong script are flagged for review and
+//! never reach captions.
+//!
+//! Why the compression ratio is not whisper's byte ratio: UTF-8 spends three bytes on a Devanagari or
+//! Arabic-script letter, two of them nearly constant, so ordinary Hindi compresses far better than
+//! English by byte count. The reference transcript of one CoSHE-Eval clip scores 2.43 on whisper's
+//! measure, and real speech in Hindi and Hinglish went over 2.4 and was dropped. The measure here is
+//! computed per character (`guard-calibration.txt` has the calibration).
 
 use std::io::Write;
 
@@ -45,25 +53,58 @@ impl DropReason {
 pub const MIN_SPEECH_RATIO: f32 = 0.3;
 pub const NO_SPEECH_ABOVE: f32 = 0.6;
 pub const LOGPROB_BELOW: f32 = -1.0;
-pub const COMPRESSION_ABOVE: f32 = 2.4;
+/// Loop threshold of `compression_ratio`, calibrated 10 Nov 2026 (`docs/evidence/phase-2/guard-calibration.txt`):
+/// the geometric middle of the highest ratio of any reference transcript (2.55, a whole CoSHE-Eval utterance;
+/// no 25-word window passes 2.0) and the lowest known loop (2.74). Do not change it without re-running the
+/// calibration.
+pub const COMPRESSION_ABOVE: f32 = 2.64;
 
-/// Length of the text divided by its DEFLATE-compressed length (zlib, as whisper's own guard).
-pub fn compression_ratio(text: &str) -> f32 {
-    let bytes = text.as_bytes();
-    if bytes.is_empty() {
+fn zlib_ratio(raw: &[u8]) -> f32 {
+    if raw.is_empty() {
         return 1.0;
     }
-    let mut enc = ZlibEncoder::new(Vec::with_capacity(bytes.len()), Compression::default());
-    if enc.write_all(bytes).is_err() {
+    let mut enc = ZlibEncoder::new(Vec::with_capacity(raw.len()), Compression::default());
+    if enc.write_all(raw).is_err() {
         return 1.0;
     }
     match enc.finish() {
-        Ok(out) if !out.is_empty() => bytes.len() as f32 / out.len() as f32,
+        Ok(out) if !out.is_empty() => raw.len() as f32 / out.len() as f32,
         _ => 1.0,
     }
 }
 
-/// Whether the chunk should be dropped, and why.
+/// Whisper's own measure: the UTF-8 length of the text divided by its zlib-compressed length. Kept only
+/// to compare with `compression_ratio` in the calibration; it is script-dependent.
+pub fn compression_ratio_utf8(text: &str) -> f32 {
+    zlib_ratio(text.as_bytes())
+}
+
+/// Script-independent loop measure: characters per compressed byte. Each distinct character is first
+/// mapped to one byte (in order of first appearance), so a Devanagari or Urdu letter costs one byte
+/// like a Latin one and the ratio means the same in every script; the mapping is one-to-one, so
+/// repetition compresses exactly as before. Text with more than 256 distinct characters (not seen in
+/// English, Hindi or Urdu) falls back to the UTF-8 measure.
+pub fn compression_ratio(text: &str) -> f32 {
+    let mut map: std::collections::HashMap<char, u8> = std::collections::HashMap::new();
+    let mut raw: Vec<u8> = Vec::with_capacity(text.len());
+    for ch in text.chars() {
+        let next = map.len();
+        match map.get(&ch) {
+            Some(b) => raw.push(*b),
+            None => {
+                let Ok(b) = u8::try_from(next) else {
+                    return compression_ratio_utf8(text);
+                };
+                map.insert(ch, b);
+                raw.push(b);
+            }
+        }
+    }
+    zlib_ratio(&raw)
+}
+
+/// Whether the chunk should be given up on, and why. `Compression` here means "looks like a loop": the
+/// caller retries it before dropping anything.
 pub fn drop_reason(m: &Metrics) -> Option<DropReason> {
     if m.speech_ratio < MIN_SPEECH_RATIO {
         Some(DropReason::LittleSpeech)
@@ -189,13 +230,13 @@ mod tests {
         assert_eq!(drop_reason(&m(-0.5, 0.7, 1.5, 0.9)), None);
         assert_eq!(drop_reason(&m(-1.2, 0.5, 1.5, 0.9)), None);
         assert_eq!(
-            drop_reason(&m(-0.3, 0.1, 2.5, 0.9)),
+            drop_reason(&m(-0.3, 0.1, 2.7, 0.9)),
             Some(DropReason::Compression)
         );
         assert_eq!(
-            drop_reason(&m(-0.3, 0.1, 2.4, 0.9)),
+            drop_reason(&m(-0.3, 0.1, COMPRESSION_ABOVE, 0.9)),
             None,
-            "2.4 is not over 2.4"
+            "the threshold itself is not over the threshold"
         );
     }
 
@@ -222,6 +263,32 @@ mod tests {
             "{}",
             compression_ratio(hindi)
         );
+    }
+
+    #[test]
+    fn the_measure_means_the_same_in_every_script() {
+        // Ordinary speech with repeated words (as in audio_1444: Hindi with a repeated phrase) is not a loop
+        // in any script, although the UTF-8 byte measure puts Devanagari far above English.
+        let hindi = "हम हम आज आज यह बात बात बता रहे हैं कि सत्र में सत्र में कौन कौन बोलेगा और कब बोलेगा";
+        let urdu = "ہم ہم آج آج یہ بات بات بتا رہے ہیں کہ سیشن میں سیشن میں کون کون بولے گا اور کب بولے گا";
+        let english = "we we today today this matter matter is what we are telling you that in the session in the session who will speak and when";
+        for t in [hindi, urdu, english] {
+            assert!(
+                compression_ratio(t) <= COMPRESSION_ABOVE,
+                "{t}: {}",
+                compression_ratio(t)
+            );
+        }
+        assert!(compression_ratio_utf8(hindi) > compression_ratio(hindi));
+        // A real loop is over the threshold in each script.
+        for unit in ["धन्यवाद आप सभी का ", "شکریہ آپ سب کا ", "thank you all of you "] {
+            let looped = unit.repeat(12);
+            assert!(
+                compression_ratio(&looped) > COMPRESSION_ABOVE,
+                "{unit}: {}",
+                compression_ratio(&looped)
+            );
+        }
     }
 
     #[test]

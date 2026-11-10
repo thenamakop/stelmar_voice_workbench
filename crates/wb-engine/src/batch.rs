@@ -13,7 +13,7 @@ use wb_engine_core::chunker::{self, Chunk, Params};
 use wb_engine_core::guards::{self, Metrics};
 use wb_engine_core::lang::{self, Candidate, Detection, Plan, Reason, Rules};
 use wb_engine_core::text::{self, ScriptCounts};
-use wb_protocol::{BatchRequest, DoneSummary, Event, LangProb, SegmentEvent, SegmentFlag, Stats};
+use wb_protocol::{BatchRequest, DoneSummary, Event, LangProb, SegmentEvent, SegmentFlag, Source, Stats};
 
 use crate::asr::{Decoded, Model, Vad};
 use crate::out;
@@ -101,6 +101,247 @@ fn tail_chars(s: &str, n: usize) -> String {
     s.chars().skip(count.saturating_sub(n)).collect()
 }
 
+/// Why a decode of a chunk (or half a chunk) is not usable as it is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Failure {
+    /// The text looks like a loop (`guards::compression_ratio` over the threshold).
+    Loop,
+    /// The decoder reached its token limit: the text is cut.
+    TokenLimit,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Verdict {
+    Good,
+    /// Not speech (little speech in the chunk, or the model says so): dropped with a warning event, as the
+    /// PLAN says. Not retried: nothing is lost.
+    Skip(guards::DropReason),
+    /// Speech that the decoder failed on: goes through the retry ladder.
+    Fail(Failure),
+}
+
+fn judge(a: &Attempt, speech_ratio: f32) -> (Verdict, Metrics) {
+    let t = a.decoded.text.text.trim();
+    let metrics = Metrics {
+        avg_logprob: a.decoded.avg_logprob,
+        no_speech_prob: a.decoded.no_speech_prob,
+        compression_ratio: guards::compression_ratio(t),
+        speech_ratio,
+    };
+    let verdict = match guards::drop_reason(&metrics) {
+        Some(guards::DropReason::Compression) => Verdict::Fail(Failure::Loop),
+        Some(reason) => Verdict::Skip(reason),
+        None if a.decoded.truncated => Verdict::Fail(Failure::TokenLimit),
+        None => Verdict::Good,
+    };
+    (verdict, metrics)
+}
+
+/// Development aid for calibrating the loop threshold: with `WB_ATTEMPT_LOG=FILE` every decode attempt
+/// is appended to FILE as one JSON line, including its TEXT. Never set in the app; the file is scratch.
+struct AttemptLog {
+    path: Option<String>,
+    source: String,
+}
+
+impl AttemptLog {
+    fn new(source: &Source) -> Self {
+        let name = match source {
+            Source::File { path } => std::path::Path::new(path)
+                .file_stem()
+                .map_or_else(|| path.clone(), |n| n.to_string_lossy().into_owned()),
+            Source::Session { dir } => dir.clone(),
+        };
+        Self {
+            path: std::env::var("WB_ATTEMPT_LOG").ok().filter(|p| !p.is_empty()),
+            source: name,
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn record(&self, chunk: u32, start_ms: u64, end_ms: u64, step: &str, a: &Attempt, m: &Metrics, v: &Verdict) {
+        use std::io::Write;
+        let Some(path) = &self.path else { return };
+        let line = serde_json::json!({
+            "source": self.source, "chunk": chunk, "start_ms": start_ms, "end_ms": end_ms, "step": step,
+            "lang": a.lang, "text": a.decoded.text.text.trim(), "chars": a.decoded.text.text.trim().chars().count(),
+            "ratio": m.compression_ratio, "ratio_utf8": guards::compression_ratio_utf8(a.decoded.text.text.trim()),
+            "avg_logprob": m.avg_logprob, "no_speech_prob": m.no_speech_prob, "speech_ratio": m.speech_ratio,
+            "truncated": a.decoded.truncated, "verdict": format!("{v:?}"),
+        });
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+            let _ = writeln!(f, "{line}");
+        }
+    }
+}
+
+/// The result for one half of a chunk in retry step (b).
+enum Half {
+    Text(Box<Attempt>, Metrics),
+    Failed(Failure),
+    /// Not speech (under 30% speech, or the model says so): nothing to emit.
+    Silent,
+}
+
+/// What every segment of one chunk shares.
+struct ChunkCtx<'a> {
+    unit: u32,
+    chunk_no: u32,
+    det: &'a Detection,
+    locked: bool,
+    multi: bool,
+    chose_both: bool,
+    context_chars: usize,
+}
+
+impl ChunkCtx<'_> {
+    fn lang_prob(&self, lang: &str) -> f32 {
+        if self.locked || self.det.probs.is_empty() || !self.multi {
+            1.0
+        } else {
+            self.det.prob_of(lang)
+        }
+    }
+
+    fn detection(&self) -> Vec<LangProb> {
+        self.det
+            .probs
+            .iter()
+            .map(|(l, p)| LangProb { lang: l.clone(), prob: *p })
+            .collect()
+    }
+}
+
+/// Emits the text of a decode that passed the guards (no event for an empty text).
+#[allow(clippy::too_many_arguments)]
+fn emit_text(
+    sink: &mut Sink<'_>,
+    summary: &mut DoneSummary,
+    context: &mut BTreeMap<String, String>,
+    cx: &ChunkCtx<'_>,
+    a: &Attempt,
+    m: &Metrics,
+    start_ms: u64,
+    end_ms: u64,
+    retried: bool,
+) -> Result<()> {
+    let t = a.decoded.text.text.trim().to_string();
+    if t.is_empty() {
+        return Ok(());
+    }
+    let mut flags: Vec<SegmentFlag> = Vec::new();
+    if a.decoded.text.is_broken() {
+        flags.push(SegmentFlag::BrokenUtf8);
+        out::warn(
+            "broken_utf8",
+            format!(
+                "chunk {}: the model output ended inside a character; the incomplete bytes were dropped",
+                cx.chunk_no
+            ),
+        );
+    }
+    if retried {
+        flags.push(SegmentFlag::Retried);
+    }
+    flags.extend(guards::flags(&t, &a.lang, &a.counts));
+    let flagged = flags.iter().any(|f| {
+        matches!(
+            f,
+            SegmentFlag::Repetition
+                | SegmentFlag::SilencePhrase
+                | SegmentFlag::WrongScript
+                | SegmentFlag::CompressionRatio
+        )
+    });
+    sink.send(&Event::Segment(SegmentEvent {
+        unit: cx.unit,
+        chunk: cx.chunk_no,
+        start_ms,
+        end_ms,
+        text: t.clone(),
+        lang: a.lang.clone(),
+        lang_prob: cx.lang_prob(&a.lang),
+        mixed: text::is_mixed(&a.counts),
+        dir: text::direction(&a.counts).to_string(),
+        avg_logprob: m.avg_logprob,
+        no_speech_prob: m.no_speech_prob,
+        compression_ratio: m.compression_ratio,
+        model: a.model_id.clone(),
+        decoded_both_ways: cx.chose_both,
+        detection: cx.detection(),
+        flags,
+        truncated: a.decoded.truncated,
+    }))?;
+    summary.segments += 1;
+    if retried {
+        summary.retried_chunks += 1;
+    }
+    if flagged {
+        context.remove(&a.lang);
+    } else {
+        let entry = context.entry(a.lang.clone()).or_default();
+        entry.push(' ');
+        entry.push_str(&t);
+        *entry = tail_chars(entry.trim(), cx.context_chars);
+    }
+    Ok(())
+}
+
+/// A stretch that failed the whole retry ladder: a segment with its times, the flag `unclear` and no
+/// text, so review shows the gap. Never a silent loss (PLAN section 6).
+#[allow(clippy::too_many_arguments)]
+fn emit_unclear(
+    sink: &mut Sink<'_>,
+    summary: &mut DoneSummary,
+    context: &mut BTreeMap<String, String>,
+    cx: &ChunkCtx<'_>,
+    lang: &str,
+    model_id: &str,
+    failure: Failure,
+    start_ms: u64,
+    end_ms: u64,
+) -> Result<()> {
+    out::warn(
+        "chunk_unclear",
+        format!(
+            "chunk {} ({start_ms} to {end_ms} ms) could not be decoded cleanly after the retries ({failure:?}); emitted as unclear with no text",
+            cx.chunk_no
+        ),
+    );
+    sink.send(&Event::Segment(SegmentEvent {
+        unit: cx.unit,
+        chunk: cx.chunk_no,
+        start_ms,
+        end_ms,
+        text: String::new(),
+        lang: lang.to_string(),
+        lang_prob: cx.lang_prob(lang),
+        mixed: false,
+        dir: "auto".to_string(),
+        avg_logprob: 0.0,
+        no_speech_prob: 0.0,
+        compression_ratio: 0.0,
+        model: model_id.to_string(),
+        decoded_both_ways: false,
+        detection: cx.detection(),
+        flags: vec![
+            SegmentFlag::Unclear,
+            match failure {
+                Failure::Loop => SegmentFlag::CompressionRatio,
+                Failure::TokenLimit => SegmentFlag::Truncated,
+            },
+        ],
+        truncated: failure == Failure::TokenLimit,
+    }))?;
+    summary.segments += 1;
+    summary.unclear_chunks += 1;
+    if failure == Failure::TokenLimit {
+        summary.truncated_chunks += 1;
+    }
+    context.remove(lang);
+    Ok(())
+}
+
 pub struct Sink<'a> {
     pub emit: &'a mut dyn FnMut(&Event) -> std::io::Result<()>,
 }
@@ -154,7 +395,10 @@ pub fn run(
         audio_ms: 0,
         truncated_chunks: 0,
         elapsed_s: 0.0,
+        retried_chunks: 0,
+        unclear_chunks: 0,
     };
+    let attempt_log = AttemptLog::new(&req.source);
     // Previous text per language, for the next chunk's prompt; reset after a flagged segment.
     let mut context: BTreeMap<String, String> = BTreeMap::new();
     let mut prev_lang: Option<String> = None;
@@ -264,107 +508,114 @@ pub fn run(
                 }
             }
 
-            let t = attempt.decoded.text.text.trim().to_string();
-            let counts = attempt.counts;
-            let ratio = guards::compression_ratio(&t);
-            let metrics = Metrics {
-                avg_logprob: attempt.decoded.avg_logprob,
-                no_speech_prob: attempt.decoded.no_speech_prob,
-                compression_ratio: ratio,
-                speech_ratio: c.speech_ratio() as f32,
+            let speech_ratio = c.speech_ratio() as f32;
+            let (start_abs, end_abs) = (abs(c.start_ms), abs(c.end_ms));
+            let (verdict, metrics) = judge(&attempt, speech_ratio);
+            attempt_log.record(chunk_no, start_abs, end_abs, "first", &attempt, &metrics, &verdict);
+            let cx = ChunkCtx {
+                unit: unit.index,
+                chunk_no,
+                det: &det,
+                locked: locked.is_some(),
+                multi,
+                chose_both,
+                context_chars: s.context_chars,
             };
-            let mut flags: Vec<SegmentFlag> = Vec::new();
-            if attempt.decoded.truncated {
-                flags.push(SegmentFlag::Truncated);
-                summary.truncated_chunks += 1;
-                out::warn(
-                    "truncated_chunk",
-                    format!(
-                        "chunk {chunk_no} ({} to {} ms) reached the token limit; its text may be cut",
-                        abs(c.start_ms),
-                        abs(c.end_ms)
-                    ),
-                );
-            }
-            if attempt.decoded.text.is_broken() {
-                flags.push(SegmentFlag::BrokenUtf8);
-                out::warn(
-                    "broken_utf8",
-                    format!(
-                        "chunk {chunk_no}: the model output ended inside a character; the incomplete bytes were dropped"
-                    ),
-                );
-            }
-            let dropped = guards::drop_reason(&metrics);
-            if let Some(reason) = dropped {
-                out::warn(
-                    "segment_dropped",
-                    format!(
-                        "chunk {chunk_no} ({} to {} ms) dropped by a guard: {reason:?} (compression ratio {:.2}, average log-probability {:.2}, no-speech {:.2}, speech share {:.2}, {} characters, {} words)",
-                        abs(c.start_ms),
-                        abs(c.end_ms),
-                        metrics.compression_ratio,
-                        metrics.avg_logprob,
-                        metrics.no_speech_prob,
-                        metrics.speech_ratio,
-                        t.chars().count(),
-                        t.split_whitespace().count()
-                    ),
-                );
-                // A dropped chunk must not poison the next prompt.
-                context.remove(&attempt.lang);
-            } else if !t.is_empty() {
-                flags.extend(guards::flags(&t, &attempt.lang, &counts));
-                let flagged = flags.iter().any(|f| {
-                    matches!(
-                        f,
-                        SegmentFlag::Repetition
-                            | SegmentFlag::SilencePhrase
-                            | SegmentFlag::WrongScript
-                            | SegmentFlag::CompressionRatio
-                    )
-                });
-                let prob = det.prob_of(&attempt.lang);
-                let lang_prob = if locked.is_some() || det.probs.is_empty() || !multi {
-                    1.0
-                } else {
-                    prob
-                };
-                let ev = SegmentEvent {
-                    unit: unit.index,
-                    chunk: chunk_no,
-                    start_ms: abs(c.start_ms),
-                    end_ms: abs(c.end_ms),
-                    text: t.clone(),
-                    lang: attempt.lang.clone(),
-                    lang_prob,
-                    mixed: text::is_mixed(&counts),
-                    dir: text::direction(&counts).to_string(),
-                    avg_logprob: metrics.avg_logprob,
-                    no_speech_prob: metrics.no_speech_prob,
-                    compression_ratio: ratio,
-                    model: attempt.model_id.clone(),
-                    decoded_both_ways: chose_both,
-                    detection: det
-                        .probs
-                        .iter()
-                        .map(|(l, p)| LangProb {
-                            lang: l.clone(),
-                            prob: *p,
-                        })
-                        .collect(),
-                    flags: flags.clone(),
-                    truncated: attempt.decoded.truncated,
-                };
-                sink.send(&Event::Segment(ev))?;
-                summary.segments += 1;
-                if flagged {
+            match verdict {
+                Verdict::Good => {
+                    emit_text(sink, &mut summary, &mut context, &cx, &attempt, &metrics, start_abs, end_abs, false)?;
+                }
+                Verdict::Skip(reason) => {
+                    out::warn(
+                        "segment_dropped",
+                        format!(
+                            "chunk {chunk_no} ({start_abs} to {end_abs} ms) is not speech and was dropped: {reason:?} (compression ratio {:.2}, average log-probability {:.2}, no-speech {:.2}, speech share {:.2})",
+                            metrics.compression_ratio,
+                            metrics.avg_logprob,
+                            metrics.no_speech_prob,
+                            metrics.speech_ratio
+                        ),
+                    );
+                    // A dropped chunk must not poison the next prompt.
                     context.remove(&attempt.lang);
-                } else {
-                    let entry = context.entry(attempt.lang.clone()).or_default();
-                    entry.push(' ');
-                    entry.push_str(&t);
-                    *entry = tail_chars(entry.trim(), s.context_chars);
+                }
+                Verdict::Fail(failure) => {
+                    // The retry ladder (PLAN section 6): (a) again without previous-text context, with
+                    // temperature fallback; (b) each half, cut at the deepest VAD pause, without context;
+                    // (c) only then a segment flagged `unclear`, with no text. Nothing is dropped silently.
+                    out::warn(
+                        "chunk_retry",
+                        format!(
+                            "chunk {chunk_no} ({start_abs} to {end_abs} ms) failed a guard ({failure:?}; compression ratio {:.2}, {} characters); retrying without previous-text context",
+                            metrics.compression_ratio,
+                            attempt.decoded.text.text.trim().chars().count()
+                        ),
+                    );
+                    let lang = attempt.lang.clone();
+                    let mut retry_req = req.clone();
+                    retry_req.settings.temperature_fallback = true;
+                    let no_context = BTreeMap::new();
+                    let step_a = decode(&mut models, &lang, chunk_pcm, &no_context, &retry_req, threads)?;
+                    let (va, ma) = judge(&step_a, speech_ratio);
+                    attempt_log.record(chunk_no, start_abs, end_abs, "a_no_context", &step_a, &ma, &va);
+                    if va == Verdict::Good {
+                        out::warn(
+                            "chunk_rescued",
+                            format!("chunk {chunk_no}: rescued by step a (decoded again without previous-text context)"),
+                        );
+                        emit_text(sink, &mut summary, &mut context, &cx, &step_a, &ma, start_abs, end_abs, true)?;
+                    } else if let Some(split_ms) = chunker::split_point_ms(&speech, c, &audio.pcm, 16_000) {
+                        let cut = ((split_ms.saturating_sub(c.start_ms)) as usize * 16).min(chunk_pcm.len());
+                        let halves = [(c.start_ms, split_ms, &chunk_pcm[..cut]), (split_ms, c.end_ms, &chunk_pcm[cut..])];
+                        let mut outcome: Vec<(u64, u64, Half)> = Vec::new();
+                        for (n, (a_ms, b_ms, pcm)) in halves.into_iter().enumerate() {
+                            let dur_s = (b_ms - a_ms) as f64 / 1000.0;
+                            let ratio = (chunker::speech_seconds(&speech, a_ms as f64 / 1000.0, b_ms as f64 / 1000.0)
+                                / dur_s.max(1e-9)) as f32;
+                            let half = if pcm.len() < 1_600 || ratio < guards::MIN_SPEECH_RATIO {
+                                Half::Silent
+                            } else {
+                                let d = decode(&mut models, &lang, pcm, &no_context, &retry_req, threads)?;
+                                let (vh, mh) = judge(&d, ratio);
+                                attempt_log.record(
+                                    chunk_no,
+                                    abs(a_ms),
+                                    abs(b_ms),
+                                    if n == 0 { "b_half1" } else { "b_half2" },
+                                    &d,
+                                    &mh,
+                                    &vh,
+                                );
+                                match vh {
+                                    Verdict::Good => Half::Text(Box::new(d), mh),
+                                    Verdict::Skip(_) => Half::Silent,
+                                    Verdict::Fail(f) => Half::Failed(f),
+                                }
+                            };
+                            outcome.push((a_ms, b_ms, half));
+                        }
+                        if outcome.iter().all(|(_, _, h)| matches!(h, Half::Failed(_))) {
+                            emit_unclear(sink, &mut summary, &mut context, &cx, &lang, &step_a.model_id, failure, start_abs, end_abs)?;
+                        } else {
+                            out::warn(
+                                "chunk_rescued",
+                                format!("chunk {chunk_no}: rescued by step b (cut at {} ms, each half decoded without context)", abs(split_ms)),
+                            );
+                            for (a_ms, b_ms, half) in outcome {
+                                match half {
+                                    Half::Text(d, m) => {
+                                        emit_text(sink, &mut summary, &mut context, &cx, &d, &m, abs(a_ms), abs(b_ms), true)?;
+                                    }
+                                    Half::Failed(f) => {
+                                        emit_unclear(sink, &mut summary, &mut context, &cx, &lang, &step_a.model_id, f, abs(a_ms), abs(b_ms))?;
+                                    }
+                                    Half::Silent => {}
+                                }
+                            }
+                        }
+                    } else {
+                        emit_unclear(sink, &mut summary, &mut context, &cx, &lang, &step_a.model_id, failure, start_abs, end_abs)?;
+                    }
                 }
             }
             let _ = lang_reason;

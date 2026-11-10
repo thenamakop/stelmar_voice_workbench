@@ -9,6 +9,11 @@ ur | 28.79 | 28.79 | 0.00 | 3.0 | PASS | 20 of 20 (100%) | 0 | 20 of 20 | 0 / 0
 
 gate (all three within 3.0 points, no broken text on either side): PASS
 
+LIMITATION (accepted by the owner, 10 Nov 2026): parity is proven with previous-text context OFF. With context ON it is verified for English only
+(20 of 20 utterances identical, below), because no reference tool can carry Hindi or Urdu context on Windows: whisper-cli's --prompt argument is
+corrupted by the ANSI command line for non-Latin text. The engine's own context path for Hindi and Urdu (UTF-8 through the library) is therefore not
+covered by a parity measurement; it is covered by the engine's own results (the Hinglish gate, and Phase 5, which scores every model through wb-engine batch).
+
 en: utterances whose text is not identical (id prefix, reference words, differing words, same chunks): none
 hi: utterances whose text is not identical (id prefix, reference words, differing words, same chunks): none
 ur: utterances whose text is not identical (id prefix, reference words, differing words, same chunks): none

@@ -17,7 +17,7 @@
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, Instant};
 
@@ -28,8 +28,8 @@ fn env(name: &str) -> PathBuf {
     PathBuf::from(std::env::var(name).unwrap_or_else(|_| panic!("{name} is not set")))
 }
 
-fn request(wav: &PathBuf, model: &PathBuf, vad: &PathBuf, threads: u32) -> BatchRequest {
-    let m = |id: &str, p: &PathBuf| ModelRef {
+fn request(wav: &Path, model: &Path, vad: &Path, threads: u32) -> BatchRequest {
+    let m = |id: &str, p: &Path| ModelRef {
         id: id.into(),
         path: p.to_string_lossy().into_owned(),
     };

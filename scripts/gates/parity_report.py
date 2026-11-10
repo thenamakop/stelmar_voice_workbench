@@ -94,6 +94,13 @@ def main() -> int:
         lines.append(f"{lang} | {wer_pct(sc):.2f} | {wer_pct(sw):.2f} | {diff:.2f} | {LIMIT} | {'PASS' if passed else 'FAIL'} | {ident} of {n} ({100 * ident / n:.0f}%) | {len(diffs)} | {same_chunks} of {n} | {bc} / {bw}")
         details.append((lang, n, ident, diffs, ident / n < 0.9))
     lines += ["", f"gate (all three within {LIMIT} points, no broken text on either side): {'PASS' if ok else 'FAIL'}", ""]
+    lines += [
+        "LIMITATION (accepted by the owner, 10 Nov 2026): parity is proven with previous-text context OFF. With context ON it is verified for English only",
+        "(20 of 20 utterances identical, below), because no reference tool can carry Hindi or Urdu context on Windows: whisper-cli's --prompt argument is",
+        "corrupted by the ANSI command line for non-Latin text. The engine's own context path for Hindi and Urdu (UTF-8 through the library) is therefore not",
+        "covered by a parity measurement; it is covered by the engine's own results (the Hinglish gate, and Phase 5, which scores every model through wb-engine batch).",
+        "",
+    ]
     for lang, n, ident, diffs, low in details:
         lines.append(f"{lang}: utterances whose text is not identical (id prefix, reference words, differing words, same chunks): "
                      + ("none" if not diffs else "; ".join(f"{i} ({r} words, {d} differ, {'same' if s else 'different'} chunks)" for i, r, d, s in diffs)))

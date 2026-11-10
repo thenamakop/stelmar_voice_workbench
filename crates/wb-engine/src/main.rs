@@ -451,6 +451,8 @@ fn cmd_chunks(args: &[String]) -> Result<(), Fail> {
         audio_ms: pcm.len() as u64 / 16,
         truncated_chunks: 0,
         elapsed_s: 0.0,
+        retried_chunks: 0,
+        unclear_chunks: 0,
     }))
     .map_err(|e| Fail { code: exit::ERROR, error_code: "io", message: e.to_string() })
 }

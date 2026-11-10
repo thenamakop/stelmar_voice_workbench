@@ -209,6 +209,54 @@ pub fn chunks(speech: &[Speech], samples: &[f32], rate: u32, p: &Params) -> Vec<
     out
 }
 
+/// Seconds of `speech` inside `[from_s, to_s]`.
+pub fn speech_seconds(speech: &[Speech], from_s: f64, to_s: f64) -> f64 {
+    speech
+        .iter()
+        .map(|s| (s.end_s.min(to_s) - s.start_s.max(from_s)).max(0.0))
+        .sum()
+}
+
+/// Where to cut a chunk in two when decoding it whole failed (PLAN section 6, retry step b): the middle
+/// of the longest VAD pause inside the chunk that leaves at least `MIN_HALF_S` and a fifth of the chunk
+/// on each side; if there is no such pause, the quietest 20 ms in the middle 60% of the chunk. Milliseconds
+/// on the same clock as the chunk. `None` for a chunk too short to split.
+pub fn split_point_ms(speech: &[Speech], chunk: &Chunk, samples: &[f32], rate: u32) -> Option<u64> {
+    const MIN_HALF_S: f64 = 0.5;
+    let start = chunk.start_ms as f64 / 1000.0;
+    let end = chunk.end_ms as f64 / 1000.0;
+    let dur = end - start;
+    if dur < 2.0 * MIN_HALF_S + 0.2 {
+        return None;
+    }
+    let margin = MIN_HALF_S.max(dur / 5.0);
+    let mut best: Option<(f64, f64)> = None; // (pause length, middle of the pause)
+    for w in speech.windows(2) {
+        let (a, b) = (w[0], w[1]);
+        let gap = b.start_s - a.end_s;
+        let mid = (a.end_s + b.start_s) / 2.0;
+        if gap <= 0.0 || mid - start < margin || end - mid < margin {
+            continue;
+        }
+        let better = match best {
+            None => true,
+            Some((g, m)) => {
+                gap > g + 1e-9
+                    || ((gap - g).abs() <= 1e-9
+                        && (mid - (start + end) / 2.0).abs() < (m - (start + end) / 2.0).abs())
+            }
+        };
+        if better {
+            best = Some((gap, mid));
+        }
+    }
+    let at = match best {
+        Some((_, mid)) => mid,
+        None => quietest_cut(samples, rate, start + 0.2 * dur, end - 0.2 * dur),
+    };
+    Some((at * 1000.0).round() as u64)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -366,6 +414,57 @@ mod tests {
         );
         assert_eq!(c.len(), 1);
         assert!(c[0].speech_ratio() > 0.8 && c[0].speech_ratio() <= 1.0);
+    }
+
+    #[test]
+    fn a_failed_chunk_is_split_at_its_longest_pause() {
+        let audio = audio(14.0, None);
+        let speech = [s(0.2, 4.0), s(4.3, 8.0), s(9.5, 13.8)];
+        let chunk = Chunk {
+            start_ms: 0,
+            end_ms: 14_000,
+            cut_inside_speech: false,
+            speech_s: 11.0,
+        };
+        // pauses: 0.3 s at 4.15 and 1.5 s at 8.75: the longer one wins.
+        assert_eq!(split_point_ms(&speech, &chunk, &audio, RATE), Some(8_750));
+    }
+
+    #[test]
+    fn a_pause_that_leaves_a_tiny_half_is_not_used() {
+        let audio = audio(10.0, None);
+        let speech = [s(0.1, 0.6), s(1.6, 9.9)];
+        let chunk = Chunk {
+            start_ms: 0,
+            end_ms: 10_000,
+            cut_inside_speech: false,
+            speech_s: 8.5,
+        };
+        // the only pause is at 1.1 s, under a fifth of the chunk from the start: fall back to the quietest
+        // moment in the middle 60% (the audio is quiet from 4.0 to 4.4 s here).
+        let quiet = self::audio(10.0, Some((4.0, 4.4)));
+        let at = split_point_ms(&speech, &chunk, &quiet, RATE).expect("split");
+        assert!((4_000..=4_400).contains(&at), "{at}");
+        let _ = audio;
+    }
+
+    #[test]
+    fn a_chunk_too_short_to_split_gives_none() {
+        let a = audio(1.0, None);
+        let chunk = Chunk {
+            start_ms: 0,
+            end_ms: 1_000,
+            cut_inside_speech: false,
+            speech_s: 0.9,
+        };
+        assert_eq!(split_point_ms(&[s(0.0, 1.0)], &chunk, &a, RATE), None);
+    }
+
+    #[test]
+    fn speech_seconds_counts_only_the_overlap() {
+        let sp = [s(1.0, 3.0), s(5.0, 6.0)];
+        assert!((speech_seconds(&sp, 2.0, 5.5) - 1.5).abs() < 1e-9);
+        assert_eq!(speech_seconds(&sp, 3.0, 5.0), 0.0);
     }
 }
 

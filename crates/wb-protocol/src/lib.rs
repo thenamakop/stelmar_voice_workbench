@@ -277,6 +277,13 @@ pub enum SegmentFlag {
     Truncated,
     /// Incomplete UTF-8 at the end of the model output was dropped.
     BrokenUtf8,
+    /// The first decode of the chunk failed a guard (a loop, or the token limit) and a retry gave this
+    /// text (without previous-text context; possibly one half of the chunk). PLAN section 6.
+    Retried,
+    /// The chunk could not be decoded cleanly even after the retries (a loop or the token limit every
+    /// time). The segment has its times and no text, so review shows the gap. It is never shown as a
+    /// caption and counts as lost speech (PLAN section 6).
+    Unclear,
 }
 
 /// One decoded segment, in audio order within its work unit.
@@ -296,6 +303,9 @@ pub struct SegmentEvent {
     pub dir: String,
     pub avg_logprob: f32,
     pub no_speech_prob: f32,
+    /// Script-independent compression ratio of the text (`wb_engine_core::guards::compression_ratio`: characters
+    /// per compressed byte, each distinct character first mapped to one byte so Devanagari and Urdu are not
+    /// inflated by UTF-8). Not whisper's own byte ratio.
     pub compression_ratio: f32,
     /// Model id that produced the text.
     pub model: String,
@@ -413,8 +423,16 @@ pub struct DoneSummary {
     pub segments: u32,
     pub chunks: u32,
     pub audio_ms: u64,
+    /// Chunks that ended as `unclear` because the token limit was reached on every attempt.
     pub truncated_chunks: u32,
     pub elapsed_s: f64,
+    /// Segments emitted with the `Retried` flag: the first decode of their chunk failed a guard and a retry
+    /// rescued the text (a chunk rescued by cutting it in two counts once per half).
+    #[serde(default)]
+    pub retried_chunks: u32,
+    /// Chunks or halves of chunks emitted as `unclear` (no text) after the whole retry ladder.
+    #[serde(default)]
+    pub unclear_chunks: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -667,6 +685,8 @@ mod tests {
                 audio_ms: 20_000,
                 truncated_chunks: 0,
                 elapsed_s: 4.0,
+                retried_chunks: 0,
+                unclear_chunks: 0,
             }),
         ];
         for e in events {

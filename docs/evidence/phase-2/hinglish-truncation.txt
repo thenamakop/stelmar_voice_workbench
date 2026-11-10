@@ -1,4 +1,35 @@
-Hinglish on 20 CoSHE-Eval clips through wb-engine batch (Phase 2, 10 Nov 2026)
+Hinglish on 20 CoSHE-Eval clips through wb-engine batch (Phase 2, 10 Nov 2026): two runs, newest first
+
+=== RUN 2 (23:07 IST): after the guard change of PLAN section 6 (script-independent loop measure, retry ladder, no silent loss) ===
+
+Gate (docs/GATES.md, 5a to 2): 0 truncated and 0 broken utterances; an `unclear` chunk counts as truncated. RESULT: FAIL (broken 0; truncated 2 of 20 clips: audio_1444 and audio_908; unclear chunks 1, in audio_908). Not re-run, engine not changed, as agreed (one re-run).
+
+Setup: as run 1 (Legion native, 8 threads, wb-engine 0.1.0 avx2, whisper.cpp v1.9.5 commit d1be6fde11ac, model hinglish-q5_0, role night, language given per clip, the same 20 clips), engine rebuilt with the ladder and loop threshold 2.64 (docs/evidence/phase-2/guard-calibration.txt). Track B idle, overlay tools closed, no build running. The development attempt log (WB_ATTEMPT_LOG, scratch folder only) was on, to name the ladder step per chunk.
+
+Result (eval/run.py, phase2-wb-hinglish-q5_0-coshe)
+- WER 16.0, CER 11.7. This is the engine's reference number; run 1's 18.1 is not comparable (it lost chunks) and 5a's 11.6 (whisper-cli) is not comparable either (its previous-text prompt was corrupted, see wer-parity.txt).
+- Broken (U+FFFD) utterances: 0. Truncated utterances by the harness's rule (under 0.7 hypothesis words per reference word, or 20 or more reference words deleted in a row): 2: audio_1444 (115 of 167 reference words, a 32-word deleted stretch) and audio_908 (166 of 196 words). Unclear chunks: 1.
+- Speed (information, not comparable with run 1): RTF 3.71 here against 3.09 in run 1. The ladder decodes a failed chunk up to three more times (4 chunks needed them) and the attempt log writes a line per decode, so this is not a clean speed number; speed decisions use wb-engine bench (speed tables).
+
+Chunks that failed the first decode (4 of 101 chunks) and what the ladder did
+| clip | chunk (ms) | first decode | step a (no context, temperature fallback) | step b (split at the deepest pause, halves without context) | outcome |
+| audio_37 | 90 to 13,350 | loop, ratio 6.29, token limit | same text, still a loop | both halves good (1.31, 1.34) | rescued by step b |
+| audio_908 | 32,610 to 46,730 | loop, ratio 3.40, token limit | same text, still a loop | both halves good (1.36, 1.30) | rescued by step b |
+| audio_1355 | 0 to 14,760 | token limit, ratio 1.45 | same text, still at the token limit | both halves good (1.36, 1.18) | rescued by step b |
+| audio_908 | 25,050 to 32,610 | loop, ratio 2.74 | same text, still a loop | first half (25,050 to 29,872) still a loop (2.82), second half good (0.78) | first half becomes an `unclear` segment (no text); second half kept |
+- Step a rescued no chunk: without previous-text context the decode was identical, so it costs a decode and gains nothing on these loops. It stays in the ladder as the owner specified; Phase 5 can show whether it ever helps.
+- The three clips of run 1: audio_1444 had no guard event this time (its chunk with ratio 1.77 on the new measure, 2.78 on the old, is kept); audio_37 is now complete (WER 24.4); audio_908 lost 4.8 s (25.05 to 29.87 s) as an `unclear` segment.
+- No chunk was dropped without an event: 0 `segment_dropped` warnings for loops; 4 `chunk_retry`, 4 `chunk_rescued` (three whole chunks and the good half of the fourth), 1 `chunk_unclear`.
+
+Why the gate still fails
+1. audio_908: one half chunk (4.8 s) is a repetition loop that survives every step; it is marked `unclear`, as designed, and counts as truncated. Its WER is 96%: besides the lost stretch, the model writes the English words of this talk in Devanagari ("transliteration") while the CoSHE-Eval reference writes them in Latin, so most words differ.
+2. audio_1444: not a guard problem. Chunk 14,490 to 28,740 ms (14 s, 69% speech) came out as 43 characters; the hypothesis lacks a 32-word stretch of the reference in that region. The model is confident (average log-probability -0.09), the ratio is 0.80, so no guard fires. A decode with previous-text context off (capture_attempts.py --no-context) gives the same 43 characters, so context is not the cause. 5a's whisper-cli run did not show this clip as truncated, but it cut the chunks differently. Not diagnosed further.
+
+Proposal (not implemented; a new guard changes PLAN section 6 and needs approval): flag a chunk with far fewer words than its speech duration allows (for example under 0.5 words per second of speech where the same clip's other chunks run above 2), and run the same ladder on it. I have not calibrated such a rule; it would need the same distribution work as the loop threshold.
+
+Reading of the WER: the Latin-versus-Devanagari convention of CoSHE-Eval versus this model affects every clip with English speech. It is a property of the reference, not of the guard, and Phase 5's script-aware normalisation is where it belongs; I have not changed the normaliser.
+
+=== RUN 1 (as first committed, 6bf9a5b) ===
 
 Gate (docs/GATES.md, 5a to 2): 0 truncated and 0 broken utterances. RESULT: FAIL (broken 0, truncated 3). Stopped; not re-run, engine not changed.
 
