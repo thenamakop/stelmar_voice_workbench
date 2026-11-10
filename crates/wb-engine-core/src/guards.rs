@@ -112,7 +112,6 @@ const SILENCE_PHRASES: &[&str] = &[
     "like and subscribe",
     "subscribe to my channel",
     "subtitles by the amara.org community",
-    "subtitles by",
     "see you in the next video",
     "देखने के लिए धन्यवाद",
     "वीडियो देखने के लिए धन्यवाद",
@@ -121,12 +120,16 @@ const SILENCE_PHRASES: &[&str] = &[
     "دیکھنے کے لیے شکریہ",
 ];
 
+/// Credits whisper models write over music or silence; any text that starts with one is a hallucination.
+const SILENCE_PREFIXES: &[&str] = &["subtitles by", "subtitled by", "transcribed by", "translated by"];
+
 pub fn is_silence_phrase(text: &str) -> bool {
     let t: String = text
         .trim()
         .trim_matches(|c: char| c.is_ascii_punctuation() || c == '।' || c == '۔' || c.is_whitespace())
         .to_lowercase();
-    !t.is_empty() && SILENCE_PHRASES.iter().any(|p| t == *p || (p.len() > 12 && t.starts_with(p)))
+    !t.is_empty()
+        && (SILENCE_PHRASES.contains(&t.as_str()) || SILENCE_PREFIXES.iter().any(|p| t.starts_with(p)))
 }
 
 /// Flags to attach to a kept segment (they are not reasons to drop it).

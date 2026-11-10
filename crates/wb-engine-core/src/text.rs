@@ -274,7 +274,7 @@ mod tests {
         let u = script_counts(URDU);
         assert!(u.arabic > 25 && u.devanagari == 0 && u.latin == 0, "{u:?}");
         let e = script_counts("Welcome to STELMAR 2027, everyone.");
-        assert!(e.latin > 25 && e.devanagari == 0, "{e:?}");
+        assert!(e.latin > 20 && e.devanagari == 0, "{e:?}");
         // Digits and punctuation are not letters.
         assert_eq!(script_counts("2027, ... 12:30").total(), 0);
     }

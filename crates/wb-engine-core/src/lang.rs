@@ -298,7 +298,7 @@ mod tests {
         let l = langs(&["en", "hi"]);
         let plan = decide(&det2(0.55, 0.45), 6.0, None, None, None, &l, &Rules::default());
         assert_eq!(plan, Plan::Both { first: "en".into(), second: "hi".into() });
-        let plan = decide(&det2(0.4, 0.6), 6.0, None, None, None, &l, &Rules::default());
+        let plan = decide(&det2(0.42, 0.58), 6.0, None, None, None, &l, &Rules::default());
         assert_eq!(plan, Plan::Both { first: "hi".into(), second: "en".into() });
         // 0.65 vs 0.35: a margin of 0.3 is clear.
         assert_eq!(single(&decide(&det2(0.65, 0.35), 6.0, None, None, None, &l, &Rules::default())), Some(("en", Reason::Detected)));

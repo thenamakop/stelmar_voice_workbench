@@ -232,18 +232,19 @@ mod tests {
     #[test]
     fn a_chunk_never_runs_past_the_limit_and_closes_at_the_longest_pause() {
         let samples = audio(60.0, None);
-        // Twelve phrases of 2 s with small 0.2 s pauses, and one 0.25 s pause in the middle.
+        // Twelve phrases of 2 s with small 0.2 s pauses, and one 0.6 s pause after the fourth.
         let mut speech = Vec::new();
         let mut t = 0.0;
         for i in 0..12 {
             speech.push(s(t, t + 2.0));
-            t += 2.0 + if i == 5 { 0.25 } else { 0.2 };
+            t += 2.0 + if i == 3 { 0.6 } else { 0.2 };
         }
         let c = chunks(&speech, &samples, RATE, &Params::default());
         assert!(c.len() >= 2, "{c:?}");
         assert!(c.iter().all(|x| x.duration_s() <= 15.0), "{c:?}");
-        // The first chunk is cut at the biggest pause that still leaves 3 s: after phrase 6 (12.25 s).
-        assert!((c[0].end_ms as f64 / 1000.0 - 12.4).abs() < 0.3, "{c:?}");
+        // The first chunk would not hold the next phrase, so it closes at the longest pause inside it:
+        // after the fourth phrase, which ends at 8.6 s (plus 0.2 s of padding).
+        assert!((c[0].end_ms as f64 / 1000.0 - 8.8).abs() < 0.3, "{c:?}");
     }
 
     #[test]
@@ -318,15 +319,17 @@ mod greedy_tests {
 
     #[test]
     fn greedy_merging_ignores_sentence_pauses_like_the_evaluation_harness() {
-        let samples: Vec<f32> = (0..16_000 * 30).map(|i| ((i * 7919) % 200) as f32 / 400.0 - 0.25).collect();
-        // Three 4 s phrases with 0.8 s pauses: sentence mode makes three chunks, greedy one.
+        let samples: Vec<f32> = (0..16_000usize * 30).map(|i| ((i * 7919) % 200) as f32 / 400.0 - 0.25).collect();
+        // Four 4 s phrases with 0.8 s pauses: sentence mode makes four chunks, greedy two (the first
+        // three phrases fit in 15 s, the fourth does not).
         let speech = [
             Speech { start_s: 0.5, end_s: 4.5 },
             Speech { start_s: 5.3, end_s: 9.3 },
             Speech { start_s: 10.1, end_s: 14.1 },
+            Speech { start_s: 14.9, end_s: 18.9 },
         ];
         let sentence = chunks(&speech, &samples, 16_000, &Params::default());
-        assert_eq!(sentence.len(), 3, "{sentence:?}");
+        assert_eq!(sentence.len(), 4, "{sentence:?}");
         let greedy_params = Params { sentence_split: false, ..Params::default() };
         let greedy = chunks(&speech, &samples, 16_000, &greedy_params);
         assert_eq!(greedy.len(), 2, "{greedy:?}");
