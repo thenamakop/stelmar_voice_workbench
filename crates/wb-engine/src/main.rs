@@ -7,6 +7,8 @@
 //! wb-engine batch --request FILE
 //! wb-engine batch --file WAV --models en=medium,hi=hindi-medium --langs en,hi --out FILE.jsonl
 //!                 [--settings JSON] [--threads N] [--device cpu|gpu:N] [--models-dir DIR]
+//! wb-engine chunks --file WAV --out CHUNKS.json [--max-chunk-s 15] [--greedy] [--models-dir DIR]
+//!                 (the VAD chunks batch would decode, without any model: for labelling)
 //! wb-engine live  --request FILE        (16 kHz mono f32 PCM on stdin)
 //! ```
 //!
@@ -413,6 +415,43 @@ fn cmd_bench(args: &[String]) -> Result<(), Fail> {
     })
 }
 
+/// `chunks`: the chunks `batch` would decode for a file, from the VAD alone (no model, no language
+/// detection). The code-switching gate fixes its chunks with this before anyone labels them.
+fn cmd_chunks(args: &[String]) -> Result<(), Fail> {
+    begin()?;
+    let file = args_value(args, "--file").ok_or_else(|| Fail::usage("--file WAV is required"))?;
+    let out_path = args_value(args, "--out").ok_or_else(|| Fail::usage("--out FILE.json is required"))?;
+    let dir = find_models_dir(args);
+    let vad_model = resolve_model(&dir, args_value(args, "--vad-model").unwrap_or("silero-v6.2.0"))?;
+    let max_chunk_s: f32 = args_value(args, "--max-chunk-s").and_then(|v| v.parse().ok()).unwrap_or(15.0);
+    let settings = Settings { max_chunk_s, ..Settings::default() };
+    let pcm = audio::read_wav_16k(Path::new(file)).map_err(|e| Fail::from_error(&e))?;
+    let mut vad = asr::Vad::load(&vad_model.path, 2).map_err(|e| Fail::from_error(&e))?;
+    let speech = vad.speech(&pcm, &settings).map_err(|e| Fail::from_error(&e))?;
+    let params = wb_engine_core::chunker::Params {
+        max_chunk_s: f64::from(max_chunk_s),
+        sentence_split: !args.iter().any(|a| a == "--greedy"),
+        ..Default::default()
+    };
+    let chunks = wb_engine_core::chunker::chunks(&speech, &pcm, 16_000, &params);
+    let list: Vec<serde_json::Value> = chunks
+        .iter()
+        .enumerate()
+        .map(|(i, c)| serde_json::json!({ "chunk": i, "start_ms": c.start_ms, "end_ms": c.end_ms, "speech_ratio": c.speech_ratio() }))
+        .collect();
+    let doc = serde_json::json!({ "file": file, "duration_ms": pcm.len() as u64 / 16, "chunks": list });
+    std::fs::write(out_path, serde_json::to_vec_pretty(&doc).map_err(|e| Fail::usage(e.to_string()))?)
+        .map_err(|e| Fail::usage(format!("cannot write {out_path}: {e}")))?;
+    out::emit(&Event::Done(wb_protocol::DoneSummary {
+        segments: 0,
+        chunks: chunks.len() as u32,
+        audio_ms: pcm.len() as u64 / 16,
+        truncated_chunks: 0,
+        elapsed_s: 0.0,
+    }))
+    .map_err(|e| Fail { code: exit::ERROR, error_code: "io", message: e.to_string() })
+}
+
 fn cmd_live(args: &[String]) -> Result<(), Fail> {
     begin()?;
     let req: LiveRequest = match read_request(args)? {
@@ -441,6 +480,7 @@ fn main() -> ExitCode {
         Some("batch") => cmd_batch(&args[1..]),
         Some("bench") => cmd_bench(&args[1..]),
         Some("live") => cmd_live(&args[1..]),
+        Some("chunks") => cmd_chunks(&args[1..]),
         Some(other) => Err(Fail::usage(format!(
             "unknown command '{other}' (info, bench, batch, live)"
         ))),

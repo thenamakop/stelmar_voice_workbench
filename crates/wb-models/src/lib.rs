@@ -16,7 +16,12 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 /// Where a model came from, exactly enough to fetch the same bytes again.
+///
+/// Written as `{"repo": ..., "revision": ...}` in `models/manifest.json`. The development-time
+/// `manifest.local.json` (written by `scripts/models/*.py`) keeps one string, `https://huggingface.co/<repo>@<revision>`,
+/// optionally followed by a note in brackets; that is read as the same two fields.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(from = "SourceRepr")]
 pub struct Source {
     /// For example `ggerganov/whisper.cpp` or `vasista22/whisper-hindi-medium`.
     #[serde(default)]
@@ -24,6 +29,40 @@ pub struct Source {
     /// The exact commit or revision of that repository.
     #[serde(default)]
     pub revision: String,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum SourceRepr {
+    Text(String),
+    Fields {
+        #[serde(default)]
+        repo: String,
+        #[serde(default)]
+        revision: String,
+    },
+}
+
+impl From<SourceRepr> for Source {
+    fn from(r: SourceRepr) -> Self {
+        match r {
+            SourceRepr::Fields { repo, revision } => Source { repo, revision },
+            SourceRepr::Text(t) => {
+                let head = t.split([' ', '(']).next().unwrap_or("");
+                let head = head.strip_prefix("https://huggingface.co/").unwrap_or(head);
+                match head.split_once('@') {
+                    Some((repo, rev)) => Source {
+                        repo: repo.to_string(),
+                        revision: rev.to_string(),
+                    },
+                    None => Source {
+                        repo: head.to_string(),
+                        revision: String::new(),
+                    },
+                }
+            }
+        }
+    }
 }
 
 /// How a converted or quantised file was made from its input.
@@ -482,5 +521,14 @@ mod tests {
         assert_eq!(c.deterministic, Some(true));
         assert_eq!(c.settings.get("quant").map(String::as_str), Some("q8_0"));
         assert!(m.find("missing").is_err());
+    }
+
+    #[test]
+    fn source_reads_both_the_object_and_the_local_string_form() {
+        let a: Source = serde_json::from_str(r#"{"repo":"ggerganov/whisper.cpp","revision":"5359861c"}"#).expect("object");
+        let b: Source = serde_json::from_str(r#""https://huggingface.co/ggerganov/whisper.cpp@5359861c""#).expect("string");
+        let c: Source = serde_json::from_str(r#""https://huggingface.co/vasista22/whisper-hindi-small@abc (convert-h5-to-ggml.py, then quantize)""#).expect("with note");
+        assert_eq!(a, b);
+        assert_eq!((c.repo.as_str(), c.revision.as_str()), ("vasista22/whisper-hindi-small", "abc"));
     }
 }

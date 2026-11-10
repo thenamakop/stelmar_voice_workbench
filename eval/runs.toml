@@ -25,7 +25,7 @@ setup = "medium"
 dataset = "fleurs-en"
 role = "rolling"
 engine = "whisper-cli"
-limit = 20
+limit = "eval/clips/phase2-verify-fleurs.txt"
 
 [[run]]
 name = "verify-cli-medium-fleurs-hi"
@@ -33,7 +33,7 @@ setup = "medium"
 dataset = "fleurs-hi"
 role = "rolling"
 engine = "whisper-cli"
-limit = 20
+limit = "eval/clips/phase2-verify-fleurs.txt"
 
 [[run]]
 name = "verify-cli-medium-fleurs-ur"
@@ -41,7 +41,7 @@ setup = "medium"
 dataset = "fleurs-ur"
 role = "rolling"
 engine = "whisper-cli"
-limit = 20
+limit = "eval/clips/phase2-verify-fleurs.txt"
 
 [[run]]
 name = "verify-wb-medium-fleurs-en"
@@ -49,7 +49,7 @@ setup = "medium"
 dataset = "fleurs-en"
 role = "rolling"
 engine = "wb-engine"
-limit = 20
+limit = "eval/clips/phase2-verify-fleurs.txt"
 needs = "phase-2"
 
 [[run]]
@@ -58,7 +58,7 @@ setup = "medium"
 dataset = "fleurs-hi"
 role = "rolling"
 engine = "wb-engine"
-limit = 20
+limit = "eval/clips/phase2-verify-fleurs.txt"
 needs = "phase-2"
 
 [[run]]
@@ -67,9 +67,10 @@ setup = "medium"
 dataset = "fleurs-ur"
 role = "rolling"
 engine = "wb-engine"
-limit = 20
+limit = "eval/clips/phase2-verify-fleurs.txt"
 needs = "phase-2"
 
+# The six verify-* runs read the 60 clip ids Phase 5a scored (20 per language) from a committed list.
 # The comparison is valid only when wb-engine bundles the same whisper.cpp version as whisper-cli
 # (eval/README.md); the table prints both versions.
 [[compare]]

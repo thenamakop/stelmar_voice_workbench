@@ -48,6 +48,9 @@ jobs:
       - name: Vendored whisper.cpp matches its pin
         run: pnpm check:vendor
 
+      - name: Model manifest holds metadata only and is not ignored
+        run: pnpm check:manifest
+
       - name: Every CMake option the engines depend on still exists in the vendored whisper.cpp
         shell: powershell
         run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-whisper-flags.ps1

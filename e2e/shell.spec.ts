@@ -36,6 +36,25 @@ test("first launch opens System with Run System Check disabled", async ({ page }
   expect(remote).toEqual([]);
 });
 
+test("System screen scrolled to the engines and models sections (screenshot)", async ({ page }) => {
+  const remote = watchRequests(page);
+  await page.goto("/e2e/index.html");
+  const models = page.getByText("Models", { exact: true }).first();
+  await expect(page.getByText("Speech engines", { exact: true })).toBeVisible();
+  await expect(models).toBeVisible();
+  await expect(page.getByText("READY").first()).toBeVisible();
+  await models.scrollIntoViewIfNeeded();
+  await page.evaluate(() => {
+    const el = [...document.querySelectorAll("*")].find(
+      (e) => e.scrollHeight > e.clientHeight + 40 && getComputedStyle(e).overflowY !== "visible",
+    );
+    if (el) el.scrollTop = el.scrollHeight;
+  });
+  await fontsReady(page);
+  await page.screenshot({ path: `${SCREENSHOT_DIR}/system-engines-models.png` });
+  expect(remote).toEqual([]);
+});
+
 test("Record screen renders Inter, IBM Plex Mono, Devanagari and Nastaliq from local files", async ({
   page,
 }) => {

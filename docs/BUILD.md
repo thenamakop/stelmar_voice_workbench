@@ -32,7 +32,17 @@ a backend line is missing.
 | `cuda` | `cuda` | the `avx2` flags | CUDA plus CPU |
 
 Outputs are `src-tauri\binaries\wb-engine-<variant>-x86_64-pc-windows-msvc.exe` (the name Tauri's `externalBin` expects), each built in
-its own target directory `target\engines\<variant>`. They are git-ignored.
+its own target directory `<TargetRoot>\<variant>`. They are git-ignored.
+
+**Target root: keep it short.** The default is `D:\wbt`. The Vulkan backend builds its shader generator as a nested CMake project;
+under the repository's own `target\...` path the compiler check inside it runs past Windows' 260-character path limit and fails with
+"No CMAKE_C_COMPILER could be found" (found 10 Nov 2026). Pass `-TargetRoot` to move it.
+
+**Optimisation flags.** The `cmake` crate that whisper-rs-sys uses replaces CMake's own release flags with the C compiler's flags
+minus every `/O` option, so a plain `cargo build --release` compiles ggml *without optimisation* (found 10 Nov 2026: a medium decode
+took 129 s for 10 s of audio, ten to seventeen times slower than whisper-cli). `build-engines.ps1` therefore sets
+`CMAKE_C_FLAGS_RELEASE` and `CMAKE_CXX_FLAGS_RELEASE` to `/O2 /Ob2 /DNDEBUG` and fails a build whose CMake cache lacks `/O2` or
+`/DNDEBUG`. Never build an engine for a measurement or for release by calling `cargo build` directly.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\build-engines.ps1                 # all four
@@ -70,6 +80,10 @@ Checks, all run by CI:
   renamed flag cannot silently drop a backend.
 * The engine's `build.rs` computes the same hash at build time and fails the build on a mismatch. `wb-engine info`, `bench` and `batch`
   print the whisper.cpp version, commit and tree hash they were built with.
+
+`whisper_version()` in the linked library returns `1.9.5-dev` for this commit (the tag is v1.9.5, the project version string in its
+CMake file is still the development one); the commit and the tree hash are what identify the code. The engine's `hello` line prints the
+tag (`v1.9.5`), `info` prints the library string, and both print the commit and the tree hash.
 
 To update the vendored copy: change the tag and commit in `scripts/vendor-whisper-cpp.ps1`, run it, put the new hash into
 `third_party/README.md`, and repeat the 3-WER comparison.
