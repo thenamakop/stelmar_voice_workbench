@@ -60,11 +60,13 @@ if (-not $Testbench) { $Testbench = Join-Path $repo 'target\release\wb-testbench
 if (-not $Emulate) { $Emulate = Join-Path $repo 'target\release\wb-emulate.exe' }
 Import-Module (Join-Path $repo 'scripts\lib\PsEnv.psm1') -Force
 Set-WbCleanPSModulePath
+Set-WbInvariantCulture
 Import-Module (Join-Path $repo 'scripts\lib\GateRun.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Redact.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\AppProcess.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Rig.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Fidelity.psm1') -Force
+Import-Module (Join-Path $repo 'scripts\lib\Detector.psm1') -Force
 foreach ($f in @($Exe, $Testbench, $Emulate)) { if (-not (Test-Path $f)) { throw "Missing $f; build it first (scripts\gates\build-gate.ps1)" } }
 
 function Q([string]$v) { ConvertTo-WbArg $v }
@@ -320,6 +322,17 @@ $lines += ("final: {0} parts, {1:n1} s of audio, mirror {2} files equal {3} (mir
 $lines += ("driver xruns (rule: one per run within 2 s of the stream start, reported not gated, only with zero loss and duplication): total {0}; excused at audio-time offsets {1} ms; problems: {2}" -f $xr.TotalXruns, ((@($xr.Excused) | ForEach-Object { [math]::Round($_.OffsetMs) }) -join ', '), $(if (@($xr.Problems).Count) { @($xr.Problems) -join '; ' } else { 'none' }))
 $lines += "parts.json check: $($r.PartsCheck | ConvertTo-Json -Compress)"
 $lines += Get-WbRigLines -Rig $r.Rig -Play $r.Play -Reference $r.Reference
+# Live detector check (Phase 2): shared upstream breaks against the repeated_block and zero_gap
+# events in session.json (all runs of the app, a kill restarts the recorder). Not gated.
+$sessionJson = Join-Path $r.SessionDir 'session.json'
+if ($r.Analysis -and (Test-Path -LiteralPath $sessionJson)) {
+  $sessionMeta = Get-Content -LiteralPath $sessionJson -Raw | ConvertFrom-Json
+  $detCheck = Get-WbDetectorMatches -Breaks @($rv.Breaks) -Analysis $r.Analysis -Events @($sessionMeta.events)
+  $lines += Get-WbDetectorLines -Check $detCheck -Rec $null
+  $lines += '  (position counters are per run of the app; the force-killed runs have no report, so none are given here)'
+} else {
+  $lines += 'live detector check: not available (no analysis or session.json for this run)'
+}
 $lines += Get-WbLateCallbackLines -Play $r.Play -BreakSourceMs @(@($r.Analysis.unmatched_ranges) | ForEach-Object { [double]$_.source_ms })
 $lines += "cable interference: $(if ($r.Interference.Count) { $r.Interference -join '; ' } else { 'none' })"
 $lines += $(if (@($r.CableDefaultRoles).Count -gt 0) { "default playback device: THE CABLE for $(@($r.CableDefaultRoles) -join ', ') (run with -AllowCableDefault: other sounds on this computer can reach the test signal)" } else { 'default playback device: not the cable (checked at start)' })

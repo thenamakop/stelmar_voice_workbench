@@ -28,6 +28,7 @@ $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 Import-Module (Join-Path $here '..\lib\PsEnv.psm1') -Force
 Set-WbCleanPSModulePath
+Set-WbInvariantCulture
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Log) | Out-Null
 
 function Write-Log([string]$Line) {

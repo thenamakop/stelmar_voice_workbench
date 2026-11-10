@@ -84,6 +84,30 @@ function Assert-WbRigPlacement {
   }
 }
 
+# The default CPU sets of a process (Windows CPU sets, set with SetProcessDefaultCpuSets; separate
+# from the affinity mask and easy to miss, so the evidence names both). Returns the logical
+# processors as 'none' (no set: the process may run anywhere its affinity allows) or a list such as
+# '12-13'. CPU set ids are 256 + the logical processor index on a system with one processor group,
+# which the Legion is.
+function Get-WbProcessCpuSets {
+  param([Parameter(Mandatory = $true)] [System.Diagnostics.Process]$Process)
+  try {
+    if (-not ('WbRig.CpuSets' -as [type])) {
+      Add-Type -Namespace WbRig -Name CpuSets -MemberDefinition '[System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)] public static extern bool GetProcessDefaultCpuSets(System.IntPtr process, uint[] ids, uint count, out uint required);'
+    }
+    $required = [uint32]0
+    $null = [WbRig.CpuSets]::GetProcessDefaultCpuSets($Process.Handle, $null, [uint32]0, [ref]$required)
+    if ($required -eq 0) { return 'none (all processors the affinity mask allows)' }
+    $ids = New-Object 'uint32[]' $required
+    if (-not [WbRig.CpuSets]::GetProcessDefaultCpuSets($Process.Handle, $ids, $required, [ref]$required)) { return 'unreadable (GetProcessDefaultCpuSets failed)' }
+    $mask = [uint64]0
+    foreach ($id in $ids) { if ($id -ge 256 -and $id -lt 256 + 64) { $mask = $mask -bor ([uint64]1 -shl [int]($id - 256)) } }
+    return (Format-WbLogicalList $mask)
+  } catch {
+    return "unreadable ($($_.Exception.Message))"
+  }
+}
+
 # Pins a running process to $Mask at HIGH priority class and reads both back, so the evidence
 # shows what the process really has (not what was asked for).
 function Set-WbRigPlacement {
@@ -101,6 +125,7 @@ function Set-WbRigPlacement {
     RequestedMask = $Mask
     Mask          = [uint64]$Process.ProcessorAffinity.ToInt64()
     Priority      = "$($Process.PriorityClass)"
+    CpuSet        = (Get-WbProcessCpuSets -Process $Process)
   }
 }
 
@@ -114,6 +139,7 @@ function Get-WbJobPlacement {
     RequestedMask = [uint64]0
     Mask          = [uint64]$app[0].ProcessorAffinity.ToInt64()
     Priority      = $null
+    CpuSet        = (Get-WbProcessCpuSets -Process $app[0])
   }
 }
 
@@ -184,7 +210,8 @@ function Get-WbRigLines {
     if ($p.Role -eq 'player' -and $Play -and (Test-WbHasProperty $Play 'affinity_mask') -and $Play.affinity_mask) { $own = "; the player itself reports $($Play.affinity_mask) at stream start" }
     if ($p.Role -eq 'reference capture' -and $Reference -and (Test-WbHasProperty $Reference 'affinity_mask') -and $Reference.affinity_mask) { $own = "; the reference capture itself reports $($Reference.affinity_mask) at stream start" }
     $prio = $(if ($p.Priority) { ", priority class $($p.Priority)" } else { '' })
-    $lines += "    $($p.Role): pid $($p.ProcessId), mask $(Format-WbMask $p.Mask) (logical processors $(Format-WbLogicalList $p.Mask))$prio$own"
+    $cpuset = $(if ((Test-WbHasProperty $p "CpuSet") -and $p.CpuSet) { "; CPU set $($p.CpuSet)" } else { "" })
+    $lines += "    $($p.Role): pid $($p.ProcessId), mask $(Format-WbMask $p.Mask) (logical processors $(Format-WbLogicalList $p.Mask))$prio$cpuset$own"
   }
   $lines += '    overlap: none (checked on the planned masks before anything started, and on the masks read back from the running processes)'
   if ($Rig.Plan -and $Rig.Plan.Note) { $lines += "    note: $($Rig.Plan.Note)" }
@@ -272,4 +299,4 @@ function Get-WbReferenceXrunLines {
   $lines
 }
 
-Export-ModuleMember -Function Get-WbReferenceXrunLines, ConvertFrom-WbMask, Format-WbMask, Format-WbLogicalList, Get-WbRigPlan, Assert-WbRigPlacement, Set-WbRigPlacement, Get-WbJobPlacement, Set-WbRigPins, Confirm-WbRigAgainstJob, Get-WbRigLines, Get-WbLateCallbackLines
+Export-ModuleMember -Function Get-WbReferenceXrunLines, ConvertFrom-WbMask, Format-WbMask, Format-WbLogicalList, Get-WbRigPlan, Assert-WbRigPlacement, Set-WbRigPlacement, Get-WbProcessCpuSets, Get-WbJobPlacement, Set-WbRigPins, Confirm-WbRigAgainstJob, Get-WbRigLines, Get-WbLateCallbackLines

@@ -27,6 +27,14 @@ function Set-WbCleanPSModulePath {
   if ($PSVersionTable.PSEdition -eq 'Desktop') { $env:PSModulePath = Get-WbWindowsPowerShellModulePath }
 }
 
+# Makes numbers in text follow the invariant culture for the rest of this thread. PowerShell's -f
+# operator uses the current culture, so on an en-IN machine 8776800 came out as 87,76,800 in the
+# gate evidence. Call it once at the top of every gate script, after Set-WbCleanPSModulePath.
+function Set-WbInvariantCulture {
+  [System.Threading.Thread]::CurrentThread.CurrentCulture = [System.Globalization.CultureInfo]::InvariantCulture
+  [System.Threading.Thread]::CurrentThread.CurrentUICulture = [System.Globalization.CultureInfo]::InvariantCulture
+}
+
 # Runs powershell.exe (Windows PowerShell 5.1) with the clean module path and returns its output
 # lines (stdout and stderr as text); $LASTEXITCODE is the child's exit code afterwards. The
 # caller's PSModulePath is restored.
@@ -47,4 +55,4 @@ function Invoke-WbWindowsPowerShell {
   $out
 }
 
-Export-ModuleMember -Function Get-WbWindowsPowerShellModulePath, Set-WbCleanPSModulePath, Invoke-WbWindowsPowerShell
+Export-ModuleMember -Function Get-WbWindowsPowerShellModulePath, Set-WbCleanPSModulePath, Set-WbInvariantCulture, Invoke-WbWindowsPowerShell

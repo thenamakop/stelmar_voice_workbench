@@ -56,6 +56,7 @@ $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 Import-Module (Join-Path $here 'lib\PsEnv.psm1') -Force
 Set-WbCleanPSModulePath
+Set-WbInvariantCulture
 if (-not $Exe) { $Exe = Join-Path $here '..\target\release\stelmar-voice-workbench.exe' }
 # The evidence folder defaults to the current phase's (from the branch name phase-<n>-...), never to
 # an earlier phase: an earlier phase's evidence must not be overwritten. Pass -OutDir to override.
