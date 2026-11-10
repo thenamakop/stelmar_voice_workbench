@@ -4,6 +4,7 @@ members = [
   "src-tauri",
   "crates/wb-protocol",
   "crates/wb-engine",
+  "crates/wb-machine",
   "crates/wb-recorder",
   "crates/wb-emulate",
   "crates/wb-testbench",
@@ -28,6 +29,7 @@ thiserror = "2"
 time = { version = "0.3", features = ["formatting", "parsing", "macros"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std", "ansi"] }
+wb-machine = { path = "crates/wb-machine" }
 wb-protocol = { path = "crates/wb-protocol" }
 wb-recorder = { path = "crates/wb-recorder" }
 # Same version as Tauri 2.11 uses, so the app links one copy. Features are chosen per crate; never

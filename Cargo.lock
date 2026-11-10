@@ -3048,8 +3048,10 @@ dependencies = [
  "tauri",
  "tauri-build",
  "thiserror 2.0.21",
+ "tokio",
  "tracing",
  "tracing-subscriber",
+ "wb-machine",
  "wb-recorder",
  "webview2-com",
  "windows 0.61.3",
@@ -4060,6 +4062,15 @@ version = "0.1.0"
 dependencies = [
  "serde_json",
  "wb-protocol",
+]
+
+[[package]]
+name = "wb-machine"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "windows 0.61.3",
 ]
 
 [[package]]
