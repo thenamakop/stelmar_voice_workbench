@@ -82,6 +82,27 @@ def write_wav(path: Path, frames: bytes, rate: int) -> None:
         w.writeframes(frames)
 
 
+CONTROL_RMS_DBFS = -26.0
+
+
+def to_level(frames: bytes, dbfs: float = CONTROL_RMS_DBFS) -> bytes:
+    """Scales 16-bit samples to a common RMS level. Most FLEURS English clips are recorded 55 to 70 dB
+    below full scale (median RMS 33 of 32768), which the VAD skips when loud speech comes before them;
+    a session is recorded at a sensible level, so the control levels every utterance the same way."""
+    import array
+    import math
+
+    s = array.array("h")
+    s.frombytes(frames)
+    if not s:
+        return frames
+    rms = math.sqrt(sum(x * x for x in s) / len(s))
+    if rms < 1:
+        return frames
+    g = min(10 ** (dbfs / 20) * 32768 / rms, 32767 / max(1, max(abs(x) for x in s)))
+    return array.array("h", (int(round(x * g)) for x in s)).tobytes()
+
+
 def bit_reversal_order(n: int) -> list[int]:
     """0..n-1 in van der Corput order: spread over the whole range, any prefix evenly covers it."""
     if n == 0:
@@ -102,8 +123,9 @@ def engine_chunks(wav: Path, out: Path) -> list[dict]:
 def engine_batch(wav: Path, out: Path, langs: str, models: str) -> list[dict]:
     out.parent.mkdir(parents=True, exist_ok=True)
     r = subprocess.run(
-        [str(ENGINE), "batch", "--file", str(wav), "--models", models, "--langs", langs, "--out", str(out)],
-        capture_output=True, text=True,
+        [str(ENGINE), "batch", "--file", str(wav), "--models", models, "--langs", langs, "--out", str(out),
+         "--settings", json.dumps({"sentence_split": True})],  # the chunks of a multi-language session; the same as `chunks`
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
     if r.returncode != 0:
         raise SystemExit(f"wb-engine batch failed ({r.returncode}): {r.stderr[-400:]}")
@@ -235,7 +257,7 @@ def cmd_score(a: argparse.Namespace) -> None:
         events_by_clip[clip] = engine_batch(set_dir / utt["audio"], scratch / f"batch-{clip}.jsonl", "en,hi", models)
     lines = [
         "Code-switching gate: per-chunk language against hand labels (Phase 2)",
-        f"engine: {ENGINE.name}; models: {models}; languages en,hi; clips {', '.join(selection['clips'])}; selection seed {selection['seed']}; rule: {selection['rule']}",
+        f"engine: {ENGINE.name}; models: {models}; languages en,hi; sentence_split on (the chunks the labeller heard come from the same chunker); clips {', '.join(selection['clips'])}; selection seed {selection['seed']}; rule: {selection['rule']}",
         "no audio and no transcript text in this file (CoSHE-Eval is CC BY-NC)",
         "",
         "n | clip | start-end ms | your label (main) | detected | prob | result",
@@ -301,6 +323,7 @@ def cmd_control(a: argparse.Namespace) -> None:
     for lang, u, d in order:
         f, r = read_wav(d / u["audio"])
         assert r == rate
+        f = to_level(f)
         spans.append({"lang": lang, "id": u["id"], "start_ms": pos * 1000 // rate, "end_ms": (pos + len(f) // 2) * 1000 // rate})
         frames += f + silence
         pos += len(f) // 2 + len(silence) // 2
@@ -310,7 +333,7 @@ def cmd_control(a: argparse.Namespace) -> None:
     segs = [e for e in events if e.get("event") == "segment"]
     lines = [
         "Code-switching control: 10 FLEURS utterances alternating English and Hindi, joined with 0.8 s of silence (Phase 2)",
-        f"engine: {ENGINE.name}; models: {a.models}; labels known by construction; no transcript text in this file",
+        f"engine: {ENGINE.name}; models: {a.models}; sentence_split on (as in a multi-language session); every utterance scaled to {CONTROL_RMS_DBFS:.0f} dBFS RMS first (peak limited), see to_level; labels known by construction; no transcript text in this file",
         "",
         "n | utterance | start-end ms | true | detected (the segment covering most of it) | prob | result",
     ]

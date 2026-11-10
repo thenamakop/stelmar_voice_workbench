@@ -1,0 +1,25 @@
+Code-switching gate: per-chunk language against hand labels (Phase 2)
+engine: wb-engine-avx2-x86_64-pc-windows-msvc.exe; models: en=medium,hi=medium; languages en,hi; sentence_split on (the chunks the labeller heard come from the same chunker); clips audio_1343, audio_147, audio_350; selection seed 20261110; rule: mixed reference, >= 25 s, 30% to 70% Latin words
+no audio and no transcript text in this file (CoSHE-Eval is CC BY-NC)
+
+n | clip | start-end ms | your label (main) | detected | prob | result
+1 | audio_1343 | 0-12975 | mixed (hi) | no segment | | MISS (nothing decoded for this chunk)
+2 | audio_350 | 23770-28415 | hi (hi) | hi | 1.00 | OK
+3 | audio_147 | 16830-25250 | mixed (en) | hi | 0.98 | WRONG
+4 | audio_1343 | 32145-46790 | mixed (hi) | hi | 0.93 | OK
+5 | audio_350 | 46780-53160 | mixed (en) | hi | 0.81 | WRONG
+6 | audio_147 | 49840-54600 | en (en) | hi | 0.68 | WRONG
+7 | audio_1343 | 19890-24910 | mixed (en) | hi | 0.79 | WRONG
+8 | audio_350 | 33080-40610 | mixed (hi) | hi | 0.99 | OK
+9 | audio_147 | 34450-43910 | mixed (hi) | hi | 1.00 | OK
+10 | audio_147 | 0-3550 | mixed (en) | en | 0.47 | OK
+
+result: 5 of 10 chunks match (1 of 2 pure, 4 of 8 mixed, scored against the main language); chunks with nothing decoded: 1
+mixed chunks in the sample: 8; chunks led by English 5, by Hindi 5; swaps made before detection: 0
+Hindi-led chunks that came back as English words only (translated): 0
+gate (at least 9 of 10 and no translated chunk): FAIL
+
+Analysis (11 Nov 2026, no re-run; one corrected run only after run 1 was found invalid, see codeswitch-labels-run1.txt)
+- Alignment: 9 of the 10 sampled chunks now line up with one engine segment of the same start and end. The one exception is n=1 (audio_1343, 0 to 12975 ms): the engine first decoded it as a loop and the retry ladder split it into two halves (0 to 9525 and 9525 to 12975 ms, both detected hi 0.94), so the scorer found no single segment (MISS). Credited as hi it would be correct, giving 6 of 10; the gate stays FAIL either way.
+- The 4 wrong results are all English-led chunks (3 mixed with main language English, 1 labelled pure English) detected as Hindi with probability 0.68 to 0.98; the 1 English-led chunk detected as English had probability 0.47. Hindi-led chunks: 4 of 4 correct (one more counted as MISS above would also be correct). Translated chunks: 0.
+- Cause not established; hypothesis only: stock medium restricted to en and hi leans to hi on Indian-accented English inside Hinglish speech. The PLAN section 5 rule that decodes both ways applies when the top two probabilities are within 0.2; the gaps on the 4 wrong chunks were 0.36 to 0.96, so it did not apply. No rule or model changed.

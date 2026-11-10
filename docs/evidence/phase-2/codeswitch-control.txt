@@ -1,0 +1,20 @@
+Code-switching control: 10 FLEURS utterances alternating English and Hindi, joined with 0.8 s of silence (Phase 2)
+engine: wb-engine-avx2-x86_64-pc-windows-msvc.exe; models: en=medium,hi=medium; sentence_split on (as in a multi-language session); every utterance scaled to -26 dBFS RMS first (peak limited), see to_level; labels known by construction; no transcript text in this file
+
+n | utterance | start-end ms | true | detected (the segment covering most of it) | prob | result
+1 | 6656552880161745727 | 0-7140 | en | en | 1.00 | OK
+2 | 1908329718103862127 | 7940-21500 | hi | hi | 1.00 | OK
+3 | 18050107333341461921 | 22300-31300 | en | en | 1.00 | OK
+4 | 9447740746764258022 | 32100-41160 | hi | hi | 1.00 | OK
+5 | 3664511950771966320 | 41960-50600 | en | en | 1.00 | OK
+6 | 12503699152033832615 | 51400-61180 | hi | hi | 0.99 | OK
+7 | 14836289886440749215 | 61980-70600 | en | en | 1.00 | OK
+8 | 15222281731797294936 | 71400-83100 | hi | en | 0.54 | WRONG
+9 | 6915474618514234246 | 83900-92180 | en | hi | 0.58 | WRONG
+10 | 11807096330378627515 | 92980-100660 | hi | hi | 1.00 | OK
+
+result: 8 of 10 utterances in the right language
+
+Analysis (11 Nov 2026)
+- The two wrong results (n=8 and n=9) are chunks that span two utterances: the chunker cut utterance 7 (English) at 67.76 s and joined its last 2.8 s to the start of utterance 8 (Hindi) in one chunk (67.76 to 79.97 s, decoded both ways, en 0.54 against hi 0.46), and joined the end of utterance 8 to utterance 9 in another (80.15 to 91.14 s, hi 0.58 against en 0.42). With the 0.8 s pauses of this construction a chunk can hold two utterances; a mixed chunk is not wrong in itself, so the control's score of 8 of 10 understates language identification on whole utterances (utterances 1 to 7 and 10: correct, probability 0.99 to 1.00).
+- Run 1 (superseded, codeswitch-control-run1.txt) scored 6 of 10 because 4 of the 5 English FLEURS clips are near silent (-58 to -69 dBFS; 444 of the 647 English clips in eval/data have an RMS under 100 of 32768) and the VAD skipped them after loud Hindi. This run scales every utterance to -26 dBFS RMS first.

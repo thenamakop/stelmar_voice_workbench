@@ -221,8 +221,11 @@ fn settings_from_harness(v: &serde_json::Value) -> Settings {
     if let Some(x) = get("flash_attn").and_then(|x| x.as_bool()) {
         s.flash_attn = x;
     }
-    // Single-language evaluation merges speech greedily, as the harness's whisper-cli path does.
-    s.sentence_split = false;
+    // Single-language evaluation merges speech greedily, as the harness's whisper-cli path does; the
+    // code-switching gate asks for sentence-sized chunks, as a multi-language session gets them.
+    s.sentence_split = get("sentence_split")
+        .and_then(|x| x.as_bool())
+        .unwrap_or(false);
     s
 }
 
