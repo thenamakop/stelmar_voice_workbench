@@ -444,6 +444,26 @@ pub fn run(
         load_s: models.load_s(),
     })?;
 
+    // A lock (Alt+1/2/3) to a language that no loaded model serves would abort the job on every restart.
+    // It is turned into a return to detection, with a warning, before any chunk is decoded.
+    let mut lang_log = req.lang_log.clone();
+    for entry in &mut lang_log {
+        let unserved = entry
+            .lang
+            .as_deref()
+            .filter(|l| models.index_for(l).is_err())
+            .map(str::to_string);
+        if let Some(l) = unserved {
+            sink.send(&Event::Warning {
+                code: "lock_ignored".into(),
+                message: format!(
+                    "the operator's lock to '{l}' at {} ms is ignored: no loaded model serves '{l}'; language detection is used from there",
+                    entry.audio_ms
+                ),
+            })?;
+            entry.lang = None;
+        }
+    }
     let s = &req.settings;
     let multi = req.languages.len() > 1 && req.detect_language;
     let params = Params {
@@ -495,7 +515,7 @@ pub fn run(
             detect_threads = 1;
         }
         for c in &todo {
-            let locked = lang::locked_language(&req.lang_log, abs(c.start_ms));
+            let locked = lang::locked_language(&lang_log, abs(c.start_ms));
             if !multi || locked.is_some() || c.duration_s() < 0.3 {
                 detections.push(None);
                 continue;
@@ -503,6 +523,13 @@ pub fn run(
             let idx = models.detector_index();
             let raw = models.loaded[idx].detect_languages(slice(c), detect_threads)?;
             detections.push(Some(Detection::restrict(&raw, &req.languages)));
+            // Detection of a whole unit can take longer than the supervisor's watchdog on a slow machine and
+            // nothing else is sent meanwhile: a heartbeat per chunk (the cursor does not move).
+            sink.send(&Event::Progress {
+                unit: unit.index,
+                committed_until_ms: req.resume_from_ms.max(unit.start_ms).min(unit.end_ms),
+                unit_end_ms: unit.end_ms,
+            })?;
         }
 
         // Second pass: decide, decode, guard, emit.
@@ -514,7 +541,7 @@ pub fn run(
             if chunk_pcm.len() < 1_600 {
                 continue; // under 100 ms: whisper.cpp refuses it
             }
-            let locked = lang::locked_language(&req.lang_log, abs(c.start_ms)).map(str::to_string);
+            let locked = lang::locked_language(&lang_log, abs(c.start_ms)).map(str::to_string);
             let det = detections[i]
                 .clone()
                 .unwrap_or_else(|| Detection::restrict(&[], &req.languages));

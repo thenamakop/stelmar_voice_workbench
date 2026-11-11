@@ -202,8 +202,9 @@ pub struct BatchRequest {
     /// from the last committed segment; nothing is repeated).
     #[serde(default)]
     pub resume_from_ms: u64,
-    /// Language detection per chunk. `false` decodes everything in `languages[0]` (a session with
-    /// one language, or the evaluation harness with the language given).
+    /// Language detection per chunk. `false` decodes everything in `languages[0]`, so it is only
+    /// valid with one language (a session with one language, or the evaluation harness with the
+    /// language given); the engine refuses several languages with detection off.
     #[serde(default = "yes")]
     pub detect_language: bool,
 }

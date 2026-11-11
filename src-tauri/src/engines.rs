@@ -428,7 +428,7 @@ pub fn refresh_models(registry: &Registry, state: &AppState) {
         let mut r = lock(&registry.inner);
         r.models_done = true;
         r.manifest_error =
-            Some("No models folder with a manifest.json was found next to the app.".into());
+            Some("No models folder with a manifest.json was found next to the app. Copy the model pack into the models folder, then run the system check again.".into());
         return;
     };
     let manifest = match Manifest::load(&dir.join("manifest.json")) {
@@ -521,6 +521,11 @@ pub fn list_engines(registry: tauri::State<'_, Registry>) -> RegistrySnapshot {
 /// Looks again (after a model pack was copied in, or an engine file was added).
 #[tauri::command]
 pub fn recheck_registry(app: tauri::AppHandle) {
+    // Hashing multi-GB model files reads the disk the recorder may be writing to: not while recording.
+    if crate::recording::is_recording(&app) {
+        tracing::info!("registry recheck refused while a session is recording");
+        return;
+    }
     start(&app);
 }
 

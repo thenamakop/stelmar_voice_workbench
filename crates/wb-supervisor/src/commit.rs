@@ -8,7 +8,7 @@
 //! defence, and counts it.
 
 use std::fs::{File, OpenOptions};
-use std::io::{BufRead, BufReader, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use wb_protocol::SegmentEvent;
@@ -24,37 +24,65 @@ pub struct Committer {
 
 impl Committer {
     /// Opens (creating) a JSONL file. An existing file is read to restore the cursor and the
-    /// count, and a torn last line (a write cut short by a crash) is cut off so appending resumes
-    /// on a clean line.
+    /// count. A torn LAST line (a write cut short by a crash) is cut off so appending resumes on a
+    /// clean line; a last line that parses but lacks its newline gets one. A line that does not
+    /// parse with more lines after it is NOT cut off (that would delete segments that were already
+    /// committed and fsynced): the file is refused with an `InvalidData` error.
     pub fn open(path: &Path) -> std::io::Result<Self> {
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir)?;
         }
         let mut committed = 0u64;
         let mut segments = 0u64;
-        let mut keep_bytes = 0u64;
+        let mut cut_at: Option<u64> = None;
+        let mut needs_newline = false;
         if path.is_file() {
-            let mut offset = 0u64;
-            for line in BufReader::new(File::open(path)?).split(b'\n') {
-                let bytes = line?;
-                let len = bytes.len() as u64 + 1;
-                match serde_json::from_slice::<SegmentEvent>(&bytes) {
+            let data = std::fs::read(path)?;
+            let mut offset = 0usize;
+            while offset < data.len() {
+                let (line, next, terminated) = match data[offset..].iter().position(|b| *b == b'\n') {
+                    Some(i) => (&data[offset..offset + i], offset + i + 1, true),
+                    None => (&data[offset..], data.len(), false),
+                };
+                if line.iter().all(u8::is_ascii_whitespace) {
+                    offset = next; // a blank line is not a segment and not damage
+                    continue;
+                }
+                match serde_json::from_slice::<SegmentEvent>(line) {
                     Ok(seg) => {
                         committed = committed.max(seg.end_ms);
                         segments += 1;
-                        offset += len;
-                        keep_bytes = offset;
+                        needs_newline = !terminated;
                     }
-                    Err(_) => break, // torn or foreign line: everything from here is cut off
+                    Err(e) => {
+                        if data[next..].iter().all(u8::is_ascii_whitespace) {
+                            cut_at = Some(offset as u64); // the last line is torn
+                        } else {
+                            return Err(std::io::Error::new(
+                                std::io::ErrorKind::InvalidData,
+                                format!(
+                                    "{}: a line at byte {offset} is not a segment ({e}) and more lines follow it; refusing to cut off committed segments",
+                                    path.display()
+                                ),
+                            ));
+                        }
+                        break;
+                    }
                 }
+                offset = next;
             }
-            if keep_bytes < std::fs::metadata(path)?.len() {
+            if let Some(keep) = cut_at {
                 let f = OpenOptions::new().write(true).open(path)?;
-                f.set_len(keep_bytes)?;
+                f.set_len(keep)?;
                 f.sync_all()?;
+                needs_newline = false;
             }
         }
-        let file = OpenOptions::new().create(true).append(true).open(path)?;
+        let mut file = OpenOptions::new().create(true).append(true).open(path)?;
+        if needs_newline {
+            file.write_all(b"\n")?;
+            file.sync_data()?;
+        }
         Ok(Self {
             path: path.to_path_buf(),
             file,
@@ -207,5 +235,66 @@ mod tests {
         for line in text.lines() {
             assert!(serde_json::from_str::<SegmentEvent>(line).is_ok(), "{line}");
         }
+    }
+
+    #[test]
+    fn a_bad_line_in_the_middle_refuses_the_file_and_cuts_nothing() {
+        let p = temp("middle");
+        {
+            let mut c = Committer::open(&p).expect("open");
+            c.commit(&seg(0, 3_000, "a")).expect("commit");
+        }
+        let mut f = OpenOptions::new().append(true).open(&p).expect("append");
+        // A line a newer protocol version wrote (or damage), followed by a good committed line.
+        f.write_all(b"{\"future\":true}\n").expect("write");
+        let mut good = serde_json::to_vec(&seg(3_000, 6_000, "b")).expect("json");
+        good.push(b'\n');
+        f.write_all(&good).expect("write");
+        drop(f);
+        let before = std::fs::read(&p).expect("read");
+        let err = match Committer::open(&p) {
+            Ok(_) => panic!("a mid-file bad line must refuse the file"),
+            Err(e) => e,
+        };
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+        assert_eq!(std::fs::read(&p).expect("read"), before, "nothing was cut off");
+    }
+
+    #[test]
+    fn a_last_line_without_its_newline_gets_one_before_the_next_append() {
+        let p = temp("no-newline");
+        {
+            let mut c = Committer::open(&p).expect("open");
+            c.commit(&seg(0, 3_000, "a")).expect("commit");
+        }
+        // Remove the trailing newline: the line still parses.
+        let mut bytes = std::fs::read(&p).expect("read");
+        assert_eq!(bytes.pop(), Some(b'\n'));
+        std::fs::write(&p, &bytes).expect("write");
+        let mut c = Committer::open(&p).expect("reopen");
+        assert_eq!((c.committed_until_ms(), c.segments()), (3_000, 1));
+        assert!(c.commit(&seg(3_000, 6_000, "b")).expect("commit"));
+        let text = std::fs::read_to_string(&p).expect("read");
+        assert_eq!(text.lines().count(), 2, "{text}");
+        for line in text.lines() {
+            assert!(serde_json::from_str::<SegmentEvent>(line).is_ok(), "{line}");
+        }
+    }
+
+    #[test]
+    fn a_torn_last_line_with_a_trailing_blank_is_still_cut() {
+        let p = temp("torn-blank");
+        {
+            let mut c = Committer::open(&p).expect("open");
+            c.commit(&seg(0, 3_000, "a")).expect("commit");
+        }
+        let mut f = OpenOptions::new().append(true).open(&p).expect("append");
+        f.write_all(b"{\"unit\":0,\"chu
+
+").expect("write");
+        drop(f);
+        let c = Committer::open(&p).expect("reopen");
+        assert_eq!((c.committed_until_ms(), c.segments()), (3_000, 1));
+        assert_eq!(std::fs::read_to_string(&p).expect("read").lines().count(), 1);
     }
 }

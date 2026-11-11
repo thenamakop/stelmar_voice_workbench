@@ -13,7 +13,7 @@
      (no development tools), under the emulation profile emu-low and natively:
        - `info` (expected exit 0; avx512 exits 3 on this CPU, as intended);
        - a short batch decode (a FLEURS English clip of 6 to 12 s, model small, 4 threads under emu-low,
-         8 natively) on the CPU, and for vulkan and cuda also on the first GPU device the run's `info` lists.
+         8 natively) on the CPU, and for vulkan and cuda also on every GPU device the run's `info` lists (natively the integrated GPU and the RTX; cuda is a development build, not shipped).
   3. While every engine process runs, it polls the sockets of the engine's whole process tree back to back (TCP
      connections, listeners, UDP endpoints; the evidence prints the measured mean interval) and records any that
      is not loopback; loopback ones are only counted. A listener or endpoint bound to 0.0.0.0 or :: is NOT
@@ -190,9 +190,10 @@ foreach ($v in $Variants) {
     $targets = @(@{ Name = 'cpu'; Arg = 'cpu' })
     if ($info -and $v -in @('vulkan', 'cuda')) {
       $want = $(if ($v -eq 'vulkan') { 'Vulkan' } else { 'CUDA' })
-      $gpu = @($info.devices | Where-Object { $_.backend -eq $want -and $_.kind -ne 'cpu' }) | Select-Object -First 1
-      if ($gpu) { $targets += @{ Name = "gpu:$($gpu.index) ($($gpu.description))"; Arg = "gpu:$($gpu.index)" } }
-      else { $lines += "   no $want device listed under $p : the GPU decode is skipped" }
+      # Every GPU the run's info lists for this backend (natively: the integrated GPU and the RTX).
+      $gpus = @($info.devices | Where-Object { $_.backend -eq $want -and $_.kind -ne 'cpu' })
+      foreach ($gpu in $gpus) { $targets += @{ Name = "gpu:$($gpu.index) ($($gpu.description))"; Arg = "gpu:$($gpu.index)" } }
+      if (-not $gpus.Count) { $lines += "   no $want device listed under $p : the GPU decode is skipped" }
     }
     foreach ($t in $targets) {
       $outFile = Join-Path $Root "batch-$v-$p-$($t.Arg -replace '[^a-z0-9]', '_').jsonl"

@@ -121,7 +121,7 @@ function Write-TableEvidence([string]$Table) {
   $lines += 'The Hinglish model is large-v3-sized: read its speed from the large-v3 q5_0 rows (the f16 model is slower and larger; the q5_0 Hinglish model is the same size as large-v3 q5_0).'
   $lines += ''
   $lines += 'Notes for Phase 3 (owner, 11 Nov 2026):'
-  $lines += '(a) The Intel UHD of the Legion is weaker than the integrated GPUs the room laptops are likely to have, so every UHD row is a FLOOR: a laptop with Iris Xe, Arc or a Radeon 680M/780M is expected to be at least as fast.'
+  $lines += '(a) The Intel UHD of the Legion is weaker than the integrated GPUs the room laptops are likely to have, so every UHD row is a FLOOR: a laptop with Iris Xe, Arc or a Radeon 680M/780M is expected to be at least as fast. The exception is the low-baseline laptop (basic integrated graphics): it may be SLOWER than the Legion UHD, so for it these rows are an estimate to be re-measured there, not a bound.'
   $lines += '(b) Hindi costs more to decode than English on the same hardware: in these tables the Hindi clip runs 1.3 to 4.4 times slower than the English clip (about 3 times for large-v3 q5_0 on the UHD: 0.51 against about 1.5). The two clips are different recordings, so part of the gap belongs to the clip. Phase 3 tiers must consider turbo or medium for Hindi on weak machines.'
   $lines += '(c) On the UHD, DXGI reports the integrated GPU''s memory as local (the shared figure stays 0.00). That memory is system RAM: Phase 3 counts it as RAM (AGENTS.md: integrated GPUs share RAM with the CPU).'
   New-Item -ItemType Directory -Force -Path $OutDir | Out-Null

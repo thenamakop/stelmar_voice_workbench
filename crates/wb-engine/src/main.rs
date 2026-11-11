@@ -355,6 +355,21 @@ fn cmd_info() -> Result<(), Fail> {
     })
 }
 
+/// Requests that cannot be decoded sensibly are refused (code "usage": a restart cannot fix them).
+fn check_request(req: &BatchRequest) -> Result<(), Fail> {
+    if req.languages.is_empty() {
+        return Err(Fail::usage(
+            "the request lists no languages: a batch needs the session's languages (for example en,hi)",
+        ));
+    }
+    if req.languages.len() > 1 && !req.detect_language {
+        return Err(Fail::usage(
+            "several languages with detection off is refused: it would force one language or decode every chunk both ways without saying so (PLAN section 5); turn detection on, or list one language",
+        ));
+    }
+    Ok(())
+}
+
 fn cmd_batch(args: &[String]) -> Result<(), Fail> {
     begin()?;
     let (req, out_path) = if args.iter().any(|a| a == "--request") {
@@ -372,6 +387,7 @@ fn cmd_batch(args: &[String]) -> Result<(), Fail> {
             args_value(args, "--out").map(PathBuf::from),
         )
     };
+    check_request(&req)?;
     let mut file = match &out_path {
         Some(p) => Some(BufWriter::new(File::create(p).map_err(|e| {
             Fail::usage(format!("cannot create {}: {e}", p.display()))
@@ -539,5 +555,52 @@ fn main() -> ExitCode {
             });
             ExitCode::from(f.code)
         }
+    }
+}
+
+#[cfg(test)]
+mod request_tests {
+    use super::*;
+    use std::collections::BTreeMap;
+
+    fn request(languages: &[&str], detect: bool) -> BatchRequest {
+        let m = ModelRef {
+            id: "small".into(),
+            path: "models/small.bin".into(),
+        };
+        BatchRequest {
+            source: Source::File {
+                path: "a.wav".into(),
+            },
+            units: Vec::new(),
+            models_by_lang: BTreeMap::from([("*".to_string(), m.clone())]),
+            vad_model: m,
+            languages: languages.iter().map(|s| (*s).to_string()).collect(),
+            lang_log: Vec::new(),
+            settings: Settings::default(),
+            device: Device::Cpu,
+            threads: 1,
+            resume_from_ms: 0,
+            detect_language: detect,
+        }
+    }
+
+    #[test]
+    fn an_empty_language_list_is_refused_and_a_restart_cannot_fix_it() {
+        let f = check_request(&request(&[], true)).expect_err("refused");
+        assert_eq!(f.error_code, "usage");
+    }
+
+    #[test]
+    fn several_languages_with_detection_off_is_refused() {
+        let f = check_request(&request(&["en", "hi"], false)).expect_err("refused");
+        assert_eq!(f.error_code, "usage");
+        assert!(f.message.contains("detection off"));
+    }
+
+    #[test]
+    fn one_language_without_detection_and_several_with_detection_are_accepted() {
+        assert!(check_request(&request(&["hi"], false)).is_ok());
+        assert!(check_request(&request(&["en", "hi", "ur"], true)).is_ok());
     }
 }

@@ -8,7 +8,8 @@ use wb_protocol::CpuReport;
 
 /// What each build variant needs.
 pub fn required_features(variant: &str) -> Vec<&'static str> {
-    let mut v = vec!["avx", "avx2", "fma", "f16c"];
+    // BMI2 too: the ggml CPU backend is built with it (GGML_BMI2 defaults on when GGML_NATIVE is off).
+    let mut v = vec!["avx", "avx2", "fma", "f16c", "bmi2"];
     if variant == "avx512" {
         v.extend(["avx512f", "avx512cd", "avx512vl", "avx512dq", "avx512bw"]);
     }
@@ -22,6 +23,7 @@ fn has(name: &str) -> bool {
         "avx2" => std::arch::is_x86_feature_detected!("avx2"),
         "fma" => std::arch::is_x86_feature_detected!("fma"),
         "f16c" => std::arch::is_x86_feature_detected!("f16c"),
+        "bmi2" => std::arch::is_x86_feature_detected!("bmi2"),
         "avx512f" => std::arch::is_x86_feature_detected!("avx512f"),
         "avx512cd" => std::arch::is_x86_feature_detected!("avx512cd"),
         "avx512vl" => std::arch::is_x86_feature_detected!("avx512vl"),
@@ -45,6 +47,7 @@ const REPORTED: &[&str] = &[
     "avx2",
     "fma",
     "f16c",
+    "bmi2",
     "avx512f",
     "avx512cd",
     "avx512vl",
