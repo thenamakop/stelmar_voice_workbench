@@ -45,6 +45,7 @@ Set-WbCleanPSModulePath
 Set-WbInvariantCulture
 Import-Module (Join-Path $repo 'scripts\lib\NetworkState.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Redact.psm1') -Force
+Import-Module (Join-Path $repo 'scripts\lib\ProcessTree.psm1') -Force
 $inv = [Globalization.CultureInfo]::InvariantCulture
 
 # ---- 1. The network must be off -------------------------------------------------------------
@@ -80,19 +81,6 @@ $clipRec = Get-Content (Join-Path $repo 'eval\data\fleurs-en\manifest.jsonl') -E
 $clip = Join-Path $repo ('eval\data\fleurs-en\' + ($clipRec.audio -replace '/', '\'))
 if (-not (Test-Path $clip)) { throw "test clip not found: $clip" }
 
-# Process tree of $RootPid (children, grandchildren, ...).
-function Get-Tree([int]$RootPid) {
-  $all = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Select-Object ProcessId, ParentProcessId)
-  $ids = New-Object System.Collections.Generic.HashSet[int]
-  [void]$ids.Add($RootPid)
-  $grew = $true
-  while ($grew) {
-    $grew = $false
-    foreach ($p in $all) { if ($ids.Contains([int]$p.ParentProcessId) -and $ids.Add([int]$p.ProcessId)) { $grew = $true } }
-  }
-  @($ids)
-}
-
 # Runs a command and watches its process tree for sockets. Returns exit code, output and the sockets.
 function Invoke-Watched([string]$File, [string[]]$ArgumentList, [string]$Tag) {
   $o = Join-Path $env:TEMP "wb-netoff-$Tag-$PID.out"
@@ -103,21 +91,39 @@ function Invoke-Watched([string]$File, [string[]]$ArgumentList, [string]$Tag) {
     $p = Start-Process -FilePath $File -ArgumentList $ArgumentList -PassThru -WindowStyle Hidden -RedirectStandardOutput $o -RedirectStandardError $e
   } finally { $env:PATH = $saved }
   $null = $p.Handle   # keeps the process handle open so ExitCode is readable after it exits
-  $nonLoop = @{}; $loopCount = 0; $polls = 0
+  $nonLoop = @{}; $excluded = @{}; $loopCount = 0; $polls = 0
   $loop = @('127.0.0.1', '::1', '0.0.0.0', '::')
   $watch = [Diagnostics.Stopwatch]::StartNew()
   while (-not $p.HasExited -and $watch.Elapsed.TotalSeconds -lt 900) {
-    $ids = @(Get-Tree $p.Id)
+    # One snapshot per poll; the tree is built from it with the creation-time rule (no parent-PID reuse), and the
+    # owner of every flagged socket is described from the same snapshot.
+    $snap = @(Get-WbProcessSnapshot)
+    $ids = @(Get-WbTreeIds -Processes $snap -RootPid $p.Id)
     $polls++
+    # Information only: sockets of processes the old rule (parent id alone) would have put in the tree and the
+    # creation-time rule leaves out. They are listed with their owners and do not count.
+    $oldIds = @(Get-WbTreeIds -Processes $snap -RootPid $p.Id -IgnoreCreationTime)
+    $extra = @($oldIds | Where-Object { $ids -notcontains $_ })
+    if ($extra.Count) {
+      foreach ($c in @(Get-NetTCPConnection -ErrorAction SilentlyContinue | Where-Object { $extra -contains $_.OwningProcess -and $_.RemoteAddress -notin $loop -and $_.State -ne 'Listen' })) {
+        $xk = "TCP $($c.RemoteAddress):$($c.RemotePort) $($c.State)"
+        if (-not $excluded.ContainsKey($xk)) { $excluded[$xk] = "$xk ; $(Get-WbOwnerDescription -Processes $snap -OwnerPid ([int]$c.OwningProcess)) ; engine tree root pid $($p.Id), started $(([datetime]$p.StartTime).ToString('HH:mm:ss.fff', $inv)); left out: created before its parent (the parent id was reused)" }
+      }
+    }
     foreach ($c in @(Get-NetTCPConnection -ErrorAction SilentlyContinue | Where-Object { $ids -contains $_.OwningProcess })) {
+      $key = $null
       if ($c.State -eq 'Listen') {
-        if ($c.LocalAddress -notin $loop) { $nonLoop["TCP listen $($c.LocalAddress):$($c.LocalPort)"] = $true } else { $loopCount++ }
+        if ($c.LocalAddress -notin $loop) { $key = "TCP listen $($c.LocalAddress):$($c.LocalPort)" } else { $loopCount++ }
       } elseif ($c.RemoteAddress -notin $loop) {
-        $nonLoop["TCP $($c.RemoteAddress):$($c.RemotePort) $($c.State)"] = $true
+        $key = "TCP $($c.RemoteAddress):$($c.RemotePort) $($c.State)"
       } else { $loopCount++ }
+      if ($key -and -not $nonLoop.ContainsKey($key)) { $nonLoop[$key] = "$key ; $(Get-WbOwnerDescription -Processes $snap -OwnerPid ([int]$c.OwningProcess)) ; engine tree root pid $($p.Id), started $(([datetime]$p.StartTime).ToString('HH:mm:ss.fff', $inv))" }
     }
     foreach ($u in @(Get-NetUDPEndpoint -ErrorAction SilentlyContinue | Where-Object { $ids -contains $_.OwningProcess })) {
-      if ($u.LocalAddress -notin $loop) { $nonLoop["UDP $($u.LocalAddress):$($u.LocalPort)"] = $true } else { $loopCount++ }
+      if ($u.LocalAddress -notin $loop) {
+        $key = "UDP $($u.LocalAddress):$($u.LocalPort)"
+        if (-not $nonLoop.ContainsKey($key)) { $nonLoop[$key] = "$key ; $(Get-WbOwnerDescription -Processes $snap -OwnerPid ([int]$u.OwningProcess)) ; engine tree root pid $($p.Id), started $(([datetime]$p.StartTime).ToString('HH:mm:ss.fff', $inv))" }
+      } else { $loopCount++ }
     }
     Start-Sleep -Milliseconds 100
   }
@@ -127,7 +133,7 @@ function Invoke-Watched([string]$File, [string[]]$ArgumentList, [string]$Tag) {
   $stdout = @(Get-Content $o -Encoding UTF8 -ErrorAction SilentlyContinue)
   $stderr = @(Get-Content $e -Encoding UTF8 -ErrorAction SilentlyContinue)
   Remove-Item $o, $e -Force -ErrorAction SilentlyContinue
-  [pscustomobject]@{ Exit = $p.ExitCode; Out = $stdout; Err = $stderr; NonLoopback = @($nonLoop.Keys | Sort-Object); LoopbackSamples = $loopCount; Polls = $polls; Seconds = $seconds }
+  [pscustomobject]@{ Exit = $p.ExitCode; Out = $stdout; Err = $stderr; NonLoopback = @($nonLoop.Keys | Sort-Object | ForEach-Object { $nonLoop[$_] }); Excluded = @($excluded.Keys | Sort-Object | ForEach-Object { $excluded[$_] }); LoopbackSamples = $loopCount; Polls = $polls; Seconds = $seconds }
 }
 
 function Get-Events($Lines) { @($Lines | Where-Object { $_ -match '^\{' } | ForEach-Object { try { $_ | ConvertFrom-Json } catch { $null } } | Where-Object { $_ }) }
@@ -173,6 +179,7 @@ foreach ($v in $Variants) {
     if ($r.NonLoopback.Count) { $problems += "$v/$p info: non-loopback sockets: $($r.NonLoopback -join '; ')" }
     $lines += "-- $p info : exit code $($r.Exit) (expected $expect)$(if ($okInfo) { ' ok' } else { ' WRONG' }); $($r.Seconds) s; sockets of the process tree: non-loopback $($r.NonLoopback.Count), loopback samples $($r.LoopbackSamples), polls $($r.Polls)"
     foreach ($s in $r.NonLoopback) { $lines += "   NON-LOOPBACK SOCKET: $s" }
+    foreach ($s in $r.Excluded) { $lines += "   not in the engine tree (not counted): $s" }
     $rows += [pscustomobject]@{ Variant = $v; Profile = $p; Step = 'info'; Exit = $r.Exit; Ok = $okInfo; NonLoop = $r.NonLoopback.Count }
 
     # Devices to decode on: the CPU always (except avx512 on this CPU), and for vulkan and cuda the first GPU device.
@@ -206,6 +213,7 @@ foreach ($v in $Variants) {
       if ($errB) { $lines += "   error event: $($errB.code): $($errB.message)" }
       if (-not $okB) { foreach ($e in $rb.Err | Select-Object -Last 6) { if ("$e".Trim()) { $lines += "   stderr: $("$e".Trim())" } } }
       foreach ($s in $rb.NonLoopback) { $lines += "   NON-LOOPBACK SOCKET: $s" }
+      foreach ($s in $rb.Excluded) { $lines += "   not in the engine tree (not counted): $s" }
       $rows += [pscustomobject]@{ Variant = $v; Profile = $p; Step = "batch $($t.Name)"; Exit = $rb.Exit; Ok = $okB; NonLoop = $rb.NonLoopback.Count }
       Remove-Item $outFile -Force -ErrorAction SilentlyContinue
     }

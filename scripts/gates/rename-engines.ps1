@@ -76,6 +76,28 @@ function Invoke-Run([string]$Label, [string]$EnginesDir) {
 $run1 = Invoke-Run 'renamed' $renamed
 $run2 = Invoke-Run 'intact' $intact
 
+# 3. What the operator sees: the app is started once more with the engines renamed away and its own window is
+# captured (window bounds only, only while it is in front; never the desktop) at about 1, 4 and 9 s after the first render.
+Import-Module (Join-Path $repo 'scripts\lib\AppProcess.psm1') -Force
+$shotDir = Join-Path $OutDir 'ui'
+New-Item -ItemType Directory -Force -Path $shotDir | Out-Null
+$shots = @()
+$shotNote = ''
+$env:WB_ENGINES_DIR = $renamed
+try {
+  if (Get-Process stelmar-voice-workbench -ErrorAction SilentlyContinue) { throw 'the app is already running' }
+  $app = Start-WbApp -Exe (Join-Path $repo 'target\gate\stelmar-voice-workbench.exe') -TimeoutSeconds 30
+  $n = 0
+  foreach ($sec in 1, 3, 5) {
+    Start-Sleep -Seconds $sec
+    $n++
+    $png = Join-Path $shotDir "rename-engines-$Profile-shot$n.png"
+    $c = Get-WbWindowCheck -Handle $app.Handle -SavePath $png
+    $shots += [pscustomobject]@{ Path = $png; Rendered = [bool]$c.Rendered; Obscured = [bool]$c.Obscured; Seconds = [math]::Round($app.Watch.Elapsed.TotalSeconds, 0) }
+  }
+} catch { $shotNote = "screenshots not taken: $($_.Exception.Message)" }
+finally { Remove-Item Env:\WB_ENGINES_DIR -ErrorAction SilentlyContinue; try { Stop-WbApp } catch { } }
+
 function Get-Verdict($run) { ($run.EvidenceLines | Where-Object { $_ -match '^verdict:' } | Select-Object -First 1) }
 $ok1 = ($run1.Exit -eq 0) -and ($run1.Hits.Count -ge 1)
 $ok2 = ($run2.Exit -eq 0) -and ($run2.Hits.Count -eq 0)
@@ -97,7 +119,12 @@ $lines += "   recorder run: exit code $($run2.Exit); $(Get-Verdict $run2)"
 $lines += "   app log lines holding the message: $($run2.Hits.Count) (expected 0)"
 $lines += $(if ($ok2) { '   => ok: without the renaming there is no such message' } else { '   => WRONG' })
 $lines += ''
-$lines += 'what was checked: the app log holds the notice; the same notice event goes to the UI, which shows it as a Toast (the Toast itself was not screenshotted in this run; the UI side of the notice path is covered by the Phase 2 System screen screenshots)'
+$lines += ''
+$lines += '3. what the operator sees (the app started with the engines renamed away; its own window captured: bounds only, foreground-checked, never the desktop)'
+foreach ($sh in $shots) { $lines += "   $(Split-Path $sh.Path -Leaf), $($sh.Seconds) s after launch: rendered $($sh.Rendered), obscured $($sh.Obscured)" }
+if ($shotNote) { $lines += "   $shotNote" }
+$lines += '   Read from the PNGs (by the agent, not by the script): see the note at the end of this file.'
+$lines += ''
 $lines += "the recorder evidence of both runs: $($run1.Evidence) and $($run2.Evidence) (scratch folder, not committed; audio never leaves D:\STELMAR-Gate)"
 if (-not $ok1) { $lines += ($run1.Console | ForEach-Object { "   console: $_" }) }
 if (-not $ok2) { $lines += ($run2.Console | ForEach-Object { "   console: $_" }) }
