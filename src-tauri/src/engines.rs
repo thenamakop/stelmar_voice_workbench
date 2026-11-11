@@ -173,9 +173,19 @@ fn has_engines(dir: &Path) -> bool {
     !discover(dir).is_empty()
 }
 
+/// The folder named by an environment variable, in development and gate builds only. An installed app
+/// ignores `WB_ENGINES_DIR` and `WB_MODELS_DIR`, so the environment cannot choose which executable it launches.
+fn dev_override(name: &str) -> Option<PathBuf> {
+    if cfg!(any(debug_assertions, feature = "gate-hooks")) {
+        std::env::var(name).ok().map(PathBuf::from)
+    } else {
+        None
+    }
+}
+
 pub fn locate_engines_dir() -> Option<PathBuf> {
-    if let Ok(d) = std::env::var("WB_ENGINES_DIR") {
-        return Some(PathBuf::from(d));
+    if let Some(d) = dev_override("WB_ENGINES_DIR") {
+        return Some(d);
     }
     for dir in exe_ancestors() {
         if has_engines(&dir) {
@@ -190,8 +200,8 @@ pub fn locate_engines_dir() -> Option<PathBuf> {
 }
 
 pub fn locate_models_dir() -> Option<PathBuf> {
-    if let Ok(d) = std::env::var("WB_MODELS_DIR") {
-        return Some(PathBuf::from(d));
+    if let Some(d) = dev_override("WB_MODELS_DIR") {
+        return Some(d);
     }
     exe_ancestors()
         .into_iter()
@@ -341,36 +351,57 @@ pub fn refresh_engines(registry: &Registry, state: &AppState) {
             state,
             NoticeLevel::Warning,
             match &dir {
-                Some(d) => format!("No speech engine found in {}. Recording is not affected; sessions are recorded and transcribed later, on a computer that has the engines.", d.display()),
-                None => "No speech engine found next to the app. Recording is not affected; sessions are recorded and transcribed later, on a computer that has the engines.".into(),
+                Some(d) => format!("No speech engine found in {}. Recording is not affected; sessions are recorded now and need a working speech engine to be transcribed.", d.display()),
+                None => "No speech engine found next to the app. Recording is not affected; sessions are recorded now and need a working speech engine to be transcribed.".into(),
             },
         );
         return;
     }
     let log_dir = state.data_dir.join("engine-logs");
-    let mut usable = 0;
+    let mut probed: Vec<EngineRow> = Vec::with_capacity(found.len());
     for (i, (variant, exe)) in found.iter().enumerate() {
         let row = probe_engine(variant, exe, &log_dir);
-        if matches!(row.state, EngineState::Ok) {
-            usable += 1;
-        } else {
-            notice(
-                state,
-                NoticeLevel::Warning,
-                format!(
-                    "The {variant} speech engine cannot be used on this computer: {}",
-                    row.message.clone().unwrap_or_else(|| "it failed".into())
-                ),
-            );
-        }
+        probed.push(row.clone());
         if let Some(slot) = lock(&registry.inner).engines.get_mut(i) {
             *slot = row;
         }
     }
     lock(&registry.inner).engines_done = true;
-    if usable == 0 {
-        notice(state, NoticeLevel::Error, "None of the speech engines can run on this computer. Recording is not affected; sessions are transcribed later on another computer.".into());
+    for (level, message) in engine_notices(&probed) {
+        notice(state, level, message);
     }
+}
+
+/// What to tell the operator about the engines that were probed. A build that cannot run on this computer
+/// is only worth an alert when no other build works (a laptop without AVX-512 is the normal case for the
+/// `avx512` build): then it is an info line (log only, and the System screen shows the row), and the Toast
+/// is reserved for "no engine can run here".
+pub fn engine_notices(rows: &[EngineRow]) -> Vec<(NoticeLevel, String)> {
+    let usable = rows.iter().filter(|r| matches!(r.state, EngineState::Ok)).count();
+    let mut out = Vec::new();
+    for r in rows {
+        let message = match r.state {
+            EngineState::Ok | EngineState::Checking => continue,
+            EngineState::CpuMismatch => format!(
+                "The {} speech engine needs a newer processor than this computer has, so it was skipped.",
+                r.variant
+            ),
+            _ => format!(
+                "The {} speech engine cannot be used on this computer: {}",
+                r.variant,
+                r.message.clone().unwrap_or_else(|| "it failed".into())
+            ),
+        };
+        let level = if usable > 0 { NoticeLevel::Info } else { NoticeLevel::Warning };
+        out.push((level, message));
+    }
+    if usable == 0 && !rows.is_empty() {
+        out.push((
+            NoticeLevel::Error,
+            "None of the speech engines can run on this computer. Recording is not affected; sessions are recorded now and need a working speech engine to be transcribed.".into(),
+        ));
+    }
+    out
 }
 
 fn model_row(e: &wb_models::Entry, state: ModelState, message: Option<String>) -> ModelRow {
@@ -558,6 +589,31 @@ mod tests {
         let mixed = [row(EngineState::CpuMismatch), row(EngineState::Ok)];
         assert_eq!(speech_engine_state(&mixed, false), SpeechEngine::Available);
         assert_eq!(speech_engine_state(&mixed, true), SpeechEngine::Available);
+    }
+
+    #[test]
+    fn a_build_that_cannot_run_is_an_alert_only_when_no_build_can() {
+        // The normal laptop: avx2 works, avx512 needs a newer processor. Nothing to alert about.
+        let mixed = [row(EngineState::Ok), {
+            let mut r = row(EngineState::CpuMismatch);
+            r.variant = "avx512".into();
+            r.message = Some("This engine build (avx512) needs CPU features this computer does not have: avx512f.".into());
+            r
+        }];
+        let n = engine_notices(&mixed);
+        assert_eq!(n.len(), 1);
+        assert!(matches!(n[0].0, NoticeLevel::Info), "{n:?}");
+        assert!(n[0].1.contains("avx512") && !n[0].1.contains("avx512f"), "plain wording, no feature list: {}", n[0].1);
+        // Nothing can run: a warning per build and one error that says so.
+        let none = [row(EngineState::CpuMismatch), row(EngineState::Failed)];
+        let n = engine_notices(&none);
+        assert_eq!(n.len(), 3);
+        assert!(n[..2].iter().all(|(l, _)| matches!(l, NoticeLevel::Warning)));
+        assert!(matches!(n[2].0, NoticeLevel::Error));
+        assert!(n[2].1.contains("Recording is not affected"));
+        // All good, or nothing found (that case has its own notice): silence.
+        assert!(engine_notices(&[row(EngineState::Ok)]).is_empty());
+        assert!(engine_notices(&[]).is_empty());
     }
 
     #[test]

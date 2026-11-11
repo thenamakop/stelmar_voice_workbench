@@ -1,0 +1,7 @@
+Machine view in the app (Phase 2, carry-over row 1 -> 2, 3)
+source: the app log of the gate build (target\gate), lines written at start-up; the same line is logged under every profile. Nothing else is taken from the log.
+emu-low run (affinity mask of 4 efficiency cores; the host has 32 logical processors):
+INFO main machine view (from the affinity mask and the job limit, not from the host) runtime_workers=4 logical_processors=4 physical_cores=4 std_available_parallelism=32 total_ram_bytes=17179869184 available_ram_bytes=11727245312 job_memory_limit_bytes=11811160064
+native run:
+INFO main machine view (from the affinity mask and the job limit, not from the host) runtime_workers=32 logical_processors=32 physical_cores=24 std_available_parallelism=32 total_ram_bytes=34070192128 available_ram_bytes=15065276416 job_memory_limit_bytes=0
+reading: runtime_workers and logical_processors follow the mask (4 under emu-low), while std_available_parallelism still reports the host's 32 inside the job: the app no longer uses it. Memory: the engine's info reports available RAM 11 GiB under emu-low and emu-mid (the job limit) and 17.2 GiB natively (docs/evidence/phase-2/engines-info.txt).

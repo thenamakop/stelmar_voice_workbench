@@ -141,7 +141,14 @@ export function useRecorder(notify: Notify): Recorder {
         if (e.level !== "info") {
           notifyRef.current({
             tone: e.level === "error" ? "danger" : "warning",
-            title: e.source === "mirror" ? "Backup" : e.source === "capture" ? "Audio input" : "Recorder",
+            title:
+              e.source === "mirror"
+                ? "Backup"
+                : e.source === "capture"
+                  ? "Audio input"
+                  : e.source === "engines"
+                    ? "Speech engine"
+                    : "Recorder",
             message: e.message,
           });
         }

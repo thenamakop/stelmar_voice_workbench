@@ -16,7 +16,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 # Development and gate runs only: environment variables start, resume, stop and stress a session
 # without the UI (docs/GATES.md runs). build.rs refuses it in the release profile, so it can never
 # reach an installer; gate builds use `cargo build --profile gate --features gate-hooks`.
-gate-hooks = []
+gate-hooks = ["wb-machine/emulation"]
 # Serve the built UI from dist/ instead of the dev server, for builds made with plain cargo
 # (`pnpm tauri build` turns on tauri/custom-protocol itself).
 custom-protocol = ["tauri/custom-protocol"]

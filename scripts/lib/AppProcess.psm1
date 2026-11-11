@@ -38,19 +38,13 @@ function Get-WbUserDataDir {
   Join-Path $env:LOCALAPPDATA "$script:Identifier\EBWebView"
 }
 
+# The process tree of $RootId with the creation-time rule (a stale parent id reused by a new process does not
+# pull an unrelated older process into the tree; see ProcessTree.psm1).
 function Get-WbProcessTree([int]$RootId) {
-  $all = Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, Name
-  $ids = New-Object 'System.Collections.Generic.HashSet[int]'
-  [void]$ids.Add($RootId)
-  do {
-    $added = $false
-    foreach ($p in $all) {
-      if ($ids.Contains([int]$p.ParentProcessId) -and -not $ids.Contains([int]$p.ProcessId)) {
-        [void]$ids.Add([int]$p.ProcessId); $added = $true
-      }
-    }
-  } while ($added)
-  @($all | Where-Object { $ids.Contains([int]$_.ProcessId) })
+  Import-Module (Join-Path $PSScriptRoot 'ProcessTree.psm1') -Force
+  $all = @(Get-WbProcessSnapshot)
+  $ids = @(Get-WbTreeIds -Processes $all -RootPid $RootId)
+  @($all | Where-Object { $ids -contains [int]$_.ProcessId })
 }
 
 # Every msedgewebview2.exe whose command line names this app's user data folder.

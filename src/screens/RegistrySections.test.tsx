@@ -22,7 +22,11 @@ describe("Speech engines section", () => {
     expect(screen.getByText("avx2")).toBeTruthy();
     expect(screen.getAllByText("Ready").length).toBe(2);
     expect(screen.getByText("Needs a newer CPU")).toBeTruthy();
-    expect(screen.getByText(/needs CPU features this computer does not have/)).toBeTruthy();
+    // A plain sentence for the operator; the engine's own message with the instruction sets is the hover text.
+    expect(screen.getByText("Needs a newer processor than this computer has.")).toBeTruthy();
+    expect(screen.getByTitle(/needs CPU features this computer does not have.*avx512f/)).toBeTruthy();
+    // The file and its size are separate cells, so neither wraps in the middle.
+    expect(screen.getByText("wb-engine-avx2.exe")).toBeTruthy();
     // The integrated GPU with its driver and the RAM it shares.
     expect(
       screen.getByText(
@@ -75,11 +79,21 @@ describe("System screen", () => {
     mockIPC(bridge({ profile: false }));
     render(<App />);
     expect(await screen.findByText("Speech engines")).toBeTruthy();
-    expect(await screen.findByText("wb-engine-avx2.exe · 5 MB")).toBeTruthy();
+    expect(await screen.findByText("wb-engine-avx2.exe")).toBeTruthy();
   });
 });
 
 describe("No-engine banner", () => {
+  it("keeps its status region in the page and fills it only when there is something to say", () => {
+    const { rerender } = render(<NoEngineBanner registry={registry} />);
+    const region = screen.getByRole("status", { name: "Speech engine" });
+    expect(region.textContent).toBe("");
+    rerender(<NoEngineBanner registry={NO_ENGINES as unknown as RegistrySnapshot} />);
+    // The same element, now with the banner inside: that is what a screen reader announces.
+    expect(screen.getByRole("status", { name: "Speech engine" })).toBe(region);
+    expect(region.textContent).toMatch(/No speech engine found\. Recording is not affected\./);
+  });
+
   it("is not shown while the engines are being looked for, or when one is available", () => {
     const { rerender, container } = render(<NoEngineBanner registry={null} />);
     expect(container.textContent).toBe("");

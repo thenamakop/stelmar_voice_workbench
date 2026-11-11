@@ -25,7 +25,7 @@ serde_json.workspace = true
 thiserror.workspace = true
 wb-engine-core.workspace = true
 wb-models.workspace = true
-wb-machine.workspace = true
+wb-machine = { workspace = true, features = ["emulation"] }
 wb-protocol.workspace = true
 # whisper.cpp v1.9.5 is vendored through the patch in the root Cargo.toml (third_party/); the Unlicense
 # is approved for this crate and whisper-rs-sys only (docs/BUILD.md).

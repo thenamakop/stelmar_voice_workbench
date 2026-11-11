@@ -14,9 +14,10 @@
        - `info` (expected exit 0; avx512 exits 3 on this CPU, as intended);
        - a short batch decode (a FLEURS English clip of 6 to 12 s, model small, 4 threads under emu-low,
          8 natively) on the CPU, and for vulkan and cuda also on the first GPU device the run's `info` lists.
-  3. While every engine process runs, it samples the sockets of the engine's whole process tree about every
-     100 ms (TCP connections, listeners, UDP endpoints) and records any that is not loopback; loopback ones
-     are only counted.
+  3. While every engine process runs, it polls the sockets of the engine's whole process tree back to back (TCP
+     connections, listeners, UDP endpoints; the evidence prints the measured mean interval) and records any that
+     is not loopback; loopback ones are only counted. A listener or endpoint bound to 0.0.0.0 or :: is NOT
+     loopback. A socket created more than 2 s before the engine started is listed with its owner, not counted.
   4. Checks the network state again at the end and writes docs\evidence\phase-2\network-off.txt.
 
   It never changes adapters or firewall rules, needs no administrator rights, writes no model or audio into
@@ -92,8 +93,11 @@ function Invoke-Watched([string]$File, [string[]]$ArgumentList, [string]$Tag) {
   } finally { $env:PATH = $saved }
   $null = $p.Handle   # keeps the process handle open so ExitCode is readable after it exits
   $nonLoop = @{}; $excluded = @{}; $loopCount = 0; $polls = 0
-  $loop = @('127.0.0.1', '::1', '0.0.0.0', '::')
+  $rootStart = $null; try { $rootStart = [datetime]$p.StartTime } catch { }
+  $rootText = "engine tree root pid $($p.Id), started $(if ($rootStart) { $rootStart.ToString('HH:mm:ss.fff', $inv) } else { 'unknown' })"
   $watch = [Diagnostics.Stopwatch]::StartNew()
+  # No sleep between polls: each poll (process snapshot, two tree builds, the TCP and UDP tables) already takes a few
+  # hundred ms, and the evidence prints the measured mean interval.
   while (-not $p.HasExited -and $watch.Elapsed.TotalSeconds -lt 900) {
     # One snapshot per poll; the tree is built from it with the creation-time rule (no parent-PID reuse), and the
     # owner of every flagged socket is described from the same snapshot.
@@ -104,36 +108,32 @@ function Invoke-Watched([string]$File, [string[]]$ArgumentList, [string]$Tag) {
     # creation-time rule leaves out. They are listed with their owners and do not count.
     $oldIds = @(Get-WbTreeIds -Processes $snap -RootPid $p.Id -IgnoreCreationTime)
     $extra = @($oldIds | Where-Object { $ids -notcontains $_ })
-    if ($extra.Count) {
-      foreach ($c in @(Get-NetTCPConnection -ErrorAction SilentlyContinue | Where-Object { $extra -contains $_.OwningProcess -and $_.RemoteAddress -notin $loop -and $_.State -ne 'Listen' })) {
-        $xk = "TCP $($c.RemoteAddress):$($c.RemotePort) $($c.State)"
-        if (-not $excluded.ContainsKey($xk)) { $excluded[$xk] = "$xk ; $(Get-WbOwnerDescription -Processes $snap -OwnerPid ([int]$c.OwningProcess)) ; engine tree root pid $($p.Id), started $(([datetime]$p.StartTime).ToString('HH:mm:ss.fff', $inv)); left out: created before its parent (the parent id was reused)" }
-      }
+    $tcp = @(Get-NetTCPConnection -ErrorAction SilentlyContinue)
+    $udp = @(Get-NetUDPEndpoint -ErrorAction SilentlyContinue)
+    foreach ($c in @($tcp | Where-Object { $extra -contains $_.OwningProcess })) {
+      $v = Get-WbSocketVerdict -Kind TCP -State "$($c.State)" -LocalAddress $c.LocalAddress -LocalPort $c.LocalPort -RemoteAddress $c.RemoteAddress -RemotePort $c.RemotePort
+      if ($v.Verdict -ne 'loopback' -and -not $excluded.ContainsKey($v.Key)) { $excluded[$v.Key] = "$($v.Key) ; $(Get-WbOwnerDescription -Processes $snap -OwnerPid ([int]$c.OwningProcess)) ; $rootText; left out: created before its parent (the parent id was reused)" }
     }
-    foreach ($c in @(Get-NetTCPConnection -ErrorAction SilentlyContinue | Where-Object { $ids -contains $_.OwningProcess })) {
-      $key = $null
-      if ($c.State -eq 'Listen') {
-        if ($c.LocalAddress -notin $loop) { $key = "TCP listen $($c.LocalAddress):$($c.LocalPort)" } else { $loopCount++ }
-      } elseif ($c.RemoteAddress -notin $loop) {
-        $key = "TCP $($c.RemoteAddress):$($c.RemotePort) $($c.State)"
-      } else { $loopCount++ }
-      if ($key -and -not $nonLoop.ContainsKey($key)) { $nonLoop[$key] = "$key ; $(Get-WbOwnerDescription -Processes $snap -OwnerPid ([int]$c.OwningProcess)) ; engine tree root pid $($p.Id), started $(([datetime]$p.StartTime).ToString('HH:mm:ss.fff', $inv))" }
+    $mine = @(@($tcp | Where-Object { $ids -contains $_.OwningProcess } | ForEach-Object { @{ Kind = 'TCP'; S = $_ } }) +
+              @($udp | Where-Object { $ids -contains $_.OwningProcess } | ForEach-Object { @{ Kind = 'UDP'; S = $_ } }))
+    foreach ($m in $mine) {
+      $s = $m.S
+      $v = Get-WbSocketVerdict -Kind $m.Kind -State "$($s.State)" -LocalAddress $s.LocalAddress -LocalPort $s.LocalPort -RemoteAddress $s.RemoteAddress -RemotePort $s.RemotePort -CreationTime $s.CreationTime -RootStart $rootStart
+      if ($v.Verdict -eq 'loopback') { $loopCount++; continue }
+      $d = "$($v.Key) ; $(Get-WbOwnerDescription -Processes $snap -OwnerPid ([int]$s.OwningProcess)) ; socket created $(if ($s.CreationTime) { ([datetime]$s.CreationTime).ToString('HH:mm:ss.fff', $inv) } else { 'unknown' }); $rootText"
+      if ($v.Verdict -eq 'predates') {
+        if (-not $excluded.ContainsKey($v.Key)) { $excluded[$v.Key] = "$d; left out: the socket was created before the engine started" }
+      } elseif (-not $nonLoop.ContainsKey($v.Key)) { $nonLoop[$v.Key] = $d }
     }
-    foreach ($u in @(Get-NetUDPEndpoint -ErrorAction SilentlyContinue | Where-Object { $ids -contains $_.OwningProcess })) {
-      if ($u.LocalAddress -notin $loop) {
-        $key = "UDP $($u.LocalAddress):$($u.LocalPort)"
-        if (-not $nonLoop.ContainsKey($key)) { $nonLoop[$key] = "$key ; $(Get-WbOwnerDescription -Processes $snap -OwnerPid ([int]$u.OwningProcess)) ; engine tree root pid $($p.Id), started $(([datetime]$p.StartTime).ToString('HH:mm:ss.fff', $inv))" }
-      } else { $loopCount++ }
-    }
-    Start-Sleep -Milliseconds 100
   }
   if (-not $p.HasExited) { try { $p.Kill() } catch { } }
   $p.WaitForExit()
   $seconds = [math]::Round($watch.Elapsed.TotalSeconds, 1)
+  $meanPollMs = $(if ($polls) { [int]($watch.Elapsed.TotalMilliseconds / $polls) } else { 0 })
   $stdout = @(Get-Content $o -Encoding UTF8 -ErrorAction SilentlyContinue)
   $stderr = @(Get-Content $e -Encoding UTF8 -ErrorAction SilentlyContinue)
   Remove-Item $o, $e -Force -ErrorAction SilentlyContinue
-  [pscustomobject]@{ Exit = $p.ExitCode; Out = $stdout; Err = $stderr; NonLoopback = @($nonLoop.Keys | Sort-Object | ForEach-Object { $nonLoop[$_] }); Excluded = @($excluded.Keys | Sort-Object | ForEach-Object { $excluded[$_] }); LoopbackSamples = $loopCount; Polls = $polls; Seconds = $seconds }
+  [pscustomobject]@{ Exit = $p.ExitCode; Out = $stdout; Err = $stderr; NonLoopback = @($nonLoop.Keys | Sort-Object | ForEach-Object { $nonLoop[$_] }); Excluded = @($excluded.Keys | Sort-Object | ForEach-Object { $excluded[$_] }); LoopbackSamples = $loopCount; Polls = $polls; Seconds = $seconds; MeanPollMs = $meanPollMs }
 }
 
 function Get-Events($Lines) { @($Lines | Where-Object { $_ -match '^\{' } | ForEach-Object { try { $_ | ConvertFrom-Json } catch { $null } } | Where-Object { $_ }) }
@@ -177,7 +177,7 @@ foreach ($v in $Variants) {
     if (-not $okInfo) { $problems += "$v/$p info: exit $($r.Exit), expected $expect" }
     $totalNonLoop += $r.NonLoopback.Count
     if ($r.NonLoopback.Count) { $problems += "$v/$p info: non-loopback sockets: $($r.NonLoopback -join '; ')" }
-    $lines += "-- $p info : exit code $($r.Exit) (expected $expect)$(if ($okInfo) { ' ok' } else { ' WRONG' }); $($r.Seconds) s; sockets of the process tree: non-loopback $($r.NonLoopback.Count), loopback samples $($r.LoopbackSamples), polls $($r.Polls)"
+    $lines += "-- $p info : exit code $($r.Exit) (expected $expect)$(if ($okInfo) { ' ok' } else { ' WRONG' }); $($r.Seconds) s; sockets of the process tree: non-loopback $($r.NonLoopback.Count), loopback samples $($r.LoopbackSamples), polls $($r.Polls) (mean $($r.MeanPollMs) ms apart)"
     foreach ($s in $r.NonLoopback) { $lines += "   NON-LOOPBACK SOCKET: $s" }
     foreach ($s in $r.Excluded) { $lines += "   not in the engine tree (not counted): $s" }
     $rows += [pscustomobject]@{ Variant = $v; Profile = $p; Step = 'info'; Exit = $r.Exit; Ok = $okInfo; NonLoop = $r.NonLoopback.Count }
@@ -209,7 +209,7 @@ foreach ($v in $Variants) {
       if (-not $okB) { $problems += "$v/$p batch on $($t.Name): exit $($rb.Exit), segments $($segs.Count)$(if ($errB) { ', error ' + $errB.code })" }
       $totalNonLoop += $rb.NonLoopback.Count
       if ($rb.NonLoopback.Count) { $problems += "$v/$p batch on $($t.Name): non-loopback sockets: $($rb.NonLoopback -join '; ')" }
-      $lines += "-- $p batch on $($t.Name) : exit code $($rb.Exit); segments $($segs.Count), Latin letters $letters (the text is not printed); $($rb.Seconds) s; $(if ($okB) { 'ok' } else { 'WRONG' }); sockets: non-loopback $($rb.NonLoopback.Count), loopback samples $($rb.LoopbackSamples), polls $($rb.Polls)"
+      $lines += "-- $p batch on $($t.Name) : exit code $($rb.Exit); segments $($segs.Count), Latin letters $letters (the text is not printed); $($rb.Seconds) s; $(if ($okB) { 'ok' } else { 'WRONG' }); sockets: non-loopback $($rb.NonLoopback.Count), loopback samples $($rb.LoopbackSamples), polls $($rb.Polls) (mean $($rb.MeanPollMs) ms apart)"
       if ($errB) { $lines += "   error event: $($errB.code): $($errB.message)" }
       if (-not $okB) { foreach ($e in $rb.Err | Select-Object -Last 6) { if ("$e".Trim()) { $lines += "   stderr: $("$e".Trim())" } } }
       foreach ($s in $rb.NonLoopback) { $lines += "   NON-LOOPBACK SOCKET: $s" }
@@ -228,7 +228,8 @@ $lines += @($netEnd.Lines | ForEach-Object { "  $_" })
 if ($netEnd.Result.State -ne 'Offline' -and -not $DryRun) { $problems += "the network state at the end is $($netEnd.Result.State): the run is not valid as an offline run" }
 $lines += ''
 $lines += ('summary: ' + (($rows | ForEach-Object { "$($_.Variant)/$($_.Profile)/$($_.Step) exit $($_.Exit) $(if ($_.Ok) { 'ok' } else { 'WRONG' })" }) -join '; '))
-$lines += "socket check: non-loopback TCP connections, TCP listeners or UDP endpoints seen in the engines' process trees: $totalNonLoop in $(@($rows).Count) runs (sampled about every 100 ms while each ran)"
+$lines += "socket check: non-loopback TCP connections, TCP listeners or UDP endpoints seen in the engines' process trees: $totalNonLoop in $(@($rows).Count) runs"
+$lines += 'what PASS means: no standing non-loopback socket or endpoint was observed in an engine process tree at any poll (the polls are a few hundred ms apart, so a connection attempt that fails at once is not seen; the static check that no engine or app binary imports Winsock, WinHTTP or WinINet covers that). A wildcard listener (0.0.0.0 or ::) is a non-loopback socket. A socket created more than 2 s before its engine started is listed with its owner and not counted.'
 if ($DryRun) {
   $lines += "DRY RUN: the network was $($netStart.Result.State); this is NOT evidence. Problems found: $($problems.Count)"
   foreach ($pr in $problems) { $lines += "  problem: $pr" }

@@ -58,4 +58,34 @@ function Get-WbOwnerDescription {
   "owner pid $OwnerPid $($o.Name) path $($o.ExecutablePath) created $created, parent pid $($o.ParentProcessId) ($parText)"
 }
 
-Export-ModuleMember -Function Get-WbProcessSnapshot, Get-WbTreeIds, Get-WbOwnerDescription
+# Classifies one socket of an engine's process tree (pure logic, tested without a network).
+#   Kind: TCP or UDP. State: the TCP state ('Listen', 'Established', 'Bound', ...; ignored for UDP).
+#   Verdict: 'loopback' (counted only), 'flag' (a non-loopback socket: the check fails) or
+#   'predates' (it would be flagged but was created more than 2 s before the engine started, so the engine did not
+#   open it; listed with its owner and not counted).
+# 0.0.0.0 and :: are "no peer" only as the REMOTE address of a socket that is not connected; as a LOCAL address
+# (a listener or an endpoint bound to every interface) they are NOT loopback.
+function Get-WbSocketVerdict {
+  param([Parameter(Mandatory = $true)] [ValidateSet('TCP', 'UDP')] [string]$Kind,
+    [string]$State = '', [string]$LocalAddress = '', [int]$LocalPort = 0, [string]$RemoteAddress = '', [int]$RemotePort = 0,
+    $CreationTime = $null, $RootStart = $null)
+  $loop = @('127.0.0.1', '::1')
+  $noPeer = @('0.0.0.0', '::')
+  $key = $null
+  if ($Kind -eq 'UDP') {
+    if ($LocalAddress -notin $loop) { $key = "UDP $($LocalAddress):$LocalPort" }
+  } elseif ($State -eq 'Listen') {
+    if ($LocalAddress -notin $loop) { $key = "TCP listen $($LocalAddress):$LocalPort" }
+  } elseif ($RemoteAddress -in $noPeer) {
+    if ($LocalAddress -notin $loop) { $key = "TCP bound $($LocalAddress):$LocalPort $State" }
+  } elseif ($RemoteAddress -notin $loop) {
+    $key = "TCP $($RemoteAddress):$RemotePort $State"
+  }
+  if (-not $key) { return [pscustomobject]@{ Verdict = 'loopback'; Key = $null } }
+  if ($CreationTime -and $RootStart -and ([datetime]$CreationTime) -lt ([datetime]$RootStart).AddSeconds(-2)) {
+    return [pscustomobject]@{ Verdict = 'predates'; Key = $key }
+  }
+  [pscustomobject]@{ Verdict = 'flag'; Key = $key }
+}
+
+Export-ModuleMember -Function Get-WbProcessSnapshot, Get-WbTreeIds, Get-WbOwnerDescription, Get-WbSocketVerdict

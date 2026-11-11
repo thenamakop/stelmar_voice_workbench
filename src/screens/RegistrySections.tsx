@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import { Badge, Icon, type BadgeTone } from "../ds";
 import { px } from "../ds/units";
 import { type EngineDevice, type EngineRow, type ModelRow, type RegistrySnapshot, listEngines } from "../ipc";
@@ -49,10 +50,15 @@ function describeDevice(d: EngineDevice): string {
   return parts.join(" · ");
 }
 
-function engineDetail(e: EngineRow): string {
+function engineDetail(e: EngineRow): ReactNode {
   if (e.state === "ok") {
     const gpus = e.devices.filter((d) => d.kind !== "cpu");
     return gpus.length === 0 ? "CPU only" : gpus.map(describeDevice).join("; ");
+  }
+  // A plain sentence for the operator; the engine's own message (with the instruction sets it needs) is
+  // one hover away and in the engine log.
+  if (e.state === "cpu_mismatch") {
+    return <span title={e.message ?? undefined}>Needs a newer processor than this computer has.</span>;
   }
   return e.message ?? "";
 }
@@ -62,14 +68,15 @@ export function EnginesSection({ registry }: { registry: RegistrySnapshot | null
   return (
     <Section title="Speech engines">
       <Table
-        headers={["Build", "File", "Devices", "Result"]}
+        headers={["Build", "File", "Size", "Devices", "Result"]}
         rows={
           engines.length > 0
             ? engines.map((e) => {
                 const [tone, label] = ENGINE_BADGE[e.state];
                 return [
                   { content: e.variant, strong: true, mono: true },
-                  { content: `${e.file} · ${formatBytes(e.bytes)}`, mono: true },
+                  { content: e.file, mono: true },
+                  { content: formatBytes(e.bytes), mono: true },
                   { content: engineDetail(e) },
                   { content: <Badge tone={tone}>{label}</Badge> },
                 ];
@@ -78,9 +85,10 @@ export function EnginesSection({ registry }: { registry: RegistrySnapshot | null
                 [
                   { content: registry?.engines_done ? "None found" : "Looking…", strong: true },
                   { content: "" },
+                  { content: "" },
                   {
                     content: registry?.engines_done
-                      ? "Recording works without an engine. Sessions are transcribed later, on a computer that has one."
+                      ? "Recording works without an engine. Transcription needs a working speech engine."
                       : "",
                   },
                   {
@@ -158,32 +166,38 @@ export function ModelsSection({ registry }: { registry: RegistrySnapshot | null 
  */
 export function NoEngineBanner({ registry }: { registry: RegistrySnapshot | null }) {
   const kind = registry?.speech_engine;
-  if (kind !== "none_found" && kind !== "none_usable") return null;
+  const show = kind === "none_found" || kind === "none_usable";
+  // The status region is always in the page and the banner is put into it, so screen readers announce it
+  // (a live region that is inserted already filled is often missed).
   return (
-    <div
-      role="status"
-      aria-label="Speech engine"
-      style={{
-        display: "flex",
-        gap: 10,
-        alignItems: "center",
-        marginTop: 12,
-        padding: px(10, 14),
-        borderRadius: "var(--radius-sm)",
-        background: "var(--status-warning-bg)",
-        color: "var(--status-warning-fg)",
-        fontSize: 13,
-        lineHeight: "var(--lh-small)",
-      }}
-    >
-      <Icon name="alert-triangle" size={16} />
-      <span>
-        <b style={{ fontWeight: "var(--fw-semibold)" }}>
-          {kind === "none_found" ? "No speech engine found." : "No speech engine can run on this computer."}
-        </b>{" "}
-        Recording is not affected. Sessions are recorded now and transcribed later, on a computer that has
-        a working engine.
-      </span>
+    <div role="status" aria-label="Speech engine">
+      {show && (
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            alignItems: "center",
+            marginTop: 12,
+            padding: px(10, 14),
+            borderRadius: "var(--radius-sm)",
+            background: "var(--status-warning-bg)",
+            color: "var(--status-warning-fg)",
+            fontSize: 13,
+            lineHeight: "var(--lh-small)",
+          }}
+        >
+          <Icon name="alert-triangle" size={16} />
+          <span>
+            <b style={{ fontWeight: "var(--fw-semibold)" }}>
+              {kind === "none_found"
+                ? "No speech engine found."
+                : "No speech engine can run on this computer."}
+            </b>{" "}
+            Recording is not affected. Sessions are recorded now; transcription needs a working speech engine.
+            See System.
+          </span>
+        </div>
+      )}
     </div>
   );
 }

@@ -51,4 +51,45 @@ Test-Case 'the owner description names pid, name, path, creation time and parent
   $d = Get-WbOwnerDescription -Processes $procs -OwnerPid 200
   foreach ($frag in 'pid 200', 'claude-like.exe', 'C:\fake\claude-like.exe', 'created 2026-11-11 12:00:01.000', 'parent pid 100') { if ($d -notlike "*$frag*") { throw "missing '$frag' in: $d" } }
 }
+
+# ---- Get-WbSocketVerdict: the socket filter of scripts/gates/network-off.ps1 ----
+$start = [datetime]'2026-11-11 12:10:00'
+Test-Case 'a TCP listener on 0.0.0.0 or :: is NOT loopback' {
+  foreach ($a in '0.0.0.0', '::') {
+    $v = Get-WbSocketVerdict -Kind TCP -State Listen -LocalAddress $a -LocalPort 50052 -RemoteAddress '0.0.0.0' -RemotePort 0 -CreationTime $start.AddSeconds(1) -RootStart $start
+    if ($v.Verdict -ne 'flag' -or $v.Key -ne "TCP listen $($a):50052") { throw "wildcard listener on $a gave $($v.Verdict) / $($v.Key)" }
+  }
+}
+Test-Case 'a UDP endpoint bound to 0.0.0.0 or :: is NOT loopback' {
+  foreach ($a in '0.0.0.0', '::') {
+    $v = Get-WbSocketVerdict -Kind UDP -LocalAddress $a -LocalPort 5353 -CreationTime $start.AddSeconds(1) -RootStart $start
+    if ($v.Verdict -ne 'flag') { throw "wildcard UDP on $a gave $($v.Verdict)" }
+  }
+}
+Test-Case 'loopback listeners, endpoints and connections are only counted' {
+  foreach ($a in '127.0.0.1', '::1') {
+    $l = Get-WbSocketVerdict -Kind TCP -State Listen -LocalAddress $a -LocalPort 1 -RemoteAddress '0.0.0.0'
+    $u = Get-WbSocketVerdict -Kind UDP -LocalAddress $a -LocalPort 2
+    $c = Get-WbSocketVerdict -Kind TCP -State Established -LocalAddress $a -LocalPort 3 -RemoteAddress $a -RemotePort 4
+    foreach ($x in $l, $u, $c) { if ($x.Verdict -ne 'loopback') { throw "loopback $a gave $($x.Verdict)" } }
+  }
+}
+Test-Case 'an established connection to a public address is flagged with its remote address and state' {
+  $v = Get-WbSocketVerdict -Kind TCP -State Established -LocalAddress '192.168.1.5' -LocalPort 50000 -RemoteAddress '104.18.39.21' -RemotePort 443 -CreationTime $start.AddSeconds(2) -RootStart $start
+  if ($v.Verdict -ne 'flag' -or $v.Key -ne 'TCP 104.18.39.21:443 Established') { throw "$($v.Verdict) / $($v.Key)" }
+}
+Test-Case 'a bound, not connected TCP socket on a non-loopback address is flagged' {
+  $v = Get-WbSocketVerdict -Kind TCP -State Bound -LocalAddress '192.168.1.5' -LocalPort 50001 -RemoteAddress '0.0.0.0' -RemotePort 0
+  if ($v.Verdict -ne 'flag') { throw $v.Verdict }
+  $w = Get-WbSocketVerdict -Kind TCP -State Bound -LocalAddress '127.0.0.1' -LocalPort 50001 -RemoteAddress '0.0.0.0' -RemotePort 0
+  if ($w.Verdict -ne 'loopback') { throw "loopback bound gave $($w.Verdict)" }
+}
+Test-Case 'a socket created more than 2 s before the engine started is listed, not counted; one created after still counts' {
+  $old = Get-WbSocketVerdict -Kind TCP -State Established -LocalAddress '192.168.1.5' -LocalPort 50000 -RemoteAddress '104.18.39.21' -RemotePort 443 -CreationTime $start.AddSeconds(-60) -RootStart $start
+  if ($old.Verdict -ne 'predates') { throw "old socket gave $($old.Verdict)" }
+  $near = Get-WbSocketVerdict -Kind TCP -State Established -LocalAddress '192.168.1.5' -LocalPort 50000 -RemoteAddress '104.18.39.21' -RemotePort 443 -CreationTime $start.AddSeconds(-1) -RootStart $start
+  if ($near.Verdict -ne 'flag') { throw "a socket 1 s before the start must still count, got $($near.Verdict)" }
+  $unk = Get-WbSocketVerdict -Kind TCP -State Established -LocalAddress '192.168.1.5' -LocalPort 50000 -RemoteAddress '104.18.39.21' -RemotePort 443
+  if ($unk.Verdict -ne 'flag') { throw "an unknown creation time must count, got $($unk.Verdict)" }
+}
 if ($script:failures) { exit 1 }

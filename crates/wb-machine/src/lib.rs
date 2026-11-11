@@ -104,6 +104,7 @@ impl Machine {
     }
 }
 
+#[cfg(feature = "emulation")]
 fn env_u64(name: &str) -> Option<u64> {
     std::env::var(name).ok()?.trim().parse().ok()
 }
@@ -114,11 +115,17 @@ pub fn probe() -> Machine {
     #[allow(unused_mut)]
     let mut inputs = Inputs {
         std_available_parallelism: std_parallelism,
-        env_emulated: std::env::var(ENV_EMULATE).ok().filter(|s| !s.is_empty()),
-        env_reported_ram: env_u64(ENV_REPORTED_RAM),
-        env_job_memory: env_u64(ENV_JOB_MEMORY),
         ..Inputs::default()
     };
+    // The emulation variables are read only where the build asks for it (the `emulation` feature: engines, which
+    // `wb-emulate` launches, and gate builds of the app). An installed app ignores them, so a stray variable in an
+    // operator's environment cannot change what it believes about the machine.
+    #[cfg(feature = "emulation")]
+    {
+        inputs.env_emulated = std::env::var(ENV_EMULATE).ok().filter(|s| !s.is_empty());
+        inputs.env_reported_ram = env_u64(ENV_REPORTED_RAM);
+        inputs.env_job_memory = env_u64(ENV_JOB_MEMORY);
+    }
     #[cfg(windows)]
     {
         inputs.affinity_mask = win::process_affinity().unwrap_or(0);
