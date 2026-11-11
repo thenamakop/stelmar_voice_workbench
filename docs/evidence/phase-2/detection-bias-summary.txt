@@ -1,0 +1,17 @@
+Language-detection bias, summary of the four measurements (Phase 2, information only, 11 Nov 2026)
+engine: wb-engine avx2 `detect` (the engine's own chunker and detector, stock medium, languages en and hi, no decoding); 100 whole utterances per set, seed 20261111; chunks with at least 1 s of speech. Per-set files: detection-bias-coshe-en.txt, -coshe-hi.txt, -fleurs-en.txt, -fleurs-hi.txt. No audio and no text.
+
+set | what the speech is | chunks | detected as the other language | share | over 0.9
+CoSHE-Eval `en` | pure English by speakers of Indian English (reference entirely in Latin script) | 629 | 7 (as Hindi) | 1.1% | 0
+FLEURS en, clips at or above -50 dBFS | American English read speech (196 of 647 clips are that loud; 100 sampled) | 147 | 0 (as Hindi) | 0.0% | 0
+FLEURS hi | Hindi read speech | 157 | 0 (as English) | 0.0% | 0
+CoSHE-Eval `hi` | Hindi-matrix code-switched speech (the utterance's main language is Hindi) | 724 | 123 (as English) | 17.0% | 67
+
+Reading (what the numbers say, and what they do not):
+- Pure English, with an Indian accent or not, is almost never taken for Hindi: 7 of 629 chunks (1.1%, wrong-detection probability 0.67 to 0.74, none over 0.9) for the accented speakers, 0 of 147 for FLEURS English. So the stock medium restricted to en and hi does not have a general accent problem.
+- Pure Hindi is never taken for English (0 of 157).
+- In Hindi-matrix code-switched utterances 17.0% of chunks are detected as English, 67 of them with probability over 0.9. The set label is the utterance's main language, so many of these chunks are English-led and detecting English there is not an error; this number measures how often the language flips between chunks, not how often detection is wrong. It cannot be read as a wrong-detection rate.
+- Together with the hand-labelled baseline (codeswitch-labels.txt: 4 of the 5 English-led chunks in Hinglish speech detected as Hindi, probability 0.68 to 0.98), this points to the difficulty being English words inside code-switched speech, not Indian-accented English as such. Hypothesis only: the sample of labelled chunks is 10 and one speaker set.
+- The most likely language among all of whisper's was neither English nor Hindi in 15 of 629, 11 of 157 and 18 of 724 chunks (2.4%, 7.0%, 2.5%): short chunks and non-speech, restricted away by the en,hi list.
+- NOT measured: Svarah (ai4bharat/Svarah, 1.09 GB test split, gated on Hugging Face; its licence is not visible without signing in: no licence tag, the card returns 401) and Kathbath hi (ai4bharat/Kathbath, CC-BY-4.0 by its tag, gated). Both need the owner to sign in and accept; Svarah's licence must be confirmed to allow evaluation use before a download. Nothing was downloaded.
+- Carried to Phase 5 (GATES.md row "Language-detection rules"): rules (a) to (d) are compared on transcript WER and script correctness on code-switched sessions; this measurement only says where the first-pass detector is reliable (single-language speech) and where it is not informative (chunks that mix languages).
