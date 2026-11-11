@@ -37,6 +37,8 @@ class Segment:
     lang: str
     lang_prob: float | None = None
     mixed: bool = False
+    # wb-engine segment flags (retried, unclear, low_coverage, ...); empty for other engines.
+    flags: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -344,7 +346,7 @@ def parse_events(text: str, elapsed_s: float) -> Transcript:
         if kind != "segment":
             continue
         segments.append(Segment(int(ev["start_ms"]), int(ev["end_ms"]), ev["text"], ev["lang"],
-                                ev.get("lang_prob"), bool(ev.get("mixed", False))))
+                                ev.get("lang_prob"), bool(ev.get("mixed", False)), list(ev.get("flags", []))))
         models.append(ev.get("model", ""))
     return Transcript(segments, elapsed_s, models)
 

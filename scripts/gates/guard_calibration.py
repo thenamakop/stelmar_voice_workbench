@@ -48,9 +48,9 @@ def run_measure(rows: list[tuple[str, str, str]]) -> list[dict]:
     r = subprocess.run([str(binary)], input=payload, capture_output=True, text=True, encoding="utf-8")
     out = []
     for line in r.stdout.splitlines():
-        i, s, chars, words, ratio, ratio_utf8, rep = line.split("\t")
+        i, s, chars, words, ratio, ratio_utf8, rep, *rest = line.split("\t")
         out.append({"id": i, "set": s, "chars": int(chars), "words": int(words), "ratio": float(ratio),
-                    "ratio_utf8": float(ratio_utf8), "rep": int(rep)})
+                    "ratio_utf8": float(ratio_utf8), "rep": int(rep), "letters": int(rest[0]) if rest else 0})
     assert len(out) == len(rows), (len(out), len(rows))
     return out
 
@@ -106,7 +106,7 @@ def main() -> int:
     attempts = [json.loads(x) for x in Path(args.attempts).read_text(encoding="utf-8").splitlines() if x.strip()]
     loops, legit = [], []
     for a in attempts:
-        if a["step"] != "first" and a["step"] != "a_no_context" and not a["step"].startswith("b_"):
+        if a["step"] != "first" and not a["step"].startswith(("a_", "b_")):
             continue
         is_loop = a["truncated"] or (a["ratio_utf8"] > 2.4 and repeated_phrase(a["text"]))
         (loops if is_loop else legit).append(a)

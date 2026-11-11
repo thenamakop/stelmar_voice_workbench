@@ -19,12 +19,13 @@ fn main() {
             continue;
         };
         println!(
-            "{id}\t{set}\t{}\t{}\t{:.4}\t{:.4}\t{}",
+            "{id}\t{set}\t{}\t{}\t{:.4}\t{:.4}\t{}\t{}",
             text.chars().count(),
             text.split_whitespace().count(),
             guards::compression_ratio(text),
             guards::compression_ratio_utf8(text),
-            u8::from(guards::has_repetition(text))
+            u8::from(guards::has_repetition(text)),
+            guards::letter_count(text)
         );
     }
 }

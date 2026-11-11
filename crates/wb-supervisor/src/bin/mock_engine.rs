@@ -129,5 +129,6 @@ fn main() {
         elapsed_s: 0.0,
         retried_chunks: 0,
         unclear_chunks: 0,
+        low_coverage_chunks: 0,
     }));
 }

@@ -84,6 +84,11 @@ pub struct Settings {
     /// compare speed or to work around a driver fault.
     #[serde(default = "yes")]
     pub flash_attn: bool,
+    /// First sampling temperature of a decode (0 for the normal decode). The retry ladder starts its
+    /// first step at 0.4, 0.6 and 0.8 so the re-decode really differs from the first one; whisper.cpp's own
+    /// temperature fallback never fires when our loop check is what failed.
+    #[serde(default)]
+    pub start_temperature: f32,
 }
 
 impl Default for Settings {
@@ -103,6 +108,7 @@ impl Default for Settings {
             vad_threshold: 0.5,
             vad_min_silence_ms: 100,
             flash_attn: true,
+            start_temperature: 0.0,
         }
     }
 }
@@ -284,6 +290,10 @@ pub enum SegmentFlag {
     /// time). The segment has its times and no text, so review shows the gap. It is never shown as a
     /// caption and counts as lost speech (PLAN section 6).
     Unclear,
+    /// The text has far fewer characters per second of speech than is normal for its language, and the
+    /// retries did not change that. The text is kept (it may be right: a long pause the VAD called
+    /// speech), but review shows the chunk (PLAN section 6, coverage check, 11 Nov 2026).
+    LowCoverage,
 }
 
 /// One decoded segment, in audio order within its work unit.
@@ -433,6 +443,9 @@ pub struct DoneSummary {
     /// Chunks or halves of chunks emitted as `unclear` (no text) after the whole retry ladder.
     #[serde(default)]
     pub unclear_chunks: u32,
+    /// Segments emitted with the `LowCoverage` flag (text kept, chunk shown for review).
+    #[serde(default)]
+    pub low_coverage_chunks: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -687,6 +700,7 @@ mod tests {
                 elapsed_s: 4.0,
                 retried_chunks: 0,
                 unclear_chunks: 0,
+                low_coverage_chunks: 0,
             }),
         ];
         for e in events {

@@ -127,7 +127,7 @@ impl Model {
         p.set_print_progress(false);
         p.set_print_realtime(false);
         p.set_print_timestamps(false);
-        p.set_temperature(0.0);
+        p.set_temperature(s.start_temperature.clamp(0.0, 1.0));
         p.set_temperature_inc(if s.temperature_fallback { 0.2 } else { 0.0 });
         // Past text as a prompt is the app's own context (same language, last characters), passed in
         // `prompt`; without any prompt the model is told to use none (n_max_text_ctx = 0).

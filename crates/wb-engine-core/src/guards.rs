@@ -59,6 +59,44 @@ pub const LOGPROB_BELOW: f32 = -1.0;
 /// calibration.
 pub const COMPRESSION_ABOVE: f32 = 2.64;
 
+/// Coverage check (PLAN section 6, 11 Nov 2026): the floor of letters and digits per second of VAD
+/// speech below which a chunk's text is too short for the speech it holds, by language. A decode like
+/// that is not a loop and the model is confident of it, so no other guard sees it (one 14 s Hinglish
+/// chunk came out as 43 characters). The values come from `scripts/gates/coverage_calibration.py`
+/// (`docs/evidence/phase-2/coverage-calibration.txt`, 11 Nov 2026: 0.9 x the lowest reference rate of the language); a language with no entry is not checked.
+pub const COVERAGE_FLOOR: &[(&str, f32)] = &[("en", 5.79), ("hi", 5.03), ("ur", 7.70)];
+
+/// Chunks with less speech than this are not judged: their rate varies too much.
+pub const COVERAGE_MIN_SPEECH_S: f64 = 3.0;
+
+pub fn coverage_floor(lang: &str) -> Option<f32> {
+    COVERAGE_FLOOR
+        .iter()
+        .find(|(l, _)| *l == lang)
+        .map(|(_, f)| *f)
+}
+
+/// Letters and digits in `text` (the unit of the coverage rate; spaces and punctuation do not count).
+pub fn letter_count(text: &str) -> usize {
+    text.chars().filter(|c| c.is_alphanumeric()).count()
+}
+
+/// Letters and digits per second of speech, or `None` when the chunk holds too little speech to judge.
+pub fn chars_per_speech_second(text: &str, speech_s: f64) -> Option<f32> {
+    if speech_s < COVERAGE_MIN_SPEECH_S {
+        return None;
+    }
+    Some((letter_count(text) as f64 / speech_s) as f32)
+}
+
+/// True when `text` is far below the normal rate for `lang` given `speech_s` seconds of speech.
+pub fn low_coverage(text: &str, lang: &str, speech_s: f64) -> bool {
+    match (coverage_floor(lang), chars_per_speech_second(text, speech_s)) {
+        (Some(floor), Some(rate)) => rate < floor,
+        _ => false,
+    }
+}
+
 fn zlib_ratio(raw: &[u8]) -> f32 {
     if raw.is_empty() {
         return 1.0;
@@ -263,6 +301,38 @@ mod tests {
             "{}",
             compression_ratio(hindi)
         );
+    }
+
+    #[test]
+    fn coverage_counts_letters_per_second_of_speech_and_skips_short_chunks() {
+        // 40 letters in 10 s of speech: 4 per second.
+        let t = "abcdefghij abcdefghij abcdefghij abcdefghij";
+        assert_eq!(letter_count(t), 40);
+        let r = chars_per_speech_second(t, 10.0).unwrap_or(0.0);
+        assert!((r - 4.0).abs() < 1e-6, "{r}");
+        // Under 3 s of speech nothing is judged.
+        assert_eq!(chars_per_speech_second(t, 2.9), None);
+        // Devanagari letters and vowel signs count as letters; punctuation does not.
+        assert!(letter_count("नमस्ते, दोस्तों।") >= 10);
+        assert_eq!(letter_count(" , . ! । "), 0);
+        // A language without a floor is never flagged.
+        assert!(!low_coverage("a", "xx", 30.0));
+        assert!(!low_coverage("", "en", 30.0) || coverage_floor("en").is_some());
+    }
+
+    #[test]
+    fn the_calibrated_floors_flag_a_short_decode_and_not_a_normal_one() {
+        // The known case (audio_1444 chunk 1): 3.34 letters per second of speech, floor 5.03 for hi.
+        let short = "a".repeat(46); // 46 letters in 13.8 s of speech = 3.33 per second
+        assert!(low_coverage(&short, "hi", 13.8));
+        // A normal rate (the median of the references is about 10 to 14 per second) is not flagged.
+        let normal = "a".repeat(140);
+        assert!(!low_coverage(&normal, "hi", 13.8));
+        assert!(!low_coverage(&normal, "en", 13.8));
+        assert!(!low_coverage(&normal, "ur", 13.8));
+        // The same short decode in a chunk with under 3 s of speech is not judged.
+        assert!(!low_coverage("abc", "hi", 2.0));
+        assert_eq!(coverage_floor("hi"), Some(5.03));
     }
 
     #[test]

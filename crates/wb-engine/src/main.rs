@@ -9,6 +9,8 @@
 //!                 [--settings JSON] [--threads N] [--device cpu|gpu:N] [--models-dir DIR]
 //! wb-engine chunks --file WAV --out CHUNKS.json [--max-chunk-s 15] [--greedy] [--models-dir DIR]
 //!                 (the VAD chunks batch would decode, without any model: for labelling)
+//! wb-engine detect --file WAV --models en=medium --langs en,hi --out FILE.jsonl [--settings JSON]
+//!                 (language probabilities per chunk, no decoding: information tool, never called by the app)
 //! wb-engine live  --request FILE        (16 kHz mono f32 PCM on stdin)
 //! ```
 //!
@@ -421,6 +423,37 @@ fn cmd_bench(args: &[String]) -> Result<(), Fail> {
     })
 }
 
+/// `detect`: the language probabilities of every chunk of a file and no decoding (same arguments as
+/// `batch --file`, with `--out FILE.jsonl`; one JSON object per chunk). Information tool for measuring
+/// the detector's bias on labelled sets; the app never calls it.
+fn cmd_detect(args: &[String]) -> Result<(), Fail> {
+    begin()?;
+    let req = eval_request(args)?;
+    let out_path = args_value(args, "--out").ok_or_else(|| Fail::usage("--out FILE.jsonl is required"))?;
+    let mut file = BufWriter::new(
+        File::create(out_path)
+            .map_err(|e| Fail::usage(format!("cannot create {out_path}: {e}")))?,
+    );
+    let picked = pick_device(req.device).map_err(|e| Fail::from_error(&e))?;
+    let started = std::time::Instant::now();
+    let mut emit = |v: &serde_json::Value| -> std::io::Result<()> {
+        writeln!(file, "{v}")?;
+        file.flush()
+    };
+    let n = batch::detect_only(&req, picked.gpu_ordinal, &mut emit).map_err(|e| Fail::from_error(&e))?;
+    out::emit(&Event::Done(wb_protocol::DoneSummary {
+        segments: 0,
+        chunks: n,
+        audio_ms: 0,
+        truncated_chunks: 0,
+        elapsed_s: started.elapsed().as_secs_f64(),
+        retried_chunks: 0,
+        unclear_chunks: 0,
+        low_coverage_chunks: 0,
+    }))
+    .map_err(|e| Fail { code: exit::ERROR, error_code: "io", message: e.to_string() })
+}
+
 /// `chunks`: the chunks `batch` would decode for a file, from the VAD alone (no model, no language
 /// detection). The code-switching gate fixes its chunks with this before anyone labels them.
 fn cmd_chunks(args: &[String]) -> Result<(), Fail> {
@@ -456,6 +489,7 @@ fn cmd_chunks(args: &[String]) -> Result<(), Fail> {
         elapsed_s: 0.0,
         retried_chunks: 0,
         unclear_chunks: 0,
+        low_coverage_chunks: 0,
     }))
     .map_err(|e| Fail { code: exit::ERROR, error_code: "io", message: e.to_string() })
 }
@@ -489,8 +523,9 @@ fn main() -> ExitCode {
         Some("bench") => cmd_bench(&args[1..]),
         Some("live") => cmd_live(&args[1..]),
         Some("chunks") => cmd_chunks(&args[1..]),
+        Some("detect") => cmd_detect(&args[1..]),
         Some(other) => Err(Fail::usage(format!(
-            "unknown command '{other}' (info, bench, batch, live)"
+            "unknown command '{other}' (info, bench, batch, live, chunks, detect)"
         ))),
     };
     match result {

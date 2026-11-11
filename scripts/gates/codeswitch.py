@@ -120,8 +120,13 @@ def engine_chunks(wav: Path, out: Path) -> list[dict]:
     return json.loads(out.read_text(encoding="utf-8"))["chunks"]
 
 
-def engine_batch(wav: Path, out: Path, langs: str, models: str) -> list[dict]:
+def engine_batch(wav: Path, out: Path, langs: str, models: str, reuse: bool = False) -> list[dict]:
+    """Runs `wb-engine batch`; with `reuse`, reads the segments an earlier run left in `out` (no decoding)."""
     out.parent.mkdir(parents=True, exist_ok=True)
+    if reuse:
+        if not out.exists():
+            raise SystemExit(f"--reuse: {out} does not exist")
+        return [json.loads(line) for line in out.read_text(encoding="utf-8").splitlines() if line.strip()]
     r = subprocess.run(
         [str(ENGINE), "batch", "--file", str(wav), "--models", models, "--langs", langs, "--out", str(out),
          "--settings", json.dumps({"sentence_split": True})],  # the chunks of a multi-language session; the same as `chunks`
@@ -238,10 +243,29 @@ def cmd_swap(a: argparse.Namespace) -> None:
 
 
 def segment_for(events: list[dict], c: dict) -> dict | None:
-    for e in events:
-        if e.get("event") == "segment" and e["start_ms"] <= c["start_ms"] + 400 and e["end_ms"] >= c["end_ms"] - 400:
+    """The engine's answer for a sampled chunk. One segment that covers the chunk is its answer. A chunk the
+    retry ladder split (or any chunk cut into several segments) is answered by the language that covers
+    most of its time (segments with no text, flagged `unclear`, still carry the detected language); the
+    segments must cover at least half of the chunk, else there is no answer."""
+    segs = [e for e in events if e.get("event") == "segment"]
+    for e in segs:
+        if e["start_ms"] <= c["start_ms"] + 400 and e["end_ms"] >= c["end_ms"] - 400:
             return e
-    return None
+
+    def overlap(e: dict) -> int:
+        return max(0, min(e["end_ms"], c["end_ms"]) - max(e["start_ms"], c["start_ms"]))
+
+    inside = [e for e in segs if overlap(e) > 0]
+    if sum(overlap(e) for e in inside) < (c["end_ms"] - c["start_ms"]) / 2:
+        return None
+    cover: dict[str, int] = {}
+    for e in inside:
+        cover[e["lang"]] = cover.get(e["lang"], 0) + overlap(e)
+    lang = max(cover, key=lambda k: cover[k])
+    mine = [e for e in inside if e["lang"] == lang]
+    best = max(mine, key=overlap)
+    prob = sum(e["lang_prob"] * overlap(e) for e in mine) / max(1, sum(overlap(e) for e in mine))
+    return {**best, "lang": lang, "lang_prob": prob, "split_into": len(inside)}
 
 
 def cmd_score(a: argparse.Namespace) -> None:
@@ -254,7 +278,7 @@ def cmd_score(a: argparse.Namespace) -> None:
     events_by_clip: dict[str, list[dict]] = {}
     for clip in selection["clips"]:
         utt = next(json.loads(line) for line in (set_dir / "manifest.jsonl").read_text(encoding="utf-8").splitlines() if json.loads(line)["id"] == clip)
-        events_by_clip[clip] = engine_batch(set_dir / utt["audio"], scratch / f"batch-{clip}.jsonl", "en,hi", models)
+        events_by_clip[clip] = engine_batch(set_dir / utt["audio"], scratch / f"batch-{clip}.jsonl", "en,hi", models, reuse=a.reuse)
     lines = [
         "Code-switching gate: per-chunk language against hand labels (Phase 2)",
         f"engine: {ENGINE.name}; models: {models}; languages en,hi; sentence_split on (the chunks the labeller heard come from the same chunker); clips {', '.join(selection['clips'])}; selection seed {selection['seed']}; rule: {selection['rule']}",
@@ -287,7 +311,8 @@ def cmd_score(a: argparse.Namespace) -> None:
         else:
             tot_pure += 1
             ok_pure += good
-        lines.append(f"{i + 1} | {c['clip']} | {c['start_ms']}-{c['end_ms']} | {lab['label']} ({lab['main']}) | {e['lang']} | {e['lang_prob']:.2f} | {'OK' if good else 'WRONG'}")
+        lines.append(f"{i + 1} | {c['clip']} | {c['start_ms']}-{c['end_ms']} | {lab['label']} ({lab['main']}) | {e['lang']} | {e['lang_prob']:.2f} | {'OK' if good else 'WRONG'}"
+                     + (f" (the chunk came back as {e['split_into']} segments; the language covering most of it)" if e.get("split_into") else ""))
     total = tot_pure + tot_mixed
     ok = ok_pure + ok_mixed
     lines += [
@@ -295,7 +320,7 @@ def cmd_score(a: argparse.Namespace) -> None:
         f"result: {ok} of {total} chunks match ({ok_pure} of {tot_pure} pure, {ok_mixed} of {tot_mixed} mixed, scored against the main language); chunks with nothing decoded: {missing}",
         f"mixed chunks in the sample: {tot_mixed}; chunks led by English {led['en']}, by Hindi {led['hi']}; swaps made before detection: {len(selection['swaps'])}",
         f"Hindi-led chunks that came back as English words only (translated): {translated}",
-        f"gate (at least 9 of 10 and no translated chunk): {'PASS' if ok >= 9 and translated == 0 and total == SAMPLE else 'FAIL'}",
+        f"baseline for Phase 5 (the accuracy gate of 9 of 10 and no translated chunk moved to Phase 5 on 11 Nov 2026): {'at the bar' if ok >= 9 and translated == 0 and total == SAMPLE else 'below the bar'}",
     ]
     Path(a.out).write_text("\n".join(lines) + "\n", encoding="utf-8")
     print("\n".join(lines))
@@ -329,7 +354,7 @@ def cmd_control(a: argparse.Namespace) -> None:
         pos += len(f) // 2 + len(silence) // 2
     wav = scratch / "control.wav"
     write_wav(wav, frames, rate)
-    events = engine_batch(wav, scratch / "control-batch.jsonl", "en,hi", a.models)
+    events = engine_batch(wav, scratch / "control-batch.jsonl", "en,hi", a.models, reuse=a.reuse)
     segs = [e for e in events if e.get("event") == "segment"]
     lines = [
         "Code-switching control: 10 FLEURS utterances alternating English and Hindi, joined with 0.8 s of silence (Phase 2)",
@@ -361,6 +386,7 @@ def main() -> int:
         s.add_argument("--labels", help="labels.json (default: SCRATCH/labelling/labels.json)")
         s.add_argument("--out", help="evidence file (score, control)")
         s.add_argument("--models", default="en=medium,hi=medium", help="lang=id,... for the engine")
+        s.add_argument("--reuse", action="store_true", help="score the batch files an earlier run left in SCRATCH; no decoding")
         s.set_defaults(fn=fn)
     a = p.parse_args()
     if Path(a.scratch).resolve().is_relative_to(REPO):

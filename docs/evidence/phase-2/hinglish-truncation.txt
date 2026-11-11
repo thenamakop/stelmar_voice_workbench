@@ -1,4 +1,18 @@
-Hinglish on 20 CoSHE-Eval clips through wb-engine batch (Phase 2, 10 Nov 2026): two runs, newest first
+Hinglish on 20 CoSHE-Eval clips through wb-engine batch (Phase 2, 10 and 11 Nov 2026): three runs, newest first
+
+=== RUN 3 (11 Nov 2026, 04:55 to 05:52 IST): the one re-run under the restated gate, after the coverage check and ladder step a at temperatures 0.4, 0.6, 0.8 ===
+
+Gate as restated by the owner on 11 Nov 2026 (docs/GATES.md, 5a to 2): ENGINE PART, 0 broken utterances and 0 silent loss. RESULT: PASS (PROVISIONAL: native Legion run). Model part reported, not gated (Phase 5 row).
+Setup: as run 2 (Legion native, 8 threads, wb-engine 0.1.0 avx2 rebuilt with COVERAGE_FLOOR en 5.79, hi 5.03, ur 7.70 and step a at 0.4, 0.6, 0.8; whisper.cpp v1.9.5 commit d1be6fde11ac; model hinglish-q5_0; role night; language given per clip; the same 20 clips). Track B idle, overlay tools closed, no build running (the engine build ended before the run began; the kill gate re-run had ended at 04:37). The development attempt log (WB_ATTEMPT_LOG, scratch folder only) was on.
+Result (eval/run.py, phase2-wb-hinglish-q5_0-coshe): WER 15.8, CER 11.5 (run 2: 16.0 and 11.7). Speed RTF 3.40 (information only: the attempt log is on and failed chunks are decoded again; speed decisions use wb-engine bench).
+Engine part: broken utterances 0; silent loss 0 of 89 chunks (84 decoded cleanly at the first attempt, 5 sent through the retry ladder, 0 dropped as non-speech, 0 empty with a chunk_empty event).
+Model part: unclear chunks 1 (audio_1444 chunk 1, 14.5 to 28.7 s of the clip); low_coverage chunks 0; truncated utterances by the harness's rule 1 (audio_1444). audio_908, truncated and unclear in run 2, is now whole.
+Ladder, chunk by chunk (hinglish-report.txt): audio_1355 chunk 0: step b. audio_1444 chunk 1: first decode 43 characters (3.34 letters per second of speech, under the hi floor 5.03: Fail LowCoverage); step a at 0.4, 0.6 and 0.8 gave the same 43 characters, still under the floor; step b cut it at the deepest pause: first half a loop (compression 3.09, unclear), second half good (kept). audio_37 chunk 0: step b. audio_908 chunk 2: step a at temperature 0.4 (the first time step a rescued anything). audio_908 chunk 3: step b.
+Step a at 0.6 and 0.8 rescued no chunk in this run: 4 chunks reached them and all were rescued only by step b or stayed unclear.
+Open design question for the owner: when step b's first half is a loop, the 43-character text of the original decode is dropped and the half is `unclear`; keeping that text flagged `low_coverage` would show more of the speech (the rule as approved keeps the text only when no later attempt produced a result to judge).
+Not new in run 3: temperature-rescued text may differ after an engine restart (whisper.cpp's random generator is not reseeded per decode).
+
+=== RUN 2 and earlier follow ===
 
 === RUN 2 (23:07 IST): after the guard change of PLAN section 6 (script-independent loop measure, retry ladder, no silent loss) ===
 

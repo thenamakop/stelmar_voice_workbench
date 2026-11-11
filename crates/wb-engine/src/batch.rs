@@ -108,7 +108,14 @@ enum Failure {
     Loop,
     /// The decoder reached its token limit: the text is cut.
     TokenLimit,
+    /// Far fewer letters per second of speech than is normal for the language (`guards::low_coverage`):
+    /// the text is probably missing a stretch. Unlike the others, text that stays low is kept and flagged.
+    LowCoverage,
 }
+
+/// First sampling temperature of each attempt of ladder step (a). The first decode runs at 0; whisper.cpp's
+/// own fallback never fires when our loop check is what failed, so the retries start hotter.
+const STEP_A_TEMPERATURES: [f32; 3] = [0.4, 0.6, 0.8];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Verdict {
@@ -120,7 +127,8 @@ enum Verdict {
     Fail(Failure),
 }
 
-fn judge(a: &Attempt, speech_ratio: f32) -> (Verdict, Metrics) {
+/// `speech_s` is the seconds of VAD speech in the chunk (or half chunk) the attempt decoded.
+fn judge(a: &Attempt, speech_ratio: f32, speech_s: f64) -> (Verdict, Metrics) {
     let t = a.decoded.text.text.trim();
     let metrics = Metrics {
         avg_logprob: a.decoded.avg_logprob,
@@ -132,6 +140,7 @@ fn judge(a: &Attempt, speech_ratio: f32) -> (Verdict, Metrics) {
         Some(guards::DropReason::Compression) => Verdict::Fail(Failure::Loop),
         Some(reason) => Verdict::Skip(reason),
         None if a.decoded.truncated => Verdict::Fail(Failure::TokenLimit),
+        None if guards::low_coverage(t, &a.lang, speech_s) => Verdict::Fail(Failure::LowCoverage),
         None => Verdict::Good,
     };
     (verdict, metrics)
@@ -178,6 +187,8 @@ impl AttemptLog {
 /// The result for one half of a chunk in retry step (b).
 enum Half {
     Text(Box<Attempt>, Metrics),
+    /// Only the coverage check failed: the text is kept and flagged `low_coverage`.
+    Low(Box<Attempt>, Metrics),
     Failed(Failure),
     /// Not speech (under 30% speech, or the model says so): nothing to emit.
     Silent,
@@ -224,9 +235,18 @@ fn emit_text(
     start_ms: u64,
     end_ms: u64,
     retried: bool,
+    low_coverage: bool,
 ) -> Result<()> {
     let t = a.decoded.text.text.trim().to_string();
     if t.is_empty() {
+        // Nothing to show, but never silently: a chunk that decodes to nothing gets an event.
+        out::warn(
+            "chunk_empty",
+            format!(
+                "chunk {} ({start_ms} to {end_ms} ms) decoded to an empty text",
+                cx.chunk_no
+            ),
+        );
         return Ok(());
     }
     let mut flags: Vec<SegmentFlag> = Vec::new();
@@ -243,6 +263,9 @@ fn emit_text(
     if retried {
         flags.push(SegmentFlag::Retried);
     }
+    if low_coverage {
+        flags.push(SegmentFlag::LowCoverage);
+    }
     flags.extend(guards::flags(&t, &a.lang, &a.counts));
     let flagged = flags.iter().any(|f| {
         matches!(
@@ -251,6 +274,7 @@ fn emit_text(
                 | SegmentFlag::SilencePhrase
                 | SegmentFlag::WrongScript
                 | SegmentFlag::CompressionRatio
+                | SegmentFlag::LowCoverage
         )
     });
     sink.send(&Event::Segment(SegmentEvent {
@@ -275,6 +299,9 @@ fn emit_text(
     summary.segments += 1;
     if retried {
         summary.retried_chunks += 1;
+    }
+    if low_coverage {
+        summary.low_coverage_chunks += 1;
     }
     if flagged {
         context.remove(&a.lang);
@@ -329,6 +356,7 @@ fn emit_unclear(
             match failure {
                 Failure::Loop => SegmentFlag::CompressionRatio,
                 Failure::TokenLimit => SegmentFlag::Truncated,
+                Failure::LowCoverage => SegmentFlag::LowCoverage,
             },
         ],
         truncated: failure == Failure::TokenLimit,
@@ -340,6 +368,37 @@ fn emit_unclear(
     }
     context.remove(lang);
     Ok(())
+}
+
+/// The end of the ladder for a stretch that no step rescued. When only the coverage check failed and
+/// some attempt produced text, that text is kept and flagged `low_coverage`; in every other case (a loop
+/// or the token limit every time, or no text at all) the stretch becomes an `unclear` segment.
+#[allow(clippy::too_many_arguments)]
+fn emit_kept_or_unclear(
+    sink: &mut Sink<'_>,
+    summary: &mut DoneSummary,
+    context: &mut BTreeMap<String, String>,
+    cx: &ChunkCtx<'_>,
+    keep: Option<(&Attempt, &Metrics)>,
+    lang: &str,
+    model_id: &str,
+    failure: Failure,
+    start_ms: u64,
+    end_ms: u64,
+) -> Result<()> {
+    match keep {
+        Some((a, m)) if !a.decoded.text.text.trim().is_empty() => {
+            out::warn(
+                "chunk_low_coverage",
+                format!(
+                    "chunk {} ({start_ms} to {end_ms} ms) stays far shorter than its speech after the retries; the text is kept and flagged low_coverage",
+                    cx.chunk_no
+                ),
+            );
+            emit_text(sink, summary, context, cx, a, m, start_ms, end_ms, true, true)
+        }
+        _ => emit_unclear(sink, summary, context, cx, lang, model_id, failure, start_ms, end_ms),
+    }
 }
 
 pub struct Sink<'a> {
@@ -397,6 +456,7 @@ pub fn run(
         elapsed_s: 0.0,
         retried_chunks: 0,
         unclear_chunks: 0,
+        low_coverage_chunks: 0,
     };
     let attempt_log = AttemptLog::new(&req.source);
     // Previous text per language, for the next chunk's prompt; reset after a flagged segment.
@@ -509,8 +569,9 @@ pub fn run(
             }
 
             let speech_ratio = c.speech_ratio() as f32;
+            let speech_s = c.duration_s() * c.speech_ratio();
             let (start_abs, end_abs) = (abs(c.start_ms), abs(c.end_ms));
-            let (verdict, metrics) = judge(&attempt, speech_ratio);
+            let (verdict, metrics) = judge(&attempt, speech_ratio, speech_s);
             attempt_log.record(chunk_no, start_abs, end_abs, "first", &attempt, &metrics, &verdict);
             let cx = ChunkCtx {
                 unit: unit.index,
@@ -523,7 +584,7 @@ pub fn run(
             };
             match verdict {
                 Verdict::Good => {
-                    emit_text(sink, &mut summary, &mut context, &cx, &attempt, &metrics, start_abs, end_abs, false)?;
+                    emit_text(sink, &mut summary, &mut context, &cx, &attempt, &metrics, start_abs, end_abs, false, false)?;
                 }
                 Verdict::Skip(reason) => {
                     out::warn(
@@ -540,13 +601,15 @@ pub fn run(
                     context.remove(&attempt.lang);
                 }
                 Verdict::Fail(failure) => {
-                    // The retry ladder (PLAN section 6): (a) again without previous-text context, with
-                    // temperature fallback; (b) each half, cut at the deepest VAD pause, without context;
-                    // (c) only then a segment flagged `unclear`, with no text. Nothing is dropped silently.
+                    // The retry ladder (PLAN section 6): (a) again without previous-text context, starting
+                    // at temperature 0.4, then 0.6, then 0.8; (b) each half, cut at the deepest VAD pause,
+                    // without context; (c) only then a segment flagged `unclear`, with no text (or, when
+                    // only the coverage check failed, the text kept and flagged `low_coverage`). Nothing is
+                    // dropped silently.
                     out::warn(
                         "chunk_retry",
                         format!(
-                            "chunk {chunk_no} ({start_abs} to {end_abs} ms) failed a guard ({failure:?}; compression ratio {:.2}, {} characters); retrying without previous-text context",
+                            "chunk {chunk_no} ({start_abs} to {end_abs} ms) failed a guard ({failure:?}; compression ratio {:.2}, {} characters, {speech_s:.1} s of speech); retrying without previous-text context",
                             metrics.compression_ratio,
                             attempt.decoded.text.text.trim().chars().count()
                         ),
@@ -555,28 +618,66 @@ pub fn run(
                     let mut retry_req = req.clone();
                     retry_req.settings.temperature_fallback = true;
                     let no_context = BTreeMap::new();
-                    let step_a = decode(&mut models, &lang, chunk_pcm, &no_context, &retry_req, threads)?;
-                    let (va, ma) = judge(&step_a, speech_ratio);
-                    attempt_log.record(chunk_no, start_abs, end_abs, "a_no_context", &step_a, &ma, &va);
-                    if va == Verdict::Good {
+                    // The longest step-a text that failed only the coverage check, kept if nothing better comes.
+                    let mut low_a: Option<(Attempt, Metrics)> = None;
+                    let mut rescued_a: Option<(Attempt, Metrics, f32)> = None;
+                    for t in STEP_A_TEMPERATURES {
+                        let mut req_a = retry_req.clone();
+                        req_a.settings.start_temperature = t;
+                        let a = decode(&mut models, &lang, chunk_pcm, &no_context, &req_a, threads)?;
+                        let (va, ma) = judge(&a, speech_ratio, speech_s);
+                        attempt_log.record(chunk_no, start_abs, end_abs, &format!("a_t{t:.1}"), &a, &ma, &va);
+                        match va {
+                            Verdict::Good => {
+                                rescued_a = Some((a, ma, t));
+                                break;
+                            }
+                            Verdict::Fail(Failure::LowCoverage) => {
+                                let longer = low_a.as_ref().is_none_or(|(b, _)| {
+                                    guards::letter_count(&a.decoded.text.text) > guards::letter_count(&b.decoded.text.text)
+                                });
+                                if longer {
+                                    low_a = Some((a, ma));
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    // What to keep if the whole ladder fails on coverage alone: the longest text so far.
+                    let keep: Option<(&Attempt, &Metrics)> = if failure == Failure::LowCoverage {
+                        match &low_a {
+                            Some((a, m))
+                                if guards::letter_count(&a.decoded.text.text)
+                                    > guards::letter_count(&attempt.decoded.text.text) =>
+                            {
+                                Some((a, m))
+                            }
+                            _ => Some((&attempt, &metrics)),
+                        }
+                    } else {
+                        None
+                    };
+                    let model_id = attempt.model_id.clone();
+                    if let Some((a, m, t)) = rescued_a {
                         out::warn(
                             "chunk_rescued",
-                            format!("chunk {chunk_no}: rescued by step a (decoded again without previous-text context)"),
+                            format!("chunk {chunk_no}: rescued by step a (decoded again without previous-text context at temperature {t:.1})"),
                         );
-                        emit_text(sink, &mut summary, &mut context, &cx, &step_a, &ma, start_abs, end_abs, true)?;
+                        emit_text(sink, &mut summary, &mut context, &cx, &a, &m, start_abs, end_abs, true, false)?;
                     } else if let Some(split_ms) = chunker::split_point_ms(&speech, c, &audio.pcm, 16_000) {
                         let cut = ((split_ms.saturating_sub(c.start_ms)) as usize * 16).min(chunk_pcm.len());
                         let halves = [(c.start_ms, split_ms, &chunk_pcm[..cut]), (split_ms, c.end_ms, &chunk_pcm[cut..])];
                         let mut outcome: Vec<(u64, u64, Half)> = Vec::new();
                         for (n, (a_ms, b_ms, pcm)) in halves.into_iter().enumerate() {
                             let dur_s = (b_ms - a_ms) as f64 / 1000.0;
-                            let ratio = (chunker::speech_seconds(&speech, a_ms as f64 / 1000.0, b_ms as f64 / 1000.0)
-                                / dur_s.max(1e-9)) as f32;
+                            let half_speech_s =
+                                chunker::speech_seconds(&speech, a_ms as f64 / 1000.0, b_ms as f64 / 1000.0);
+                            let ratio = (half_speech_s / dur_s.max(1e-9)) as f32;
                             let half = if pcm.len() < 1_600 || ratio < guards::MIN_SPEECH_RATIO {
                                 Half::Silent
                             } else {
                                 let d = decode(&mut models, &lang, pcm, &no_context, &retry_req, threads)?;
-                                let (vh, mh) = judge(&d, ratio);
+                                let (vh, mh) = judge(&d, ratio, half_speech_s);
                                 attempt_log.record(
                                     chunk_no,
                                     abs(a_ms),
@@ -589,32 +690,47 @@ pub fn run(
                                 match vh {
                                     Verdict::Good => Half::Text(Box::new(d), mh),
                                     Verdict::Skip(_) => Half::Silent,
+                                    Verdict::Fail(Failure::LowCoverage) => Half::Low(Box::new(d), mh),
                                     Verdict::Fail(f) => Half::Failed(f),
                                 }
                             };
                             outcome.push((a_ms, b_ms, half));
                         }
                         if outcome.iter().all(|(_, _, h)| matches!(h, Half::Failed(_))) {
-                            emit_unclear(sink, &mut summary, &mut context, &cx, &lang, &step_a.model_id, failure, start_abs, end_abs)?;
+                            emit_kept_or_unclear(sink, &mut summary, &mut context, &cx, keep, &lang, &model_id, failure, start_abs, end_abs)?;
                         } else {
-                            out::warn(
-                                "chunk_rescued",
-                                format!("chunk {chunk_no}: rescued by step b (cut at {} ms, each half decoded without context)", abs(split_ms)),
-                            );
+                            if outcome.iter().any(|(_, _, h)| matches!(h, Half::Text(..))) {
+                                out::warn(
+                                    "chunk_rescued",
+                                    format!("chunk {chunk_no}: rescued by step b (cut at {} ms, each half decoded without context)", abs(split_ms)),
+                                );
+                            } else {
+                                out::warn(
+                                    "chunk_low_coverage",
+                                    format!("chunk {chunk_no}: both halves (cut at {} ms) stay far shorter than their speech; the text is kept and flagged low_coverage", abs(split_ms)),
+                                );
+                            }
                             for (a_ms, b_ms, half) in outcome {
                                 match half {
                                     Half::Text(d, m) => {
-                                        emit_text(sink, &mut summary, &mut context, &cx, &d, &m, abs(a_ms), abs(b_ms), true)?;
+                                        emit_text(sink, &mut summary, &mut context, &cx, &d, &m, abs(a_ms), abs(b_ms), true, false)?;
+                                    }
+                                    Half::Low(d, m) => {
+                                        if d.decoded.text.text.trim().is_empty() {
+                                            emit_unclear(sink, &mut summary, &mut context, &cx, &lang, &model_id, Failure::LowCoverage, abs(a_ms), abs(b_ms))?;
+                                        } else {
+                                            emit_text(sink, &mut summary, &mut context, &cx, &d, &m, abs(a_ms), abs(b_ms), true, true)?;
+                                        }
                                     }
                                     Half::Failed(f) => {
-                                        emit_unclear(sink, &mut summary, &mut context, &cx, &lang, &step_a.model_id, f, abs(a_ms), abs(b_ms))?;
+                                        emit_unclear(sink, &mut summary, &mut context, &cx, &lang, &model_id, f, abs(a_ms), abs(b_ms))?;
                                     }
                                     Half::Silent => {}
                                 }
                             }
                         }
                     } else {
-                        emit_unclear(sink, &mut summary, &mut context, &cx, &lang, &step_a.model_id, failure, start_abs, end_abs)?;
+                        emit_kept_or_unclear(sink, &mut summary, &mut context, &cx, keep, &lang, &model_id, failure, start_abs, end_abs)?;
                     }
                 }
             }
@@ -659,6 +775,66 @@ pub fn run(
     summary.elapsed_s = started.elapsed().as_secs_f64();
     sink.send(&Event::Done(summary.clone()))?;
     Ok(summary)
+}
+
+/// `detect`: the language probabilities of every chunk of the source, and nothing else (no decoding). One
+/// JSON object per chunk goes to `emit`: the chunk's times, its seconds of speech, the probabilities
+/// restricted to the session's languages and renormalised, and the most likely language among all of
+/// whisper's. Used to measure how often the detector prefers the wrong language on labelled sets (Phase 2
+/// information, 11 Nov 2026). Returns the number of chunks.
+pub fn detect_only(
+    req: &BatchRequest,
+    gpu_ordinal: Option<u32>,
+    emit: &mut dyn FnMut(&serde_json::Value) -> std::io::Result<()>,
+) -> Result<u32> {
+    let threads = req.threads.max(1) as usize;
+    let reader = Reader::open(&req.source)?;
+    let mut models = Models::load(req, gpu_ordinal)?;
+    let mut vad = Vad::load(&req.vad_model.path, threads.min(4))?;
+    let s = &req.settings;
+    let params = Params {
+        max_chunk_s: f64::from(s.max_chunk_s),
+        sentence_split: s.sentence_split,
+        ..Params::default()
+    };
+    let mut n = 0u32;
+    for unit in reader.units(&req.units) {
+        let audio = reader.unit_audio(unit.start_ms, unit.end_ms)?;
+        if audio.pcm.is_empty() {
+            continue;
+        }
+        let speech = vad.speech(&audio.pcm, s)?;
+        for c in &chunker::chunks(&speech, &audio.pcm, 16_000, &params) {
+            let a = (c.start_ms as usize * 16).min(audio.pcm.len());
+            let b = (c.end_ms as usize * 16).min(audio.pcm.len());
+            let pcm = &audio.pcm[a..b.max(a)];
+            if c.duration_s() < 0.3 || pcm.len() < 1_600 {
+                continue;
+            }
+            let idx = models.detector_index();
+            let raw = models.loaded[idx].detect_languages(pcm, threads)?;
+            let det = Detection::restrict(&raw, &req.languages);
+            let top_any = raw
+                .iter()
+                .max_by(|x, y| x.1.partial_cmp(&y.1).unwrap_or(std::cmp::Ordering::Equal))
+                .map(|(l, p)| serde_json::json!({ "lang": l, "prob": p }));
+            let probs: Vec<serde_json::Value> = det
+                .probs
+                .iter()
+                .map(|(l, p)| serde_json::json!({ "lang": l, "prob": p }))
+                .collect();
+            emit(&serde_json::json!({
+                "start_ms": audio.start_ms + c.start_ms,
+                "end_ms": audio.start_ms + c.end_ms,
+                "speech_s": c.duration_s() * c.speech_ratio(),
+                "probs": probs,
+                "top_any": top_any,
+            }))
+            .map_err(|e| anyhow!("cannot write the detection: {e}"))?;
+            n += 1;
+        }
+    }
+    Ok(n)
 }
 
 fn decode(
