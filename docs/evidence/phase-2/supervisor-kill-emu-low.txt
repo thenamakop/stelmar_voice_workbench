@@ -1,8 +1,8 @@
 ﻿Supervisor kill test with the real engine (Phase 2), profile emu-low
-date: 2026-11-11 12:12 (IST on the Legion); ran 1041 s
+date: 2026-11-12 04:04 (IST on the Legion); ran 944 s
 overlay tools closed: yes
 no engine build was running when the test started (checked); the test binary was built before it ran
-engine: wb-engine avx2 (copy named wb-engine-killtest.exe, sha256 49ecdebd4c21f2631ab1805d3764452b5ac36fb3fe5e7bac4a4de65e24c09b26), model small f16, 3 threads, previous-text context off
+engine: wb-engine avx2 (copy named wb-engine-killtest.exe, sha256 6548fa546e85302d1fc5747ffe5364142adacb8847ef3abe1ca2d6ec1d14514d), model small f16, 3 threads, previous-text context off
 audio: concat-5min.wav: 313.3 s from 30 fleurs-en utterances, sha256 61dca3313321a61bd671d983e15f2b595ca5c9362c7b23e13863688f4be62184 (FLEURS English test utterances in id order joined with 0.8 s of silence; not committed)
 test: crates/wb-supervisor/tests/kill_real.rs; kill points drawn with a fixed seed (20261110) among the segments of the uninterrupted run; the engine is killed with taskkill /F while decoding the next chunk
 test exit code: 0
@@ -11,7 +11,7 @@ segments in the uninterrupted run: 25
 kill points (after segment number, audio ms): [(4, 54225), (8, 86950), (12, 138410), (16, 192650), (17, 202850)]
 restarts: 5 (kills sent: 5)
 segments after the kills: 25; repeats refused by the committer: 0
-wall time: uninterrupted 506 s, with kills 534 s
+wall time: uninterrupted 466 s, with kills 476 s
 segment times equal to the uninterrupted run: true
 segments with different text: 0
 notices: [Died { exit: Some(1), restart: 1, committed_until_ms: 54225 }, Died { exit: Some(1), restart: 2, committed_until_ms: 86950 }, Died { exit: Some(1), restart: 3, committed_until_ms: 138410 }, Died { exit: Some(1), restart: 4, committed_until_ms: 192650 }, Died { exit: Some(1), restart: 5, committed_until_ms: 202850 }]
