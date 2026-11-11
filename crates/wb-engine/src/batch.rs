@@ -295,6 +295,7 @@ fn emit_text(
         detection: cx.detection(),
         flags,
         truncated: a.decoded.truncated,
+        hint_text: None,
     }))?;
     summary.segments += 1;
     if retried {
@@ -327,6 +328,7 @@ fn emit_unclear(
     failure: Failure,
     start_ms: u64,
     end_ms: u64,
+    hint: Option<&str>,
 ) -> Result<()> {
     out::warn(
         "chunk_unclear",
@@ -360,6 +362,7 @@ fn emit_unclear(
             },
         ],
         truncated: failure == Failure::TokenLimit,
+        hint_text: hint.map(str::to_string),
     }))?;
     summary.segments += 1;
     summary.unclear_chunks += 1;
@@ -385,6 +388,7 @@ fn emit_kept_or_unclear(
     failure: Failure,
     start_ms: u64,
     end_ms: u64,
+    hint: Option<&str>,
 ) -> Result<()> {
     match keep {
         Some((a, m)) if !a.decoded.text.text.trim().is_empty() => {
@@ -397,7 +401,7 @@ fn emit_kept_or_unclear(
             );
             emit_text(sink, summary, context, cx, a, m, start_ms, end_ms, true, true)
         }
-        _ => emit_unclear(sink, summary, context, cx, lang, model_id, failure, start_ms, end_ms),
+        _ => emit_unclear(sink, summary, context, cx, lang, model_id, failure, start_ms, end_ms, hint),
     }
 }
 
@@ -615,6 +619,12 @@ pub fn run(
                         ),
                     );
                     let lang = attempt.lang.clone();
+                    // The original full-chunk text, kept on an `unclear` segment as `hint_text` for review
+                    // (never in the transcript). Not kept when the first decode was a loop: repeated
+                    // words are no hint of what was said.
+                    let hint: Option<String> = Some(attempt.decoded.text.text.trim())
+                        .filter(|t| !t.is_empty() && failure != Failure::Loop)
+                        .map(str::to_string);
                     let mut retry_req = req.clone();
                     retry_req.settings.temperature_fallback = true;
                     let no_context = BTreeMap::new();
@@ -697,7 +707,7 @@ pub fn run(
                             outcome.push((a_ms, b_ms, half));
                         }
                         if outcome.iter().all(|(_, _, h)| matches!(h, Half::Failed(_))) {
-                            emit_kept_or_unclear(sink, &mut summary, &mut context, &cx, keep, &lang, &model_id, failure, start_abs, end_abs)?;
+                            emit_kept_or_unclear(sink, &mut summary, &mut context, &cx, keep, &lang, &model_id, failure, start_abs, end_abs, hint.as_deref())?;
                         } else {
                             if outcome.iter().any(|(_, _, h)| matches!(h, Half::Text(..))) {
                                 out::warn(
@@ -717,20 +727,20 @@ pub fn run(
                                     }
                                     Half::Low(d, m) => {
                                         if d.decoded.text.text.trim().is_empty() {
-                                            emit_unclear(sink, &mut summary, &mut context, &cx, &lang, &model_id, Failure::LowCoverage, abs(a_ms), abs(b_ms))?;
+                                            emit_unclear(sink, &mut summary, &mut context, &cx, &lang, &model_id, Failure::LowCoverage, abs(a_ms), abs(b_ms), hint.as_deref())?;
                                         } else {
                                             emit_text(sink, &mut summary, &mut context, &cx, &d, &m, abs(a_ms), abs(b_ms), true, true)?;
                                         }
                                     }
                                     Half::Failed(f) => {
-                                        emit_unclear(sink, &mut summary, &mut context, &cx, &lang, &model_id, f, abs(a_ms), abs(b_ms))?;
+                                        emit_unclear(sink, &mut summary, &mut context, &cx, &lang, &model_id, f, abs(a_ms), abs(b_ms), hint.as_deref())?;
                                     }
                                     Half::Silent => {}
                                 }
                             }
                         }
                     } else {
-                        emit_kept_or_unclear(sink, &mut summary, &mut context, &cx, keep, &lang, &model_id, failure, start_abs, end_abs)?;
+                        emit_kept_or_unclear(sink, &mut summary, &mut context, &cx, keep, &lang, &model_id, failure, start_abs, end_abs, hint.as_deref())?;
                     }
                 }
             }
@@ -875,6 +885,50 @@ mod tests {
         assert!(hindi.ends_with(&t));
         assert_eq!(tail_chars("short", 200), "short");
         assert_eq!(tail_chars("", 5), "");
+    }
+
+    #[test]
+    fn an_unclear_segment_carries_the_original_text_as_a_hint_and_no_text() -> Result<()> {
+        let det = Detection { probs: vec![("hi".to_string(), 0.9), ("en".to_string(), 0.1)] };
+        let cx = ChunkCtx { unit: 0, chunk_no: 3, det: &det, locked: false, multi: true, chose_both: false, context_chars: 0 };
+        let mut events: Vec<Event> = Vec::new();
+        let mut summary = DoneSummary {
+            segments: 0,
+            chunks: 0,
+            audio_ms: 0,
+            truncated_chunks: 0,
+            elapsed_s: 0.0,
+            retried_chunks: 0,
+            unclear_chunks: 0,
+            low_coverage_chunks: 0,
+        };
+        let mut context: BTreeMap<String, String> = BTreeMap::new();
+        context.insert("hi".to_string(), "previous".to_string());
+        let original = "यह पूरे चंक का मूल पाठ है";
+        {
+            let mut emit = |e: &Event| -> std::io::Result<()> {
+                events.push(e.clone());
+                Ok(())
+            };
+            let mut sink = Sink { emit: &mut emit };
+            emit_unclear(&mut sink, &mut summary, &mut context, &cx, "hi", "m", Failure::LowCoverage, 1_000, 6_000, Some(original))?;
+            emit_unclear(&mut sink, &mut summary, &mut context, &cx, "hi", "m", Failure::Loop, 6_000, 9_000, None)?;
+        }
+        let segments: Vec<SegmentEvent> = events
+            .into_iter()
+            .filter_map(|e| if let Event::Segment(s) = e { Some(s) } else { None })
+            .collect();
+        assert_eq!(segments.len(), 2);
+        assert!(segments[0].flags.contains(&SegmentFlag::Unclear));
+        assert!(segments[0].text.is_empty(), "an unclear segment has no text");
+        assert_eq!(segments[0].hint_text.as_deref(), Some(original));
+        assert_eq!(segments[1].hint_text, None);
+        assert_eq!(summary.unclear_chunks, 2);
+        // The hint never reaches the transcript text.
+        let transcript = wb_protocol::transcript_text(&segments);
+        assert_eq!(transcript, "");
+        assert!(!transcript.contains(original));
+        Ok(())
     }
 
     #[test]

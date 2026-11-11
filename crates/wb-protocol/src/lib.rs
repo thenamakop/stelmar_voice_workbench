@@ -330,6 +330,24 @@ pub struct SegmentEvent {
     /// Whisper's token count for the chunk, when it reached the limit.
     #[serde(default)]
     pub truncated: bool,
+    /// On an `unclear` segment: the text of the original full-chunk decode, kept so a reviewer can see what
+    /// the model heard (owner's decision, 11 Nov 2026). It is a hint for review only (Phase 6): never part of
+    /// the transcript, an export or the live captions, and never counted toward WER. Use [`transcript_text`],
+    /// which ignores it, to get the text of a transcript.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hint_text: Option<String>,
+}
+
+/// The text of a transcript: the `text` of every segment, in order, joined by single spaces. `hint_text` is
+/// not part of it, and an `unclear` segment (empty `text`) adds nothing. Exports, captions and the WER
+/// harness take their text from here (or from `text` alone).
+pub fn transcript_text(segments: &[SegmentEvent]) -> String {
+    segments
+        .iter()
+        .map(|s| s.text.trim())
+        .filter(|t| !t.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -656,11 +674,59 @@ mod tests {
                 ],
                 flags: vec![SegmentFlag::Truncated],
                 truncated: true,
+                hint_text: None,
             });
             let line = seg.to_line()?;
             assert!(!line.contains('\n'));
             assert_eq!(Event::from_line(&line)?, seg);
         }
+        Ok(())
+    }
+
+    fn unclear_segment(start: u64, hint: Option<&str>) -> SegmentEvent {
+        SegmentEvent {
+            unit: 0,
+            chunk: 1,
+            start_ms: start,
+            end_ms: start + 5_000,
+            text: String::new(),
+            lang: "hi".into(),
+            lang_prob: 1.0,
+            mixed: false,
+            dir: "auto".into(),
+            avg_logprob: 0.0,
+            no_speech_prob: 0.0,
+            compression_ratio: 0.0,
+            model: "m".into(),
+            decoded_both_ways: false,
+            detection: vec![],
+            flags: vec![SegmentFlag::Unclear],
+            truncated: false,
+            hint_text: hint.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn hint_text_travels_with_an_unclear_segment_and_is_not_in_the_transcript() -> Result<(), serde_json::Error> {
+        let hint = "यह मूल पाठ है";
+        let mut ok = unclear_segment(10_000, None);
+        ok.text = "सामान्य पाठ".into();
+        ok.flags.clear();
+        let segments = vec![ok, unclear_segment(15_000, Some(hint))];
+        // The hint survives a round trip (review reads it from the committed JSONL) ...
+        let line = Event::Segment(segments[1].clone()).to_line()?;
+        assert!(line.contains("hint_text"));
+        assert_eq!(Event::from_line(&line)?, Event::Segment(segments[1].clone()));
+        // ... a segment without one writes no field at all ...
+        assert!(!Event::Segment(segments[0].clone()).to_line()?.contains("hint_text"));
+        // ... and the transcript text never contains it.
+        let text = transcript_text(&segments);
+        assert_eq!(text, "सामान्य पाठ");
+        assert!(!text.contains(hint));
+        // An older line without the field still reads.
+        let old = line.replace(&format!(",\"hint_text\":\"{hint}\""), "");
+        assert!(!old.contains("hint_text"));
+        assert!(matches!(Event::from_line(&old)?, Event::Segment(s) if s.hint_text.is_none()));
         Ok(())
     }
 

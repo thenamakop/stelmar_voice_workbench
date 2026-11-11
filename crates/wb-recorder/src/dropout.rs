@@ -273,6 +273,57 @@ mod tests {
         assert!(scan(&audio, 1, 480).is_empty());
     }
 
+    /// Speech-like audio: a few hundred hertz with a slow envelope plus a noise floor of a few 16-bit
+    /// steps, never exactly zero.
+    fn speech_like(frames: usize, seed: u64) -> Vec<f32> {
+        let floor = noise(frames, 1, seed);
+        (0..frames)
+            .map(|i| {
+                let t = i as f32 / 48_000.0;
+                let env = 0.2 + 0.15 * (t * 4.0 * std::f32::consts::TAU).sin().abs();
+                env * (t * 220.0 * std::f32::consts::TAU).sin() + floor[i] * 0.02
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_500_ms_gated_pause_between_speech_is_not_flagged() {
+        // A mixer's noise gate or a muted microphone: 500 ms (24,000 frames) of exact zeros between
+        // two stretches of speech is far over the 50 ms bound, so it is not a dropout.
+        let mut audio = speech_like(144_000, 21);
+        zero_out(&mut audio, 1, 60_000, 24_000);
+        assert!(scan(&audio, 1, 480).is_empty());
+        // The same in a stereo recording where both channels are gated.
+        let mut stereo = noise(144_000, 2, 22);
+        zero_out(&mut stereo, 2, 60_000, 24_000);
+        assert!(scan(&stereo, 2, 480).is_empty());
+    }
+
+    #[test]
+    fn a_10_ms_dropout_inside_speech_is_flagged() {
+        let mut audio = speech_like(144_000, 23);
+        zero_out(&mut audio, 1, 70_000, 480); // 10 ms at 48 kHz
+        let found = scan(&audio, 1, 480);
+        assert_eq!(
+            found,
+            vec![ZeroGap {
+                start_frame: 70_000,
+                len: 480
+            }]
+        );
+    }
+
+    #[test]
+    fn the_bounds_are_1_to_50_ms_and_just_over_the_upper_bound_is_not_flagged() {
+        assert_eq!((MIN_ZERO, MAX_ZERO), (48, 2_400));
+        let mut audio = speech_like(240_000, 24);
+        zero_out(&mut audio, 1, 50_000, 2_400); // exactly 50 ms: flagged
+        zero_out(&mut audio, 1, 150_000, 2_448); // 51 ms: not flagged
+        let found = scan(&audio, 1, 480);
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert_eq!((found[0].start_frame, found[0].len), (50_000, 2_400));
+    }
+
     #[test]
     fn two_holes_closer_than_the_flank_are_not_both_reported() {
         let mut audio = noise(60_000, 1, 7);

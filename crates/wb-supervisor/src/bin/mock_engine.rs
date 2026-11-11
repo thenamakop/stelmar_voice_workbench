@@ -113,6 +113,7 @@ fn main() {
             detection: vec![],
             flags: vec![],
             truncated: false,
+            hint_text: None,
         }));
         emit(&Event::Progress {
             unit: 0,

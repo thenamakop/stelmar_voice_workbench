@@ -121,6 +121,7 @@ mod tests {
             detection: vec![],
             flags: vec![],
             truncated: false,
+            hint_text: None,
         }
     }
 
