@@ -1,0 +1,18 @@
+﻿Renamed-engines test (Phase 2), profile emu-low
+date: 2026-11-11 12:19 (IST on the Legion); machine: Legion; gate build target\gate\stelmar-voice-workbench.exe; recorder run 3 min each through recorder-gate.ps1 -Gate soak -Minutes 3
+engines renamed: avx2, avx512, vulkan, cuda (copies named wb-engine-<variant>-x86_64-pc-windows-msvc.exe.renamed in a scratch folder; the app is pointed at it with WB_ENGINES_DIR)
+
+1. engines renamed away
+   recorder run: exit code 0; verdict: PASS (PROVISIONAL: emulated)
+   app log lines holding the message (1):
+     2026-11-11T06:42:57.972663Z  WARN wb-events No speech engine found in D:\STELMAR-Gate\rename-engines\renamed. Recording is not affected; sessions are recorded and transcribed later, on a computer that has the engines. source="engines"
+   => the recording ran and passed its own checks, and the app said so: ok
+
+2. control, engines intact (same run, WB_ENGINES_DIR = the intact copies)
+   recorder run: exit code 0; verdict: PASS (PROVISIONAL: emulated)
+   app log lines holding the message: 0 (expected 0)
+   => ok: without the renaming there is no such message
+
+what was checked: the app log holds the notice; the same notice event goes to the UI, which shows it as a Toast (the Toast itself was not screenshotted in this run; the UI side of the notice path is covered by the Phase 2 System screen screenshots)
+the recorder evidence of both runs: D:\STELMAR-Gate\rename-engines\recorder-renamed\soak-emu-low.txt and D:\STELMAR-Gate\rename-engines\recorder-intact\soak-emu-low.txt (scratch folder, not committed; audio never leaves D:\STELMAR-Gate)
+verdict: PASS (PROVISIONAL: emulated)
