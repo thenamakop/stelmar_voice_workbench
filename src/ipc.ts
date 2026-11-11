@@ -245,6 +245,8 @@ export interface RegistrySnapshot {
   engines_dir: string | null;
   engines: EngineRow[];
   engines_done: boolean;
+  /** Whether a speech engine can be used here; the app state the Record screen reads on every load. */
+  speech_engine: "checking" | "available" | "none_found" | "none_usable";
   models_dir: string | null;
   models: ModelRow[];
   models_done: boolean;

@@ -1,0 +1,26 @@
+Language-detection confusion on pure Hindi and pure Urdu read speech (Phase 2, information only, 12 Nov 2026)
+engine: wb-engine-avx2-x86_64-pc-windows-msvc.exe detect; models en=medium; sentence_split on; chunks with at least 1 s of speech; threads 8
+sample (seed 20261112, ids sorted then shuffled): kathbath-hi: 100 utterances of 1929 with id prefix 'tu_'; kathbath-ur: 100 utterances of 1959 with id prefix 'tu_'; no audio and no text below
+Detection is restricted to the session's languages. An Urdu chunk in an en,hi session can only come out as en or hi, because Urdu is not an expected language there.
+The probability columns are the probability of the WRONG language the chunk was assigned (p50, p90, max over those chunks; count above 0.9).
+
+== session languages en,hi
+spoken -> detected | chunks of the spoken language | chunks detected as that | share | wrong-detection probability p50 | p90 | max | over 0.9
+hi -> en (flip) | 103 | 1 | 1.0% | 0.63 | 0.63 | 0.63 | 0
+hi -> hi (correct) | 103 | 102 | 99.0% | n/a | n/a | n/a | 0
+   hi: chunks whose most likely language among all of whisper's is not in en,hi: 12 of 103
+ur -> en (flip) | 101 | 1 | 1.0% | 0.78 | 0.78 | 0.78 | 0
+ur -> hi (flip) | 101 | 100 | 99.0% | 0.99 | 1.00 | 1.00 | 93
+   ur: chunks whose most likely language among all of whisper's is not in en,hi: 59 of 101
+
+== session languages en,hi,ur
+spoken -> detected | chunks of the spoken language | chunks detected as that | share | wrong-detection probability p50 | p90 | max | over 0.9
+hi -> en (flip) | 103 | 1 | 1.0% | 0.44 | 0.44 | 0.44 | 0
+hi -> hi (correct) | 103 | 90 | 87.4% | n/a | n/a | n/a | 0
+hi -> ur (flip) | 103 | 12 | 11.7% | 0.79 | 0.91 | 0.93 | 2
+   hi: chunks whose most likely language among all of whisper's is not in en,hi,ur: 0 of 103
+ur -> en (flip) | 101 | 0 | 0.0% | n/a | n/a | n/a | 0
+ur -> hi (flip) | 101 | 42 | 41.6% | 0.88 | 0.99 | 1.00 | 17
+ur -> ur (correct) | 101 | 59 | 58.4% | n/a | n/a | n/a | 0
+   ur: chunks whose most likely language among all of whisper's is not in en,hi,ur: 1 of 101
+

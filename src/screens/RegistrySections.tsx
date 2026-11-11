@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Badge, type BadgeTone } from "../ds";
+import { Badge, Icon, type BadgeTone } from "../ds";
+import { px } from "../ds/units";
 import { type EngineDevice, type EngineRow, type ModelRow, type RegistrySnapshot, listEngines } from "../ipc";
 import { Note, Section, Table } from "../shell/layout";
 
@@ -147,6 +148,43 @@ export function ModelsSection({ registry }: { registry: RegistrySnapshot | null 
         {checking > 0 ? ` Checking ${checking} more…` : ""}
       </Note>
     </Section>
+  );
+}
+
+/**
+ * Shown on the Record screen while no speech engine can be used. Driven by the app state
+ * (`speech_engine` from `list_engines`), which the screen reads when it loads, so it appears
+ * whether or not the start-up notice was seen. Never shown while the engines are still being looked for.
+ */
+export function NoEngineBanner({ registry }: { registry: RegistrySnapshot | null }) {
+  const kind = registry?.speech_engine;
+  if (kind !== "none_found" && kind !== "none_usable") return null;
+  return (
+    <div
+      role="status"
+      aria-label="Speech engine"
+      style={{
+        display: "flex",
+        gap: 10,
+        alignItems: "center",
+        marginTop: 12,
+        padding: px(10, 14),
+        borderRadius: "var(--radius-sm)",
+        background: "var(--status-warning-bg)",
+        color: "var(--status-warning-fg)",
+        fontSize: 13,
+        lineHeight: "var(--lh-small)",
+      }}
+    >
+      <Icon name="alert-triangle" size={16} />
+      <span>
+        <b style={{ fontWeight: "var(--fw-semibold)" }}>
+          {kind === "none_found" ? "No speech engine found." : "No speech engine can run on this computer."}
+        </b>{" "}
+        Recording is not affected. Sessions are recorded now and transcribed later, on a computer that has
+        a working engine.
+      </span>
+    </div>
   );
 }
 

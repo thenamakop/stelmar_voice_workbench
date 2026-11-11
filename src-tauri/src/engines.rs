@@ -98,11 +98,28 @@ pub struct ModelRow {
     pub message: Option<String>,
 }
 
+/// Whether a speech engine can be used on this computer. Part of the app state: the UI reads it
+/// every time a screen loads (it does not depend on having seen a notice event).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SpeechEngine {
+    /// The engines are still being looked for or probed.
+    #[default]
+    Checking,
+    /// At least one engine build answered `info`.
+    Available,
+    /// No engine file next to the app.
+    NoneFound,
+    /// Engine files exist but none can run here (CPU mismatch, failure, timeout).
+    NoneUsable,
+}
+
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct RegistrySnapshot {
     pub engines_dir: Option<String>,
     pub engines: Vec<EngineRow>,
     pub engines_done: bool,
+    pub speech_engine: SpeechEngine,
     pub models_dir: Option<String>,
     pub models: Vec<ModelRow>,
     pub models_done: bool,
@@ -115,9 +132,24 @@ pub struct Registry {
     inner: Mutex<RegistrySnapshot>,
 }
 
+/// The availability implied by the engine rows and whether the probing has finished.
+pub fn speech_engine_state(engines: &[EngineRow], engines_done: bool) -> SpeechEngine {
+    if engines.iter().any(|e| matches!(e.state, EngineState::Ok)) {
+        SpeechEngine::Available
+    } else if !engines_done {
+        SpeechEngine::Checking
+    } else if engines.is_empty() {
+        SpeechEngine::NoneFound
+    } else {
+        SpeechEngine::NoneUsable
+    }
+}
+
 impl Registry {
     pub fn snapshot(&self) -> RegistrySnapshot {
-        lock(&self.inner).clone()
+        let mut snap = lock(&self.inner).clone();
+        snap.speech_engine = speech_engine_state(&snap.engines, snap.engines_done);
+        snap
     }
 }
 
@@ -495,6 +527,54 @@ mod tests {
         let row = probe_engine("avx2", &missing, &d.join("logs"));
         assert!(matches!(row.state, EngineState::Failed), "{row:?}");
         assert!(row.message.is_some());
+    }
+
+    fn row(state: EngineState) -> EngineRow {
+        EngineRow {
+            variant: "avx2".into(),
+            file: "wb-engine-avx2.exe".into(),
+            bytes: 1,
+            state,
+            message: None,
+            devices: Vec::new(),
+            whisper_cpp: None,
+            cpu: None,
+            backends: Vec::new(),
+            info_ms: 0,
+        }
+    }
+
+    #[test]
+    fn engine_availability_is_part_of_the_snapshot() {
+        // Nothing found, probing done: the state the banner shows "No speech engine found" for.
+        assert_eq!(speech_engine_state(&[], true), SpeechEngine::NoneFound);
+        // Before the first look has finished the answer is "checking", never "none".
+        assert_eq!(speech_engine_state(&[], false), SpeechEngine::Checking);
+        assert_eq!(speech_engine_state(&[row(EngineState::Checking)], false), SpeechEngine::Checking);
+        // Files present but none can run here.
+        let bad = [row(EngineState::CpuMismatch), row(EngineState::Failed), row(EngineState::Timeout)];
+        assert_eq!(speech_engine_state(&bad, true), SpeechEngine::NoneUsable);
+        // One good engine is enough, even while the others are still being probed.
+        let mixed = [row(EngineState::CpuMismatch), row(EngineState::Ok)];
+        assert_eq!(speech_engine_state(&mixed, false), SpeechEngine::Available);
+        assert_eq!(speech_engine_state(&mixed, true), SpeechEngine::Available);
+    }
+
+    #[test]
+    fn the_registry_snapshot_carries_the_availability_for_a_late_reader() {
+        // A screen that loads long after start-up (no notice event to catch) still gets the answer.
+        let reg = Registry::default();
+        assert_eq!(reg.snapshot().speech_engine, SpeechEngine::Checking);
+        {
+            let mut r = lock(&reg.inner);
+            r.engines_done = true;
+        }
+        assert_eq!(reg.snapshot().speech_engine, SpeechEngine::NoneFound);
+        {
+            let mut r = lock(&reg.inner);
+            r.engines = vec![row(EngineState::Ok)];
+        }
+        assert_eq!(reg.snapshot().speech_engine, SpeechEngine::Available);
     }
 
     #[test]

@@ -29,7 +29,7 @@ a backend line is missing.
 | `avx2` | none | `GGML_AVX=ON GGML_AVX2=ON GGML_FMA=ON GGML_F16C=ON`, `GGML_AVX512=OFF` | CPU |
 | `avx512` | none | the `avx2` flags plus `GGML_AVX512=ON` | CPU |
 | `vulkan` | `vulkan` | the `avx2` flags | Vulkan (any GPU with a Vulkan driver, integrated ones included) plus CPU |
-| `cuda` | `cuda` | the `avx2` flags | CUDA plus CPU |
+| `cuda` | `cuda` | the `avx2` flags | CUDA plus CPU. **Development only** (decision of 11 Nov 2026: Vulkan only is shipped): built only with `-Variants cuda`, not in the release bundle, the gate pack or CI |
 
 Outputs are `src-tauri\binaries\wb-engine-<variant>-x86_64-pc-windows-msvc.exe` (the name Tauri's `externalBin` expects), each built in
 its own target directory `<TargetRoot>\<variant>`. They are git-ignored.

@@ -1,0 +1,9 @@
+AVX-512 instruction scan of the portable engine (Phase 2, gate 11)
+date: 2026-11-12 (IST on the Legion); machine: Legion; tool: scripts/check-no-zmm.ps1 (dumpbin /disasm, streamed, stops at the first zmm register); overlay tools closed: yes (no timing involved)
+CI runs the same script on the avx2 build (.github/workflows/ci.yml, "no zmm" step).
+
+1. wb-engine-avx2-x86_64-pc-windows-msvc.exe (sha256 49ecdebd4c21f2631ab1805d3764452b5ac36fb3fe5e7bac4a4de65e24c09b26), expected: no zmm register
+   result: no zmm register in 708,411 lines of disassembly. OK
+2. positive control, wb-engine-avx512-x86_64-pc-windows-msvc.exe (sha256 3c94dbc5c1816c9656061ab78a9c7f5bfc7dd5fede0d9344e594ce0c886a5d17), expected: a zmm register
+   result: a zmm register appears after 468,408 lines of disassembly (00000001401EBFF5: vmovups zmm0,zmmword ptr [...]). OK; the scan can see them.
+verdict: PASS

@@ -94,7 +94,7 @@ function Write-TableEvidence([string]$Table) {
   $lines += "whisper.cpp printed by the engine: " + ((($rows | Where-Object { $_.whisper } | ForEach-Object { $_.whisper } | Sort-Object -Unique)) -join '; ')
   $lines += "method: wb-engine bench, clip = 60 s of FLEURS test utterances joined with 0.8 s of silence (en: $(F $rows[0].clip_en_s 1) s, hi: $(F $rows[0].clip_hi_s 1) s), beam 5 + temperature fallback + 15 s VAD chunks ('rolling') except the near-live rows (greedy, utterance-length chunks); 1 warm-up, then the median of $Runs timed runs; RTF = processing time / clip length (load time excluded, reported apart); run from a folder with only the engine and a minimal PATH; Silero VAD v6.2.0 on the CPU"
   if ($def.Headroom) {
-    $lines += 'headroom rule (LEGION-FIRST): the Legion emulates a laptop, so a model "meets" an RTF <= 1.0 bar only at a measured RTF <= 0.75, and an RTF <= 0.35 bar only at <= 0.26 (25% headroom). "needed" below is that threshold; no pass bar is set in Phase 2, the table feeds Phase 3.'
+    $lines += 'headroom rule (LEGION-FIRST): the Legion emulates a laptop, so a model "meets" an RTF <= 1.0 bar only at a measured RTF <= 0.75, and an RTF <= 0.35 bar only at <= 0.26 (25% headroom). the last two columns apply that threshold to each row; no pass bar is set in Phase 2, the table feeds Phase 3.'
   } else {
     $lines += 'native table: no headroom rule applied (the Legion itself).'
   }
@@ -119,6 +119,11 @@ function Write-TableEvidence([string]$Table) {
   }
   $lines += "cells: $($rows.Count) (ok $(@($rows | Where-Object status -eq 'ok').Count), does not fit $(@($rows | Where-Object status -eq 'does_not_fit').Count), failed $(@($rows | Where-Object { $_.status -notin @('ok', 'does_not_fit') }).Count), single-run $(@($rows | Where-Object single_run).Count))"
   $lines += 'The Hinglish model is large-v3-sized: read its speed from the large-v3 q5_0 rows (the f16 model is slower and larger; the q5_0 Hinglish model is the same size as large-v3 q5_0).'
+  $lines += ''
+  $lines += 'Notes for Phase 3 (owner, 11 Nov 2026):'
+  $lines += '(a) The Intel UHD of the Legion is weaker than the integrated GPUs the room laptops are likely to have, so every UHD row is a FLOOR: a laptop with Iris Xe, Arc or a Radeon 680M/780M is expected to be at least as fast.'
+  $lines += '(b) Hindi costs more to decode than English on the same hardware: in these tables the Hindi clip runs 1.3 to 4.4 times slower than the English clip (about 3 times for large-v3 q5_0 on the UHD: 0.51 against about 1.5). The two clips are different recordings, so part of the gap belongs to the clip. Phase 3 tiers must consider turbo or medium for Hindi on weak machines.'
+  $lines += '(c) On the UHD, DXGI reports the integrated GPU''s memory as local (the shared figure stays 0.00). That memory is system RAM: Phase 3 counts it as RAM (AGENTS.md: integrated GPUs share RAM with the CPU).'
   New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
   $path = $(if ($Smoke) { Join-Path $Work "smoke-$Table.txt" } else { Join-Path $OutDir "speed-table-$Table.txt" })
   Write-WbEvidence -Path $path -Lines $lines -MachineLabel $Machine

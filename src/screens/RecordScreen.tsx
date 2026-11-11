@@ -20,6 +20,7 @@ import { clock, format, istDateTime, languages, meterPercent, minutes, partFile 
 import type { Level, Recorder } from "../recording/useRecorder";
 import { KeyValue, MainWithSide, Note, PageHead, SideCard } from "../shell/layout";
 import { liveUnavailableReason } from "./liveReason";
+import { NoEngineBanner, useRegistry } from "./RegistrySections";
 
 // Record screen per design/mockups/record-only.html. Phase 1: input, meter, recording state,
 // parts strip (Recording and Waiting until Phase 4 adds transcription) and backup. While no
@@ -401,6 +402,7 @@ export function RecordScreen({ hasProfile, recorder }: RecordScreenProps) {
   const [tab, setTab] = useState("transcript");
   const [startOpen, setStartOpen] = useState(false);
   const { snapshot, level, inputs, settings, busy } = recorder;
+  const registry = useRegistry();
   const session = snapshot?.session ?? null;
   const rec = snapshot?.recorder ?? null;
   const mirror = snapshot?.mirror ?? null;
@@ -591,6 +593,7 @@ export function RecordScreen({ hasProfile, recorder }: RecordScreenProps) {
             { value: "speakers", label: "Speakers" },
           ]}
         />
+        <NoEngineBanner registry={registry} />
         {recording && state === "input_lost" && (
           <div
             role="alert"

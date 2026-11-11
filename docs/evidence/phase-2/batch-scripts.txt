@@ -1,0 +1,47 @@
+﻿Batch check: three FLEURS clips per language through medium, right script, on the CPU and on the UHD (Phase 2)
+date: 2026-11-12 02:53 (IST on the Legion); machine: Legion; model: medium; clips: the first 3 per language of eval/clips/phase2-verify-fleurs.txt (FLEURS test, ids only below; no text)
+engines: avx2 (CPU rows) and vulkan (UHD rows) copied from src-tauri\binaries; run through wb-emulate; overlay tools closed: yes; no build running: yes
+pass rule: exit 0, a done event, at least one segment, no U+FFFD, no run of ? characters, at least 90% of the letters and combining marks in the language's script
+
+== profile emu-low (4 threads)
+CPU (avx2) | en | 1003119935936341070 | exit 0 | segments 1 | letters and marks 78 | Latin share 100% | broken text no | wall time over audio 4.38 (with load) | ok
+CPU (avx2) | en | 10894616243452123700 | exit 0 | segments 1 | letters and marks 112 | Latin share 100% | broken text no | wall time over audio 4.61 (with load) | ok
+CPU (avx2) | en | 11665346626937246597 | exit 0 | segments 1 | letters and marks 49 | Latin share 100% | broken text no | wall time over audio 8.23 (with load) | ok
+CPU (avx2) | hi | 10011266027513218401 | exit 0 | segments 1 | letters and marks 98 | Devanagari share 100% | broken text no | wall time over audio 7 (with load) | ok
+CPU (avx2) | hi | 10798430940133763019 | exit 0 | segments 2 | letters and marks 131 | Devanagari share 100% | broken text no | wall time over audio 6.93 (with load) | ok
+CPU (avx2) | hi | 11483002217487175688 | exit 0 | segments 1 | letters and marks 123 | Devanagari share 100% | broken text no | wall time over audio 5.74 (with load) | ok
+CPU (avx2) | ur | 10032188829272002643 | exit 0 | segments 1 | letters and marks 144 | Arabic script share 100% | broken text no | wall time over audio 5.18 (with load) | ok
+CPU (avx2) | ur | 10853409053322940440 | exit 0 | segments 1 | letters and marks 97 | Arabic script share 100% | broken text no | wall time over audio 6.96 (with load) | ok
+CPU (avx2) | ur | 11435065495993884398 | exit 0 | segments 1 | letters and marks 50 | Arabic script share 100% | broken text no | wall time over audio 11.27 (with load) | ok
+Intel UHD (vulkan, device 0) | en | 1003119935936341070 | exit 0 | segments 1 | letters and marks 78 | Latin share 100% | broken text no | wall time over audio 0.8 (with load) | ok
+Intel UHD (vulkan, device 0) | en | 10894616243452123700 | exit 0 | segments 1 | letters and marks 112 | Latin share 100% | broken text no | wall time over audio 0.9 (with load) | ok
+Intel UHD (vulkan, device 0) | en | 11665346626937246597 | exit 0 | segments 1 | letters and marks 49 | Latin share 100% | broken text no | wall time over audio 1.53 (with load) | ok
+Intel UHD (vulkan, device 0) | hi | 10011266027513218401 | exit 0 | segments 1 | letters and marks 98 | Devanagari share 100% | broken text no | wall time over audio 1.62 (with load) | ok
+Intel UHD (vulkan, device 0) | hi | 10798430940133763019 | exit 0 | segments 2 | letters and marks 131 | Devanagari share 100% | broken text no | wall time over audio 1.46 (with load) | ok
+Intel UHD (vulkan, device 0) | hi | 11483002217487175688 | exit 0 | segments 1 | letters and marks 125 | Devanagari share 100% | broken text no | wall time over audio 1.39 (with load) | ok
+Intel UHD (vulkan, device 0) | ur | 10032188829272002643 | exit 0 | segments 1 | letters and marks 144 | Arabic script share 100% | broken text no | wall time over audio 1.15 (with load) | ok
+Intel UHD (vulkan, device 0) | ur | 10853409053322940440 | exit 0 | segments 1 | letters and marks 99 | Arabic script share 100% | broken text no | wall time over audio 1.33 (with load) | ok
+Intel UHD (vulkan, device 0) | ur | 11435065495993884398 | exit 0 | segments 1 | letters and marks 50 | Arabic script share 100% | broken text no | wall time over audio 2.14 (with load) | ok
+
+== profile emu-mid (12 threads)
+CPU (avx2) | en | 1003119935936341070 | exit 0 | segments 1 | letters and marks 78 | Latin share 100% | broken text no | wall time over audio 1.58 (with load) | ok
+CPU (avx2) | en | 10894616243452123700 | exit 0 | segments 1 | letters and marks 112 | Latin share 100% | broken text no | wall time over audio 1.77 (with load) | ok
+CPU (avx2) | en | 11665346626937246597 | exit 0 | segments 1 | letters and marks 49 | Latin share 100% | broken text no | wall time over audio 3.1 (with load) | ok
+CPU (avx2) | hi | 10011266027513218401 | exit 0 | segments 1 | letters and marks 98 | Devanagari share 100% | broken text no | wall time over audio 2.82 (with load) | ok
+CPU (avx2) | hi | 10798430940133763019 | exit 0 | segments 2 | letters and marks 131 | Devanagari share 100% | broken text no | wall time over audio 2.71 (with load) | ok
+CPU (avx2) | hi | 11483002217487175688 | exit 0 | segments 1 | letters and marks 123 | Devanagari share 100% | broken text no | wall time over audio 2.29 (with load) | ok
+CPU (avx2) | ur | 10032188829272002643 | exit 0 | segments 1 | letters and marks 144 | Arabic script share 100% | broken text no | wall time over audio 1.95 (with load) | ok
+CPU (avx2) | ur | 10853409053322940440 | exit 0 | segments 1 | letters and marks 97 | Arabic script share 100% | broken text no | wall time over audio 2.41 (with load) | ok
+CPU (avx2) | ur | 11435065495993884398 | exit 0 | segments 1 | letters and marks 50 | Arabic script share 100% | broken text no | wall time over audio 4.23 (with load) | ok
+Intel UHD (vulkan, device 0) | en | 1003119935936341070 | exit 0 | segments 1 | letters and marks 78 | Latin share 100% | broken text no | wall time over audio 0.65 (with load) | ok
+Intel UHD (vulkan, device 0) | en | 10894616243452123700 | exit 0 | segments 1 | letters and marks 112 | Latin share 100% | broken text no | wall time over audio 0.8 (with load) | ok
+Intel UHD (vulkan, device 0) | en | 11665346626937246597 | exit 0 | segments 1 | letters and marks 49 | Latin share 100% | broken text no | wall time over audio 1.36 (with load) | ok
+Intel UHD (vulkan, device 0) | hi | 10011266027513218401 | exit 0 | segments 1 | letters and marks 98 | Devanagari share 100% | broken text no | wall time over audio 1.39 (with load) | ok
+Intel UHD (vulkan, device 0) | hi | 10798430940133763019 | exit 0 | segments 2 | letters and marks 131 | Devanagari share 100% | broken text no | wall time over audio 1.29 (with load) | ok
+Intel UHD (vulkan, device 0) | hi | 11483002217487175688 | exit 0 | segments 1 | letters and marks 125 | Devanagari share 100% | broken text no | wall time over audio 1.22 (with load) | ok
+Intel UHD (vulkan, device 0) | ur | 10032188829272002643 | exit 0 | segments 1 | letters and marks 144 | Arabic script share 100% | broken text no | wall time over audio 0.99 (with load) | ok
+Intel UHD (vulkan, device 0) | ur | 10853409053322940440 | exit 0 | segments 1 | letters and marks 99 | Arabic script share 100% | broken text no | wall time over audio 1.18 (with load) | ok
+Intel UHD (vulkan, device 0) | ur | 11435065495993884398 | exit 0 | segments 1 | letters and marks 50 | Arabic script share 100% | broken text no | wall time over audio 1.99 (with load) | ok
+
+runs: 36; problems: 0
+verdict: PASS (PROVISIONAL: emulated)

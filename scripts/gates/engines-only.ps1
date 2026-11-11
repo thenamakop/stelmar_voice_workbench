@@ -19,7 +19,8 @@
 #>
 [CmdletBinding()]
 param(
-  [string[]]$Variants = @('avx2', 'avx512', 'vulkan', 'cuda'),
+  # cuda is development only (decision of 11 Nov 2026): pass -Variants avx2,avx512,vulkan,cuda to include it.
+  [string[]]$Variants = @('avx2', 'avx512', 'vulkan'),
   [string[]]$Profiles = @('emu-low', 'emu-mid', 'native'),
   [string]$Root = 'D:\STELMAR-Gate\engines-only',
   [string]$Out,

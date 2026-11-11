@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { mockIPC } from "@tauri-apps/api/mocks";
 import { App } from "../App";
-import { REGISTRY, bridge } from "../test/mockBridge";
-import { EnginesSection, ModelsSection, formatBytes } from "./RegistrySections";
+import { NO_ENGINES, REGISTRY, bridge } from "../test/mockBridge";
+import { EnginesSection, ModelsSection, NoEngineBanner, formatBytes } from "./RegistrySections";
 import type { RegistrySnapshot } from "../ipc";
 
 const registry = REGISTRY as unknown as RegistrySnapshot;
@@ -76,5 +76,50 @@ describe("System screen", () => {
     render(<App />);
     expect(await screen.findByText("Speech engines")).toBeTruthy();
     expect(await screen.findByText("wb-engine-avx2.exe · 5 MB")).toBeTruthy();
+  });
+});
+
+describe("No-engine banner", () => {
+  it("is not shown while the engines are being looked for, or when one is available", () => {
+    const { rerender, container } = render(<NoEngineBanner registry={null} />);
+    expect(container.textContent).toBe("");
+    rerender(<NoEngineBanner registry={{ ...registry, speech_engine: "checking" }} />);
+    expect(container.textContent).toBe("");
+    rerender(<NoEngineBanner registry={registry} />);
+    expect(container.textContent).toBe("");
+  });
+
+  it("says no engine was found and that recording is not affected", () => {
+    render(<NoEngineBanner registry={NO_ENGINES as unknown as RegistrySnapshot} />);
+    expect(screen.getByRole("status", { name: "Speech engine" }).textContent).toMatch(
+      /No speech engine found\. Recording is not affected\./,
+    );
+  });
+
+  it("says so when engine files exist but none can run here", () => {
+    render(<NoEngineBanner registry={{ ...registry, speech_engine: "none_usable" }} />);
+    expect(screen.getByText(/No speech engine can run on this computer\./)).toBeTruthy();
+  });
+});
+
+describe("Record screen banner (app state, read on load)", () => {
+  async function openRecord(engines: "present" | "none") {
+    mockIPC(bridge({ profile: true, engines }));
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Record" }));
+    await screen.findByText("No Session Open");
+  }
+
+  it("shows with every engine renamed away, without any notice event having been seen", async () => {
+    await openRecord("none");
+    expect(await screen.findByText("No speech engine found.")).toBeTruthy();
+    expect(screen.getByText(/Recording is not affected\./)).toBeTruthy();
+    // Starting a session is not blocked by it.
+    expect((screen.getByRole("button", { name: /Start Session/ }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("is absent when an engine is present", async () => {
+    await openRecord("present");
+    await waitFor(() => expect(screen.queryByText(/No speech engine/)).toBeNull());
   });
 });

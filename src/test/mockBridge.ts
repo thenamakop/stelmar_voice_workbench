@@ -18,6 +18,8 @@ export interface MockOptions {
   /** capability.json exists (or the lookup fails with this error). */
   profile?: boolean | Error;
   state?: MockState;
+  /** "none": every speech engine renamed away (list_engines finds no engine). Default: engines present. */
+  engines?: "present" | "none";
   /** Commands seen, in order (for assertions). */
   calls?: string[];
 }
@@ -173,7 +175,7 @@ export function bridge(opts: MockOptions = {}) {
     opts.calls?.push(cmd);
     switch (cmd) {
       case "list_engines":
-        return REGISTRY;
+        return opts.engines === "none" ? NO_ENGINES : REGISTRY;
       case "recheck_registry":
         return undefined;
       case "has_capability_profile":
@@ -262,6 +264,7 @@ const pin = {
 export const REGISTRY = {
   engines_dir: "C:/Program Files/STELMAR Voice Workbench",
   engines_done: true,
+  speech_engine: "available",
   engines: [
     {
       variant: "avx2",
@@ -368,4 +371,11 @@ export const REGISTRY = {
       message: "file not found",
     },
   ],
+};
+
+/** What `list_engines` returns with every speech engine renamed away (models are unaffected). */
+export const NO_ENGINES = {
+  ...REGISTRY,
+  engines: [],
+  speech_engine: "none_found",
 };

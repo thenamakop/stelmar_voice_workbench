@@ -8,8 +8,9 @@
     1. engines renamed away: a scratch folder holds copies of the four engines under names the app does not
        recognise (wb-engine-<variant>-x86_64-pc-windows-msvc.exe.renamed); the app is pointed at it with
        WB_ENGINES_DIR. Expected: the recorder run passes its own checks (duration, no gap, zero overruns) and
-       the app log holds the warning "No speech engine found in ... Recording is not affected ..." that the
-       UI shows as a Toast (the notice goes to the UI and the log through one path);
+       the app log holds the warning "No speech engine found in ... Recording is not affected ..." (the notice
+       goes to the log and, if the UI is listening, to a Toast); the Record screen shows a persistent banner read from
+       the app state (see step 3 below);
     2. control, engines intact: the same run with WB_ENGINES_DIR pointing at the real engines: the app log must
        NOT hold that message, so the message in run 1 is caused by the renaming.
   Takes the gate lock through recorder-gate.ps1 (timing-sensitive rules apply); about 12 minutes in all.
@@ -76,32 +77,49 @@ function Invoke-Run([string]$Label, [string]$EnginesDir) {
 $run1 = Invoke-Run 'renamed' $renamed
 $run2 = Invoke-Run 'intact' $intact
 
-# 3. What the operator sees: the app is started once more with the engines renamed away and its own window is
-# captured (window bounds only, only while it is in front; never the desktop) at about 1, 4 and 9 s after the first render.
+# 3. What the operator sees: the app is started with the engines renamed away, then with them present (control).
+# Each time the Record screen is opened through the window's accessibility tree (no mouse or keyboard input), the
+# banner text is looked for there, and the window is captured (window bounds only, only while it is in front; never
+# the desktop) at about 1, 3 and 5 s after the screen opened. The banner is "No speech engine found. Recording is
+# not affected." and must show with the engines renamed away and not with them present.
 Import-Module (Join-Path $repo 'scripts\lib\AppProcess.psm1') -Force
 $shotDir = Join-Path $OutDir 'ui'
 New-Item -ItemType Directory -Force -Path $shotDir | Out-Null
-$shots = @()
-$shotNote = ''
-$env:WB_ENGINES_DIR = $renamed
-try {
-  if (Get-Process stelmar-voice-workbench -ErrorAction SilentlyContinue) { throw 'the app is already running' }
-  $app = Start-WbApp -Exe (Join-Path $repo 'target\gate\stelmar-voice-workbench.exe') -TimeoutSeconds 30
-  $n = 0
-  foreach ($sec in 1, 3, 5) {
-    Start-Sleep -Seconds $sec
-    $n++
-    $png = Join-Path $shotDir "rename-engines-$Profile-shot$n.png"
-    $c = Get-WbWindowCheck -Handle $app.Handle -SavePath $png
-    $shots += [pscustomobject]@{ Path = $png; Rendered = [bool]$c.Rendered; Obscured = [bool]$c.Obscured; Seconds = [math]::Round($app.Watch.Elapsed.TotalSeconds, 0) }
-  }
-} catch { $shotNote = "screenshots not taken: $($_.Exception.Message)" }
-finally { Remove-Item Env:\WB_ENGINES_DIR -ErrorAction SilentlyContinue; try { Stop-WbApp } catch { } }
+$bannerText = 'No speech engine found.'
+function Invoke-UiRun([string]$Tag, [string]$EnginesDir, [int[]]$Waits) {
+  $r = [pscustomobject]@{ Tag = $Tag; Opened = $false; BannerFound = $false; Shots = @(); Note = '' }
+  $env:WB_ENGINES_DIR = $EnginesDir
+  try {
+    if (Get-Process stelmar-voice-workbench -ErrorAction SilentlyContinue) { throw 'the app is already running' }
+    $app = Start-WbApp -Exe (Join-Path $repo 'target\gate\stelmar-voice-workbench.exe') -TimeoutSeconds 30
+    $r.Opened = Invoke-WbAppButton -Handle $app.Handle -Name 'Record'
+    if (-not $r.Opened) { throw 'the Record button was not found in the window' }
+    # Present: found at once. Absent: the whole wait (15 s, longer than the engine probe) passes without it.
+    $r.BannerFound = Test-WbAppText -Handle $app.Handle -Text $bannerText -TimeoutSeconds 15
+    $n = 0
+    foreach ($sec in $Waits) {
+      Start-Sleep -Seconds $sec
+      $n++
+      $png = Join-Path $shotDir "rename-engines-$Profile-$Tag-shot$n.png"
+      $c = Get-WbWindowCheck -Handle $app.Handle -SavePath $png
+      $r.Shots += [pscustomobject]@{ Path = $png; Rendered = [bool]$c.Rendered; Obscured = [bool]$c.Obscured; Seconds = [math]::Round($app.Watch.Elapsed.TotalSeconds, 0) }
+    }
+  } catch { $r.Note = "not completed: $($_.Exception.Message)" }
+  finally { Remove-Item Env:\WB_ENGINES_DIR -ErrorAction SilentlyContinue; try { $null = Stop-WbApp } catch { } }
+  $r
+}
+# Old captures from earlier versions of this script are replaced.
+Get-ChildItem -Path $shotDir -Filter "rename-engines-$Profile-*shot*.png" -ErrorAction SilentlyContinue | Remove-Item -Force
+# Whatever else the function wrote to the pipeline, the result is its last object.
+$ui1 = @(Invoke-UiRun 'renamed' $renamed @(1, 2, 2))[-1]
+$ui2 = @(Invoke-UiRun 'intact' $intact @(1))[-1]
 
 function Get-Verdict($run) { ($run.EvidenceLines | Where-Object { $_ -match '^verdict:' } | Select-Object -First 1) }
 $ok1 = ($run1.Exit -eq 0) -and ($run1.Hits.Count -ge 1)
 $ok2 = ($run2.Exit -eq 0) -and ($run2.Hits.Count -eq 0)
-$pass = $ok1 -and $ok2
+$ok3 = $ui1.Opened -and $ui1.BannerFound -and ($ui1.Shots.Count -ge 1) -and (@($ui1.Shots | Where-Object { $_.Obscured }).Count -eq 0)
+$ok4 = $ui2.Opened -and (-not $ui2.BannerFound) -and ($ui2.Shots.Count -ge 1) -and (@($ui2.Shots | Where-Object { $_.Obscured }).Count -eq 0)
+$pass = $ok1 -and $ok2 -and $ok3 -and $ok4
 $lines = @(
   "Renamed-engines test (Phase 2), profile $Profile",
   "date: $((Get-Date).ToString('yyyy-MM-dd HH:mm', $inv)) (IST on the Legion); machine: $Machine; gate build target\gate\stelmar-voice-workbench.exe; recorder run $Minutes min each through recorder-gate.ps1 -Gate soak -Minutes $Minutes",
@@ -120,9 +138,13 @@ $lines += "   app log lines holding the message: $($run2.Hits.Count) (expected 0
 $lines += $(if ($ok2) { '   => ok: without the renaming there is no such message' } else { '   => WRONG' })
 $lines += ''
 $lines += ''
-$lines += '3. what the operator sees (the app started with the engines renamed away; its own window captured: bounds only, foreground-checked, never the desktop)'
-foreach ($sh in $shots) { $lines += "   $(Split-Path $sh.Path -Leaf), $($sh.Seconds) s after launch: rendered $($sh.Rendered), obscured $($sh.Obscured)" }
-if ($shotNote) { $lines += "   $shotNote" }
+$lines += '3. what the operator sees: the Record screen (opened through the window''s accessibility tree; windows captured: bounds only, foreground-checked, never the desktop)'
+foreach ($u in @($ui1, $ui2)) {
+  $what = $(if ($u.Tag -eq 'renamed') { 'engines renamed away' } else { 'control, engines present' })
+  $lines += "   $what : Record opened $($u.Opened); text '$bannerText' found in the window: $($u.BannerFound)$(if ($u.Note) { '; ' + $u.Note })"
+  foreach ($sh in $u.Shots) { $lines += "     $(Split-Path $sh.Path -Leaf), $($sh.Seconds) s after launch: rendered $($sh.Rendered), obscured $($sh.Obscured)" }
+}
+$lines += $(if ($ok3 -and $ok4) { '   => the banner shows with the engines renamed away and not with them present: ok' } else { '   => WRONG: the banner is missing with the engines renamed away, or shows with them present' })
 $lines += '   Read from the PNGs (by the agent, not by the script): see the note at the end of this file.'
 $lines += ''
 $lines += "the recorder evidence of both runs: $($run1.Evidence) and $($run2.Evidence) (scratch folder, not committed; audio never leaves D:\STELMAR-Gate)"
