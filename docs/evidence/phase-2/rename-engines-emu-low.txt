@@ -1,11 +1,11 @@
 ﻿Renamed-engines test (Phase 2), profile emu-low
-date: 2026-11-11 12:19 (IST on the Legion); machine: Legion; gate build target\gate\stelmar-voice-workbench.exe; recorder run 3 min each through recorder-gate.ps1 -Gate soak -Minutes 3
+date: 2026-11-11 13:36 (IST on the Legion); machine: Legion; gate build target\gate\stelmar-voice-workbench.exe; recorder run 3 min each through recorder-gate.ps1 -Gate soak -Minutes 3
 engines renamed: avx2, avx512, vulkan, cuda (copies named wb-engine-<variant>-x86_64-pc-windows-msvc.exe.renamed in a scratch folder; the app is pointed at it with WB_ENGINES_DIR)
 
 1. engines renamed away
    recorder run: exit code 0; verdict: PASS (PROVISIONAL: emulated)
    app log lines holding the message (1):
-     2026-11-11T06:42:57.972663Z  WARN wb-events No speech engine found in D:\STELMAR-Gate\rename-engines\renamed. Recording is not affected; sessions are recorded and transcribed later, on a computer that has the engines. source="engines"
+     2026-11-11T07:59:14.729521Z  WARN wb-events No speech engine found in D:\STELMAR-Gate\rename-engines\renamed. Recording is not affected; sessions are recorded and transcribed later, on a computer that has the engines. source="engines"
    => the recording ran and passed its own checks, and the app said so: ok
 
 2. control, engines intact (same run, WB_ENGINES_DIR = the intact copies)
@@ -13,6 +13,14 @@ engines renamed: avx2, avx512, vulkan, cuda (copies named wb-engine-<variant>-x8
    app log lines holding the message: 0 (expected 0)
    => ok: without the renaming there is no such message
 
-what was checked: the app log holds the notice; the same notice event goes to the UI, which shows it as a Toast (the Toast itself was not screenshotted in this run; the UI side of the notice path is covered by the Phase 2 System screen screenshots)
+
+3. what the operator sees (the app started with the engines renamed away; its own window captured: bounds only, foreground-checked, never the desktop)
+   rename-engines-emu-low-shot1.png, 2 s after launch: rendered True, obscured False
+   rename-engines-emu-low-shot2.png, 6 s after launch: rendered True, obscured False
+   rename-engines-emu-low-shot3.png, 11 s after launch: rendered True, obscured False
+   Read from the PNGs (by the agent, not by the script): see the note at the end of this file.
+
 the recorder evidence of both runs: D:\STELMAR-Gate\rename-engines\recorder-renamed\soak-emu-low.txt and D:\STELMAR-Gate\rename-engines\recorder-intact\soak-emu-low.txt (scratch folder, not committed; audio never leaves D:\STELMAR-Gate)
 verdict: PASS (PROVISIONAL: emulated)
+
+Note (read from the three PNGs by the agent, 11 Nov 2026): the screenshots are byte-identical, so nothing changed on screen between 2 and 11 s. They show the System screen with the Speech engines row 'None found. Recording works without an engine. Sessions are transcribed later, on a computer that has one.', a NO ENGINE badge and the folder that was searched. NO TOAST appeared in any of the three. The notice is broadcast once, at start-up, to the UI channels that are subscribed at that moment; the snapshot does not replay it, so it reaches the app log but not a UI that subscribes later. What an operator sees today is therefore the System screen row (and the Record screen is unaffected); the Toast half of the item is NOT met. This is reported as an open decision (replay notices to a late subscriber, or accept the System-screen message); no app code was changed.

@@ -245,7 +245,7 @@ def prepare_kathbath_official(name: str) -> None:
                 continue
             uid = f"{prefix}_{m4a.stem}"
             wav = out / "audio" / f"{uid}.wav"
-            dur = convert_or_reuse(m4a.read_bytes(), wav)
+            dur = convert_m4a_or_reuse(m4a, wav)
             text = texts[m4a.stem]
             utts.append(Utterance(uid, rel_to(wav, out), text, lang, is_mixed(text), round(dur, 3), sha256_file(wav)))
     files = []
@@ -260,7 +260,8 @@ def prepare_kathbath_official(name: str) -> None:
         "terms of the Hugging Face copy accepted by the developer; not committed; used unmodified (resampled to 16 kHz mono WAV)",
         files=files,
         notes=f"{folder} only; splits test_known (id prefix tk_) and test = test unknown (tu_); the reference is transcription_n2w.txt "
-        "(numbers written as words); the Hugging Face repository ai4bharat/Kathbath has no test split, hence this source",
+        "(numbers written as words); the m4a clips were decoded with the ffmpeg on PATH (N-55702, a 2013 build) at their own rate and resampled with soxr; "
+        "the Hugging Face repository ai4bharat/Kathbath has no test split, hence this source",
     ), utts)
     log.info("%s: %d utterances", name, len(utts))
 
@@ -318,6 +319,14 @@ def convert_or_reuse(data: bytes | None, wav: Path) -> float:
     if data is None:
         raise ValueError(f"no audio for {wav.name}")
     return audio.convert_bytes(data, wav)
+
+
+def convert_m4a_or_reuse(src: Path, wav: Path) -> float:
+    if wav.exists():
+        import soundfile as sf
+
+        return sf.info(wav).duration
+    return audio.convert_file(src, wav)
 
 
 def coshe_lang(text: str) -> str:
