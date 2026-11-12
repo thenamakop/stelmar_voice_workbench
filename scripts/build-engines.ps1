@@ -111,6 +111,8 @@ if (Test-Path -LiteralPath $GateLock) { throw "A gate is running ($GateLock exis
 if (Test-Path -LiteralPath $GateRequest) { throw "A gate sequence is requested or running ($GateRequest exists). Wait for it." }
 if (Test-Path -LiteralPath $BuildLock) { throw "Another build holds $BuildLock. Wait for it (or delete the file if none is running)." }
 New-Item -ItemType Directory -Force -Path $binDir | Out-Null
+# The lock's folder exists on the Legion; on a CI runner it may not.
+New-Item -ItemType Directory -Force -Path (Split-Path -Parent $BuildLock) | Out-Null
 Set-Content -LiteralPath $BuildLock -Value "build=build-engines $($Variants -join ',')`r`nstarted=$((Get-Date).ToString('o'))`r`npid=$PID`r`n" -Encoding ascii
 
 function Get-CacheValue([string]$Cache, [string]$Name) {
