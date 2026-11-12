@@ -8,7 +8,15 @@
 use std::path::Path;
 
 use windows::Win32::Foundation::{FILETIME, HANDLE};
+use windows::Win32::Media::Audio::{
+    AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_EVENTCALLBACK, IAudioClient, IMMDeviceEnumerator,
+    MMDeviceEnumerator,
+};
 use windows::Win32::Storage::FileSystem::{GetDiskFreeSpaceExW, GetDriveTypeW};
+use windows::Win32::System::Com::{
+    CLSCTX_ALL, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx, CoTaskMemFree,
+    CoUninitialize,
+};
 use windows::Win32::System::Performance::{QueryPerformanceCounter, QueryPerformanceFrequency};
 use windows::Win32::System::Power::{
     ES_CONTINUOUS, ES_SYSTEM_REQUIRED, EXECUTION_STATE, SetThreadExecutionState,
@@ -158,4 +166,87 @@ pub fn qpc_hz() -> u64 {
     // SAFETY: `hz` is a valid i64 the call writes; the function takes no other input.
     let ok = unsafe { QueryPerformanceFrequency(&mut hz) };
     if ok.is_ok() { hz.max(0) as u64 } else { 0 }
+}
+
+/// What a shared-mode WASAPI capture client was given for a requested buffer duration.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BufferGrant {
+    /// Frames in the endpoint buffer (`IAudioClient::GetBufferSize`).
+    pub frames: u32,
+    /// Sample rate of the mix format the grant was read with.
+    pub rate: u32,
+    /// The engine's default period (`GetDevicePeriod`), in milliseconds.
+    pub period_ms: f64,
+}
+
+/// Asks the audio engine what endpoint buffer it grants in shared mode for `requested_hns`
+/// (100 ns units): opens a separate, short-lived `IAudioClient` on the endpoint with the same
+/// event-driven shared-mode `Initialize` call cpal makes, reads `GetBufferSize` and
+/// `GetDevicePeriod`, and releases it without starting it. cpal does not expose the granted size.
+/// Runs on a helper thread with its own COM apartment, so it cannot disturb the caller's.
+pub fn probe_shared_capture_buffer(endpoint_id: &str, requested_hns: i64) -> Option<BufferGrant> {
+    let id = endpoint_id.to_string();
+    std::thread::Builder::new()
+        .name("wb-buffer-probe".into())
+        .spawn(move || probe_on_this_thread(&id, requested_hns))
+        .ok()?
+        .join()
+        .ok()
+        .flatten()
+}
+
+fn probe_on_this_thread(endpoint_id: &str, requested_hns: i64) -> Option<BufferGrant> {
+    // SAFETY: COM is initialised for this helper thread only and uninitialised before it ends;
+    // every COM object is dropped (released) inside `probe`, before CoUninitialize runs.
+    let init = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
+    if init.is_err() {
+        return None;
+    }
+    let out = probe(endpoint_id, requested_hns);
+    // SAFETY: balances the successful CoInitializeEx above, on the same thread.
+    unsafe { CoUninitialize() };
+    out
+}
+
+fn probe(endpoint_id: &str, requested_hns: i64) -> Option<BufferGrant> {
+    let id = HSTRING::from(endpoint_id);
+    // SAFETY: COM is initialised on this thread; the class id and flags are the documented ones
+    // for the device enumerator and no outer unknown is aggregated.
+    let enumerator: IMMDeviceEnumerator =
+        unsafe { CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL) }.ok()?;
+    // SAFETY: `id` is a NUL-terminated wide string that outlives the call.
+    let device = unsafe { enumerator.GetDevice(&id) }.ok()?;
+    // SAFETY: no activation parameters are passed; the requested interface is IAudioClient.
+    let client: IAudioClient = unsafe { device.Activate(CLSCTX_ALL, None) }.ok()?;
+    // SAFETY: the call returns a CoTaskMem allocation that is freed below.
+    let format = unsafe { client.GetMixFormat() }.ok()?;
+    // SAFETY: `format` is the pointer GetMixFormat just returned and is still allocated, so
+    // reading its sample rate is valid.
+    let rate = unsafe { (*format).nSamplesPerSec };
+    // SAFETY: `format` is valid for the call (see above); an event-driven shared-mode client is
+    // initialised exactly as cpal does, and is never started.
+    let init = unsafe {
+        client.Initialize(
+            AUDCLNT_SHAREMODE_SHARED,
+            AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
+            requested_hns,
+            0,
+            format,
+            None,
+        )
+    };
+    // SAFETY: `format` came from GetMixFormat (a CoTaskMem allocation), is freed exactly once and
+    // is not used afterwards.
+    unsafe { CoTaskMemFree(Some(format.cast_const().cast())) };
+    init.ok()?;
+    // SAFETY: the client was initialised successfully above.
+    let frames = unsafe { client.GetBufferSize() }.ok()?;
+    let mut period = 0i64;
+    // SAFETY: `period` is a valid i64 the call writes; the minimum period is not requested.
+    unsafe { client.GetDevicePeriod(Some(&mut period), None) }.ok()?;
+    Some(BufferGrant {
+        frames,
+        rate,
+        period_ms: period as f64 / 10_000.0,
+    })
 }

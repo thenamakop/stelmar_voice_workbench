@@ -67,7 +67,8 @@ pub struct RecorderStatus {
     pub priority_note: Option<String>,
     /// Priority of the audio driver's capture thread (`mmcss`, `highest`, `normal`, `unknown`).
     pub capture_priority: Option<String>,
-    /// Device buffer the capture stream opened with: "fixed 100 ms" or "device default".
+    /// Device buffer the capture stream asked for and the audio engine granted, as one line, for
+    /// example "requested 1000 ms, granted 1000.0 ms (48000 frames), engine period 10.0 ms".
     pub capture_buffer: Option<String>,
     /// The machine is being kept awake.
     pub awake: bool,

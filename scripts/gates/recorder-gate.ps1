@@ -285,6 +285,12 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
   $nvPids = @(Get-NvidiaPids)
   $nvOverlap = @($nvPids | Where-Object { $jobPids -contains $_ })
   $progress.Add("$(Get-Date -Format 'HH:mm:ss') job processes: $($jobPids.Count); nvidia-smi processes: $($nvPids.Count); job processes on the NVIDIA GPU: $($nvOverlap.Count)")
+  # Load gate: read the stress processes' priority class and threads from the running processes.
+  $stressPriority = @()
+  if ($Gate -eq 'load') {
+    try { $stressPriority = @(Get-WbStressLines -Info @(Get-WbStressInfo)) } catch { $stressPriority = @("  stress priority: could not be read ($($_.Exception.Message))") }
+    foreach ($l in $stressPriority) { $progress.Add("$(Get-Date -Format 'HH:mm:ss') $($l.Trim())") }
+  }
 
   $webviewKill = $null
   if ($Gate -eq 'webview') {
@@ -368,7 +374,7 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
     AnalysisError = $analysisErr; RefAnalysisError = $refAnalysisErr; CableDefaultRoles = $cableRoles; Rig = $rig
     CacheNote = $cacheNote; BootTime = $bootTime; UptimeMin = $uptimeMin; FastStartup = $fastStartup; ModelsDisk = $modelsDisk; RecDisk = $recDisk
     CableRig = $cableRig; CableTest = $cableTest; CableSeen = $cableSeen; CablePollProblems = @(ConvertTo-WbArray $pollProblems)
-    MachineState = $machineState; SamplerCsv = $samplerCsv
+    MachineState = $machineState; SamplerCsv = $samplerCsv; StressPriority = @($stressPriority)
   }
   Stop-WbSampler -Process $sampler
   $finished = $true
@@ -530,6 +536,20 @@ if (Test-WbHasProperty $rec 'detector_max_block_us') {
   $lines += ("  detector coverage: the time budget skipped {0} ms of {1:n0} ms of audio ({2:n2}%)" -f $rec.detector_skipped_ms, $rec.audio_ms, $skippedPct)
   $lines += ("  detectors (R1: they run after the WAV write, each in catch_unwind, with a budget of 1/20 of the block's audio time, at least 2 ms): longest time on one block {0:n0} us; blocks over budget {1}; audio the detectors skipped {2} ms; detectors switched off {3}" -f $rec.detector_max_block_us, $rec.detector_over_budget_blocks, $rec.detector_skipped_ms, @($rec.detectors_disabled).Count)
 }
+if (Test-WbHasProperty $rec 'capture_max_callback_gap_ms') {
+  $bufTxt = $(if (@($rec.capture_buffers).Count -gt 0) { (@($rec.capture_buffers) -join ' | ') } else { 'not recorded' })
+  $lines += ("  capture device buffer (12 Nov decision: ask for 1,000 ms, then 500 ms, 200 ms, then the device default; shared mode kept): {0}" -f $bufTxt)
+  $grantedTxt = $(if ($null -ne $rec.capture_buffer_granted_ms) { ('{0:n0}' -f $rec.capture_buffer_granted_ms) } else { 'unknown' })
+  $marginTxt = $(if ($null -ne $rec.capture_margin_ms) { ('{0:n1}' -f $rec.capture_margin_ms) } else { 'unknown' })
+  $lines += ("  capture margin: longest gap between capture callbacks {0:n1} ms against a granted device buffer of {1} ms, so {2} ms of room were left (a negative number means audio was lost)" -f $rec.capture_max_callback_gap_ms, $grantedTxt, $marginTxt)
+  $lines += ("  capture callback gaps (histogram): at least 50 ms {0}; at least 100 ms {1}; at least 250 ms {2}; at least 500 ms {3}" -f $rec.capture_gaps_ge_50ms, $rec.capture_gaps_ge_100ms, $rec.capture_gaps_ge_250ms, $rec.capture_gaps_ge_500ms)
+  $periodTxt = $(if ($null -ne $rec.capture_callback_period_ms) { ('{0:n2} ms' -f $rec.capture_callback_period_ms) } else { 'not measured' })
+  $periodMin = $(if ($null -ne $rec.capture_callback_period_min_ms) { ('{0:n3} ms' -f $rec.capture_callback_period_min_ms) } else { 'not measured' })
+  $lines += ("  capture callback period measured in the app: mean {0} over every gap under 50 ms (the shortest, {1}, is two packets handed over back to back after a late wake-up); the larger buffer sits behind the callback and does not change this period" -f $periodTxt, $periodMin)
+  if ($null -ne $rec.capture_buffer_granted_ms -and [double]$rec.capture_buffer_granted_ms -lt 999) { $lines += ("  NOTE: the audio engine granted {0:n0} ms, less than the 1,000 ms asked for; the margin above is against that smaller buffer" -f $rec.capture_buffer_granted_ms) }
+} else {
+  $lines += '  capture device buffer and callback gaps: not in this recorder report (an older build)'
+}
 if ($Gate -eq 'hashing') {
   $lines += ''
   $lines += 'cold-cache model hashing while recording (R5):'
@@ -581,6 +601,7 @@ if ($r.Analysis -and (Test-Path -LiteralPath $sessionJson)) {
 } else {
   $lines += 'live detector check: not available (no analysis or session.json for this run)'
 }
+if ($Gate -eq 'load') { $lines += $(if ($r.StressPriority) { @($r.StressPriority) } else { '  stress priority: not measured for this run' }) }
 $lines += $(if ($null -ne $r.NvOverlap) { "  GPU check: {0} job processes, {1} processes in nvidia-smi, overlap {2}" -f @($r.JobPids).Count, @($r.NvPids).Count, @($r.NvOverlap).Count } else { '  GPU check: not re-evaluated (measured live, not saved); emulator-check.txt covers it' })
 if ($r.Stress) { $lines += ("  stress: {0} threads at {1:n1} M loops/thread/s for {2:n0} s; GPU {3}: {4} dispatches {5}" -f $r.Stress.cpu_threads, $r.Stress.cpu_mloops_per_thread_s, $r.Stress.seconds, $r.Stress.gpu_adapter, $r.Stress.gpu_dispatches, $r.Stress.gpu_error) }
 if ($r.WebviewKill) { $lines += "  webview: $($r.WebviewKill); display restarts reported: $($r.Report.display_restarts)" }

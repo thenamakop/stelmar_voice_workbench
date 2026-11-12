@@ -56,6 +56,224 @@ pub struct StreamCounters {
     pub position_pair_flags: AtomicU64,
     /// Frames the data callback has delivered (including any it could not fit in the ring).
     pub frames: AtomicU64,
+    /// Longest time between two data callbacks, in microseconds: how long the capture thread was
+    /// away from the device at worst. A stall at or above the granted device buffer loses audio.
+    pub max_callback_gap_us: AtomicU64,
+    /// Gaps between data callbacks of at least 50, 100, 250 and 500 ms.
+    pub gaps_ge_50ms: AtomicU64,
+    pub gaps_ge_100ms: AtomicU64,
+    pub gaps_ge_250ms: AtomicU64,
+    pub gaps_ge_500ms: AtomicU64,
+    /// Sum, count and minimum (0 until the first) of the gaps under 50 ms: the callback period
+    /// the engine delivers at when nothing stalls.
+    pub period_sum_us: AtomicU64,
+    pub period_count: AtomicU64,
+    pub period_min_us: AtomicU64,
+    /// Test hook: milliseconds the next data callback sleeps at its end, once (0 = none). It
+    /// stands in for the capture thread being kept away from the device. One relaxed load per
+    /// callback when unused.
+    #[doc(hidden)]
+    pub inject_pause_ms: AtomicU64,
+}
+
+/// The gaps between data callbacks that [`StreamCounters`] keeps, summed over a session's streams.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+pub struct CallbackGapStats {
+    pub max_gap_us: u64,
+    pub gaps_ge_50ms: u64,
+    pub gaps_ge_100ms: u64,
+    pub gaps_ge_250ms: u64,
+    pub gaps_ge_500ms: u64,
+    pub period_sum_us: u64,
+    pub period_count: u64,
+    pub period_min_us: u64,
+}
+
+impl CallbackGapStats {
+    pub fn from_counters(c: &StreamCounters) -> Self {
+        Self {
+            max_gap_us: c.max_callback_gap_us.load(Ordering::Relaxed),
+            gaps_ge_50ms: c.gaps_ge_50ms.load(Ordering::Relaxed),
+            gaps_ge_100ms: c.gaps_ge_100ms.load(Ordering::Relaxed),
+            gaps_ge_250ms: c.gaps_ge_250ms.load(Ordering::Relaxed),
+            gaps_ge_500ms: c.gaps_ge_500ms.load(Ordering::Relaxed),
+            period_sum_us: c.period_sum_us.load(Ordering::Relaxed),
+            period_count: c.period_count.load(Ordering::Relaxed),
+            period_min_us: c.period_min_us.load(Ordering::Relaxed),
+        }
+    }
+
+    /// Adds another stream's numbers (the maximum of the maxima, the sums of the counts).
+    pub fn merge(&mut self, other: &Self) {
+        self.max_gap_us = self.max_gap_us.max(other.max_gap_us);
+        self.gaps_ge_50ms += other.gaps_ge_50ms;
+        self.gaps_ge_100ms += other.gaps_ge_100ms;
+        self.gaps_ge_250ms += other.gaps_ge_250ms;
+        self.gaps_ge_500ms += other.gaps_ge_500ms;
+        self.period_sum_us += other.period_sum_us;
+        self.period_count += other.period_count;
+        self.period_min_us = match (self.period_min_us, other.period_min_us) {
+            (0, b) => b,
+            (a, 0) => a,
+            (a, b) => a.min(b),
+        };
+    }
+
+    pub fn max_gap_ms(&self) -> f64 {
+        self.max_gap_us as f64 / 1000.0
+    }
+
+    /// Mean callback period when nothing stalled, in milliseconds (None before two callbacks).
+    pub fn mean_period_ms(&self) -> Option<f64> {
+        (self.period_count > 0)
+            .then(|| self.period_sum_us as f64 / self.period_count as f64 / 1000.0)
+    }
+}
+
+/// Measures the time between data callbacks. Runs inside the audio callback: one clock read and a
+/// few relaxed atomic stores, nothing that allocates, locks or blocks.
+struct CallbackGap {
+    last: Option<std::time::Instant>,
+}
+
+impl CallbackGap {
+    fn new() -> Self {
+        Self { last: None }
+    }
+
+    #[inline]
+    fn note(&mut self, counters: &StreamCounters) {
+        let now = std::time::Instant::now();
+        if let Some(prev) = self.last.replace(now) {
+            let us = now
+                .saturating_duration_since(prev)
+                .as_micros()
+                .min(u128::from(u64::MAX)) as u64;
+            record_gap(counters, us);
+        }
+    }
+}
+
+/// Files one gap between two callbacks in the counters. The data callback is their only writer.
+#[inline]
+pub fn record_gap(counters: &StreamCounters, us: u64) {
+    if us > counters.max_callback_gap_us.load(Ordering::Relaxed) {
+        counters.max_callback_gap_us.store(us, Ordering::Relaxed);
+    }
+    if us >= 50_000 {
+        counters.gaps_ge_50ms.fetch_add(1, Ordering::Relaxed);
+        if us >= 100_000 {
+            counters.gaps_ge_100ms.fetch_add(1, Ordering::Relaxed);
+        }
+        if us >= 250_000 {
+            counters.gaps_ge_250ms.fetch_add(1, Ordering::Relaxed);
+        }
+        if us >= 500_000 {
+            counters.gaps_ge_500ms.fetch_add(1, Ordering::Relaxed);
+        }
+    } else {
+        counters.period_sum_us.fetch_add(us, Ordering::Relaxed);
+        counters.period_count.fetch_add(1, Ordering::Relaxed);
+        let min = counters.period_min_us.load(Ordering::Relaxed);
+        if min == 0 || us < min {
+            counters.period_min_us.store(us.max(1), Ordering::Relaxed);
+        }
+    }
+}
+
+/// Test hook: sleeps once if a pause was injected. A relaxed load when none was.
+#[inline]
+fn injected_pause(counters: &StreamCounters) {
+    let ms = counters.inject_pause_ms.load(Ordering::Relaxed);
+    if ms != 0 {
+        counters.inject_pause_ms.store(0, Ordering::Relaxed);
+        std::thread::sleep(Duration::from_millis(ms));
+    }
+}
+
+/// The device buffer sizes a session asks for, in order, in milliseconds (`None` is the device's
+/// default). A driver that refuses one moves the request to the next.
+pub const BUFFER_REQUESTS_MS: [Option<u32>; 4] = [Some(1000), Some(500), Some(200), None];
+
+/// What the capture stream asked the device for, and what the audio engine granted.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct BufferInfo {
+    /// The size that was accepted, in milliseconds (`None`: the device default).
+    pub requested_ms: Option<u32>,
+    /// Larger requests the driver refused before this one.
+    pub refused_ms: Vec<u32>,
+    /// Endpoint buffer the engine granted, in milliseconds, read through a probe client with the
+    /// same request (`None` when it could not be read).
+    pub granted_ms: Option<f64>,
+    pub granted_frames: Option<u32>,
+    /// How often the engine calls back: its default period, in milliseconds.
+    pub engine_period_ms: Option<f64>,
+}
+
+impl BufferInfo {
+    /// A buffer that was not opened on a device (tests).
+    pub fn manual() -> Self {
+        Self {
+            requested_ms: None,
+            refused_ms: Vec::new(),
+            granted_ms: None,
+            granted_frames: None,
+            engine_period_ms: None,
+        }
+    }
+
+    /// One line for session.log, session.json and the evidence.
+    pub fn label(&self) -> String {
+        let asked = match self.requested_ms {
+            Some(ms) => format!("requested {ms} ms"),
+            None => "device default requested".to_string(),
+        };
+        let refused = if self.refused_ms.is_empty() {
+            String::new()
+        } else {
+            let list: Vec<String> = self.refused_ms.iter().map(|m| format!("{m} ms")).collect();
+            format!(" (refused {})", list.join(", "))
+        };
+        let granted = match (self.granted_ms, self.granted_frames) {
+            (Some(ms), Some(frames)) => format!("granted {ms:.1} ms ({frames} frames)"),
+            _ => "granted size unknown".to_string(),
+        };
+        let period = self
+            .engine_period_ms
+            .map_or(String::new(), |p| format!(", engine period {p:.1} ms"));
+        format!("{asked}{refused}, {granted}{period}")
+    }
+}
+
+/// Tries each size in [`BUFFER_REQUESTS_MS`] in order with `open` (called with the request and the
+/// matching cpal buffer size) and returns the first that opens, with the larger requests that
+/// were refused. The error of the last attempt is returned if none opens.
+pub fn open_with_fallback<T>(
+    sample_rate: u32,
+    mut open: impl FnMut(Option<u32>, cpal::BufferSize) -> Result<T, Error>,
+) -> Result<(T, Option<u32>, Vec<u32>), Error> {
+    let mut refused = Vec::new();
+    let mut last: Option<Error> = None;
+    for request in BUFFER_REQUESTS_MS {
+        let size = match request {
+            Some(ms) => cpal::BufferSize::Fixed(
+                u32::try_from(u64::from(sample_rate) * u64::from(ms) / 1000)
+                    .unwrap_or(u32::MAX)
+                    .max(1),
+            ),
+            None => cpal::BufferSize::Default,
+        };
+        match open(request, size) {
+            Ok(opened) => return Ok((opened, request, refused)),
+            Err(e) => {
+                if let Some(ms) = request {
+                    refused.push(ms);
+                }
+                last = Some(e);
+            }
+        }
+    }
+    Err(last.unwrap_or_else(|| Error::Device("no device buffer size could be opened".into())))
 }
 
 /// A driver xrun, as the error callback saw it.
@@ -323,8 +541,9 @@ pub struct StreamHandle {
     pub counters: Arc<StreamCounters>,
     /// Ring buffer size in samples.
     pub capacity: usize,
-    /// Device buffer the stream opened with: "fixed 100 ms" or "device default".
-    pub buffer: &'static str,
+    /// Device buffer the stream asked for and the engine granted (boxed: it keeps the handle, and
+    /// with it `RecorderMsg`, small).
+    pub buffer: Box<BufferInfo>,
     /// Driver xruns with their position, left by the error callback (none for a manual handle).
     pub xrun_log: Option<HeapCons<XrunMark>>,
     /// Position-check findings left by the data callback (none for a manual handle).
@@ -343,7 +562,7 @@ impl StreamHandle {
                 input,
                 counters: Arc::new(StreamCounters::default()),
                 capacity,
-                buffer: "manual",
+                buffer: Box::new(BufferInfo::manual()),
                 xrun_log: None,
                 position_log: None,
             },
@@ -554,7 +773,7 @@ fn try_open(
     base: StreamConfig,
     format: SampleFormat,
     buffer: cpal::BufferSize,
-    buffer_label: &'static str,
+    requested_ms: Option<u32>,
 ) -> Result<(cpal::Stream, StreamHandle), Error> {
     let config = StreamConfig {
         buffer_size: buffer,
@@ -594,6 +813,7 @@ fn try_open(
 
     let cb = Arc::clone(&counters);
     let mut registered = false;
+    let mut gap = CallbackGap::new();
     let mut position = PositionCheck::new(config.sample_rate, position_prod);
     let timeout = Some(Duration::from_secs(5));
     let stream = match format {
@@ -601,8 +821,10 @@ fn try_open(
             config,
             move |data: &[f32], info| {
                 register_capture_thread(&mut registered, &cb);
+                gap.note(&cb);
                 position.check(info, (data.len() / channels) as u64, &cb);
-                push_frames(&mut prod, data, channels, |s| s, &cb)
+                push_frames(&mut prod, data, channels, |s| s, &cb);
+                injected_pause(&cb);
             },
             on_error,
             timeout,
@@ -611,8 +833,10 @@ fn try_open(
             config,
             move |data: &[i16], info| {
                 register_capture_thread(&mut registered, &cb);
+                gap.note(&cb);
                 position.check(info, (data.len() / channels) as u64, &cb);
-                push_frames(&mut prod, data, channels, |s| f32::from(s) / 32_768.0, &cb)
+                push_frames(&mut prod, data, channels, |s| f32::from(s) / 32_768.0, &cb);
+                injected_pause(&cb);
             },
             on_error,
             timeout,
@@ -621,6 +845,7 @@ fn try_open(
             config,
             move |data: &[i32], info| {
                 register_capture_thread(&mut registered, &cb);
+                gap.note(&cb);
                 position.check(info, (data.len() / channels) as u64, &cb);
                 push_frames(
                     &mut prod,
@@ -628,7 +853,8 @@ fn try_open(
                     channels,
                     |s| s as f32 / 2_147_483_648.0,
                     &cb,
-                )
+                );
+                injected_pause(&cb);
             },
             on_error,
             timeout,
@@ -655,16 +881,24 @@ fn try_open(
             input,
             counters,
             capacity,
-            buffer: buffer_label,
+            buffer: Box::new(BufferInfo {
+                requested_ms,
+                refused_ms: Vec::new(),
+                granted_ms: None,
+                granted_frames: None,
+                engine_period_ms: None,
+            }),
             xrun_log: Some(xrun_cons),
             position_log: Some(position_cons),
         },
     ))
 }
 
-/// Opens the device by id (or, after a replug, by name) with a 100 ms device buffer, so the
-/// driver's capture thread has slack under load; falls back to the device default when the
-/// driver refuses that size.
+/// Opens the device by id (or, after a replug, by name) with a 1,000 ms device buffer, so the
+/// driver's capture thread can be kept away from the device for most of a second under load
+/// without losing audio. A driver that refuses a size moves the request on to 500 ms, 200 ms and
+/// the device default. The size the audio engine grants is read back and recorded in the handle.
+/// Shared mode and the 10 ms callback period do not change: only the endpoint buffer behind it.
 fn open_stream(device_id: &str, name: Option<&str>) -> Result<(cpal::Stream, StreamHandle), Error> {
     let device = find_device(device_id, name).ok_or_else(|| {
         Error::Device(format!(
@@ -673,17 +907,41 @@ fn open_stream(device_id: &str, name: Option<&str>) -> Result<(cpal::Stream, Str
         ))
     })?;
     let (config, format) = choose_config(&device)?;
-    let fixed = cpal::BufferSize::Fixed((config.sample_rate / 10).max(1));
-    match try_open(&device, config, format, fixed, "fixed 100 ms") {
-        Ok(opened) => Ok(opened),
-        Err(_) => try_open(
-            &device,
-            config,
-            format,
-            cpal::BufferSize::Default,
-            "device default",
-        ),
+    let ((stream, mut handle), requested, refused) =
+        open_with_fallback(config.sample_rate, |request, size| {
+            try_open(&device, config, format, size, request)
+        })?;
+    handle.buffer.refused_ms = refused;
+    let endpoint = device.id().ok().map(|id| id.id().to_string());
+    if let Some(grant) = endpoint
+        .as_deref()
+        .and_then(|e| crate::sys::probe_capture_buffer(e, requested.unwrap_or(0)))
+    {
+        handle.buffer.granted_ms = Some(grant.granted_ms);
+        handle.buffer.granted_frames = Some(grant.granted_frames);
+        handle.buffer.engine_period_ms = Some(grant.engine_period_ms);
     }
+    Ok((stream, handle))
+}
+
+/// Opens the named input the way a session does (same buffer request, fallback and counters) and
+/// starts it, for the stall tests on a real device. Not part of the recorder's own path.
+#[doc(hidden)]
+pub fn open_for_test(name_contains: &str) -> Result<(cpal::Stream, StreamHandle), Error> {
+    let host = host();
+    let devices = host
+        .input_devices()
+        .map_err(|e| Error::Device(e.to_string()))?;
+    let device = devices
+        .into_iter()
+        .find(|d| d.to_string().contains(name_contains))
+        .ok_or_else(|| Error::Device(format!("no input device named like {name_contains}")))?;
+    let id = device_id_string(&device);
+    let (stream, handle) = open_stream(&id, None)?;
+    stream
+        .play()
+        .map_err(|e| Error::Device(format!("could not start: {e}")))?;
+    Ok((stream, handle))
 }
 
 /// The running capture thread.
@@ -1027,5 +1285,174 @@ mod tests {
         let step = tracker.check(123 * MS, 480);
         assert_eq!(step.verdict, PositionVerdict::Ok);
         let _ = PERIOD;
+    }
+
+    // --- device buffer request, fallback and margin logging ---
+
+    fn frames_of(size: cpal::BufferSize) -> Option<u32> {
+        match size {
+            cpal::BufferSize::Fixed(f) => Some(f),
+            cpal::BufferSize::Default => None,
+        }
+    }
+
+    #[test]
+    fn the_requests_are_1000_500_200_ms_and_then_the_default() {
+        assert_eq!(BUFFER_REQUESTS_MS, [Some(1000), Some(500), Some(200), None]);
+    }
+
+    #[test]
+    fn the_first_request_is_one_second_of_frames_and_it_is_used_when_the_driver_accepts_it() {
+        let mut asked = Vec::new();
+        let (value, request, refused) = open_with_fallback(48_000, |r, size| {
+            asked.push((r, frames_of(size)));
+            Ok::<_, Error>("opened")
+        })
+        .expect("opens");
+        assert_eq!(value, "opened");
+        assert_eq!(request, Some(1000));
+        assert!(refused.is_empty());
+        assert_eq!(asked, vec![(Some(1000), Some(48_000))]);
+    }
+
+    #[test]
+    fn a_refused_size_falls_back_in_order_to_500_200_and_the_default() {
+        for (accept_from, want) in [(1usize, Some(500u32)), (2, Some(200)), (3, None)] {
+            let mut asked = Vec::new();
+            let (_, request, refused) = open_with_fallback(48_000, |r, size| {
+                asked.push((r, frames_of(size)));
+                if asked.len() > accept_from {
+                    Ok(())
+                } else {
+                    Err(Error::Device("refused".into()))
+                }
+            })
+            .expect("opens");
+            assert_eq!(request, want);
+            let all = [
+                (Some(1000u32), Some(48_000u32)),
+                (Some(500), Some(24_000)),
+                (Some(200), Some(9_600)),
+                (None, None),
+            ];
+            assert_eq!(asked, all[..=accept_from].to_vec());
+            let sizes: Vec<u32> = all[..accept_from].iter().filter_map(|a| a.0).collect();
+            assert_eq!(refused, sizes);
+        }
+    }
+
+    #[test]
+    fn when_nothing_opens_the_last_error_is_returned() {
+        let mut n = 0;
+        let err = open_with_fallback::<()>(44_100, |_, _| {
+            n += 1;
+            Err(Error::Device(format!("no {n}")))
+        })
+        .expect_err("fails");
+        assert_eq!(n, 4);
+        assert!(err.to_string().contains("no 4"));
+    }
+
+    #[test]
+    fn the_frames_follow_the_sample_rate() {
+        let mut first = None;
+        let _ = open_with_fallback(44_100, |_, size| {
+            first.get_or_insert(frames_of(size));
+            Ok::<_, Error>(())
+        });
+        assert_eq!(first, Some(Some(44_100)));
+    }
+
+    #[test]
+    fn the_buffer_label_says_what_was_asked_refused_and_granted() {
+        let granted = BufferInfo {
+            requested_ms: Some(1000),
+            refused_ms: Vec::new(),
+            granted_ms: Some(1000.0),
+            granted_frames: Some(48_000),
+            engine_period_ms: Some(10.0),
+        };
+        assert_eq!(
+            granted.label(),
+            "requested 1000 ms, granted 1000.0 ms (48000 frames), engine period 10.0 ms"
+        );
+        let fallback = BufferInfo {
+            requested_ms: Some(200),
+            refused_ms: vec![1000, 500],
+            granted_ms: Some(200.0),
+            granted_frames: Some(9_600),
+            engine_period_ms: Some(10.0),
+        };
+        assert!(fallback.label().contains("(refused 1000 ms, 500 ms)"));
+        let unknown = BufferInfo::manual();
+        assert!(unknown.label().contains("granted size unknown"));
+    }
+
+    #[test]
+    fn gaps_are_sorted_into_the_histogram_and_the_period() {
+        let c = StreamCounters::default();
+        for us in [10_000, 10_100, 9_900, 49_999] {
+            record_gap(&c, us);
+        }
+        for us in [
+            50_000, 99_999, 100_000, 249_999, 250_000, 499_999, 500_000, 730_000,
+        ] {
+            record_gap(&c, us);
+        }
+        let g = CallbackGapStats::from_counters(&c);
+        assert_eq!(g.max_gap_us, 730_000);
+        assert_eq!(g.gaps_ge_50ms, 8);
+        assert_eq!(g.gaps_ge_100ms, 6);
+        assert_eq!(g.gaps_ge_250ms, 4);
+        assert_eq!(g.gaps_ge_500ms, 2);
+        // The four ordinary gaps give the period; the stalls do not.
+        assert_eq!(g.period_count, 4);
+        assert_eq!(g.period_min_us, 9_900);
+        let mean = g.mean_period_ms().expect("a mean");
+        assert!((mean - 20.0).abs() < 5.0, "mean {mean}");
+        assert!((g.max_gap_ms() - 730.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn the_gap_clock_measures_a_real_pause_between_two_callbacks() {
+        let c = StreamCounters::default();
+        let mut gap = CallbackGap::new();
+        gap.note(&c);
+        assert_eq!(c.max_callback_gap_us.load(Ordering::Relaxed), 0);
+        std::thread::sleep(Duration::from_millis(120));
+        gap.note(&c);
+        let us = c.max_callback_gap_us.load(Ordering::Relaxed);
+        assert!((115_000..400_000).contains(&us), "gap {us} us");
+        assert_eq!(c.gaps_ge_100ms.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn gap_numbers_of_two_streams_add_up() {
+        let a = StreamCounters::default();
+        let b = StreamCounters::default();
+        record_gap(&a, 300_000);
+        record_gap(&a, 10_000);
+        record_gap(&b, 600_000);
+        record_gap(&b, 9_000);
+        let mut all = CallbackGapStats::from_counters(&a);
+        all.merge(&CallbackGapStats::from_counters(&b));
+        assert_eq!(all.max_gap_us, 600_000);
+        assert_eq!(all.gaps_ge_250ms, 2);
+        assert_eq!(all.gaps_ge_500ms, 1);
+        assert_eq!(all.period_min_us, 9_000);
+        assert_eq!(all.period_count, 2);
+    }
+
+    #[test]
+    fn an_injected_pause_is_taken_once() {
+        let c = StreamCounters::default();
+        c.inject_pause_ms.store(60, Ordering::Relaxed);
+        let t = std::time::Instant::now();
+        injected_pause(&c);
+        assert!(t.elapsed() >= Duration::from_millis(55));
+        assert_eq!(c.inject_pause_ms.load(Ordering::Relaxed), 0);
+        let t = std::time::Instant::now();
+        injected_pause(&c);
+        assert!(t.elapsed() < Duration::from_millis(30));
     }
 }

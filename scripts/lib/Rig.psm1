@@ -300,4 +300,64 @@ function Get-WbReferenceXrunLines {
   $lines
 }
 
-Export-ModuleMember -Function Get-WbReferenceXrunLines, ConvertFrom-WbMask, Format-WbMask, Format-WbLogicalList, Get-WbRigPlan, Assert-WbRigPlacement, Set-WbRigPlacement, Get-WbProcessCpuSets, Get-WbJobPlacement, Set-WbRigPins, Confirm-WbRigAgainstJob, Get-WbRigLines, Get-WbLateCallbackLines
+# Which stress process a wb-testbench command line is: 'job' (the one the inner script starts inside
+# the emulation job, with --gpu), 'host' (the load gate's all-processors load outside the job, with
+# --threads), or $null for any other command.
+function Get-WbStressKind([string]$CommandLine) {
+  if (-not $CommandLine -or $CommandLine -notmatch '\sstress(\s|$)') { return $null }
+  if ($CommandLine -match '--gpu') { return 'job' }
+  if ($CommandLine -match '--threads') { return 'host' }
+  return 'other'
+}
+
+# The stress processes that run now: priority class, threads with their base priorities, the CPU
+# they used over a few seconds (about the number of busy threads) and their affinity. Read from the
+# running processes, not from what the script meant to start.
+function Get-WbStressInfo {
+  param([int]$SampleSeconds = 3)
+  $found = @()
+  foreach ($p in @(Get-CimInstance -ClassName Win32_Process -Filter "Name='wb-testbench.exe'" -ErrorAction SilentlyContinue)) {
+    $kind = Get-WbStressKind $p.CommandLine
+    if ($kind) { $found += [pscustomobject]@{ Kind = $kind; Id = [int]$p.ProcessId } }
+  }
+  $before = @{}
+  foreach ($f in $found) {
+    try { $before[$f.Id] = (Get-Process -Id $f.Id -ErrorAction Stop).TotalProcessorTime.TotalSeconds } catch { }
+  }
+  Start-Sleep -Seconds $SampleSeconds
+  foreach ($f in $found) {
+    try {
+      $gp = Get-Process -Id $f.Id -ErrorAction Stop
+      $bases = @($gp.Threads | ForEach-Object { [int]$_.BasePriority } | Group-Object | Sort-Object { [int]$_.Name } | ForEach-Object { '{0} thread(s) at base priority {1}' -f $_.Count, $_.Name })
+      $cores = if ($before.ContainsKey($f.Id)) { ($gp.TotalProcessorTime.TotalSeconds - $before[$f.Id]) / [double]$SampleSeconds } else { $null }
+      [pscustomobject]@{
+        Kind = $f.Kind; Id = $f.Id; PriorityClass = "$($gp.PriorityClass)"; Threads = @($gp.Threads).Count
+        BasePriorities = $bases; AllThreadsNormal = (@($gp.Threads | Where-Object { [int]$_.BasePriority -ne 8 }).Count -eq 0)
+        CoresBusy = $cores; Affinity = ('0x{0:X}' -f [int64]$gp.ProcessorAffinity); SampleSeconds = $SampleSeconds
+      }
+    } catch { }
+  }
+}
+
+# Evidence lines for Get-WbStressInfo: count, priority class and thread priorities of each stress
+# process, and whether they are the normal priority the load gate requires.
+function Get-WbStressLines {
+  param($Info)
+  $items = @($Info | Where-Object { $_ })
+  if ($items.Count -eq 0) { return @('  stress priority: no stress process was found running (not measured)') }
+  $lines = @()
+  $bad = 0
+  foreach ($i in ($items | Sort-Object Kind)) {
+    $label = switch ($i.Kind) { 'job' { 'inside the job' } 'host' { 'on the host, outside the job' } default { 'other' } }
+    $cpu = if ($null -ne $i.CoresBusy) { ('{0:n1} cores busy over {1} s' -f $i.CoresBusy, $i.SampleSeconds) } else { 'CPU use not measured' }
+    $ok = ($i.PriorityClass -eq 'Normal' -and $i.AllThreadsNormal)
+    if (-not $ok) { $bad++ }
+    $verdict = if ($ok) { 'normal, as the load gate requires' } else { 'NOT NORMAL PRIORITY' }
+    $lines += ("  stress priority, {0}: pid {1}, priority class {2}, {3} threads ({4}), {5}, affinity {6}: {7}" -f $label, $i.Id, $i.PriorityClass, $i.Threads, ($i.BasePriorities -join '; '), $cpu, $i.Affinity, $verdict)
+  }
+  if ($bad -gt 0) { $lines += '  stress priority: NOT NORMAL for at least one stress process; the load gate requires normal priority, so this load is not the one the gate defines' }
+  else { $lines += '  stress priority: every stress process is at normal priority (class Normal, all threads at base priority 8)' }
+  return $lines
+}
+
+Export-ModuleMember -Function Get-WbStressKind, Get-WbStressInfo, Get-WbStressLines, Get-WbReferenceXrunLines, ConvertFrom-WbMask, Format-WbMask, Format-WbLogicalList, Get-WbRigPlan, Assert-WbRigPlacement, Set-WbRigPlacement, Get-WbProcessCpuSets, Get-WbJobPlacement, Set-WbRigPins, Confirm-WbRigAgainstJob, Get-WbRigLines, Get-WbLateCallbackLines

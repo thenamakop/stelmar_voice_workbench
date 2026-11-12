@@ -153,5 +153,32 @@ Check 'a break given another label is not called a shared break (late callbacks)
 $lx = (Get-WbReferenceXrunLines -RefAnalysis $refA -Reference $refR -PlayStarted $playAt -BreakSourceMs @(90000.0) -Label 'app-only break (not in the reference capture)') -join "`n"
 Check 'a break given another label is not called a shared break (reference xruns)' ($lx -match 'app-only break \(not in the reference capture\) at source 90.000 s' -and $lx -notmatch 'shared break at')
 Check 'the default label stays shared break' ($text -match 'shared break at source 51.979 s')
+# The load gate reads the stress processes' priority class and threads from the running processes.
+Check 'a stress command line is told apart: in the job (--gpu), on the host (--threads), other commands are not stress' (((Get-WbStressKind 'wb-testbench.exe stress --gpu Intel --seconds 9') -eq 'job') -and ((Get-WbStressKind 'wb-testbench.exe stress --threads 32 --seconds 9') -eq 'host') -and ($null -eq (Get-WbStressKind 'wb-testbench.exe play --device x')) -and ($null -eq (Get-WbStressKind '')))
+$okJob = [pscustomobject]@{ Kind = 'job'; Id = 11; PriorityClass = 'Normal'; Threads = 6; BasePriorities = @('6 thread(s) at base priority 8'); AllThreadsNormal = $true; CoresBusy = 3.9; Affinity = '0xF0000'; SampleSeconds = 3 }
+$okHost = [pscustomobject]@{ Kind = 'host'; Id = 12; PriorityClass = 'Normal'; Threads = 33; BasePriorities = @('33 thread(s) at base priority 8'); AllThreadsNormal = $true; CoresBusy = 28.5; Affinity = '0xFFFFFFFF'; SampleSeconds = 3 }
+$sl = (Get-WbStressLines -Info @($okJob, $okHost)) -join "`n"
+Check 'normal stress is reported with its count, class, thread priorities and cores busy' ($sl -match 'inside the job: pid 11, priority class Normal, 6 threads' -and $sl -match 'on the host, outside the job: pid 12, priority class Normal, 33 threads' -and $sl -match '3\.9 cores busy over 3 s' -and $sl -match 'every stress process is at normal priority')
+$high = [pscustomobject]@{ Kind = 'job'; Id = 13; PriorityClass = 'High'; Threads = 6; BasePriorities = @('6 thread(s) at base priority 13'); AllThreadsNormal = $false; CoresBusy = 4.0; Affinity = '0xF0000'; SampleSeconds = 3 }
+$hl = (Get-WbStressLines -Info @($high, $okHost)) -join "`n"
+Check 'a stress process that is not at normal priority is called out' ($hl -match 'NOT NORMAL PRIORITY' -and $hl -match 'the load gate requires normal priority')
+Check 'no stress process found is said plainly' (((Get-WbStressLines -Info @()) -join '') -match 'no stress process was found')
+$tb = @('target\debug\wb-testbench.exe', 'target\release\wb-testbench.exe') | ForEach-Object { Join-Path (Join-Path $here '..\..') $_ } | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+if ($tb) {
+  $stop = Join-Path ([IO.Path]::GetTempPath()) ('wb-stress-stop-' + [guid]::NewGuid().ToString('N'))
+  $sp = Start-Process -FilePath $tb -ArgumentList @('stress', '--threads', '2', '--seconds', '20', '--stop-file', $stop) -PassThru -WindowStyle Hidden
+  try {
+    Start-Sleep -Seconds 2
+    $live = @(Get-WbStressInfo -SampleSeconds 2 | Where-Object { $_.Id -eq $sp.Id })
+    Check 'a real stress process is found and read: host kind, normal class, about 2 cores busy' ($live.Count -eq 1 -and $live[0].Kind -eq 'host' -and $live[0].PriorityClass -eq 'Normal' -and $live[0].AllThreadsNormal -and $live[0].CoresBusy -gt 1.5 -and $live[0].CoresBusy -lt 2.5)
+  } finally {
+    Set-Content -LiteralPath $stop -Value 'stop'
+    if (-not $sp.WaitForExit(15000)) { Stop-Process -Id $sp.Id -Force -ErrorAction SilentlyContinue }
+    Remove-Item -LiteralPath $stop -Force -ErrorAction SilentlyContinue
+  }
+} else {
+  Write-Host 'skip live stress read: wb-testbench.exe is not built'
+}
+
 if ($fails) { Write-Host "$fails failed"; exit 1 }
 Write-Host 'Rig tests passed'

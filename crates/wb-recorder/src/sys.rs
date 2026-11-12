@@ -373,3 +373,36 @@ pub fn qpc_hz() -> u64 {
         0
     }
 }
+
+/// The endpoint buffer the audio engine grants a shared-mode capture client for a request of
+/// `requested_ms`, read through a short-lived probe client on the same endpoint (cpal does not
+/// expose it). `None` off Windows, or when the endpoint cannot be probed.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CaptureBufferGrant {
+    pub granted_ms: f64,
+    pub granted_frames: u32,
+    pub rate: u32,
+    /// The engine's default period: how often the capture callback is due.
+    pub engine_period_ms: f64,
+}
+
+/// See [`CaptureBufferGrant`]. `endpoint_id` is cpal's `DeviceId::id()` (the Windows endpoint id).
+pub fn probe_capture_buffer(endpoint_id: &str, requested_ms: u32) -> Option<CaptureBufferGrant> {
+    #[cfg(windows)]
+    {
+        let g =
+            crate::win::probe_shared_capture_buffer(endpoint_id, i64::from(requested_ms) * 10_000)?;
+        let rate = g.rate.max(1);
+        Some(CaptureBufferGrant {
+            granted_ms: f64::from(g.frames) * 1000.0 / f64::from(rate),
+            granted_frames: g.frames,
+            rate: g.rate,
+            engine_period_ms: g.period_ms,
+        })
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (endpoint_id, requested_ms);
+        None
+    }
+}

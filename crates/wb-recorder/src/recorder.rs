@@ -26,7 +26,7 @@ use ringbuf::traits::{Consumer, Observer};
 use serde::Serialize;
 
 use crate::Error;
-use crate::capture::{PositionKind, RING_SECONDS, StreamHandle};
+use crate::capture::{CallbackGapStats, PositionKind, RING_SECONDS, StreamHandle};
 use crate::dropout::{DropoutDetector, ZeroGap};
 use crate::events::{Event, Notice, NoticeLevel, RecState, RecorderStatus};
 use crate::level::LevelMeter;
@@ -182,6 +182,25 @@ pub struct StopReport {
     pub detector_max_block_us: u64,
     /// Detectors that panicked and were switched off for the rest of the session.
     pub detectors_disabled: Vec<String>,
+    /// Each capture stream the session opened: what it asked the device for and what the audio
+    /// engine granted (one entry per stream; more than one after a reconnect).
+    pub capture_buffers: Vec<String>,
+    /// The smallest endpoint buffer granted to any stream of the session, in milliseconds.
+    pub capture_buffer_granted_ms: Option<f64>,
+    /// Longest time between two data callbacks over the session, in milliseconds: how long the
+    /// capture thread was away from the device at worst.
+    pub capture_max_callback_gap_ms: f64,
+    /// Granted buffer minus the longest callback gap: how much room was left (negative: audio
+    /// was lost).
+    pub capture_margin_ms: Option<f64>,
+    /// Callback gaps of at least 50, 100, 250 and 500 ms.
+    pub capture_gaps_ge_50ms: u64,
+    pub capture_gaps_ge_100ms: u64,
+    pub capture_gaps_ge_250ms: u64,
+    pub capture_gaps_ge_500ms: u64,
+    /// Mean and minimum callback period when nothing stalled (gaps under 50 ms), in milliseconds.
+    pub capture_callback_period_ms: Option<f64>,
+    pub capture_callback_period_min_ms: Option<f64>,
 }
 
 pub struct RecorderConfig {
@@ -435,6 +454,13 @@ struct Recorder {
     last_gap_event: Option<Instant>,
     write_blocked_until: Option<Instant>,
 
+    /// Callback-gap numbers of the streams already closed (the open one is read live).
+    gaps_before: CallbackGapStats,
+    /// The capture buffers of the streams opened so far, as `BufferInfo::label` prints them.
+    capture_buffers: Vec<String>,
+    granted_ms_min: Option<f64>,
+    /// Longest callback gap already written to session.log, in microseconds.
+    logged_max_gap_us: u64,
     overruns_before: u64,
     xruns_before: u64,
     position_breaks_before: u64,
@@ -559,6 +585,10 @@ fn run(cfg: RecorderConfig, rx: &Receiver<RecorderMsg>, events: Sender<Event>) {
         first_write_pending: false,
         last_gap_event: None,
         write_blocked_until: None,
+        gaps_before: CallbackGapStats::default(),
+        capture_buffers: Vec::new(),
+        granted_ms_min: None,
+        logged_max_gap_us: 0,
         overruns_before: 0,
         xruns_before: 0,
         position_breaks_before: 0,
@@ -679,6 +709,7 @@ impl Recorder {
         if now.duration_since(t.status) >= STATUS_INTERVAL {
             t.status = now;
             self.log_counters();
+            self.log_capture_margin();
             self.send_status();
         }
         Step::Continue
@@ -812,6 +843,8 @@ impl Recorder {
             self.timestamp_outliers_before +=
                 old.counters.timestamp_outliers.load(Ordering::Relaxed);
             self.pair_flags_before += old.counters.position_pair_flags.load(Ordering::Relaxed);
+            self.gaps_before
+                .merge(&CallbackGapStats::from_counters(&old.counters));
         }
         self.meter = None;
         self.repeat = None;
@@ -852,6 +885,12 @@ impl Recorder {
                     .then(|| DropoutDetector::new(handle.input.channels, handle.input.sample_rate));
                 let restored = self.had_stream && !self.input_ok;
                 let input = handle.input.clone();
+                let buffer_label = handle.buffer.label();
+                if let Some(ms) = handle.buffer.granted_ms {
+                    self.granted_ms_min = Some(self.granted_ms_min.map_or(ms, |m| m.min(ms)));
+                }
+                self.capture_buffers.push(buffer_label.clone());
+                self.logged_max_gap_us = 0;
                 self.stream = Some(handle);
                 self.rebuild_scratch();
                 self.had_stream = true;
@@ -859,6 +898,7 @@ impl Recorder {
                 self.input_lost_since = None;
                 self.last_callbacks = (0, Instant::now());
                 self.meta.input = Some(input.clone());
+                self.event("capture_buffer", Some(buffer_label));
                 if restored {
                     self.event(
                         "input_restored",
@@ -1765,6 +1805,40 @@ impl Recorder {
         }
     }
 
+    /// Callback-gap numbers of the whole session: the closed streams plus the open one.
+    fn callback_gaps(&self) -> CallbackGapStats {
+        let mut all = self.gaps_before;
+        if let Some(s) = &self.stream {
+            all.merge(&CallbackGapStats::from_counters(&s.counters));
+        }
+        all
+    }
+
+    /// Writes a session.log line when the longest gap between capture callbacks reaches a new
+    /// high of at least 100 ms, next to the buffer granted, so a near miss is on record at its
+    /// audio time (at most once a second, from the status tick).
+    fn log_capture_margin(&mut self) {
+        let Some(stream) = &self.stream else { return };
+        let max_us = stream.counters.max_callback_gap_us.load(Ordering::Relaxed);
+        if max_us < 100_000 || max_us <= self.logged_max_gap_us {
+            return;
+        }
+        self.logged_max_gap_us = max_us;
+        let granted = stream
+            .buffer
+            .granted_ms
+            .map_or_else(|| "unknown".to_string(), |g| format!("{g:.0}"));
+        let audio_ms = self.audio_ms();
+        session::append_log(
+            &self.dir,
+            now_ist(),
+            &format!(
+                "capture_stall audio_ms={audio_ms} max_callback_gap_ms={:.1} granted_buffer_ms={granted}",
+                max_us as f64 / 1000.0
+            ),
+        );
+    }
+
     fn counters(&self) -> (u64, u64) {
         let (o, x) = self.stream.as_ref().map_or((0, 0), |s| {
             (
@@ -1844,7 +1918,7 @@ impl Recorder {
             ring_max_fill_pct: self.max_fill_pct,
             priority: self.priority.mode,
             priority_note: self.priority.fallback_reason.clone(),
-            capture_buffer: self.stream.as_ref().map(|s| s.buffer.to_string()),
+            capture_buffer: self.stream.as_ref().map(|s| s.buffer.label()),
             capture_priority: self
                 .stream
                 .as_ref()
@@ -1885,6 +1959,8 @@ impl Recorder {
         let repeated_blocks = self.repeated_blocks;
         let zero_gaps = self.zero_gaps;
         let cpu = sys::thread_cpu_ms();
+        let gaps = self.callback_gaps();
+        let margin_ms = self.granted_ms_min.map(|g| g - gaps.max_gap_ms());
         let final_status = self.status(RecState::Stopped);
         self.take_stream();
         let index = self.closer.finish().unwrap_or_default();
@@ -1893,14 +1969,25 @@ impl Recorder {
         self.event(
             "closed",
             Some(format!(
-                "overrun_samples={overrun_samples} xruns={xruns} dropped_samples={} recorder_restarts={} recorder_cpu_ms={} detector_over_budget_blocks={} detector_skipped_ms={} detector_max_block_us={} detectors_disabled={}",
+                "overrun_samples={overrun_samples} xruns={xruns} dropped_samples={} recorder_restarts={} recorder_cpu_ms={} detector_over_budget_blocks={} detector_skipped_ms={} detector_max_block_us={} detectors_disabled={} capture_buffer_granted_ms={} capture_max_callback_gap_ms={:.1} capture_margin_ms={} capture_gaps_ge_50ms={} capture_gaps_ge_100ms={} capture_gaps_ge_250ms={} capture_gaps_ge_500ms={} capture_callback_period_ms={}",
                 self.dropped_samples,
                 self.restarts,
                 cpu.unwrap_or(0),
                 self.detector_over_budget_blocks,
                 self.detector_skipped_ms,
                 self.detector_max_block_us,
-                self.detectors_disabled.len()
+                self.detectors_disabled.len(),
+                self.granted_ms_min
+                    .map_or_else(|| "unknown".to_string(), |g| format!("{g:.1}")),
+                gaps.max_gap_ms(),
+                margin_ms.map_or_else(|| "unknown".to_string(), |m| format!("{m:.1}")),
+                gaps.gaps_ge_50ms,
+                gaps.gaps_ge_100ms,
+                gaps.gaps_ge_250ms,
+                gaps.gaps_ge_500ms,
+                gaps
+                    .mean_period_ms()
+                    .map_or_else(|| "unknown".to_string(), |p| format!("{p:.2}"))
             )),
         );
         let manifest_files = session::write_manifest(&self.dir)?;
@@ -1926,6 +2013,17 @@ impl Recorder {
             detector_skipped_ms: self.detector_skipped_ms,
             detector_max_block_us: self.detector_max_block_us,
             detectors_disabled: self.detectors_disabled.clone(),
+            capture_buffers: self.capture_buffers.clone(),
+            capture_buffer_granted_ms: self.granted_ms_min,
+            capture_max_callback_gap_ms: gaps.max_gap_ms(),
+            capture_margin_ms: margin_ms,
+            capture_gaps_ge_50ms: gaps.gaps_ge_50ms,
+            capture_gaps_ge_100ms: gaps.gaps_ge_100ms,
+            capture_gaps_ge_250ms: gaps.gaps_ge_250ms,
+            capture_gaps_ge_500ms: gaps.gaps_ge_500ms,
+            capture_callback_period_ms: gaps.mean_period_ms(),
+            capture_callback_period_min_ms: (gaps.period_min_us > 0)
+                .then(|| gaps.period_min_us as f64 / 1000.0),
         })
     }
 
