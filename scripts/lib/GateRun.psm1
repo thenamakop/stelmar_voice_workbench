@@ -24,7 +24,8 @@ $script:LockPath = 'D:\Projects\stelmar-gate.lock'
 $script:TrackBBusyPath = 'D:\Projects\stelmar-eval-busy.lock'
 # Free RAM a gate needs before it starts: the 11 GiB emulation job plus headroom.
 $script:MinFreeRamGB = 14
-$script:OverlayNames = @('RTSS', 'MSIAfterburner')
+# LatMon is LatencyMon: it traces and used about one core for the whole of the 12 Nov diagnostic run.
+$script:OverlayNames = @('RTSS', 'MSIAfterburner', 'LatMon')
 # Engine builds (cargo, CMake, the C++ and CUDA compilers) must not run while a timing-sensitive run
 # is going: they take every core for minutes and would spoil a speed, load or soak measurement.
 # scripts/build-engines.ps1 holds this lock for the whole build; the process names catch any other
@@ -40,7 +41,7 @@ function Get-WbOverlayTools {
 function Assert-WbNoOverlayTools {
   $running = @(Get-WbOverlayTools)
   if ($running.Count -gt 0) {
-    throw ("Overlay tools are running: " + ($running -join ', ') + ". Close RivaTuner Statistics Server and MSI Afterburner (including their tray icons), then run the gate again.")
+    throw ("Overlay tools are running: " + ($running -join ', ') + ". Close RivaTuner Statistics Server, MSI Afterburner and LatencyMon (including their tray icons), then run the gate again.")
   }
 }
 
@@ -199,7 +200,7 @@ function Get-WbGateHeader {
   if ($fromRun) {
     $lines += 'overlay tools closed: checked by the original run before it started (the gate refuses to start otherwise); not saved, not re-checked'
   } else {
-    $lines += 'overlay tools closed: yes (RTSS.exe and MSIAfterburner.exe not running when the gate started)'
+    $lines += 'overlay tools closed: yes (RTSS.exe, MSIAfterburner.exe and LatMon.exe not running when the gate started)'
   }
   if ($c -and $null -ne $c.OverlayAtEnd) {
     if ($c.OverlayAtEnd.Count -gt 0) {

@@ -50,6 +50,7 @@ $tmp = Join-Path $env:TEMP "wb-gaterun-tests-$PID"
 New-Item -ItemType Directory -Force -Path $tmp | Out-Null
 $gateLock = Join-Path $tmp 'gate.lock'
 $busyLock = Join-Path $tmp 'busy.lock'
+Check 'LatencyMon (LatMon.exe) counts as a resident tool that must be closed' ((Get-Content -LiteralPath (Join-Path $here '..\lib\GateRun.psm1') -Raw) -match "OverlayNames = @\('RTSS', 'MSIAfterburner', 'LatMon'\)")
 $overlay = @(Get-WbOverlayTools)
 if ($overlay.Count -gt 0) {
   Write-Host "skip Invoke-WbGate tests: overlay tools are running ($($overlay -join ', '))"
