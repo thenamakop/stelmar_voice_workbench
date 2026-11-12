@@ -252,6 +252,20 @@ impl Cache {
     }
 }
 
+/// A file modified less than this long before it was hashed is not cached. File systems stamp
+/// modification times coarsely (a clock tick or more), so a same-size edit made just after the hash
+/// would keep the same size and time and be taken for the verified file. Model files are hours old
+/// when they are verified, so in practice nothing is re-read that need not be.
+const RACY_WINDOW: std::time::Duration = std::time::Duration::from_secs(3);
+
+fn is_racy(meta: &fs::Metadata) -> bool {
+    match meta.modified().map(|t| t.elapsed()) {
+        Ok(Ok(age)) => age < RACY_WINDOW,
+        // A modification time in the future, or unreadable: do not trust it.
+        _ => true,
+    }
+}
+
 fn mtime_ns(meta: &fs::Metadata) -> u128 {
     meta.modified()
         .ok()
@@ -291,14 +305,19 @@ pub fn verify(dir: &Path, entry: &Entry, cache: &mut Cache, hashed: &mut bool) -
     *hashed = true;
     match sha256_file(&path) {
         Ok(actual) if actual == want => {
-            cache.files.insert(
-                entry.file.clone(),
-                Verified {
-                    size: meta.len(),
-                    mtime_ns: mtime,
-                    sha256: actual,
-                },
-            );
+            if is_racy(&meta) {
+                // Verified now, but not remembered: the next check reads the file again.
+                cache.files.remove(&entry.file);
+            } else {
+                cache.files.insert(
+                    entry.file.clone(),
+                    Verified {
+                        size: meta.len(),
+                        mtime_ns: mtime,
+                        sha256: actual,
+                    },
+                );
+            }
             Status::Ok
         }
         Ok(actual) => {
@@ -381,6 +400,16 @@ mod tests {
         }
     }
 
+    /// Makes a file look old (as a model file is when it is verified), so it may be cached.
+    fn age(dir: &Dir, file: &str) {
+        let old = std::time::SystemTime::now() - std::time::Duration::from_secs(3600);
+        fs::File::options()
+            .write(true)
+            .open(dir.0.join(file))
+            .and_then(|f| f.set_modified(old))
+            .expect("set modification time");
+    }
+
     fn check(dir: &Dir, e: &Entry, cache: &mut Cache) -> (Status, bool) {
         let mut hashed = false;
         let s = verify(&dir.0, e, cache, &mut hashed);
@@ -391,6 +420,7 @@ mod tests {
     fn an_intact_file_is_ok_and_is_not_read_again_while_it_is_unchanged() {
         let d = Dir::new();
         fs::write(d.0.join("a.bin"), b"model bytes").expect("write");
+        age(&d, "a.bin");
         let e = entry("a.bin", b"model bytes");
         let mut cache = Cache::default();
         assert_eq!(check(&d, &e, &mut cache), (Status::Ok, true));
@@ -402,12 +432,36 @@ mod tests {
     }
 
     #[test]
-    fn one_corrupted_byte_is_a_hash_mismatch() {
+    fn a_file_modified_just_before_it_was_hashed_is_not_cached() {
+        // Coarse file-system timestamps: a same-size edit right after the hash would look unchanged.
         let d = Dir::new();
         fs::write(d.0.join("a.bin"), b"model bytes").expect("write");
         let e = entry("a.bin", b"model bytes");
         let mut cache = Cache::default();
+        assert_eq!(check(&d, &e, &mut cache), (Status::Ok, true));
+        assert!(
+            cache.files.is_empty(),
+            "a racy file is verified, not remembered"
+        );
+        assert_eq!(
+            check(&d, &e, &mut cache),
+            (Status::Ok, true),
+            "so the next check reads it again"
+        );
+    }
+
+    #[test]
+    fn one_corrupted_byte_is_a_hash_mismatch() {
+        let d = Dir::new();
+        fs::write(d.0.join("a.bin"), b"model bytes").expect("write");
+        age(&d, "a.bin");
+        let e = entry("a.bin", b"model bytes");
+        let mut cache = Cache::default();
         assert!(check(&d, &e, &mut cache).0.is_ok());
+        assert!(
+            cache.files.contains_key("a.bin"),
+            "an old file is remembered"
+        );
         fs::write(d.0.join("a.bin"), b"model byteX").expect("write");
         let (status, hashed) = check(&d, &e, &mut cache);
         assert!(hashed, "a changed file is read again");
@@ -491,6 +545,7 @@ mod tests {
     fn the_cache_survives_a_restart() {
         let d = Dir::new();
         fs::write(d.0.join("a.bin"), b"model bytes").expect("write");
+        age(&d, "a.bin");
         let e = entry("a.bin", b"model bytes");
         let mut cache = Cache::default();
         assert!(check(&d, &e, &mut cache).0.is_ok());
