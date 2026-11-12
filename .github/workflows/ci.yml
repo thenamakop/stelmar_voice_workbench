@@ -45,6 +45,16 @@ jobs:
       - name: No personal or secret data in docs/evidence (public repository)
         run: pnpm check:evidence
 
+      - name: Vendored whisper.cpp matches its pin
+        run: pnpm check:vendor
+
+      - name: Model manifest holds metadata only and is not ignored
+        run: pnpm check:manifest
+
+      - name: Every CMake option the engines depend on still exists in the vendored whisper.cpp
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-whisper-flags.ps1
+
       - name: Lint (design adherence, no raw hex or px)
         run: pnpm lint
 
@@ -86,6 +96,12 @@ jobs:
 
       - name: No networking crates in the Windows build
         run: pnpm check:crates
+
+      - name: Build the portable avx2 engine (GGML_NATIVE=OFF) and scan it for AVX-512
+        shell: powershell
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-engines.ps1 -Variants avx2
+          powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-no-zmm.ps1 -Exe src-tauri/binaries/wb-engine-avx2-x86_64-pc-windows-msvc.exe
 
       - name: Tauri build
         run: pnpm tauri build

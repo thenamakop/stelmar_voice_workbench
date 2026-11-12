@@ -32,6 +32,7 @@ $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 Import-Module (Join-Path $here 'lib\PsEnv.psm1') -Force
 Set-WbCleanPSModulePath
+Set-WbInvariantCulture
 if (-not $Exe) { $Exe = Join-Path $here '..\target\release\stelmar-voice-workbench.exe' }
 if (-not $OutDir) { $OutDir = Join-Path $here '..\docs\evidence\phase-1' }
 Import-Module (Join-Path $here 'lib\NetworkState.psm1') -Force

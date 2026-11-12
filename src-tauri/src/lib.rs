@@ -7,8 +7,10 @@
 mod boundary;
 mod capability;
 mod display;
+mod engines;
 #[cfg(feature = "gate-hooks")]
 mod gate;
+mod machine;
 mod recording;
 mod settings;
 mod state;
@@ -21,6 +23,9 @@ use std::sync::Mutex;
 use tauri::{Manager, RunEvent, WindowEvent};
 
 use crate::state::AppState;
+
+/// Worker threads of the async runtime, from the affinity mask (logged at start).
+static RUNTIME_WORKERS: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
 
 /// Errors that stop the app from starting.
 #[derive(Debug, thiserror::Error)]
@@ -66,13 +71,27 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         emulated = std::env::var("WB_EMULATE").unwrap_or_default(),
         "emulation profile"
     );
+    let machine = machine::get();
+    tracing::info!(
+        runtime_workers = RUNTIME_WORKERS.get().copied().unwrap_or(0),
+        logical_processors = machine.logical_processors,
+        physical_cores = machine.physical_cores,
+        std_available_parallelism = machine.std_available_parallelism,
+        total_ram_bytes = machine.total_ram_bytes,
+        available_ram_bytes = machine.available_ram_bytes,
+        job_memory_limit_bytes = machine.job_memory_limit_bytes.unwrap_or(0),
+        "machine view (from the affinity mask and the job limit, not from the host)"
+    );
     let data_dir = app.path().app_data_dir()?;
     let settings = settings::load(&data_dir, app.path().document_dir().ok());
     let (state, events_rx) = AppState::new(data_dir, settings);
     state::spawn_forwarder(events_rx, state.snapshot.clone(), state.subscribers.clone());
     app.manage(state);
+    app.manage(engines::Registry::default());
     #[cfg(feature = "gate-hooks")]
     gate::apply_overrides(app.handle());
+
+    engines::start(app.handle());
 
     let handle = app.handle().clone();
     std::thread::Builder::new()
@@ -90,19 +109,22 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 /// Starts the app and blocks until it exits.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() -> Result<(), RunError> {
+    if let Some(workers) = machine::install_runtime() {
+        let _ = RUNTIME_WORKERS.set(workers);
+    }
     let app = tauri::Builder::default()
         .setup(setup)
         .on_window_event(|window, event| {
             // Closing the window mid-session would end the recording: ask for Stop first.
-            if let WindowEvent::CloseRequested { api, .. } = event {
-                if recording::is_recording(window.app_handle()) {
-                    api.prevent_close();
-                    tracing::warn!("window close refused while recording");
-                    window
-                        .app_handle()
-                        .state::<AppState>()
-                        .broadcast(serde_json::json!({ "kind": "close_blocked" }));
-                }
+            if let WindowEvent::CloseRequested { api, .. } = event
+                && recording::is_recording(window.app_handle())
+            {
+                api.prevent_close();
+                tracing::warn!("window close refused while recording");
+                window
+                    .app_handle()
+                    .state::<AppState>()
+                    .broadcast(serde_json::json!({ "kind": "close_blocked" }));
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -118,6 +140,8 @@ pub fn run() -> Result<(), RunError> {
             recording::recorder_snapshot,
             recording::recovery_list,
             recording::recover_session,
+            engines::list_engines,
+            engines::recheck_registry,
         ])
         .build(tauri::generate_context!())?;
     app.run(|_handle, event| {

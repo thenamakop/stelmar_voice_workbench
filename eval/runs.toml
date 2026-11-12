@@ -25,7 +25,7 @@ setup = "medium"
 dataset = "fleurs-en"
 role = "rolling"
 engine = "whisper-cli"
-limit = 20
+limit = "eval/clips/phase2-verify-fleurs.txt"
 
 [[run]]
 name = "verify-cli-medium-fleurs-hi"
@@ -33,7 +33,7 @@ setup = "medium"
 dataset = "fleurs-hi"
 role = "rolling"
 engine = "whisper-cli"
-limit = 20
+limit = "eval/clips/phase2-verify-fleurs.txt"
 
 [[run]]
 name = "verify-cli-medium-fleurs-ur"
@@ -41,7 +41,7 @@ setup = "medium"
 dataset = "fleurs-ur"
 role = "rolling"
 engine = "whisper-cli"
-limit = 20
+limit = "eval/clips/phase2-verify-fleurs.txt"
 
 [[run]]
 name = "verify-wb-medium-fleurs-en"
@@ -49,7 +49,7 @@ setup = "medium"
 dataset = "fleurs-en"
 role = "rolling"
 engine = "wb-engine"
-limit = 20
+limit = "eval/clips/phase2-verify-fleurs.txt"
 needs = "phase-2"
 
 [[run]]
@@ -58,7 +58,7 @@ setup = "medium"
 dataset = "fleurs-hi"
 role = "rolling"
 engine = "wb-engine"
-limit = 20
+limit = "eval/clips/phase2-verify-fleurs.txt"
 needs = "phase-2"
 
 [[run]]
@@ -67,25 +67,96 @@ setup = "medium"
 dataset = "fleurs-ur"
 role = "rolling"
 engine = "wb-engine"
-limit = 20
+limit = "eval/clips/phase2-verify-fleurs.txt"
 needs = "phase-2"
 
+# --- Phase 2 parity gate (decision of 10 Nov 2026): identical chunks (whisper-cli decodes the chunks wb-engine cuts),
+# context off on both sides (role 'parity'), two-sided limit 3.0. Run 1 below (verify-cli-* against verify-wb-*) used each
+# side's own chunker and whisper-cli's corrupted --prompt, so it is information only.
+[[run]]
+name = "verify-clichunks-medium-fleurs-en"
+setup = "medium"
+dataset = "fleurs-en"
+role = "parity"
+engine = "whisper-cli-engine-chunks"
+limit = "eval/clips/phase2-verify-fleurs.txt"
+needs = "phase-2"
+
+[[run]]
+name = "verify-wbpar-medium-fleurs-en"
+setup = "medium"
+dataset = "fleurs-en"
+role = "parity"
+engine = "wb-engine"
+limit = "eval/clips/phase2-verify-fleurs.txt"
+needs = "phase-2"
+
+[[run]]
+name = "verify-clichunks-medium-fleurs-hi"
+setup = "medium"
+dataset = "fleurs-hi"
+role = "parity"
+engine = "whisper-cli-engine-chunks"
+limit = "eval/clips/phase2-verify-fleurs.txt"
+needs = "phase-2"
+
+[[run]]
+name = "verify-wbpar-medium-fleurs-hi"
+setup = "medium"
+dataset = "fleurs-hi"
+role = "parity"
+engine = "wb-engine"
+limit = "eval/clips/phase2-verify-fleurs.txt"
+needs = "phase-2"
+
+[[run]]
+name = "verify-clichunks-medium-fleurs-ur"
+setup = "medium"
+dataset = "fleurs-ur"
+role = "parity"
+engine = "whisper-cli-engine-chunks"
+limit = "eval/clips/phase2-verify-fleurs.txt"
+needs = "phase-2"
+
+[[run]]
+name = "verify-wbpar-medium-fleurs-ur"
+setup = "medium"
+dataset = "fleurs-ur"
+role = "parity"
+engine = "wb-engine"
+limit = "eval/clips/phase2-verify-fleurs.txt"
+needs = "phase-2"
+
+# Context on, English only (Latin text reaches whisper-cli intact): whisper-cli on the engine's chunks.
+[[run]]
+name = "verify-clichunks-rolling-fleurs-en"
+setup = "medium"
+dataset = "fleurs-en"
+role = "rolling"
+engine = "whisper-cli-engine-chunks"
+limit = "eval/clips/phase2-verify-fleurs.txt"
+needs = "phase-2"
+
+# The six verify-* runs read the 60 clip ids Phase 5a scored (20 per language) from a committed list.
 # The comparison is valid only when wb-engine bundles the same whisper.cpp version as whisper-cli
 # (eval/README.md); the table prints both versions.
 [[compare]]
 a = "verify-cli-medium-fleurs-en"
 b = "verify-wb-medium-fleurs-en"
 max_wer_points = 3.0
+informational = true   # as deployed: each side with its own chunker (run 1); not a parity measurement
 
 [[compare]]
 a = "verify-cli-medium-fleurs-hi"
 b = "verify-wb-medium-fleurs-hi"
 max_wer_points = 3.0
+informational = true   # as deployed: each side with its own chunker (run 1); not a parity measurement
 
 [[compare]]
 a = "verify-cli-medium-fleurs-ur"
 b = "verify-wb-medium-fleurs-ur"
 max_wer_points = 3.0
+informational = true   # as deployed: each side with its own chunker (run 1); not a parity measurement
 
 # --------------------------------------------------- Phase 5a smoke runs of the converted candidates
 # 20 clips each, to catch a broken conversion (garbage, wrong script) before Phase 5's full grid.
@@ -153,3 +224,37 @@ dataset = "coshe-eval"
 role = "night"
 engine = "whisper-cli"
 limit = 20
+
+# Phase 2 truncation check (docs/GATES.md, 5a to 2): the same 20 CoSHE-Eval clips, model and role as the
+# 5a smoke run of whisper-cli, decoded by wb-engine batch. Closed when 0 truncated and 0 broken utterances.
+[[run]]
+name = "phase2-wb-hinglish-q5_0-coshe"
+setup = "hinglish-q5_0"
+dataset = "coshe-eval"
+role = "night"
+engine = "wb-engine"
+limit = 20
+needs = "phase-2"
+
+# The parity gate.
+[[compare]]
+a = "verify-clichunks-medium-fleurs-en"
+b = "verify-wbpar-medium-fleurs-en"
+max_wer_points = 3.0
+
+[[compare]]
+a = "verify-clichunks-medium-fleurs-hi"
+b = "verify-wbpar-medium-fleurs-hi"
+max_wer_points = 3.0
+
+[[compare]]
+a = "verify-clichunks-medium-fleurs-ur"
+b = "verify-wbpar-medium-fleurs-ur"
+max_wer_points = 3.0
+
+# Information: context on (English), whisper-cli on the engine's chunks against the engine's rolling run.
+[[compare]]
+a = "verify-clichunks-rolling-fleurs-en"
+b = "verify-wb-medium-fleurs-en"
+max_wer_points = 3.0
+informational = true

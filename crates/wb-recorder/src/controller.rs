@@ -63,13 +63,13 @@ pub struct ActiveSession {
 }
 
 fn check_space(root: &Path) -> Result<(), Error> {
-    if let Ok(free) = sys::disk_free_bytes(root) {
-        if free < REFUSE_BELOW_BYTES {
-            return Err(Error::DiskFull {
-                path: root.to_path_buf(),
-                free_gb: free as f64 / 1e9,
-            });
-        }
+    if let Ok(free) = sys::disk_free_bytes(root)
+        && free < REFUSE_BELOW_BYTES
+    {
+        return Err(Error::DiskFull {
+            path: root.to_path_buf(),
+            free_gb: free as f64 / 1e9,
+        });
     }
     Ok(())
 }

@@ -65,11 +65,13 @@ if (-not $Emulate) { $Emulate = Join-Path $repo 'target\release\wb-emulate.exe' 
 if ($Minutes -le 0) { $Minutes = @{ soak = 120; load = 30; panic = 3; webview = 3 }[$Gate] }
 Import-Module (Join-Path $repo 'scripts\lib\PsEnv.psm1') -Force
 Set-WbCleanPSModulePath
+Set-WbInvariantCulture
 Import-Module (Join-Path $repo 'scripts\lib\GateRun.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Redact.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\AppProcess.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Rig.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Fidelity.psm1') -Force
+Import-Module (Join-Path $repo 'scripts\lib\Detector.psm1') -Force
 foreach ($f in @($Exe, $Testbench, $Emulate)) { if (-not (Test-Path $f)) { throw "Missing $f; build it first (scripts\gates\build-gate.ps1)" } }
 
 function Q([string]$v) { ConvertTo-WbArg $v }
@@ -225,9 +227,24 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
     Start-Sleep -Seconds 25
     $browser = @(Get-WbWebView2 | Where-Object { $_.Type -eq 'browser' })
     if ($browser.Count -eq 0) { throw 'No WebView2 browser process found' }
+    $before = @(Get-WbWebView2)
     $at = Get-Date
     Stop-Process -Id $browser[0].ProcessId -Force
-    $webviewKill = "killed WebView2 browser process $($browser[0].ProcessId) at $($at.ToString('HH:mm:ss.fff'))"
+    $webviewKill = "killed WebView2 browser process $($browser[0].ProcessId) (started $(([DateTime]$browser[0].Started).ToString('HH:mm:ss.fff'))) at $($at.ToString('HH:mm:ss.fff'))"
+    # Start times of the msedgewebview2.exe processes the app starts in reply (GATES row 1 -> 2),
+    # to line up a break in the recording with a WebView2 restart.
+    $newStarts = @()
+    for ($w = 0; $w -lt 30 -and $newStarts.Count -eq 0; $w++) {
+      Start-Sleep -Milliseconds 500
+      $newStarts = @(Get-WbWebView2 | Where-Object { $before.ProcessId -notcontains $_.ProcessId })
+    }
+    Start-Sleep -Seconds 2
+    $newStarts = @(Get-WbWebView2 | Where-Object { $before.ProcessId -notcontains $_.ProcessId } | Sort-Object Started)
+    if ($newStarts.Count -gt 0) {
+      $webviewKill += "; new msedgewebview2.exe processes: " + ((@($newStarts) | ForEach-Object { "$($_.Type) pid $($_.ProcessId) started $(([DateTime]$_.Started).ToString('HH:mm:ss.fff'))" }) -join ', ')
+    } else {
+      $webviewKill += '; no new msedgewebview2.exe process appeared within 17 s'
+    }
     $progress.Add("$($at.ToString('HH:mm:ss')) $webviewKill")
   }
 
@@ -274,7 +291,7 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
     try { [void]$fs.Seek($logStart, 'Begin'); $sr = New-Object System.IO.StreamReader($fs); $appLog = $sr.ReadToEnd() -split "`r?`n" } finally { $fs.Dispose() }
   }
   [pscustomobject]@{
-    Run = $run; SessionDir = $sessionDir; Source = $source; Report = $report; Inner = $innerRes; Play = $playRes
+    Run = $run; SessionDir = $sessionDir; Source = $source; Report = $report; Inner = $innerRes; Play = $playRes; EmuExit = $emu.ExitCode
     Compare = (Read-Json (Join-Path $run 'compare.json')); CompareError = $(if ($cmp.ExitCode -ne 0) { (@($cmp.Error) + @($cmp.Output)) -join ' ' } else { $null })
     Stress = $stressRes; Analysis = $analysis; Decode = $decode; Progress = $progress; AppLog = $appLog
     NvOverlap = $nvOverlap; JobPids = $jobPids; NvPids = $nvPids; WebviewKill = $webviewKill; Interference = @(ConvertTo-WbArray $interference)
@@ -375,6 +392,7 @@ $lines += ("  parts: {0}; audio {1:n1} s; overrun samples {2}; driver xruns {3};
 $lines += ("  priorities: recorder thread {0}, capture thread {1}; ring buffer {2} s, highest fill {3:n2}%" -f $r.LastStatus.recorder.priority, $r.LastStatus.recorder.capture_priority, $r.LastStatus.recorder.ring_seconds, $r.LastStatus.recorder.ring_max_fill_pct)
 $lines += ("  recorder thread CPU: {0:n2} s over {1:n0} s = {2:n3}% of one core" -f ($rec.recorder_cpu_ms / 1000.0), $wall, $recCpuPctCore)
 $lines += ("  app process CPU (main process; WebView2 processes not counted): {0:n1} s = {1:n2}% of the job's {2} logical processors ({3:n2}% of one core)" -f $r.Inner.app_cpu_seconds, $appCpuPctMachine, $logical, $appCpuPctCore)
+$lines += ("  exit codes (information, not gated): the app {0} (read inside the job), wb-emulate {1} (the app's code, since the 10 Nov fix)" -f $r.Inner.app_exit_code, $r.EmuExit)
 $lines += ("  mirror: {0} files compared, all equal: {1} (mirror on the same machine, separate drive pending: C: instead of an external SSD)" -f @($stopped.mirror.files).Count, $stopped.mirror.all_match)
 $lines += ("  player: {0} frames of {1}, underrun callbacks {2}, render thread priority {3}, output buffer {4}" -f $r.Play.frames_played, $r.Play.frames_in_file, $r.Play.underrun_callbacks, $r.Play.render_priority, $r.Play.buffer)
 $lines += Get-WbRigLines -Rig $r.Rig -Play $r.Play -Reference $r.Reference
@@ -393,6 +411,16 @@ $lines += Get-WbReferenceXrunLines -RefAnalysis $r.RefAnalysis -Reference $r.Ref
 $lines += ("  reference capture (separate cpal + hound recorder outside the job; shares the audio engine, cable driver and cpal with the app): {0} breaks, unmatched {1} ms, its overruns {2}, xruns {3}" -f @($r.RefAnalysis.discontinuities).Count, $refUnmatched, $r.Reference.overrun_samples, $r.Reference.xruns)
 $lines += ("  breaks in the app recording: recorder's own {0}; shared with the reference (upstream; see the upstream breaks section) {1}; start-up repeats within the old allowance {2} {3}" -f $split.Own.Count, $split.Chain.Count, $split.Excused.Count, ((@($split.Excused) | ForEach-Object { "(at source $([math]::Round([double]$_.source_ms)) ms, $([math]::Round([double]$_.source_jump_ms, 1)) ms)" }) -join ' '))
 $lines += ("  capture position breaks counted in the app's callback (device time not following on): {0}" -f $rec.position_breaks)
+# Live detector check (Phase 2): the shared upstream breaks the harness found against the
+# repeated_block and zero_gap events the recorder wrote to session.json. Not gated.
+$sessionJson = Join-Path $r.SessionDir 'session.json'
+if ($r.Analysis -and (Test-Path -LiteralPath $sessionJson)) {
+  $sessionMeta = Get-Content -LiteralPath $sessionJson -Raw | ConvertFrom-Json
+  $detCheck = Get-WbDetectorMatches -Breaks @($rv.Breaks) -Analysis $r.Analysis -Events @($sessionMeta.events)
+  $lines += Get-WbDetectorLines -Check $detCheck -Rec $rec
+} else {
+  $lines += 'live detector check: not available (no analysis or session.json for this run)'
+}
 $lines += $(if ($null -ne $r.NvOverlap) { "  GPU check: {0} job processes, {1} processes in nvidia-smi, overlap {2}" -f @($r.JobPids).Count, @($r.NvPids).Count, @($r.NvOverlap).Count } else { '  GPU check: not re-evaluated (measured live, not saved); emulator-check.txt covers it' })
 if ($r.Stress) { $lines += ("  stress: {0} threads at {1:n1} M loops/thread/s for {2:n0} s; GPU {3}: {4} dispatches {5}" -f $r.Stress.cpu_threads, $r.Stress.cpu_mloops_per_thread_s, $r.Stress.seconds, $r.Stress.gpu_adapter, $r.Stress.gpu_dispatches, $r.Stress.gpu_error) }
 if ($r.WebviewKill) { $lines += "  webview: $($r.WebviewKill); display restarts reported: $($r.Report.display_restarts)" }

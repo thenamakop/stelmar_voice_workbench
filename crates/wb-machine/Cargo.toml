@@ -1,0 +1,29 @@
+[package]
+name = "wb-machine"
+description = "What this process may really use: logical processors from its affinity mask, memory from its job limit (STELMAR Voice Workbench)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[features]
+# Read the WB_EMULATE* environment variables (set by wb-emulate). Off in the installed app.
+emulation = []
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true, features = [
+  "std",
+  "Win32_Foundation",
+  "Win32_System_JobObjects",
+  "Win32_System_ProcessStatus",
+  "Win32_System_SystemInformation",
+  "Win32_System_Threading",
+] }
+
+[lints]
+workspace = true

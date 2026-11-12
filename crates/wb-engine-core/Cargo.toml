@@ -1,0 +1,16 @@
+[package]
+name = "wb-engine-core"
+description = "The speech engine's decisions that need no model: chunking at VAD pauses, per-chunk language choice, guards, scripts and UTF-8 (STELMAR Voice Workbench)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+# DEFLATE for the compression-ratio guard (PLAN section 6); pure Rust backend.
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+wb-protocol.workspace = true
+
+[lints]
+workspace = true

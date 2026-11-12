@@ -22,12 +22,17 @@ param(
   # Run even though the virtual cable is a default playback device (see recorder-gate.ps1).
   [switch]$AllowCableDefault,
   [string]$Log = 'D:\STELMAR-Gate\run-all.log',
-  [string]$RequestFlag = 'D:\Projects\stelmar-gate-request.flag'
+  [string]$RequestFlag = 'D:\Projects\stelmar-gate-request.flag',
+  # Where the evidence files go (default: each gate script's own default, docs\evidence\phase-1).
+  [string]$OutDir = '',
+  # Minutes for every listed recorder gate (0 = the gate's own length); for a short diagnostic run.
+  [double]$Minutes = 0
 )
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 Import-Module (Join-Path $here '..\lib\PsEnv.psm1') -Force
 Set-WbCleanPSModulePath
+Set-WbInvariantCulture
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Log) | Out-Null
 
 function Write-Log([string]$Line) {
@@ -52,6 +57,8 @@ try {
     $argList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $script)
     if ($g -in @('panic', 'webview', 'load', 'soak')) { $argList += @('-Gate', $g, '-Profile', $Profile) }
     if ($g -eq 'kill') { $argList += @('-Profile', $Profile) }
+    if ($OutDir) { $argList += @('-OutDir', $OutDir) }
+    if ($Minutes -gt 0 -and $g -in @('panic', 'webview', 'load', 'soak')) { $argList += @('-Minutes', $Minutes) }
     if ($AllowCableDefault -and $g -ne 'emulator') { $argList += '-AllowCableDefault' }
     # The helper gives the child Windows PowerShell 5.1's own module path (a parent shell's
     # PowerShell 7 path makes Get-FileHash vanish) and collects stderr as text.
@@ -67,6 +74,8 @@ try {
       $stopReason = "$g : the virtual cable is a default playback device"
     } elseif ($text -match 'Overlay tools are running') {
       $stopReason = "$g : overlay tools are running"
+    } elseif ($text -match 'An engine build is running') {
+      $stopReason = "$g : an engine build is running"
     }
     if ($stopReason) {
       Write-Log "$g : NOT RUN. $stopReason. Sequence stopped; ask the user."

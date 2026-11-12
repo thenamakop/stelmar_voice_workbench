@@ -55,5 +55,23 @@ foreach ($name in $launchers) {
   Check "$name repairs or sets the module path" ($t -match 'Set-WbCleanPSModulePath|Invoke-WbWindowsPowerShell')
 }
 
+# Numbers in evidence follow the invariant culture: no 87,76,800 on an en-IN machine.
+$gateScripts = @('gates\recorder-gate.ps1', 'gates\kill-gate.ps1', 'gates\emulator-check.ps1', 'gates\run-phase1-gates.ps1',
+  'gates\rescore-run.ps1', 'offline-check.ps1', 'offline-session-check.ps1')
+foreach ($name in $gateScripts) {
+  $t = Get-Content -LiteralPath (Join-Path $root $name) -Raw
+  Check "$name sets the invariant culture" ($t -match 'Set-WbInvariantCulture')
+}
+$savedCulture = [System.Threading.Thread]::CurrentThread.CurrentCulture
+try {
+  [System.Threading.Thread]::CurrentThread.CurrentCulture = [System.Globalization.CultureInfo]::GetCultureInfo('en-IN')
+  Check 'control: under en-IN the -f operator groups 8776800 as 87,76,800' ((('{0:n0}' -f 8776800) -eq '87,76,800'))
+  Set-WbInvariantCulture
+  Check 'after Set-WbInvariantCulture 8776800 is 8,776,800' ((('{0:n0}' -f 8776800) -eq '8,776,800'))
+  Check 'after Set-WbInvariantCulture a decimal point is a point' ((('{0:n1}' -f 1234.5) -eq '1,234.5'))
+} finally {
+  [System.Threading.Thread]::CurrentThread.CurrentCulture = $savedCulture
+}
+
 if ($fails) { Write-Host "$fails failed"; exit 1 }
 Write-Host 'PsEnv tests passed'

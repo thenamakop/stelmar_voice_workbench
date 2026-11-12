@@ -1,0 +1,20 @@
+[package]
+name = "wb-supervisor"
+description = "Starts, prioritises, watches and restarts wb-engine processes; commits their segments (STELMAR Voice Workbench)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+wb-protocol.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true, features = ["std", "Win32_Foundation", "Win32_Security", "Win32_System_JobObjects", "Win32_System_Threading"] }
+
+[lints]
+workspace = true

@@ -71,6 +71,7 @@ try {
   $placed = Set-WbRigPlacement -Process $child -Mask $lowest -Role 'player'
   Check 'a process is pinned and the mask is read back' ($placed.Mask -eq $lowest -and $placed.RequestedMask -eq $lowest)
   Check 'a process is set to HIGH priority class, not realtime' ($placed.Priority -eq 'High')
+  Check "the process's CPU set is read back (none by default)" ($placed.CpuSet -match "^none")
 } finally {
   Stop-Process -Id $child.Id -Force -ErrorAction SilentlyContinue
 }
@@ -139,6 +140,10 @@ $rig = [pscustomobject]@{
 $rl = (Get-WbRigLines -Rig $rig -Play ([pscustomobject]@{ affinity_mask = '0xc000' }) -Reference ([pscustomobject]@{ affinity_mask = '0x3000' })) -join "`n"
 Check 'the evidence lists the job, player and reference masks with logical processors' ($rl -match 'mask 0xf0000 \(logical processors 16-19\)' -and $rl -match 'player: pid 11, mask 0xc000 \(logical processors 14-15\), priority class High' -and $rl -match 'reference capture: pid 12, mask 0x3000')
 Check 'the evidence shows what the player and the reference report themselves' ($rl -match 'player itself reports 0xc000' -and $rl -match 'reference capture itself reports 0x3000')
+$rig.Player | Add-Member -NotePropertyName CpuSet -NotePropertyValue "none (all processors the affinity mask allows)"
+$rig.Reference | Add-Member -NotePropertyName CpuSet -NotePropertyValue "12-13"
+$rl2 = (Get-WbRigLines -Rig $rig -Play $null -Reference $null) -join "`n"
+Check "the evidence shows each process's CPU set next to its mask" ($rl2 -match 'player: pid 11, mask 0xc000 \(logical processors 14-15\), priority class High; CPU set none' -and $rl2 -match 'reference capture: pid 12, mask 0x3000 \(logical processors 12-13\), priority class High; CPU set 12-13')
 
 Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
 if ($fails) { Write-Host "$fails failed"; exit 1 }

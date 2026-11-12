@@ -33,3 +33,8 @@ models/manifest.local.json
 .setup/
 .env*
 *.log
+
+# Engine sidecars built by scripts/build-engines.ps1
+src-tauri/binaries/
+
+__pycache__/

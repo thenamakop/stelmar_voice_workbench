@@ -9,12 +9,14 @@
 
 pub mod capture;
 pub mod controller;
+pub mod dropout;
 pub mod events;
 pub mod level;
 pub mod mirror;
 pub mod parts;
 pub mod recorder;
 pub mod recovery;
+pub mod repeat;
 pub mod session;
 pub mod sys;
 pub mod util;

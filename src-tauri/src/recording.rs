@@ -99,10 +99,10 @@ fn pick_device(
         return Ok(fallback.id.clone());
     }
     let last = lock(&st.settings).last_device_id.clone();
-    if let Some(last) = last {
-        if inputs.iter().any(|d| d.id == last) {
-            return Ok(last);
-        }
+    if let Some(last) = last
+        && inputs.iter().any(|d| d.id == last)
+    {
+        return Ok(last);
     }
     inputs.first().map(|d| d.id.clone()).ok_or_else(|| {
         "No audio input was found. Connect the audio interface and try again.".to_string()

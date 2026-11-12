@@ -49,3 +49,18 @@ previous_text_context = true
 vad = true
 max_chunk_s = 25.0
 threads = 8
+
+# Parity with whisper-cli (Phase 2): the rolling settings without previous-text context. whisper-cli
+# takes the context as a --prompt command-line argument, and on Windows its ANSI command line turns every
+# Devanagari or Arabic-script character of the prompt into "?" (found 10 Nov 2026), after which the model
+# decodes garbage ("??? ??? ???"). Context can therefore not be compared through whisper-cli for Hindi or
+# Urdu; this role switches it off on both sides so that the decoding itself is compared.
+[parity]
+timestamps = false
+beam_size = 5
+best_of = 5
+temperature_fallback = true
+previous_text_context = false
+vad = true
+max_chunk_s = 15.0
+threads = 8

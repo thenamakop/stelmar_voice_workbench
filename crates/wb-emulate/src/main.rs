@@ -233,7 +233,10 @@ mod app {
             .envs(env)
             .status()
             .with_context(|| format!("start {}", command[0]))?;
-        drop(job);
+        // The launcher is inside the job itself (win.rs), and the job kills everything in it when its
+        // handle closes. Closing it here would end this process before it returned the child's exit
+        // code (every exit code read 0, found 10 Nov 2026); the handle closes when the process exits.
+        std::mem::forget(job);
         Ok(ExitCode::from(
             u8::try_from(status.code().unwrap_or(1).clamp(0, 255)).unwrap_or(1),
         ))

@@ -65,6 +65,7 @@ scripts/                   setup-legion.ps1; build-engines.ps1; dev-time model d
 - **Time:** segment times are milliseconds from session start on the audio clock. Wall-clock time appears only in the UI and in IST.
 - **Errors:** no `unwrap()` or `expect()` on production paths; use `thiserror` and `anyhow`; surface errors with the DS `Toast`, never silently. An engine failure is reported and retried; it never takes the app down.
 - **Windows first:** PowerShell-friendly scripts; build paths with `std::path` and `path.join`; no bash-only commands in `package.json`.
+- **Evidence files** under `docs/evidence/` are written by scripts only, never edited by hand. To correct one, fix the script and re-run it. A person's or an agent's reading of a screenshot or log goes in a separate note file that says who wrote it.
 - **Do not edit** `design/tokens/{colors,typography,spacing,effects,base}.css`, anything in `design/reference/`, or the decisions in `docs/PLAN.md` (ask instead). Never commit model binaries or private audio.
 - **Licences:** only MIT, Apache 2.0, BSD, ISC or OFL dependencies and models without asking (system SDKs such as the CUDA Toolkit, the Vulkan SDK and WebView2 excepted). Record each model's source, licence and SHA-256 in `models/manifest.json`.
 

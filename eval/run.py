@@ -41,10 +41,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import metrics  # noqa: E402
 from wbeval import manifest  # noqa: E402
 from wbeval.common import (  # noqa: E402
-    DATA_DIR, EVAL_DIR, RESULTS_DIR, WAIT_LOG, rel, set_below_normal_priority, setup_logging,
+    DATA_DIR, EVAL_DIR, REPO, RESULTS_DIR, WAIT_LOG, rel, set_below_normal_priority, setup_logging,
 )
 from wbeval.data import Utterance, load_manifest, read_sources  # noqa: E402
-from wbeval.engines import Engine, Settings, Setup, WbEngine, WhisperCli, segments_to_events  # noqa: E402
+from wbeval.engines import (  # noqa: E402
+    Engine, Settings, Setup, WbEngine, WhisperCli, WhisperCliOnEngineChunks, segments_to_events,
+)
 from wbeval.tools import whisper_cpp_info  # noqa: E402
 
 log = logging.getLogger("run")
@@ -93,12 +95,41 @@ def make_engine(name: str, fixture: str | None) -> Engine:
         return WhisperCli()
     if name == "wb-engine":
         return WbEngine(fixture_dir=Path(fixture) if fixture else None)
+    if name == "whisper-cli-engine-chunks":
+        return WhisperCliOnEngineChunks()
     raise SystemExit(f"unknown engine {name!r}")
 
 
-def select(utts: list[Utterance], limit: int | None) -> list[Utterance]:
-    """Deterministic spread over the sorted set: every k-th utterance."""
+def clip_list_ids(path: str, dataset: str) -> list[str]:
+    """Ids of `dataset` in a committed clip list (`dataset<TAB>id` per line, # comments)."""
+    ids = []
+    for line in (REPO / path).read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            ds, _, uid = line.partition("	")
+            if ds == dataset:
+                ids.append(uid)
+    return ids
+
+
+def limit_key(limit: int | str | None) -> int | str | None:
+    """What a limit contributes to the fingerprint: a clip list counts by its content."""
+    if isinstance(limit, str):
+        return "clips:" + hashlib.sha256((REPO / limit).read_bytes()).hexdigest()
+    return limit
+
+
+def select(utts: list[Utterance], limit: int | str | None, dataset: str | None = None) -> list[Utterance]:
+    """Deterministic spread over the sorted set: every k-th utterance. A string limit is the path of a
+    committed clip list (eval/clips/*.txt); exactly those ids are used, and a missing id is an error."""
     utts = sorted(utts, key=lambda u: u.id)
+    if isinstance(limit, str):
+        by_id = {u.id: u for u in utts}
+        ids = clip_list_ids(limit, dataset or "")
+        missing = [i for i in ids if i not in by_id]
+        if not ids or missing:
+            raise SystemExit(f"clip list {limit}: {len(ids)} ids for {dataset}, missing from the manifest: {missing[:3]}")
+        return [by_id[i] for i in ids]
     if not limit or limit >= len(utts):
         return utts
     step = len(utts) / limit
@@ -119,19 +150,20 @@ def machine_info(name: str | None) -> dict:
             "emulation": os.environ.get("WB_EMULATE", "none"), "os": platform.platform(terse=True)}
 
 
-def run_name(engine: str, setup: Setup, dataset: str, role: str, limit: int | None, lang_mode: str) -> str:
-    return f"{dataset}__{setup.name}__{role}__{lang_mode}__{engine}" + (f"__n{limit}" if limit else "")
+def run_name(engine: str, setup: Setup, dataset: str, role: str, limit: int | str | None, lang_mode: str) -> str:
+    tag = f"__n{limit}" if isinstance(limit, int) else ("__" + Path(limit).stem if limit else "")
+    return f"{dataset}__{setup.name}__{role}__{lang_mode}__{engine}" + tag
 
 
 def fingerprint(engine: dict, setup: Setup, settings: Settings, models: dict, dataset_sha: str | None,
-                lang_mode: str, langs: list[str] | None, limit: int | None, machine: str | None = None) -> str:
+                lang_mode: str, langs: list[str] | None, limit: int | str | None, machine: str | None = None) -> str:
     """Hash of everything that changes a run's output. A run on disk with another fingerprint is stale:
     `all` re-runs it, and `run` refuses to resume it without --force."""
     wcpp = whisper_cpp_info()
     key = {"engine": engine,
            "whisper_cpp": wcpp.get("commit"), "setup": setup.models, "detector": setup.detector,
            "settings": asdict(settings), "models": {k: v.get("sha256") for k, v in models.items()},
-           "dataset": dataset_sha, "lang_mode": lang_mode, "langs": langs, "limit": limit,
+           "dataset": dataset_sha, "lang_mode": lang_mode, "langs": langs, "limit": limit_key(limit),
            # Speed numbers belong to a machine and emulation profile: a summary from another one is stale.
            "machine": {k: v for k, v in machine_info(machine).items() if k in ("name", "emulation")}}
     return hashlib.sha256(json.dumps(key, sort_keys=True).encode("utf-8")).hexdigest()
@@ -162,7 +194,7 @@ def independence_fields(models: dict, dataset: str) -> dict:
             "not_independent_models": leaked, "independence_unknown_models": unknown}
 
 
-def expected_fingerprint(engine_name: str, setup: Setup, dataset: str, role: str, limit: int | None,
+def expected_fingerprint(engine_name: str, setup: Setup, dataset: str, role: str, limit: int | str | None,
                          lang_mode: str, langs: list[str] | None, threads: int | None, glossary: str | None,
                          fixture: str | None, data_dir: Path | None = None, machine: str | None = None) -> str:
     settings = role_settings(role, threads, glossary)
@@ -172,14 +204,14 @@ def expected_fingerprint(engine_name: str, setup: Setup, dataset: str, role: str
 
 # --------------------------------------------------------------------------------------------- running
 
-def run(engine_name: str, setup: Setup, dataset: str, role: str, limit: int | None = None,
+def run(engine_name: str, setup: Setup, dataset: str, role: str, limit: int | str | None = None,
         lang_mode: str = "fixed", langs: list[str] | None = None, threads: int | None = None,
         glossary: str | None = None, fixture: str | None = None, force: bool = False,
         machine: str | None = None, data_dir: Path = DATA_DIR, results_dir: Path = RESULTS_DIR,
         name: str | None = None) -> dict:
     settings = role_settings(role, threads, glossary)
     engine = make_engine(engine_name, fixture)
-    utts = select(load_manifest(dataset, data_dir), limit)
+    utts = select(load_manifest(dataset, data_dir), limit, dataset)
     name = name or run_name(engine_name, setup, dataset, role, limit, lang_mode)
     out_dir = results_dir / name
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -414,7 +446,7 @@ def write_tables(results_dir: Path = RESULTS_DIR, runs_file: Path = RUNS_FILE) -
             va = a.get("whisper_cpp", {}).get("tag", "?")
             vb = b.get("engine", {}).get("whisper_cpp", {}).get("tag") or b.get("engine", {}).get("version", "?")
             lines.append(f"| {c['a']} | {c['b']} | {fmt_pct(a['wer'])} | {fmt_pct(b['wer'])} | {diff:.2f} | "
-                         f"{c['max_wer_points']} | {'PASS' if diff <= c['max_wer_points'] else 'FAIL'} | {va} / {vb} |")
+                         f"{c['max_wer_points']} | {('PASS' if diff <= c['max_wer_points'] else 'FAIL') if not c.get('informational') else 'information only (not a gate)'} | {va} / {vb} |")
     path = results_dir / "TABLES.md"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -495,7 +527,7 @@ def cmd_record_fixture(args) -> int:
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     set_below_normal_priority()
-    for u in select(load_manifest(args.dataset), args.limit):
+    for u in select(load_manifest(args.dataset), args.limit, args.dataset):
         t = engine.transcribe(u.wav_path(DATA_DIR / args.dataset), setup, [u.lang], "fixed", settings, u.id)
         (out / f"{u.id}.jsonl").write_text(segments_to_events(t, setup.model_for(u.lang)), encoding="utf-8")
         log.info("fixture %s: %s", u.id, rel(out / f"{u.id}.jsonl"))

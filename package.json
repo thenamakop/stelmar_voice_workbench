@@ -21,7 +21,9 @@
     "test:e2e": "playwright test",
     "check:dist": "node scripts/check-dist-urls.mjs",
     "check:crates": "node scripts/check-http-crates.mjs",
-    "check:evidence": "node scripts/check-evidence.mjs"
+    "check:evidence": "node scripts/check-evidence.mjs",
+    "check:vendor": "node scripts/check-vendor.mjs",
+    "check:manifest": "node scripts/check-manifest.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "~2.11.1",

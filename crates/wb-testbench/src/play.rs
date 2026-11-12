@@ -232,13 +232,13 @@ pub fn play(
             Ordering::Relaxed,
             Ordering::Relaxed,
         );
-        if !fin1.load(Ordering::Acquire) {
-            if let Ok(mut d) = late_cb.lock() {
-                d.on_callback(
-                    base.elapsed().as_micros() as u64,
-                    p1.load(Ordering::Relaxed),
-                );
-            }
+        if !fin1.load(Ordering::Acquire)
+            && let Ok(mut d) = late_cb.lock()
+        {
+            d.on_callback(
+                base.elapsed().as_micros() as u64,
+                p1.load(Ordering::Relaxed),
+            );
         }
         let n = cons.pop_slice(out);
         for s in &mut out[n..] {

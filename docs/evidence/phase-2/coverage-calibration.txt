@@ -1,0 +1,23 @@
+Calibration of the coverage floor (Phase 2, 11 Nov 2026)
+rate = letters and digits per second of VAD speech (engine code: guards::letter_count; speech seconds from `wb-engine chunks --greedy`)
+no transcript text below: counts, percentiles and numbers only
+
+References, whole utterances with 3 s of speech or more
+set | language | n | min | p1 | p5 | p50 | p95
+coshe-eval | hi | 1981 | 5.68 | 9.42 | 10.80 | 13.62 | 16.75
+fleurs-en | en | 637 | 6.43 | 8.79 | 10.52 | 14.47 | 18.37
+fleurs-hi | hi | 417 | 5.59 | 6.47 | 7.64 | 9.87 | 13.34
+fleurs-ur | ur | 298 | 8.56 | 8.91 | 9.75 | 12.03 | 14.00
+
+floor = 0.9 x the lowest reference rate of the language (below the whole reference distribution):
+  en: lowest reference 6.43, floor 5.79
+  hi: lowest reference 5.59, floor 5.03
+  ur: lowest reference 8.56, floor 7.70
+  Rust: pub const COVERAGE_FLOOR: &[(&str, f32)] = &[("en", 5.79), ("hi", 5.03), ("ur", 7.70)];
+
+Chunk level: the first decode of every chunk of the Hinglish run (language hi), chunks with 3 s of speech or more
+  accepted chunks judged: 81; rate min 3.34, p1 7.56, p5 9.53, p50 13.50
+  accepted chunks below the hi floor (5.03): 1; audio_1444:1 at 3.34
+  known case audio_1444:1: rate 3.34 -> caught by the floor 5.03
+
+RESULT: floor catches the known case and flags no reference

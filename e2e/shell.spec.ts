@@ -36,6 +36,25 @@ test("first launch opens System with Run System Check disabled", async ({ page }
   expect(remote).toEqual([]);
 });
 
+test("System screen scrolled to the engines and models sections (screenshot)", async ({ page }) => {
+  const remote = watchRequests(page);
+  await page.goto("/e2e/index.html");
+  const models = page.getByText("Models", { exact: true }).first();
+  await expect(page.getByText("Speech engines", { exact: true })).toBeVisible();
+  await expect(models).toBeVisible();
+  await expect(page.getByText("READY").first()).toBeVisible();
+  await models.scrollIntoViewIfNeeded();
+  await page.evaluate(() => {
+    const el = [...document.querySelectorAll("*")].find(
+      (e) => e.scrollHeight > e.clientHeight + 40 && getComputedStyle(e).overflowY !== "visible",
+    );
+    if (el) el.scrollTop = el.scrollHeight;
+  });
+  await fontsReady(page);
+  await page.screenshot({ path: `${SCREENSHOT_DIR}/system-engines-models.png` });
+  expect(remote).toEqual([]);
+});
+
 test("Record screen renders Inter, IBM Plex Mono, Devanagari and Nastaliq from local files", async ({
   page,
 }) => {
@@ -70,6 +89,28 @@ test("Record screen renders Inter, IBM Plex Mono, Devanagari and Nastaliq from l
   await expect(urdu).toHaveAttribute("dir", "rtl");
   await page.screenshot({ path: `${SCREENSHOT_DIR}/record.png` });
   expect(remote).toEqual([]);
+});
+
+test("Record screen with every speech engine renamed away shows the banner (screenshot)", async ({
+  page,
+}) => {
+  const remote = watchRequests(page);
+  await page.goto("/e2e/index.html?profile=present&engines=none&state=idle");
+  await page.getByRole("button", { name: "Record", exact: true }).click();
+  const banner = page.getByRole("status", { name: "Speech engine" });
+  await expect(banner).toContainText("No speech engine found. Recording is not affected.");
+  // The banner must not push the header controls: Start Session stays where it is and stays enabled.
+  await expect(page.getByRole("button", { name: /Start Session/ })).toBeEnabled();
+  await fontsReady(page);
+  await page.screenshot({ path: `${SCREENSHOT_DIR}/record-no-engine.png` });
+  expect(remote).toEqual([]);
+});
+
+test("Record screen with the engines present has no banner", async ({ page }) => {
+  await page.goto("/e2e/index.html?profile=present&state=idle");
+  await page.getByRole("button", { name: "Record", exact: true }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "No Session Open" })).toBeVisible();
+  await expect(page.getByRole("status", { name: "Speech engine" })).toHaveText("");
 });
 
 test("Record screen while recording matches record-only.html (screenshot)", async ({ page }) => {

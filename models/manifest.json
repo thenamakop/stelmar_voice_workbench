@@ -1,0 +1,321 @@
+{
+  "version": 2,
+  "_note": "Metadata only: ids, files, sizes, SHA-256, licences, sources and how a file was made. The model files are never committed and never downloaded by the app; it refuses a file whose SHA-256 differs from this list. Written by scripts/models/write_manifest.py.",
+  "models": [
+    {
+      "id": "hinglish-f16",
+      "file": "converted/ggml-hinglish-f16.bin",
+      "sha256": "e8e126837031c14c86848db0aa9f50b3340382dc647dd3bd7d35294e4d91ea5a",
+      "bytes": 3095033483,
+      "kind": "whisper",
+      "base": "large-v3",
+      "quant": "f16",
+      "languages": [
+        "hi",
+        "en"
+      ],
+      "candidate_roles": [
+        "rolling",
+        "night",
+        "live"
+      ],
+      "validated_roles": [],
+      "licence": "Apache-2.0",
+      "source": {
+        "repo": "Trelis/whisper-hinglish-preview",
+        "revision": "eab1188fd2d0e91f2584229b32b3bfe1901c896c"
+      },
+      "conversion": {
+        "script": "scripts/models/convert_hf_whisper.py (whisper.cpp convert-h5-to-ggml.py)",
+        "settings": {
+          "precision": "f16",
+          "truncate_vocab_to": "51866"
+        },
+        "input_sha256": "",
+        "whisper_cpp_commit": "d1be6fde11ac6e0407606b4e42fe72d34add8037",
+        "deterministic": true
+      }
+    },
+    {
+      "id": "hinglish-q5_0",
+      "file": "converted/ggml-hinglish-q5_0.bin",
+      "sha256": "ec99a44643648ae7a4c0da658af838b8923a6372e1e06c080e527fe694e07e6e",
+      "bytes": 1081140203,
+      "kind": "whisper",
+      "base": "large-v3",
+      "quant": "q5_0",
+      "languages": [
+        "hi",
+        "en"
+      ],
+      "candidate_roles": [
+        "rolling",
+        "night",
+        "live"
+      ],
+      "validated_roles": [],
+      "licence": "Apache-2.0",
+      "source": {
+        "repo": "Trelis/whisper-hinglish-preview",
+        "revision": "eab1188fd2d0e91f2584229b32b3bfe1901c896c"
+      },
+      "conversion": {
+        "script": "whisper-quantize",
+        "settings": {
+          "type": "q5_0",
+          "input": "f16"
+        },
+        "input_sha256": "e8e126837031c14c86848db0aa9f50b3340382dc647dd3bd7d35294e4d91ea5a",
+        "whisper_cpp_commit": "d1be6fde11ac6e0407606b4e42fe72d34add8037",
+        "deterministic": true
+      }
+    },
+    {
+      "id": "large-v3-q5_0",
+      "file": "ggml-large-v3-q5_0.bin",
+      "sha256": "d75795ecff3f83b5faa89d1900604ad8c780abd5739fae406de19f23ecd98ad1",
+      "bytes": 1081140203,
+      "kind": "whisper",
+      "base": "large-v3",
+      "quant": "q5_0",
+      "languages": [
+        "en",
+        "hi",
+        "ur"
+      ],
+      "candidate_roles": [
+        "night"
+      ],
+      "validated_roles": [],
+      "licence": "MIT",
+      "source": {
+        "repo": "ggerganov/whisper.cpp",
+        "revision": "5359861c739e955e79d9a303bcbc70fb988958b1"
+      }
+    },
+    {
+      "id": "large-v3-turbo-q5_0",
+      "file": "ggml-large-v3-turbo-q5_0.bin",
+      "sha256": "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2",
+      "bytes": 574041195,
+      "kind": "whisper",
+      "base": "large-v3-turbo",
+      "quant": "q5_0",
+      "languages": [
+        "en"
+      ],
+      "candidate_roles": [
+        "rolling",
+        "live"
+      ],
+      "validated_roles": [],
+      "licence": "MIT",
+      "source": {
+        "repo": "ggerganov/whisper.cpp",
+        "revision": "5359861c739e955e79d9a303bcbc70fb988958b1"
+      }
+    },
+    {
+      "id": "medium",
+      "file": "ggml-medium.bin",
+      "sha256": "6c14d5adee5f86394037b4e4e8b59f1673b6cee10e3cf0b11bbdbee79c156208",
+      "bytes": 1533763059,
+      "kind": "whisper",
+      "base": "medium",
+      "quant": "f16",
+      "languages": [
+        "en",
+        "hi",
+        "ur"
+      ],
+      "candidate_roles": [
+        "baseline"
+      ],
+      "validated_roles": [],
+      "licence": "MIT",
+      "source": {
+        "repo": "ggerganov/whisper.cpp",
+        "revision": "5359861c739e955e79d9a303bcbc70fb988958b1"
+      }
+    },
+    {
+      "id": "medium-q5_0",
+      "file": "converted/ggml-medium-q5_0.bin",
+      "sha256": "22f1cfcb5cd29dcb9728c459ccf449ee9da4015008d784070627d41de364f0db",
+      "bytes": 539212467,
+      "kind": "whisper",
+      "base": "medium",
+      "quant": "q5_0",
+      "languages": [
+        "en",
+        "hi",
+        "ur"
+      ],
+      "candidate_roles": [
+        "baseline"
+      ],
+      "validated_roles": [],
+      "licence": "MIT",
+      "source": {
+        "repo": "ggerganov/whisper.cpp",
+        "revision": "5359861c739e955e79d9a303bcbc70fb988958b1"
+      },
+      "conversion": {
+        "script": "whisper-quantize",
+        "settings": {
+          "type": "q5_0",
+          "input": "f16"
+        },
+        "input_sha256": "6c14d5adee5f86394037b4e4e8b59f1673b6cee10e3cf0b11bbdbee79c156208",
+        "whisper_cpp_commit": "d1be6fde11ac6e0407606b4e42fe72d34add8037",
+        "deterministic": true
+      }
+    },
+    {
+      "id": "medium-q8_0",
+      "file": "converted/ggml-medium-q8_0.bin",
+      "sha256": "42a1ffcbe4167d224232443396968db4d02d4e8e87e213d3ee2e03095dea6502",
+      "bytes": 823369779,
+      "kind": "whisper",
+      "base": "medium",
+      "quant": "q8_0",
+      "languages": [
+        "en",
+        "hi",
+        "ur"
+      ],
+      "candidate_roles": [
+        "baseline"
+      ],
+      "validated_roles": [],
+      "licence": "MIT",
+      "source": {
+        "repo": "ggerganov/whisper.cpp",
+        "revision": "5359861c739e955e79d9a303bcbc70fb988958b1"
+      },
+      "conversion": {
+        "script": "whisper-quantize",
+        "settings": {
+          "type": "q8_0",
+          "input": "f16"
+        },
+        "input_sha256": "6c14d5adee5f86394037b4e4e8b59f1673b6cee10e3cf0b11bbdbee79c156208",
+        "whisper_cpp_commit": "d1be6fde11ac6e0407606b4e42fe72d34add8037",
+        "deterministic": true
+      }
+    },
+    {
+      "id": "silero-v6.2.0",
+      "file": "ggml-silero-v6.2.0.bin",
+      "sha256": "2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987",
+      "bytes": 885098,
+      "kind": "vad",
+      "base": "silero-vad",
+      "quant": "f32",
+      "languages": [],
+      "candidate_roles": [
+        "vad"
+      ],
+      "validated_roles": [
+        "vad"
+      ],
+      "licence": "MIT",
+      "source": {
+        "repo": "ggml-org/whisper-vad",
+        "revision": "9ffd54a1e1ee413ddf265af9913beaf518d1639b"
+      }
+    },
+    {
+      "id": "small",
+      "file": "ggml-small.bin",
+      "sha256": "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b",
+      "bytes": 487601967,
+      "kind": "whisper",
+      "base": "small",
+      "quant": "f16",
+      "languages": [
+        "en",
+        "hi",
+        "ur"
+      ],
+      "candidate_roles": [
+        "near-live",
+        "baseline"
+      ],
+      "validated_roles": [],
+      "licence": "MIT",
+      "source": {
+        "repo": "ggerganov/whisper.cpp",
+        "revision": "5359861c739e955e79d9a303bcbc70fb988958b1"
+      }
+    },
+    {
+      "id": "small-q5_0",
+      "file": "converted/ggml-small-q5_0.bin",
+      "sha256": "23ad5215d37677f8eb8cbc41b4d0d4e451229f811be5206ff116dd9337eba748",
+      "bytes": 175209663,
+      "kind": "whisper",
+      "base": "small",
+      "quant": "q5_0",
+      "languages": [
+        "en",
+        "hi",
+        "ur"
+      ],
+      "candidate_roles": [
+        "near-live",
+        "baseline"
+      ],
+      "validated_roles": [],
+      "licence": "MIT",
+      "source": {
+        "repo": "ggerganov/whisper.cpp",
+        "revision": "5359861c739e955e79d9a303bcbc70fb988958b1"
+      },
+      "conversion": {
+        "script": "whisper-quantize",
+        "settings": {
+          "type": "q5_0",
+          "input": "f16"
+        },
+        "input_sha256": "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b",
+        "whisper_cpp_commit": "d1be6fde11ac6e0407606b4e42fe72d34add8037",
+        "deterministic": true
+      }
+    },
+    {
+      "id": "small-q8_0",
+      "file": "converted/ggml-small-q8_0.bin",
+      "sha256": "49c8fb02b65e6049d5fa6c04f81f53b867b5ec9540406812c643f177317f779f",
+      "bytes": 264464607,
+      "kind": "whisper",
+      "base": "small",
+      "quant": "q8_0",
+      "languages": [
+        "en",
+        "hi",
+        "ur"
+      ],
+      "candidate_roles": [
+        "near-live",
+        "baseline"
+      ],
+      "validated_roles": [],
+      "licence": "MIT",
+      "source": {
+        "repo": "ggerganov/whisper.cpp",
+        "revision": "5359861c739e955e79d9a303bcbc70fb988958b1"
+      },
+      "conversion": {
+        "script": "whisper-quantize",
+        "settings": {
+          "type": "q8_0",
+          "input": "f16"
+        },
+        "input_sha256": "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b",
+        "whisper_cpp_commit": "d1be6fde11ac6e0407606b4e42fe72d34add8037",
+        "deterministic": true
+      }
+    }
+  ]
+}

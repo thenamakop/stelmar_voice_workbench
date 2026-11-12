@@ -417,7 +417,9 @@ fn raw_samples(path: &std::path::Path) -> Result<Vec<i16>, Box<dyn std::error::E
     let start = info.data_offset as usize;
     let end = start + info.frames_on_disk as usize * usize::from(info.block_align);
     Ok(bytes[start..end]
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|b| i16::from_le_bytes([b[0], b[1]]))
         .collect())
 }
@@ -506,10 +508,10 @@ fn stop_with_timeout(
 fn drain_errors(events: &mpsc::Receiver<Event>) -> Vec<String> {
     let mut out = Vec::new();
     while let Ok(ev) = events.try_recv() {
-        if let Event::Notice(n) = ev {
-            if n.level == wb_recorder::events::NoticeLevel::Error {
-                out.push(n.message);
-            }
+        if let Event::Notice(n) = ev
+            && n.level == wb_recorder::events::NoticeLevel::Error
+        {
+            out.push(n.message);
         }
     }
     out

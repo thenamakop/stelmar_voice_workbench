@@ -527,10 +527,10 @@ pub fn run_starts(session: &Path, app: &Recording) -> Result<Vec<u64>> {
             .parts
             .iter()
             .position(|p: &PartRecord| p.start_ms >= e.audio_ms.saturating_sub(2));
-        if let Some(i) = part {
-            if let Some(f) = app.part_start(i) {
-                starts.push(f);
-            }
+        if let Some(i) = part
+            && let Some(f) = app.part_start(i)
+        {
+            starts.push(f);
         }
     }
     starts.sort_unstable();

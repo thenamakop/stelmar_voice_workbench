@@ -1,0 +1,63 @@
+﻿Engines run with the network off (Phase 2 item 12)
+date: 2026-11-12 14:23 (IST on the Legion)
+machine: Legion; PATH while running: C:\WINDOWS\System32;C:\WINDOWS (no development tools); test clip: a FLEURS English clip of 10.6 s (no audio or text below); model small; models in the repository's models folder
+
+network state at the start (scripts/lib/NetworkState.psm1):
+  Network state: Offline
+    reason: no physical adapter (Wi-Fi or Ethernet) is Up
+    reason: no connection profile reports Internet or LocalNetwork
+    reason: no probe reached its target
+    default route: 0.0.0.0/0 via 192.168.1.1 on Wi-Fi (ifIndex 6, metric 0)
+    0.0.0.0/0 via 192.168.1.1 on Wi-Fi (ifIndex 6) - ignored: adapter is Disconnected
+    interface Wi-Fi (ifIndex 6): status Disconnected, virtual False, IPv6:Disconnected IPv4:Disconnected, non-link-local address True
+    connection profiles: none
+    physical adapters Up: none
+    probe 1.1.1.1:443: reached False (A socket operation was attempted to an unreachable host 1.1.1.1:443)
+    probe 8.8.8.8:443: reached False (A socket operation was attempted to an unreachable host 8.8.8.8:443)
+
+== avx2
+-- emu-low info : exit code 0 (expected 0) ok; 0.8 s; sockets of the process tree: non-loopback 0, loopback samples 0, polls 2 (mean 399 ms apart)
+-- emu-low batch on cpu : exit code 0; segments 1, Latin letters 78 (the text is not printed); 17 s; ok; sockets: non-loopback 0, loopback samples 0, polls 49 (mean 348 ms apart)
+-- native info : exit code 0 (expected 0) ok; 0.3 s; sockets of the process tree: non-loopback 0, loopback samples 0, polls 1 (mean 293 ms apart)
+-- native batch on cpu : exit code 0; segments 1, Latin letters 78 (the text is not printed); 4.3 s; ok; sockets: non-loopback 0, loopback samples 0, polls 11 (mean 395 ms apart)
+
+== avx512
+-- emu-low info : exit code 3 (expected 3) ok; 1.2 s; sockets of the process tree: non-loopback 0, loopback samples 0, polls 4 (mean 296 ms apart)
+-- emu-low batch : not run (this CPU has no AVX-512: info exits 3 by design; the avx512 decode is a laptop gate)
+-- native info : exit code 3 (expected 3) ok; 0.3 s; sockets of the process tree: non-loopback 0, loopback samples 0, polls 1 (mean 297 ms apart)
+-- native batch : not run (this CPU has no AVX-512: info exits 3 by design; the avx512 decode is a laptop gate)
+
+== vulkan
+-- emu-low info : exit code 0 (expected 0) ok; 2.6 s; sockets of the process tree: non-loopback 0, loopback samples 0, polls 9 (mean 287 ms apart)
+-- emu-low batch on cpu : exit code 0; segments 1, Latin letters 78 (the text is not printed); 15.2 s; ok; sockets: non-loopback 0, loopback samples 0, polls 52 (mean 292 ms apart)
+-- emu-low batch on gpu:0 (Intel(R) RaptorLake-S Mobile Graphics Controller) : exit code 0; segments 1, Latin letters 78 (the text is not printed); 5 s; ok; sockets: non-loopback 0, loopback samples 0, polls 17 (mean 297 ms apart)
+-- native info : exit code 0 (expected 0) ok; 0.6 s; sockets of the process tree: non-loopback 0, loopback samples 0, polls 2 (mean 316 ms apart)
+-- native batch on cpu : exit code 0; segments 1, Latin letters 78 (the text is not printed); 4.3 s; ok; sockets: non-loopback 0, loopback samples 0, polls 11 (mean 392 ms apart)
+-- native batch on gpu:0 (Intel(R) RaptorLake-S Mobile Graphics Controller) : exit code 0; segments 1, Latin letters 78 (the text is not printed); 3.5 s; ok; sockets: non-loopback 0, loopback samples 0, polls 10 (mean 349 ms apart)
+-- native batch on gpu:1 (NVIDIA GeForce RTX 4070 Laptop GPU) : exit code 0; segments 1, Latin letters 78 (the text is not printed); 16.3 s; ok; sockets: non-loopback 0, loopback samples 0, polls 53 (mean 307 ms apart)
+
+== cuda
+-- emu-low info : exit code 0 (expected 0) ok; 4 s; sockets of the process tree: non-loopback 0, loopback samples 0, polls 15 (mean 268 ms apart)
+   no CUDA device listed under emu-low : the GPU decode is skipped
+-- emu-low batch on cpu : exit code 0; segments 1, Latin letters 78 (the text is not printed); 15.2 s; ok; sockets: non-loopback 0, loopback samples 0, polls 54 (mean 282 ms apart)
+-- native info : exit code 0 (expected 0) ok; 0.6 s; sockets of the process tree: non-loopback 0, loopback samples 0, polls 2 (mean 306 ms apart)
+-- native batch on cpu : exit code 0; segments 1, Latin letters 78 (the text is not printed); 6 s; ok; sockets: non-loopback 0, loopback samples 0, polls 14 (mean 426 ms apart)
+-- native batch on gpu:0 (NVIDIA GeForce RTX 4070 Laptop GPU) : exit code 0; segments 1, Latin letters 78 (the text is not printed); 1.5 s; ok; sockets: non-loopback 0, loopback samples 0, polls 5 (mean 302 ms apart)
+
+network state at the end:
+  Network state: Offline
+    reason: no physical adapter (Wi-Fi or Ethernet) is Up
+    reason: no connection profile reports Internet or LocalNetwork
+    reason: no probe reached its target
+    default route: 0.0.0.0/0 via 192.168.1.1 on Wi-Fi (ifIndex 6, metric 0)
+    0.0.0.0/0 via 192.168.1.1 on Wi-Fi (ifIndex 6) - ignored: adapter is Disconnected
+    interface Wi-Fi (ifIndex 6): status Disconnected, virtual False, IPv6:Disconnected IPv4:Disconnected, non-link-local address True
+    connection profiles: none
+    physical adapters Up: none
+    probe 1.1.1.1:443: reached False (A socket operation was attempted to an unreachable host 1.1.1.1:443)
+    probe 8.8.8.8:443: reached False (A socket operation was attempted to an unreachable host 8.8.8.8:443)
+
+summary: avx2/emu-low/info exit 0 ok; avx2/emu-low/batch cpu exit 0 ok; avx2/native/info exit 0 ok; avx2/native/batch cpu exit 0 ok; avx512/emu-low/info exit 3 ok; avx512/native/info exit 3 ok; vulkan/emu-low/info exit 0 ok; vulkan/emu-low/batch cpu exit 0 ok; vulkan/emu-low/batch gpu:0 (Intel(R) RaptorLake-S Mobile Graphics Controller) exit 0 ok; vulkan/native/info exit 0 ok; vulkan/native/batch cpu exit 0 ok; vulkan/native/batch gpu:0 (Intel(R) RaptorLake-S Mobile Graphics Controller) exit 0 ok; vulkan/native/batch gpu:1 (NVIDIA GeForce RTX 4070 Laptop GPU) exit 0 ok; cuda/emu-low/info exit 0 ok; cuda/emu-low/batch cpu exit 0 ok; cuda/native/info exit 0 ok; cuda/native/batch cpu exit 0 ok; cuda/native/batch gpu:0 (NVIDIA GeForce RTX 4070 Laptop GPU) exit 0 ok
+socket check: non-loopback TCP connections, TCP listeners or UDP endpoints seen in the engines' process trees: 0 in 18 runs
+what PASS means: no standing non-loopback socket or endpoint was observed in an engine process tree at any poll (the polls are a few hundred ms apart, so a connection attempt that fails at once is not seen; the static check that no engine or app binary imports Winsock, WinHTTP or WinINet covers that). A wildcard listener (0.0.0.0 or ::) is a non-loopback socket. A socket created more than 2 s before its engine started is listed with its owner and not counted.
+NETWORK-OFF RESULT: PASS (every engine ran with the network off: info and a short decode, no non-loopback socket)

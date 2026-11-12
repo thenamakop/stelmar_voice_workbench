@@ -1,5 +1,5 @@
 //! Windows calls the recorder needs: MMCSS registration, thread priority, keeping the machine
-//! awake, thread CPU time and free disk space.
+//! awake, thread CPU time, free disk space and the performance counter.
 //!
 //! This is the only module in `wb-recorder` that may use `unsafe` (docs/UNSAFE.md). Each block
 //! holds one call and says why it is sound. Callers use the safe functions in `crate::sys`.
@@ -9,6 +9,7 @@ use std::path::Path;
 
 use windows::Win32::Foundation::{FILETIME, HANDLE};
 use windows::Win32::Storage::FileSystem::{GetDiskFreeSpaceExW, GetDriveTypeW};
+use windows::Win32::System::Performance::{QueryPerformanceCounter, QueryPerformanceFrequency};
 use windows::Win32::System::Power::{
     ES_CONTINUOUS, ES_SYSTEM_REQUIRED, EXECUTION_STATE, SetThreadExecutionState,
 };
@@ -107,4 +108,20 @@ pub fn disk_free_bytes(path: &Path) -> windows::core::Result<u64> {
     // valid u64 the call writes; the two optional totals are not requested.
     unsafe { GetDiskFreeSpaceExW(&name, Some(&mut free), None, None) }?;
     Ok(free)
+}
+
+/// `QueryPerformanceCounter` ticks (0 if the call fails).
+pub fn qpc_ticks() -> u64 {
+    let mut ticks = 0i64;
+    // SAFETY: `ticks` is a valid i64 the call writes; the function takes no other input.
+    let ok = unsafe { QueryPerformanceCounter(&mut ticks) };
+    if ok.is_ok() { ticks.max(0) as u64 } else { 0 }
+}
+
+/// `QueryPerformanceFrequency`: ticks per second (0 if the call fails).
+pub fn qpc_hz() -> u64 {
+    let mut hz = 0i64;
+    // SAFETY: `hz` is a valid i64 the call writes; the function takes no other input.
+    let ok = unsafe { QueryPerformanceFrequency(&mut hz) };
+    if ok.is_ok() { hz.max(0) as u64 } else { 0 }
 }

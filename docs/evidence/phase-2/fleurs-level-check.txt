@@ -1,0 +1,16 @@
+FLEURS level check: original audio against the WAVs in eval/data (Phase 2, 11 Nov 2026)
+source: google/fleurs at 70bb2e84b976, test.tar.gz read from the local Hugging Face cache (no network)
+level = RMS of the whole clip in dBFS (float samples, 1.0 = full scale); no audio or text below
+
+set | clips | original median | p5 | p95 | eval/data median | difference eval/data minus original: median | min | max (dB) | clips under -50 dBFS (original / eval/data)
+fleurs-en | 647 | -60.0 | -66.4 | -21.7 | -60.0 | +0.00 | -0.00 | +0.02 | 451 / 451
+fleurs-hi | 418 | -31.5 | -43.2 | -19.3 | -31.5 | +0.00 | -0.00 | +0.00 | 20 / 20
+fleurs-ur | 299 | -38.1 | -42.4 | -34.6 | -38.1 | +0.00 | -0.00 | +0.00 | 0 / 0
+coshe-eval (eval/data only) | 1985 | n/a | n/a | n/a | -21.2 (p5 -31.3, p95 -14.3) | n/a | n/a | n/a | n/a / 0
+
+RESULT: eval/data matches the original audio within 1 dB in every clip of every set checked: the converter does not mis-scale; the low level is in the source recordings.
+
+ANALYSIS (11 Nov 2026):
+  The eval/data WAVs equal the original audio in the Hugging Face cache to within 0.02 dB in all 1,364 clips of FLEURS en, hi and ur: eval/data is not mis-scaled and eval/get_data.py is not changed. The quietness is in the source recordings: 451 of 647 English test clips have an RMS under -50 dBFS (median -60.0 dBFS), against a median of -31.5 dBFS in Hindi and -38.1 dBFS in Urdu (and -21.2 dBFS in CoSHE-Eval).
+  So no committed result used mis-scaled audio. Every committed FLEURS result (Phase 5a's baselines, the 3-WER comparison and parity in docs/evidence/phase-2/wer-*.txt) used the audio as the source has it. The parity comparison feeds whisper-cli and wb-engine the same files and is unaffected. The absolute English FLEURS error rates are the rates on that quiet source; they are not evidence about the same speech at a normal level, and a level effect on them has not been measured.
+  Where level matters, normalisation is done in the test-clip builder only (scripts/gates/codeswitch.py builds the control at -26 dBFS RMS); eval/data and the harness are unchanged.

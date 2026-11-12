@@ -1,0 +1,16 @@
+Model conversion and quantisation determinism (Phase 2)
+Each step is run twice from the same input; equal SHA-256 means deterministic.
+whisper-quantize and the converter are from whisper.cpp v1.9.5 (see the manifest).
+
+-- 2026-11-10 16:38 --
+quantise small -> q8_0: run 1 49c8fb02b65e6049d5fa6c04f81f53b867b5ec9540406812c643f177317f779f, run 2 49c8fb02b65e6049d5fa6c04f81f53b867b5ec9540406812c643f177317f779f: identical (deterministic)
+quantise small -> q5_0: run 1 23ad5215d37677f8eb8cbc41b4d0d4e451229f811be5206ff116dd9337eba748, run 2 23ad5215d37677f8eb8cbc41b4d0d4e451229f811be5206ff116dd9337eba748: identical (deterministic)
+quantise medium -> q8_0: run 1 42a1ffcbe4167d224232443396968db4d02d4e8e87e213d3ee2e03095dea6502, run 2 42a1ffcbe4167d224232443396968db4d02d4e8e87e213d3ee2e03095dea6502: identical (deterministic)
+quantise medium -> q5_0: run 1 22f1cfcb5cd29dcb9728c459ccf449ee9da4015008d784070627d41de364f0db, run 2 22f1cfcb5cd29dcb9728c459ccf449ee9da4015008d784070627d41de364f0db: identical (deterministic)
+
+-- 2026-11-10 17:15 --
+convert hinglish -> f16 (vocabulary trimmed to 51866), run 1: e8e126837031c14c86848db0aa9f50b3340382dc647dd3bd7d35294e4d91ea5a (36 s)
+convert hinglish -> f16 (vocabulary trimmed to 51866), run 2: e8e126837031c14c86848db0aa9f50b3340382dc647dd3bd7d35294e4d91ea5a (39 s)
+convert hinglish: identical (deterministic)
+quantise hinglish -> q5_0: run 1 ec99a44643648ae7a4c0da658af838b8923a6372e1e06c080e527fe694e07e6e, run 2 ec99a44643648ae7a4c0da658af838b8923a6372e1e06c080e527fe694e07e6e: identical (deterministic)
+

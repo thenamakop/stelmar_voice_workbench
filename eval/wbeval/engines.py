@@ -37,6 +37,8 @@ class Segment:
     lang: str
     lang_prob: float | None = None
     mixed: bool = False
+    # wb-engine segment flags (retried, unclear, low_coverage, ...); empty for other engines.
+    flags: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -287,6 +289,49 @@ class WbEngine(Engine):
         return parse_events(events, time.perf_counter() - t0)
 
 
+class WhisperCliOnEngineChunks(WhisperCli):
+    """whisper-cli decoding exactly the chunks wb-engine produces (`wb-engine chunks --greedy`, the same
+    chunker, VAD model and limit as `wb-engine batch --file`), so that both sides decode identical audio and
+    only the decoding is compared (Phase 2 parity gate). Previous-text context only for English: the
+    context reaches whisper-cli as a --prompt argument, which Windows' ANSI command line corrupts for
+    non-Latin scripts. Fails on any "??" or U+FFFD in the text, which would mean a broken character."""
+
+    name = "whisper-cli-engine-chunks"
+    ADAPTER_VERSION = 1
+
+    def __init__(self):
+        env = os.environ.get("WB_ENGINE")
+        if not env:
+            raise RuntimeError("whisper-cli-engine-chunks needs WB_ENGINE (the wb-engine binary that cuts the chunks)")
+        self.binary = Path(env)
+
+    def describe(self) -> dict:
+        version = subprocess.run([str(self.binary), "--version"], capture_output=True, text=True).stdout.strip()
+        return {**super().describe(), "chunks_from": rel(self.binary), "chunks_from_version": version}
+
+    def chunks(self, wav: Path, settings: Settings, duration_ms: int) -> tuple[list[Chunk], float]:
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "chunks.json"
+            proc = run_heavy([str(self.binary), "chunks", "--file", str(wav), "--greedy",
+                              "--max-chunk-s", f"{settings.max_chunk_s:g}", "--out", str(out)],
+                             f"wb-engine chunks {wav.stem}", capture_output=True, text=True, encoding="utf-8",
+                             errors="replace")
+            if proc.returncode != 0:
+                raise RuntimeError(f"wb-engine chunks exit {proc.returncode} on {wav.name}: {proc.stderr[-500:]}")
+            doc = json.loads(out.read_text(encoding="utf-8"))
+        return [Chunk(int(c["start_ms"]), int(c["end_ms"])) for c in doc["chunks"]], proc.run_s
+
+    def transcribe(self, wav, setup, langs, lang_mode, settings, utt_id):
+        if settings.previous_text_context and langs[0] != "en":
+            raise RuntimeError("whisper-cli-engine-chunks cannot carry previous-text context for non-Latin scripts "
+                               "(the --prompt argument is corrupted by Windows' ANSI command line); use role 'parity'")
+        t = super().transcribe(wav, setup, langs, lang_mode, settings, utt_id)
+        for s in t.segments:
+            if "??" in s.text or chr(0xFFFD) in s.text:
+                raise RuntimeError(f"{wav.name}: broken characters in whisper-cli's text ('??' or U+FFFD)")
+        return t
+
+
 def parse_events(text: str, elapsed_s: float) -> Transcript:
     """Read wb-engine JSON lines; keep `segment` events, fail on `error`."""
     segments: list[Segment] = []
@@ -301,7 +346,7 @@ def parse_events(text: str, elapsed_s: float) -> Transcript:
         if kind != "segment":
             continue
         segments.append(Segment(int(ev["start_ms"]), int(ev["end_ms"]), ev["text"], ev["lang"],
-                                ev.get("lang_prob"), bool(ev.get("mixed", False))))
+                                ev.get("lang_prob"), bool(ev.get("mixed", False)), list(ev.get("flags", []))))
         models.append(ev.get("model", ""))
     return Transcript(segments, elapsed_s, models)
 

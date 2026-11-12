@@ -49,8 +49,17 @@ pub struct RecorderStatus {
     pub dropped_samples: u64,
     /// Panics caught inside the recorder thread (each continued in a new part).
     pub recorder_restarts: u32,
-    /// Capture callbacks whose device time did not follow on from the previous one.
+    /// Capture position breaks: the device time left the line the delivered frames predict and
+    /// stayed off it for three callbacks in a row.
     pub position_breaks: u64,
+    /// Single late timestamps that came back (no audio affected).
+    pub timestamp_outliers: u64,
+    /// What the old pairwise check would have counted (diagnostic only).
+    pub position_pair_flags: u64,
+    /// Repeated blocks found in the recorded audio.
+    pub repeated_blocks: u64,
+    /// Zero gaps (short digital silence inside live audio) found in the recorded audio.
+    pub zero_gaps: u64,
     pub ring_seconds: u32,
     /// Highest ring-buffer fill seen so far, in percent.
     pub ring_max_fill_pct: f32,

@@ -52,6 +52,8 @@ def fetch(repo: str, revision: str, filename: str) -> tuple[Path, SourceFile]:
 PINNED_REVISIONS = {
     "google/fleurs": "70bb2e84b976b7e960aa89f1c648e09c59f894dd",
     "soketlabs/CoSHE-Eval": "82809be5178adebee3d993cec875bb22563154aa",
+    # Svarah: first downloaded on 11 November 2026 (test split only, by explicit file names).
+    "ai4bharat/Svarah": "ebbf7777fe771490696a3f7b007097606fa8c924",
 }
 
 
@@ -201,6 +203,113 @@ def prepare_kathbath(name: str) -> None:
     log.info("%s: %d utterances", name, len(utts))
 
 
+# ------------------------------------------------------------------- Kathbath, official test sets (IndicSUPERB)
+
+# The Hugging Face copy of Kathbath has only train and valid files, so the test sets come from the official
+# IndicSUPERB release (AI4Bharat). The archives are downloaded by hand with curl (announced first, never during a
+# timing-sensitive run) into eval/data/_downloads/kathbath-clean/, then this step extracts only the Hindi and Urdu
+# test folders, converts them and deletes the extracted m4a files. The archives are deleted afterwards by hand.
+KATHBATH_OFFICIAL_BASE = "https://objectstore.e2enetworks.net/indic-superb/kathbath/clean/"
+KATHBATH_ARCHIVES = ("testkn_audio.tar", "testunk_audio.tar", "transcripts_n2w.tar")
+KATHBATH_SPLITS = {"test_known": "tk", "test": "tu"}  # folder name -> id prefix (tu = test unknown)
+
+
+def prepare_kathbath_official(name: str) -> None:
+    folder, lang = KATHBATH_LANGS[name]
+    dl = set_dir("_downloads") / "kathbath-clean"
+    missing = [a for a in KATHBATH_ARCHIVES if not (dl / a).exists()]
+    if missing:
+        raise SystemExit(f"missing archives in {dl}: {', '.join(missing)} (download them first; see eval/data/SOURCES.md)")
+    work = dl / f"x-{folder}"
+    work.mkdir(exist_ok=True)
+    wanted = [f"kb_data_clean_m4a/{folder}/{sp}/" for sp in KATHBATH_SPLITS]
+    for archive in KATHBATH_ARCHIVES:
+        if (work / f".done-{archive}").exists():
+            continue
+        with tarfile.open(dl / archive, "r|") as tf:  # streamed: the archive is never loaded whole
+            for member in tf:
+                if member.isfile() and any(member.name.startswith(w) for w in wanted):
+                    tf.extract(member, work, filter="data")
+        (work / f".done-{archive}").write_text("ok")
+    heavy_step(f"resampling {name}")
+    out = set_dir(name)
+    utts: list[Utterance] = []
+    for split, prefix in KATHBATH_SPLITS.items():
+        base = work / "kb_data_clean_m4a" / folder / split
+        texts: dict[str, str] = {}
+        for line in (base / "transcription_n2w.txt").read_text(encoding="utf-8").splitlines():
+            fname, _, text = line.partition("	")
+            texts[Path(fname).stem] = text.strip()
+        for m4a in sorted((base / "audio").glob("*.m4a")):
+            if m4a.stem not in texts:
+                continue
+            uid = f"{prefix}_{m4a.stem}"
+            wav = out / "audio" / f"{uid}.wav"
+            dur = convert_m4a_or_reuse(m4a, wav)
+            text = texts[m4a.stem]
+            utts.append(Utterance(uid, rel_to(wav, out), text, lang, is_mixed(text), round(dur, 3), sha256_file(wav)))
+    files = []
+    for a in KATHBATH_ARCHIVES:
+        files.append(SourceFile(a, KATHBATH_OFFICIAL_BASE + a, (dl / a).stat().st_size, sha256_file(dl / a)))
+    write_source(Source(
+        set=name, title=f"Kathbath test, {folder}, clean (AI4Bharat, official IndicSUPERB release)",
+        url="https://github.com/AI4Bharat/IndicSUPERB", revision="IndicSUPERB README downloads, objects dated 2025-04-09",
+        licence="CC0 (packaging of the data); the raw text comes from IndicCorp, which AI4Bharat does not own",
+        licence_evidence="the License section of the IndicSUPERB README (raw.githubusercontent.com/AI4Bharat/IndicSUPERB/master/README.md, read 11 Nov 2026)",
+        terms="Evaluation only; attribution: AI4Bharat, Kathbath / IndicSUPERB (Javed et al., arXiv:2208.11761); "
+        "terms of the Hugging Face copy accepted by the developer; not committed; used unmodified (resampled to 16 kHz mono WAV)",
+        files=files,
+        notes=f"{folder} only; splits test_known (id prefix tk_) and test = test unknown (tu_); the reference is transcription_n2w.txt "
+        "(numbers written as words); the m4a clips were decoded with the ffmpeg on PATH (N-55702, a 2013 build) at their own rate and resampled with soxr; "
+        "the Hugging Face repository ai4bharat/Kathbath has no test split, hence this source",
+    ), utts)
+    log.info("%s: %d utterances", name, len(utts))
+
+
+# ---------------------------------------------------------------------------------------------- Svarah
+
+SVARAH_REPO = "ai4bharat/Svarah"
+SVARAH_TEST_FILES = [f"data/test-0000{i}-of-00003.parquet" for i in range(3)]
+
+
+def prepare_svarah(name: str) -> None:
+    """Svarah (AI4Bharat): English read and spontaneous speech by speakers from across India. Test split only."""
+    revision = PINNED_REVISIONS[SVARAH_REPO]
+    try:
+        fetched = [fetch(SVARAH_REPO, revision, f) for f in SVARAH_TEST_FILES]  # explicit files, never a snapshot
+    except GatedRepoError:
+        raise SystemExit(
+            f"{SVARAH_REPO} is gated: accept its terms at https://huggingface.co/datasets/{SVARAH_REPO} "
+            "and sign in with your own token, then run this again."
+        ) from None
+    heavy_step(f"resampling {name}")
+    out = set_dir(name)
+    utts: list[Utterance] = []
+    cols = ["audio_filepath", "text", "primary_language"]
+    seen: set[str] = set()
+    for i, row in enumerate(iter_parquet_rows([p for p, _ in fetched], cols)):
+        stem = Path(row["audio_filepath"].get("path") or f"utt{i:06d}").stem
+        if stem in seen:
+            stem = f"{stem}_{i:06d}"
+        seen.add(stem)
+        wav = out / "audio" / f"{stem}.wav"
+        dur = convert_or_reuse(row["audio_filepath"]["bytes"], wav)
+        text = row["text"] or ""
+        utts.append(Utterance(stem, rel_to(wav, out), text, "en", is_mixed(text), round(dur, 3), sha256_file(wav)))
+    write_source(Source(
+        set=name, title="Svarah test (AI4Bharat): Indian-accented English", url=f"https://huggingface.co/datasets/{SVARAH_REPO}",
+        revision=revision, licence="cc-by-4.0",
+        licence_evidence="the License section of the dataset's README (the card's YAML has no licence field; IndiaAI AIKosh also lists CC BY 4.0); "
+        "licence text https://creativecommons.org/licenses/by/4.0/",
+        terms="CC BY 4.0. Attribution: AI4Bharat, Svarah (Javed et al., arXiv:2305.15760), "
+        "https://huggingface.co/datasets/ai4bharat/Svarah. Used unmodified for evaluation only (resampled to 16 kHz mono WAV); "
+        "gated download (terms accepted by the developer); not committed",
+        files=[f for _, f in fetched],
+        notes="test split only (3 parquet files); lang = en; reference = the text column; the speaker's native language is not used",
+    ), utts)
+    log.info("%s: %d utterances", name, len(utts))
+
+
 def convert_or_reuse(data: bytes | None, wav: Path) -> float:
     """Resample to 16 kHz mono WAV, or reuse a WAV written by an earlier run of this script."""
     if wav.exists():
@@ -210,6 +319,14 @@ def convert_or_reuse(data: bytes | None, wav: Path) -> float:
     if data is None:
         raise ValueError(f"no audio for {wav.name}")
     return audio.convert_bytes(data, wav)
+
+
+def convert_m4a_or_reuse(src: Path, wav: Path) -> float:
+    if wav.exists():
+        import soundfile as sf
+
+        return sf.info(wav).duration
+    return audio.convert_file(src, wav)
 
 
 def coshe_lang(text: str) -> str:
@@ -229,7 +346,8 @@ class SetSpec:
 
 SETS: dict[str, SetSpec] = {
     **{k: SetSpec(prepare_fleurs, f"FLEURS test {v[0]} (CC BY 4.0)") for k, v in FLEURS_LANGS.items()},
-    **{k: SetSpec(prepare_kathbath, f"Kathbath test {v[0]} (gated)") for k, v in KATHBATH_LANGS.items()},
+    **{k: SetSpec(prepare_kathbath_official, f"Kathbath official test sets {v[0]} (IndicSUPERB tars, CC0 packaging)") for k, v in KATHBATH_LANGS.items()},
+    "svarah": SetSpec(prepare_svarah, "Svarah test, Indian-accented English (CC BY 4.0, gated, ~1.1 GB)"),
     "coshe-eval": SetSpec(prepare_coshe, "CoSHE-Eval code-switched Hindi-English (CC BY-NC 4.0, eval only, ~9 GB)"),
 }
 

@@ -91,4 +91,4 @@ Read `CONTRIBUTING.md`. In short: one phase per branch, gates before merges, and
 
 ## Licence
 
-Not yet chosen; to be decided by the STELMAR 2027 organising team. Third-party components keep their own licences (MIT, Apache 2.0, BSD, ISC and SIL OFL only), listed in `THIRD_PARTY_LICENCES.md` from Phase 8.
+Not yet chosen; to be decided by the STELMAR 2027 organising team. Third-party components keep their own licences (MIT, Apache 2.0, BSD, ISC and SIL OFL only), listed in `THIRD_PARTY_LICENCES.md` (started in Phase 2, completed in Phase 8). One named exception, approved on 10 November 2026: whisper-rs and whisper-rs-sys are under the Unlicense; the exception covers those two crates only.

@@ -1,0 +1,75 @@
+﻿Speed table C - native (Phase 2)
+date: 2026-11-11 18:32 to 2026-11-11 20:26 (IST on the Legion); machine: Legion; profile: native (no emulation)
+engines: avx2 sha256 49ecdebd4c21f2631ab1805d3764452b5ac36fb3fe5e7bac4a4de65e24c09b26; cuda sha256 3f81d2a32f959971948096f4fab39580803055cfce0307532aa585c9bdff76b7; vulkan sha256 209b4df52ce1e05320e025fffb7215f9ba1cfa8d86967b0d3149fda13be65d3f
+whisper.cpp printed by the engine: 1.9.5-dev commit d1be6fde11ac6e0407606b4e42fe72d34add8037 tree e736b4c9a5be2bc0e9b294102e261fe69c2a439976652ff6107b0c361f8667fb
+method: wb-engine bench, clip = 60 s of FLEURS test utterances joined with 0.8 s of silence (en: 68.7 s, hi: 60.2 s), beam 5 + temperature fallback + 15 s VAD chunks ('rolling') except the near-live rows (greedy, utterance-length chunks); 1 warm-up, then the median of 3 timed runs; RTF = processing time / clip length (load time excluded, reported apart); run from a folder with only the engine and a minimal PATH; Silero VAD v6.2.0 on the CPU
+native table: no headroom rule applied (the Legion itself).
+under emu-low and emu-mid a cell whose warm-up RTF is over 2 gets the warm-up plus one timed run, marked "impractical: single run"; a cell that cannot load or run inside the 11 GB job is "does not fit" (a result, with the error and the peak memory).
+
+== CPU avx2, 8 threads
+model | lang | mode | threads | RTF median (runs) | warm-up RTF | load s | peak working set GiB | peak commit GiB | GPU local / shared GiB | segments | truncated chunks | meets RTF<=1.0 with headroom (<=0.75) | meets RTF<=0.35 with headroom (<=0.26)
+small | en | rolling | 8 | 0.274 (0.277, 0.274, 0.267) | 0.274 | 0.5 | 0.78 | 1.32 | n/a | 5 | 0 | - | -
+small | hi | rolling | 8 | 0.520 (0.519, 0.520, 0.524) | 0.515 | 0.4 | 0.86 | 1.34 | n/a | 5 | 0 | - | -
+medium | en | rolling | 8 | 0.777 (0.781, 0.777, 0.773) | 0.789 | 1.7 | 2.07 | 2.62 | n/a | 5 | 0 | - | -
+medium | hi | rolling | 8 | 1.518 (1.497, 1.563, 1.518) | 1.472 | 1.5 | 2.15 | 2.63 | n/a | 5 | 0 | - | -
+large-v3-turbo q5_0 | en | rolling | 8 | 1.264 (1.303, 1.264, 1.259) | 1.289 | 0.5 | 0.83 | 1.37 | n/a | 5 | 0 | - | -
+large-v3-turbo q5_0 | hi | rolling | 8 | 1.634 (1.634, 1.694, 1.634) | 1.630 | 0.5 | 0.90 | 1.39 | n/a | 5 | 0 | - | -
+large-v3 q5_0 | en | rolling | 8 | 1.531 (1.539, 1.531, 1.522) | 1.538 | 1.1 | 1.98 | 2.53 | n/a | 5 | 0 | - | -
+large-v3 q5_0 | hi | rolling | 8 | 2.862 (2.846, 2.862, 2.870) | 2.851 | 1.0 | 2.06 | 2.55 | n/a | 5 | 0 | - | -
+
+== CPU avx2, 23 threads
+model | lang | mode | threads | RTF median (runs) | warm-up RTF | load s | peak working set GiB | peak commit GiB | GPU local / shared GiB | segments | truncated chunks | meets RTF<=1.0 with headroom (<=0.75) | meets RTF<=0.35 with headroom (<=0.26)
+small | en | rolling | 23 | 0.249 (0.250, 0.246, 0.249) | 0.238 | 0.5 | 0.78 | 1.33 | n/a | 5 | 0 | - | -
+small | hi | rolling | 23 | 0.536 (0.532, 0.538, 0.536) | 0.518 | 0.5 | 0.88 | 1.36 | n/a | 5 | 0 | - | -
+medium | en | rolling | 23 | 0.776 (0.762, 0.837, 0.776) | 0.754 | 1.6 | 2.07 | 2.62 | n/a | 5 | 0 | - | -
+medium | hi | rolling | 23 | 1.540 (1.540, 1.540, 1.547) | 1.525 | 1.4 | 2.17 | 2.65 | n/a | 5 | 0 | - | -
+large-v3-turbo q5_0 | en | rolling | 23 | 1.026 (1.030, 1.026, 1.017) | 1.033 | 0.6 | 0.83 | 1.37 | n/a | 5 | 0 | - | -
+large-v3-turbo q5_0 | hi | rolling | 23 | 1.363 (1.364, 1.351, 1.363) | 1.365 | 0.6 | 0.91 | 1.40 | n/a | 5 | 0 | - | -
+large-v3 q5_0 | en | rolling | 23 | 1.293 (1.293, 1.302, 1.285) | 1.293 | 1.1 | 1.98 | 2.53 | n/a | 5 | 0 | - | -
+large-v3 q5_0 | hi | rolling | 23 | 2.656 (2.656, 2.658, 2.638) | 2.542 | 1.1 | 2.08 | 2.57 | n/a | 5 | 0 | - | -
+
+== cuda on the RTX (device 0), 2 CPU threads
+model | lang | mode | threads | RTF median (runs) | warm-up RTF | load s | peak working set GiB | peak commit GiB | GPU local / shared GiB | segments | truncated chunks | meets RTF<=1.0 with headroom (<=0.75) | meets RTF<=0.35 with headroom (<=0.26)
+small | en | rolling | 2 | 0.027 (0.026, 0.027, 0.031) | 0.024 | 0.5 | 0.52 | 2.07 | 0.93/0.08 | 5 | 0 | - | -
+small | hi | rolling | 2 | 0.098 (0.095, 0.101, 0.098) | 0.091 | 0.5 | 0.56 | 2.07 | 0.94/0.08 | 5 | 0 | - | -
+medium | en | rolling | 2 | 0.040 (0.040, 0.039, 0.040) | 0.037 | 1.6 | 0.51 | 3.36 | 2.22/0.08 | 5 | 0 | - | -
+medium | hi | rolling | 2 | 0.151 (0.145, 0.153, 0.151) | 0.141 | 1.3 | 0.56 | 3.36 | 2.23/0.08 | 5 | 0 | - | -
+large-v3-turbo q5_0 | en | rolling | 2 | 0.033 (0.033, 0.036, 0.033) | 0.028 | 0.6 | 0.50 | 2.08 | 0.97/0.08 | 5 | 0 | - | -
+large-v3-turbo q5_0 | hi | rolling | 2 | 0.103 (0.102, 0.104, 0.103) | 0.097 | 0.7 | 0.53 | 2.07 | 0.97/0.08 | 5 | 0 | - | -
+large-v3 q5_0 | en | rolling | 2 | 0.064 (0.061, 0.064, 0.066) | 0.059 | 1.2 | 0.50 | 3.26 | 2.13/0.08 | 5 | 0 | - | -
+large-v3 q5_0 | hi | rolling | 2 | 0.284 (0.284, 0.272, 0.284) | 0.277 | 1.1 | 0.54 | 3.25 | 2.13/0.08 | 5 | 0 | - | -
+
+== vulkan on the RTX (device 1), 2 CPU threads
+model | lang | mode | threads | RTF median (runs) | warm-up RTF | load s | peak working set GiB | peak commit GiB | GPU local / shared GiB | segments | truncated chunks | meets RTF<=1.0 with headroom (<=0.75) | meets RTF<=0.35 with headroom (<=0.26)
+small | en | rolling | 2 | 0.036 (0.036, 0.036, 0.035) | 0.351 | 0.9 | 0.61 | 1.59 | 0.83/0.03 | 5 | 0 | - | -
+small | hi | rolling | 2 | 0.106 (0.105, 0.111, 0.106) | 0.171 | 0.9 | 0.61 | 1.80 | 1.07/0.03 | 5 | 0 | - | -
+medium | en | rolling | 2 | 0.047 (0.043, 0.047, 0.047) | 0.043 | 1.9 | 1.17 | 2.99 | 2.26/0.04 | 5 | 0 | - | -
+medium | hi | rolling | 2 | 0.188 (0.185, 0.188, 0.191) | 0.175 | 2.0 | 1.17 | 2.89 | 2.14/0.04 | 5 | 0 | - | -
+large-v3-turbo q5_0 | en | rolling | 2 | 0.042 (0.041, 0.042, 0.049) | 0.134 | 0.9 | 0.62 | 1.67 | 0.88/0.04 | 5 | 0 | - | -
+large-v3-turbo q5_0 | hi | rolling | 2 | 0.114 (0.114, 0.118, 0.107) | 0.143 | 1.0 | 0.62 | 1.71 | 0.89/0.05 | 5 | 0 | - | -
+large-v3 q5_0 | en | rolling | 2 | 0.061 (0.058, 0.061, 0.064) | 0.058 | 1.9 | 1.08 | 2.82 | 2.05/0.05 | 5 | 0 | - | -
+large-v3 q5_0 | hi | rolling | 2 | 0.245 (0.237, 0.247, 0.245) | 0.240 | 2.0 | 1.08 | 2.87 | 2.10/0.05 | 5 | 0 | - | -
+
+== vulkan on the UHD (device 0), 2 CPU threads
+model | lang | mode | threads | RTF median (runs) | warm-up RTF | load s | peak working set GiB | peak commit GiB | GPU local / shared GiB | segments | truncated chunks | meets RTF<=1.0 with headroom (<=0.75) | meets RTF<=0.35 with headroom (<=0.26)
+small | en | rolling | 2 | 0.155 (0.161, 0.154, 0.155) | 0.167 | 0.8 | 0.95 | 1.42 | 0.82/0.00 | 5 | 0 | - | -
+small | hi | rolling | 2 | 0.377 (0.382, 0.377, 0.376) | 0.379 | 0.5 | 0.99 | 1.43 | 0.82/0.00 | 5 | 0 | - | -
+medium | en | rolling | 2 | 0.360 (0.364, 0.360, 0.356) | 0.359 | 1.7 | 2.28 | 2.75 | 2.11/0.00 | 5 | 0 | - | -
+medium | hi | rolling | 2 | 0.877 (0.877, 0.876, 0.879) | 0.873 | 1.4 | 2.29 | 2.75 | 2.10/0.00 | 5 | 0 | - | -
+large-v3-turbo q5_0 | en | rolling | 2 | 0.374 (0.375, 0.374, 0.370) | 0.365 | 0.6 | 1.02 | 1.48 | 0.88/0.00 | 5 | 0 | - | -
+large-v3-turbo q5_0 | hi | rolling | 2 | 0.669 (0.669, 0.658, 0.797) | 0.660 | 0.6 | 1.06 | 1.50 | 0.88/0.00 | 5 | 0 | - | -
+large-v3 q5_0 | en | rolling | 2 | 0.520 (0.520, 0.518, 0.521) | 0.516 | 1.0 | 2.24 | 2.72 | 2.03/0.00 | 5 | 0 | - | -
+large-v3 q5_0 | hi | rolling | 2 | 1.487 (1.487, 1.489, 1.486) | 1.486 | 1.2 | 2.24 | 2.72 | 2.03/0.00 | 5 | 0 | - | -
+
+== CPU avx2, small near-live (greedy), 16 threads
+model | lang | mode | threads | RTF median (runs) | warm-up RTF | load s | peak working set GiB | peak commit GiB | GPU local / shared GiB | segments | truncated chunks | meets RTF<=1.0 with headroom (<=0.75) | meets RTF<=0.35 with headroom (<=0.26)
+small | en | near_live | 16 | 0.248 (0.251, 0.248, 0.247) | 0.250 | 0.5 | 0.66 | 1.20 | n/a | 5 | 0 | - | -
+small | hi | near_live | 16 | 0.497 (0.497, 0.499, 0.495) | 0.485 | 0.5 | 0.73 | 1.20 | n/a | 5 | 2 | - | -
+
+cells: 42 (ok 42, does not fit 0, failed 0, single-run 0)
+The Hinglish model is large-v3-sized: read its speed from the large-v3 q5_0 rows (the f16 model is slower and larger; the q5_0 Hinglish model is the same size as large-v3 q5_0).
+
+Notes for Phase 3 (owner, 11 Nov 2026):
+(a) The Intel UHD of the Legion is weaker than the integrated GPUs the room laptops are likely to have, so every UHD row is a FLOOR: a laptop with Iris Xe, Arc or a Radeon 680M/780M is expected to be at least as fast. The exception is the low-baseline laptop (basic integrated graphics): it may be SLOWER than the Legion UHD, so for it these rows are an estimate to be re-measured there, not a bound.
+(b) Hindi costs more to decode than English on the same hardware: in these tables the Hindi clip runs 1.3 to 4.4 times slower than the English clip (about 3 times for large-v3 q5_0 on the UHD: 0.51 against about 1.5). The two clips are different recordings, so part of the gap belongs to the clip. Phase 3 tiers must consider turbo or medium for Hindi on weak machines.
+(c) On the UHD, DXGI reports the integrated GPU's memory as local (the shared figure stays 0.00). That memory is system RAM: Phase 3 counts it as RAM (AGENTS.md: integrated GPUs share RAM with the CPU).

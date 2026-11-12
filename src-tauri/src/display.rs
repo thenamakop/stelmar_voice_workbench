@@ -139,10 +139,10 @@ fn recreate(app: &AppHandle, old_label: &str) {
                 old = old_label,
                 "display recovered in a new window"
             );
-            if let Some(old) = app.get_webview_window(old_label) {
-                if let Err(e) = old.destroy() {
-                    tracing::error!("could not close the failed window: {e}");
-                }
+            if let Some(old) = app.get_webview_window(old_label)
+                && let Err(e) = old.destroy()
+            {
+                tracing::error!("could not close the failed window: {e}");
             }
         }
         Err(e) => tracing::error!("display recovery: could not open a new window: {e}"),

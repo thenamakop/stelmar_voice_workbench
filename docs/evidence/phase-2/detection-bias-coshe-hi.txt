@@ -1,0 +1,8 @@
+Language-detection bias on coshe-eval (hi utterances) (Phase 2, information only, 11 Nov 2026)
+engine: wb-engine-avx2-x86_64-pc-windows-msvc.exe detect; models en=medium; languages en,hi; sentence_split on; chunks with at least 1 s of speech
+sample: 100 utterances, seed 20261111, taken from the manifest sorted by id then shuffled; no audio and no text below
+
+label | chunks | detected as the other language | share | wrong-detection probability p50 | p90 | max | over 0.9 | margin (label minus best other) p10 | p50 | p90
+hi | 724 | 123 | 17.0% | 0.92 | 1.00 | 1.00 | 67 | -0.74 | +0.97 | +1.00
+
+chunks whose most likely language among all of whisper's is neither of en,hi: 18 of 724

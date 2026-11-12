@@ -70,3 +70,35 @@ git config core.hooksPath .githooks
 ```
 
 This enables the hook that strips AI attribution from commit messages (`CONTRIBUTING.md`).
+
+## Stopping what the coding agent starts
+
+Everything the agent runs on the Legion is an ordinary process of your Windows user, in your own desktop session (session 1,
+`Console`, as `tasklist` shows), not in a sandbox or another account. You can see and stop all of it from a normal window: Task
+Manager, or a normal PowerShell. Checked on 10 Nov 2026, when you stopped a stuck conversion (python, pid 38104) and its children.
+The agent's own permission layer can refuse to kill a process for it; that never prevents you from doing it.
+
+Long jobs run in the background (cargo, CMake and CUDA builds, model downloads, conversions and quantisation, gate runs, evaluation
+runs). To see them and stop them:
+
+```powershell
+# What is running: engines, builds, Python jobs, the gate rig, the app
+Get-Process cargo, rustc, cmake, cl, link, nvcc, python, wb-engine*, wb-emulate, wb-testbench, stelmar-voice-workbench -ErrorAction SilentlyContinue |
+  Select-Object Name, Id, StartTime, @{n='CPU_s';e={[int]$_.CPU}}
+# Stop one, with its children
+taskkill /F /T /PID <pid>
+# Stop an emulated gate run: ending wb-emulate ends everything inside its Job Object
+taskkill /F /T /IM wb-emulate.exe
+```
+
+Each job that must not overlap another leaves a lock file; if a job was killed, remove its lock by hand (the scripts remove their
+own on a normal end or an error):
+
+| File | Held by |
+| --- | --- |
+| `D:\Projects\stelmar-gate.lock` and `stelmar-gate-request.flag` | a timing-sensitive gate run, or the request for a gate sequence |
+| `D:\Projects\stelmar-build.lock` | `scripts\build-engines.ps1` (a running build) |
+| `D:\Projects\stelmar-eval-busy.lock` | a heavy evaluation, conversion or quantisation step |
+
+The engines the app starts are in the app's kill-on-close Job Object: ending the app ends them. Never delete a lock while its process
+is still alive: a waiting step may take it and start work (10 Nov 2026).

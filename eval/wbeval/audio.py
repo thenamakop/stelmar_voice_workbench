@@ -52,6 +52,26 @@ def write_wav16(path: Path, samples: np.ndarray) -> float:
     return len(samples) / TARGET_SR
 
 
+def convert_file(src: Path, path: Path) -> float:
+    """Decode a file on disk (m4a/mp4 needs a seekable input: its index is at the end) to 16 kHz mono PCM16 WAV.
+
+    ffmpeg writes a mono WAV at the file's own rate and soxr does the resampling, as for every other set. The
+    ffmpeg on this machine's PATH is a 2013 build: only options it knows are used.
+    """
+    ffmpeg = shutil.which("ffmpeg")
+    if ffmpeg is None:
+        raise RuntimeError("ffmpeg is not on PATH")
+    tmp = path.with_suffix(".decode.wav")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        subprocess.run([ffmpeg, "-loglevel", "error", "-y", "-i", str(src), "-vn", "-ac", "1", "-f", "wav", str(tmp)],
+                       capture_output=True, check=True)
+        samples, sr = sf.read(tmp, dtype="float32", always_2d=True)
+    finally:
+        tmp.unlink(missing_ok=True)
+    return write_wav16(path, to_16k_mono(samples.mean(axis=1), sr))
+
+
 def convert_bytes(data: bytes, path: Path) -> float:
     samples, sr = decode(data)
     return write_wav16(path, to_16k_mono(samples, sr))

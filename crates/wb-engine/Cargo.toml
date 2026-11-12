@@ -1,15 +1,48 @@
 [package]
 name = "wb-engine"
-description = "STELMAR Voice Workbench speech engine (whisper.cpp arrives in Phase 2)"
+description = "STELMAR Voice Workbench speech engine: whisper.cpp through whisper-rs in its own process (info, bench, batch, live)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
+build = "build.rs"
+
+[features]
+default = []
+# GPU backends. The CPU variants (avx2, avx512) use no feature; scripts/build-engines.ps1 sets the
+# GGML_* CPU flags through the environment and WB_ENGINE_VARIANT to the variant's name.
+vulkan = ["whisper-rs/vulkan"]
+cuda = ["whisper-rs/cuda"]
 
 [dependencies]
+anyhow.workspace = true
+hound.workspace = true
+# Resampling to 16 kHz mono.
+rubato = "0.16"
+serde.workspace = true
 serde_json.workspace = true
+thiserror.workspace = true
+wb-engine-core.workspace = true
+wb-models.workspace = true
+wb-machine = { workspace = true, features = ["emulation"] }
 wb-protocol.workspace = true
+# whisper.cpp v1.9.5 is vendored through the patch in the root Cargo.toml (third_party/); the Unlicense
+# is approved for this crate and whisper-rs-sys only (docs/BUILD.md).
+whisper-rs = { version = "0.16", default-features = false, features = ["raw-api"] }
+
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true, features = [
+  "std",
+  "Win32_Foundation",
+  "Win32_Graphics_Dxgi",
+  "Win32_Graphics_Dxgi_Common",
+  "Win32_System_ProcessStatus",
+  "Win32_System_Threading",
+] }
+
+[build-dependencies]
+sha2.workspace = true
 
 [lints]
 workspace = true

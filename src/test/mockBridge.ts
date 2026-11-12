@@ -18,6 +18,8 @@ export interface MockOptions {
   /** capability.json exists (or the lookup fails with this error). */
   profile?: boolean | Error;
   state?: MockState;
+  /** "none": every speech engine renamed away (list_engines finds no engine). Default: engines present. */
+  engines?: "present" | "none";
   /** Commands seen, in order (for assertions). */
   calls?: string[];
 }
@@ -93,6 +95,10 @@ export function recorderStatus(state: RecorderStatus["state"] = "recording"): Re
     dropped_samples: 0,
     recorder_restarts: 0,
     position_breaks: 0,
+    timestamp_outliers: 0,
+    position_pair_flags: 0,
+    repeated_blocks: 0,
+    zero_gaps: 0,
     ring_seconds: 20,
     ring_max_fill_pct: 0.4,
     priority: "mmcss",
@@ -168,6 +174,10 @@ export function bridge(opts: MockOptions = {}) {
     const args = payload as Record<string, unknown> | undefined;
     opts.calls?.push(cmd);
     switch (cmd) {
+      case "list_engines":
+        return opts.engines === "none" ? NO_ENGINES : REGISTRY;
+      case "recheck_registry":
+        return undefined;
       case "has_capability_profile":
         if (opts.profile instanceof Error) throw opts.profile;
         return opts.profile ?? false;
@@ -229,3 +239,143 @@ export function bridge(opts: MockOptions = {}) {
     }
   };
 }
+
+const GIB = 1024 ** 3;
+const cpuDevice = {
+  index: 0,
+  backend: "CPU",
+  name: "CPU",
+  description: "Intel(R) Core(TM) i7-1255U",
+  kind: "cpu" as const,
+  total_memory_bytes: 16 * GIB,
+  free_memory_bytes: 9 * GIB,
+  driver_version: null,
+  duplicates_dropped: 0,
+  shared_memory_bytes: null,
+  adapter_name: null,
+};
+const pin = {
+  version: "1.9.5-dev",
+  commit: "d1be6fde11ac6e0407606b4e42fe72d34add8037",
+  tree_sha256: "e736b4c9a5be2bc0e9b294102e261fe69c2a439976652ff6107b0c361f8667fb",
+};
+
+/** What `list_engines` returns in the browser tests: a mix of good and bad rows. */
+export const REGISTRY = {
+  engines_dir: "C:/Program Files/STELMAR Voice Workbench",
+  engines_done: true,
+  speech_engine: "available",
+  engines: [
+    {
+      variant: "avx2",
+      file: "wb-engine-avx2.exe",
+      bytes: 5_300_000,
+      state: "ok",
+      message: null,
+      devices: [cpuDevice],
+      whisper_cpp: pin,
+      backends: ["CPU"],
+      info_ms: 180,
+    },
+    {
+      variant: "avx512",
+      file: "wb-engine-avx512.exe",
+      bytes: 5_500_000,
+      state: "cpu_mismatch",
+      message:
+        "This engine build (avx512) needs CPU features this computer does not have: avx512f, avx512cd, avx512vl, avx512dq, avx512bw.",
+      devices: [],
+      whisper_cpp: pin,
+      backends: [],
+      info_ms: 40,
+    },
+    {
+      variant: "vulkan",
+      file: "wb-engine-vulkan.exe",
+      bytes: 49_400_000,
+      state: "ok",
+      message: null,
+      devices: [
+        cpuDevice,
+        {
+          ...cpuDevice,
+          index: 1,
+          backend: "Vulkan",
+          name: "Vulkan0",
+          description: "Intel(R) Iris(R) Xe Graphics",
+          kind: "igpu" as const,
+          total_memory_bytes: 8 * GIB,
+          driver_version: "31.0.101.4577",
+          shared_memory_bytes: 8 * GIB,
+        },
+      ],
+      whisper_cpp: pin,
+      backends: ["CPU", "Vulkan"],
+      info_ms: 910,
+    },
+  ],
+  models_dir: "C:/Program Files/STELMAR Voice Workbench/models",
+  models_done: true,
+  manifest_error: null,
+  models: [
+    {
+      id: "small",
+      file: "ggml-small.bin",
+      bytes: 487_601_967,
+      base: "small",
+      quant: "f16",
+      languages: ["en"],
+      candidate_roles: ["near-live"],
+      validated_roles: [],
+      licence: "MIT",
+      state: "ok",
+      message: null,
+    },
+    {
+      id: "medium",
+      file: "ggml-medium.bin",
+      bytes: 1_533_763_059,
+      base: "medium",
+      quant: "f16",
+      languages: ["en", "hi", "ur"],
+      candidate_roles: ["rolling"],
+      validated_roles: [],
+      licence: "MIT",
+      state: "ok",
+      message: null,
+    },
+    {
+      id: "hindi-medium-q8_0",
+      file: "ggml-whisper-hindi-medium-q8_0.bin",
+      bytes: 823_000_000,
+      base: "medium",
+      quant: "q8_0",
+      languages: ["hi"],
+      candidate_roles: ["rolling", "night"],
+      validated_roles: [],
+      licence: "Apache-2.0",
+      state: "hash_mismatch",
+      message: "checksum does not match",
+    },
+    {
+      id: "large-v3-q5_0",
+      file: "ggml-large-v3-q5_0.bin",
+      bytes: 1_080_000_000,
+      base: "large-v3",
+      quant: "q5_0",
+      languages: ["en", "hi", "ur"],
+      candidate_roles: ["night"],
+      validated_roles: [],
+      licence: "MIT",
+      state: "missing",
+      message: "file not found",
+    },
+  ],
+};
+
+/** What `list_engines` returns with every speech engine renamed away (models are unaffected). */
+export const NO_ENGINES = {
+  ...REGISTRY,
+  engines: [],
+  speech_engine: "none_found",
+};

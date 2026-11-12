@@ -1,0 +1,31 @@
+3-WER comparison: wb-engine against whisper-cli (Phase 2, 10 Nov 2026)
+
+THE PARITY RESULT is in docs/evidence/phase-2/wer-parity.txt (run 2): both sides decode identical audio; en, hi and ur
+each have 20 of 20 utterances with identical text and a WER difference of 0.00 against the two-sided limit of 3.0: PASS.
+
+This file keeps RUN 1, which is NOT a parity measurement, and says why.
+
+Run 1: different chunkers and whisper-cli's corrupted --prompt; not a parity measurement
+Harness verdict (eval/run.py, two-sided limit 3.0): en PASS (0.00), hi FAIL (3.78), ur FAIL (3.07). In both FAILs the engine had the lower WER.
+Kept as information ("as deployed": each side with its own chunker). The comparison entries in eval/runs.toml are marked informational.
+
+Setup of run 1
+- Machine: Legion native (no emulation), 8 threads for both sides; Track B idle; overlay tools closed; no engine build running.
+- whisper-cli: whisper.cpp v1.9.5, commit d1be6fde11ac, portable AVX2. wb-engine 0.1.0 (avx2, whisper.cpp v1.9.5 commit d1be6fde11ac, tree e736b4c9a5be), portable AVX2, flash attention on (whisper-cli's default). The harness prints both and would mark the comparison INVALID if they differed; they did not.
+- Model medium f16 (sha256 6c14d5ad...), role rolling (beam 5, best-of 5, temperature fallback, no timestamps, previous-text context 200 characters), chunks of at most 15 s from Silero VAD v6.2.0: whisper-cli's side cut by the harness (whisper-vad-speech-segments), the engine's side by its own chunker.
+- Clips: eval/clips/phase2-verify-fleurs.txt (60 ids, sha256 7f42da223214dced467d9416e279f82f5aa83ff790def0ddc293f5111db6d3ef). The three FLEURS manifests were rebuilt from the HF cache at revision 70bb2e84b976 and their SHA-256 values equal docs/evidence/phase-5a/sources-phase-5a.md (fleurs-en 69f04997..., fleurs-hi 023f2119..., fleurs-ur 9aa8ad35...).
+
+Result of run 1 (WER %, nukta kept for Hindi)
+| language | whisper-cli | wb-engine | difference | limit | harness result | utterances with "??" or U+FFFD (cli / engine) |
+| en | 4.9 | 4.9 | 0.00 | 3.0 | PASS | 0 / 0 |
+| hi | 51.7 (CER 25.3) | 47.9 (CER 19.8) | 3.78 | 3.0 | FAIL | 3 / 0 |
+| ur | 32.0 (CER 13.8) | 29.0 (CER 9.8) | 3.07 | 3.0 | FAIL | 1 / 0 |
+
+Why run 1 cannot show parity (two differences the gate is not about)
+1. Different chunkers. whisper-cli's side was cut by the harness's VAD step, the engine's by its own chunker; they cut at different pauses in 2 of the 5 utterances that differed (fleurs-hi 33253568: 11,400 ms against 11,295 ms; fleurs-ur 64116877: 8,785 ms against 14,260 ms).
+2. whisper-cli's corrupted --prompt. The harness passes the previous chunk's text to whisper-cli as a `--prompt` command-line argument. On Windows whisper-cli reads its command line in the ANSI code page, which turns every Devanagari or Arabic-script character of the prompt into "?". The model is then prompted with garbage and some chunks come out as "??? ??? ???" (fleurs-hi 10798430, second chunk: same chunk boundaries on both sides, 12 correct words from the engine). Shown on that chunk (not committed): no prompt gives correct Devanagari, an ASCII prompt gives correct Devanagari, a Devanagari prompt gives "??? ??? ??? ...". All output modes (stdout, -oj, -ojf, -otxt) give the same "???", so it is not an output-reading problem and not a split character in the output. The engine passes the context through the library, in UTF-8.
+   My first explanation in this file (a character split across segments in whisper-cli's JSON output) was wrong; the prompt is the cause.
+
+Run 2 (the parity measurement) removes both: whisper-cli decodes the exact chunks wb-engine cuts, and previous-text context is off on both sides (whisper-cli cannot carry it for non-Latin text on Windows). English with context on, on the same chunks, also matches (20 of 20 identical; information in wer-parity.txt).
+
+Consequence for Phase 5a numbers: docs/GATES.md (5a rows) and docs/evidence/phase-5a/tables-phase-5a.md now say that every 5a whisper-cli run with context (rolling, night) on Hindi, Urdu or CoSHE-Eval used the corrupted prompt, and Phase 5 scores every model through `wb-engine batch`.

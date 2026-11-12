@@ -26,11 +26,11 @@ pub struct UnmatchedRange {
 
 /// Adds a stretch, merging it with the previous one when they touch.
 fn add_range(ranges: &mut Vec<UnmatchedRange>, source_ms: f64, len_ms: f64) {
-    if let Some(last) = ranges.last_mut() {
-        if (source_ms - (last.source_ms + last.ms)).abs() < 1.0 {
-            last.ms += len_ms;
-            return;
-        }
+    if let Some(last) = ranges.last_mut()
+        && (source_ms - (last.source_ms + last.ms)).abs() < 1.0
+    {
+        last.ms += len_ms;
+        return;
     }
     ranges.push(UnmatchedRange {
         source_ms,
@@ -291,12 +291,11 @@ pub fn analyse(
         if c >= MATCH {
             min_corr = min_corr.min(c);
             // Channel 1 must line up at the same offset (a dropped or swapped channel fails).
-            if let Some(r1) = &r1 {
-                if let Some(b1) = r1.get(n..n + len) {
-                    if ncorr(b1, &src1, k) < MATCH {
-                        ch1_unmatched += len;
-                    }
-                }
+            if let Some(r1) = &r1
+                && let Some(b1) = r1.get(n..n + len)
+                && ncorr(b1, &src1, k) < MATCH
+            {
+                ch1_unmatched += len;
             }
             n += len;
             end_n = n;

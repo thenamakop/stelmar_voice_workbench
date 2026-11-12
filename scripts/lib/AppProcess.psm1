@@ -38,19 +38,13 @@ function Get-WbUserDataDir {
   Join-Path $env:LOCALAPPDATA "$script:Identifier\EBWebView"
 }
 
+# The process tree of $RootId with the creation-time rule (a stale parent id reused by a new process does not
+# pull an unrelated older process into the tree; see ProcessTree.psm1).
 function Get-WbProcessTree([int]$RootId) {
-  $all = Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, Name
-  $ids = New-Object 'System.Collections.Generic.HashSet[int]'
-  [void]$ids.Add($RootId)
-  do {
-    $added = $false
-    foreach ($p in $all) {
-      if ($ids.Contains([int]$p.ParentProcessId) -and -not $ids.Contains([int]$p.ProcessId)) {
-        [void]$ids.Add([int]$p.ProcessId); $added = $true
-      }
-    }
-  } while ($added)
-  @($all | Where-Object { $ids.Contains([int]$_.ProcessId) })
+  Import-Module (Join-Path $PSScriptRoot 'ProcessTree.psm1') -Force
+  $all = @(Get-WbProcessSnapshot)
+  $ids = @(Get-WbTreeIds -Processes $all -RootPid $RootId)
+  @($all | Where-Object { $ids -contains [int]$_.ProcessId })
 }
 
 # Every msedgewebview2.exe whose command line names this app's user data folder.
@@ -156,6 +150,52 @@ function Get-WbWindowCheck([IntPtr]$Handle, [string]$SavePath) {
   $check | Add-Member -NotePropertyName Obscured -NotePropertyValue $false -PassThru
 }
 
+# ---- UI Automation: act on the app's own window through its accessibility tree (no mouse or keyboard
+# input is sent, nothing outside the app's window is touched). WebView2 builds its accessibility tree
+# when the first client asks, so the first query can come back empty: callers retry.
+$script:UiaLoaded = $false
+function Initialize-WbUia {
+  if ($script:UiaLoaded) { return }
+  Add-Type -AssemblyName UIAutomationClient
+  Add-Type -AssemblyName UIAutomationTypes
+  $script:UiaLoaded = $true
+}
+
+# Clicks (Invoke) the first button with exactly this name. Returns $true when it was found and invoked.
+function Invoke-WbAppButton([IntPtr]$Handle, [string]$Name, [int]$TimeoutSeconds = 15) {
+  Initialize-WbUia
+  $watch = [System.Diagnostics.Stopwatch]::StartNew()
+  while ($watch.Elapsed.TotalSeconds -lt $TimeoutSeconds) {
+    $root = [System.Windows.Automation.AutomationElement]::FromHandle($Handle)
+    $cond = New-Object System.Windows.Automation.AndCondition(
+      (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, $Name)),
+      (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Button)))
+    $el = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $cond)
+    if ($el) {
+      $pattern = $null
+      if ($el.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$pattern)) { $pattern.Invoke(); return $true }
+    }
+    Start-Sleep -Milliseconds 500
+  }
+  $false
+}
+
+# $true when some element in the window has a name or text containing this text (case-insensitive).
+function Test-WbAppText([IntPtr]$Handle, [string]$Text, [int]$TimeoutSeconds = 10) {
+  Initialize-WbUia
+  $watch = [System.Diagnostics.Stopwatch]::StartNew()
+  while ($true) {
+    $root = [System.Windows.Automation.AutomationElement]::FromHandle($Handle)
+    $all = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
+    foreach ($el in $all) {
+      $name = $el.Current.Name
+      if ($name -and $name.IndexOf($Text, [StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true }
+    }
+    if ($watch.Elapsed.TotalSeconds -ge $TimeoutSeconds) { return $false }
+    Start-Sleep -Milliseconds 500
+  }
+}
+
 # Start the exe and wait for the window and the first render.
 function Start-WbApp {
   param([Parameter(Mandatory)] [string]$Exe, [int]$TimeoutSeconds = 20)
@@ -182,4 +222,5 @@ function Start-WbApp {
 }
 
 Export-ModuleMember -Function Get-WbUserDataDir, Get-WbProcessTree, Get-WbWebView2, Stop-WbAppImmediate, Stop-WbApp, `
-  Get-WbWindowBounds, Get-WbWindowBitmap, Test-WbRendered, Get-WbWindowCheck, Start-WbApp
+  Get-WbWindowBounds, Get-WbWindowBitmap, Test-WbRendered, Get-WbWindowCheck, Start-WbApp, `
+  Invoke-WbAppButton, Test-WbAppText

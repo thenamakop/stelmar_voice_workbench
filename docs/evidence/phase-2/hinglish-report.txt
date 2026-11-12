@@ -1,0 +1,22 @@
+Hinglish engine gate report (Phase 2, 11 Nov 2026)
+run: phase2-wb-hinglish-q5_0-coshe; WER 15.8, CER 11.5; RTF 3.40 (information only: the attempt log is on and failed chunks are decoded again)
+no transcript text below: counts, clip names and times only
+
+ENGINE PART (gated): 0 broken utterances and 0 silent loss
+- broken utterances (U+FFFD or '??'): 0
+- chunks: 89; decoded cleanly at the first attempt: 84 (of which empty, with a chunk_empty event: 0); dropped as non-speech with a segment_dropped event: 0; sent through the retry ladder: 5
+- silent loss (a speech chunk with no segment and no event): 0
+- ENGINE PART: PASS
+
+MODEL PART (reported; carried in the Phase 5 row)
+- chunks that ended unclear: 1; audio_1444:1 14490-28740 ms
+- chunks that ended low_coverage (text kept and flagged): 0
+- truncated utterances by the harness's rule (under 0.7 hypothesis words per reference word, or 20 or more reference words deleted in a row): 1 audio_1444
+- segment flags in the output: {'compression_ratio': 1, 'retried': 8, 'unclear': 1, 'wrong_script': 2}
+
+Ladder: chunks rescued and by which step
+  audio_1355:0 0-14760 ms: step b (cut at the deepest pause)
+  audio_1444:1 14490-28740 ms: step b (cut at the deepest pause)
+  audio_37:0 90-13350 ms: step b (cut at the deepest pause)
+  audio_908:2 25050-32610 ms: step a at temperature 0.4
+  audio_908:3 32610-46730 ms: step b (cut at the deepest pause)

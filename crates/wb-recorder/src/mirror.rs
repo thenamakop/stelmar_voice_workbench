@@ -356,10 +356,10 @@ impl Mirror {
             let mut mirror_sha = sha256_file(&dst).ok();
             if mirror_sha.as_deref() != Some(sha.as_str()) {
                 // Copy the whole file again and check once more.
-                if fs::copy(&src, &dst).is_ok() {
-                    if let Ok(f) = OpenOptions::new().write(true).open(&dst) {
-                        let _ = f.sync_all();
-                    }
+                if fs::copy(&src, &dst).is_ok()
+                    && let Ok(f) = OpenOptions::new().write(true).open(&dst)
+                {
+                    let _ = f.sync_all();
                 }
                 mirror_sha = sha256_file(&dst).ok();
             } else if let Ok(f) = OpenOptions::new().write(true).open(&dst) {
