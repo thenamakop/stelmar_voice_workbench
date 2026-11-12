@@ -4,7 +4,7 @@
   and longer than the granted device buffer) and writes the evidence.
 
 .DESCRIPTION
-  Runs crates\wb-recorder\tests\capture_stall.rs (release build) with WB_CAPTURE_STALL_TEST=1: it
+  Runs crates\wb-recorder\tests\capture_stall.rs (release build, feature test-hooks, which is not in the shipped build) with WB_CAPTURE_STALL_TEST=1: it
   plays a quiet noise into the virtual cable, records the cable through the real WASAPI stream
   and the real recorder, and stalls the data callback. Writes
   docs\evidence\phase-2b\capture-stall.txt from its output: the device buffer asked for and
@@ -37,10 +37,10 @@ Push-Location $repo
 $env:WB_CAPTURE_STALL_TEST = '1'
 try {
   # Build first, so the test's own timing does not include a compile.
-  $build = Invoke-WbNative -FilePath 'cargo' -ArgumentList @('test', '-p', 'wb-recorder', '--release', '--test', 'capture_stall', '--no-run')
+  $build = Invoke-WbNative -FilePath 'cargo' -ArgumentList @('test', '-p', 'wb-recorder', '--release', '--features', 'test-hooks', '--test', 'capture_stall', '--no-run')
   if ($build.ExitCode -ne 0) { throw "The test did not build: $((@($build.Error) + @($build.Output)) -join ' ')" }
   $started = Get-Date
-  $run = Invoke-WbNative -FilePath 'cargo' -ArgumentList @('test', '-p', 'wb-recorder', '--release', '--test', 'capture_stall', '--', '--nocapture')
+  $run = Invoke-WbNative -FilePath 'cargo' -ArgumentList @('test', '-p', 'wb-recorder', '--release', '--features', 'test-hooks', '--test', 'capture_stall', '--', '--nocapture')
   $code = $run.ExitCode
   $out = @($run.Output) + @($run.Error)
 } finally {

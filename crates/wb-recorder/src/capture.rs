@@ -64,14 +64,16 @@ pub struct StreamCounters {
     pub gaps_ge_100ms: AtomicU64,
     pub gaps_ge_250ms: AtomicU64,
     pub gaps_ge_500ms: AtomicU64,
-    /// Sum, count and minimum (0 until the first) of the gaps under 50 ms: the callback period
-    /// the engine delivers at when nothing stalls.
+    /// Sum, count and minimum (0 until the first) of the gaps from 2 ms up to 50 ms: the callback
+    /// period the engine delivers at when nothing stalls (the back-to-back callbacks after a
+    /// stall are left out).
     pub period_sum_us: AtomicU64,
     pub period_count: AtomicU64,
     pub period_min_us: AtomicU64,
-    /// Test hook: milliseconds the next data callback sleeps at its end, once (0 = none). It
-    /// stands in for the capture thread being kept away from the device. One relaxed load per
-    /// callback when unused.
+    /// Test hook (feature `test-hooks`, never in the shipped build): milliseconds the next data
+    /// callback sleeps at its end, once (0 = none). It stands in for the capture thread being kept
+    /// away from the device.
+    #[cfg(feature = "test-hooks")]
     #[doc(hidden)]
     pub inject_pause_ms: AtomicU64,
 }
@@ -154,6 +156,10 @@ impl CallbackGap {
     }
 }
 
+/// Gaps under this are packets handed over back to back after a late wake-up (about 20 microseconds
+/// apart), not the engine's period, and stay out of the period figures.
+const MIN_PERIOD_GAP_US: u64 = 2_000;
+
 /// Files one gap between two callbacks in the counters. The data callback is their only writer.
 #[inline]
 pub fn record_gap(counters: &StreamCounters, us: u64) {
@@ -171,7 +177,7 @@ pub fn record_gap(counters: &StreamCounters, us: u64) {
         if us >= 500_000 {
             counters.gaps_ge_500ms.fetch_add(1, Ordering::Relaxed);
         }
-    } else {
+    } else if us >= MIN_PERIOD_GAP_US {
         counters.period_sum_us.fetch_add(us, Ordering::Relaxed);
         counters.period_count.fetch_add(1, Ordering::Relaxed);
         let min = counters.period_min_us.load(Ordering::Relaxed);
@@ -181,7 +187,8 @@ pub fn record_gap(counters: &StreamCounters, us: u64) {
     }
 }
 
-/// Test hook: sleeps once if a pause was injected. A relaxed load when none was.
+/// Test hook (feature `test-hooks`): sleeps once if a pause was injected.
+#[cfg(feature = "test-hooks")]
 #[inline]
 fn injected_pause(counters: &StreamCounters) {
     let ms = counters.inject_pause_ms.load(Ordering::Relaxed);
@@ -245,16 +252,70 @@ impl BufferInfo {
     }
 }
 
+/// Longest the buffer ladder keeps trying: each attempt can wait for the driver for up to the 5 s
+/// stream timeout, and a session start gives the whole open 15 s.
+const FALLBACK_BUDGET: Duration = Duration::from_secs(8);
+
+/// Why one attempt to open the stream failed, and whether a smaller buffer could cure it.
+#[derive(Debug)]
+pub struct OpenError {
+    pub error: Error,
+    /// False for a device that is busy, gone, denied or changed, and for an unsupported
+    /// operation: trying a smaller buffer cannot help and only costs time.
+    pub retry_smaller: bool,
+}
+
+impl OpenError {
+    /// A failure a smaller buffer may cure (a refused size, an invalid argument).
+    pub fn smaller(error: Error) -> Self {
+        Self {
+            error,
+            retry_smaller: true,
+        }
+    }
+
+    /// A failure that ends the ladder.
+    pub fn fatal(error: Error) -> Self {
+        Self {
+            error,
+            retry_smaller: false,
+        }
+    }
+
+    fn from_cpal(device: &cpal::Device, e: &cpal::Error) -> Self {
+        let retry = !matches!(
+            e.kind(),
+            ErrorKind::DeviceBusy
+                | ErrorKind::DeviceChanged
+                | ErrorKind::DeviceNotAvailable
+                | ErrorKind::HostUnavailable
+                | ErrorKind::PermissionDenied
+                | ErrorKind::StreamInvalidated
+                | ErrorKind::UnsupportedOperation
+        );
+        Self {
+            error: Error::Device(format!("{device}: {e}")),
+            retry_smaller: retry,
+        }
+    }
+}
+
 /// Tries each size in [`BUFFER_REQUESTS_MS`] in order with `open` (called with the request and the
 /// matching cpal buffer size) and returns the first that opens, with the larger requests that
-/// were refused. The error of the last attempt is returned if none opens.
+/// were refused. It moves to the next size only after an error a smaller buffer can cure
+/// ([`OpenError::retry_smaller`]) and only within [`FALLBACK_BUDGET`]; any other error, and the
+/// last attempt's error, is returned as it is.
 pub fn open_with_fallback<T>(
     sample_rate: u32,
-    mut open: impl FnMut(Option<u32>, cpal::BufferSize) -> Result<T, Error>,
+    mut open: impl FnMut(Option<u32>, cpal::BufferSize) -> Result<T, OpenError>,
 ) -> Result<(T, Option<u32>, Vec<u32>), Error> {
+    let started = std::time::Instant::now();
     let mut refused = Vec::new();
     let mut last: Option<Error> = None;
     for request in BUFFER_REQUESTS_MS {
+        if last.is_some() && started.elapsed() > FALLBACK_BUDGET {
+            break;
+        }
         let size = match request {
             Some(ms) => cpal::BufferSize::Fixed(
                 u32::try_from(u64::from(sample_rate) * u64::from(ms) / 1000)
@@ -265,11 +326,12 @@ pub fn open_with_fallback<T>(
         };
         match open(request, size) {
             Ok(opened) => return Ok((opened, request, refused)),
+            Err(e) if !e.retry_smaller => return Err(e.error),
             Err(e) => {
                 if let Some(ms) = request {
                     refused.push(ms);
                 }
-                last = Some(e);
+                last = Some(e.error);
             }
         }
     }
@@ -774,7 +836,7 @@ fn try_open(
     format: SampleFormat,
     buffer: cpal::BufferSize,
     requested_ms: Option<u32>,
-) -> Result<(cpal::Stream, StreamHandle), Error> {
+) -> Result<(cpal::Stream, StreamHandle), OpenError> {
     let config = StreamConfig {
         buffer_size: buffer,
         ..base
@@ -824,6 +886,7 @@ fn try_open(
                 gap.note(&cb);
                 position.check(info, (data.len() / channels) as u64, &cb);
                 push_frames(&mut prod, data, channels, |s| s, &cb);
+                #[cfg(feature = "test-hooks")]
                 injected_pause(&cb);
             },
             on_error,
@@ -836,6 +899,7 @@ fn try_open(
                 gap.note(&cb);
                 position.check(info, (data.len() / channels) as u64, &cb);
                 push_frames(&mut prod, data, channels, |s| f32::from(s) / 32_768.0, &cb);
+                #[cfg(feature = "test-hooks")]
                 injected_pause(&cb);
             },
             on_error,
@@ -854,18 +918,19 @@ fn try_open(
                     |s| s as f32 / 2_147_483_648.0,
                     &cb,
                 );
+                #[cfg(feature = "test-hooks")]
                 injected_pause(&cb);
             },
             on_error,
             timeout,
         ),
         other => {
-            return Err(Error::Device(format!(
+            return Err(OpenError::fatal(Error::Device(format!(
                 "{device}: sample format {other:?} is not supported"
-            )));
+            ))));
         }
     }
-    .map_err(|e| Error::Device(format!("{device}: {e}")))?;
+    .map_err(|e| OpenError::from_cpal(device, &e))?;
 
     let input = InputInfo {
         device_name: device.to_string(),
@@ -925,7 +990,9 @@ fn open_stream(device_id: &str, name: Option<&str>) -> Result<(cpal::Stream, Str
 }
 
 /// Opens the named input the way a session does (same buffer request, fallback and counters) and
-/// starts it, for the stall tests on a real device. Not part of the recorder's own path.
+/// starts it, for the stall tests on a real device (feature `test-hooks`). Not part of the
+/// recorder's own path.
+#[cfg(feature = "test-hooks")]
 #[doc(hidden)]
 pub fn open_for_test(name_contains: &str) -> Result<(cpal::Stream, StreamHandle), Error> {
     let host = host();
@@ -1306,7 +1373,7 @@ mod tests {
         let mut asked = Vec::new();
         let (value, request, refused) = open_with_fallback(48_000, |r, size| {
             asked.push((r, frames_of(size)));
-            Ok::<_, Error>("opened")
+            Ok::<_, OpenError>("opened")
         })
         .expect("opens");
         assert_eq!(value, "opened");
@@ -1324,7 +1391,7 @@ mod tests {
                 if asked.len() > accept_from {
                     Ok(())
                 } else {
-                    Err(Error::Device("refused".into()))
+                    Err(OpenError::smaller(Error::Device("refused".into())))
                 }
             })
             .expect("opens");
@@ -1346,7 +1413,7 @@ mod tests {
         let mut n = 0;
         let err = open_with_fallback::<()>(44_100, |_, _| {
             n += 1;
-            Err(Error::Device(format!("no {n}")))
+            Err(OpenError::smaller(Error::Device(format!("no {n}"))))
         })
         .expect_err("fails");
         assert_eq!(n, 4);
@@ -1354,11 +1421,23 @@ mod tests {
     }
 
     #[test]
+    fn a_failure_a_smaller_buffer_cannot_cure_ends_the_ladder_at_once() {
+        let mut n = 0;
+        let err = open_with_fallback::<()>(48_000, |_, _| {
+            n += 1;
+            Err(OpenError::fatal(Error::Device("the device is busy".into())))
+        })
+        .expect_err("fails");
+        assert_eq!(n, 1, "no further size is tried");
+        assert!(err.to_string().contains("busy"));
+    }
+
+    #[test]
     fn the_frames_follow_the_sample_rate() {
         let mut first = None;
         let _ = open_with_fallback(44_100, |_, size| {
             first.get_or_insert(frames_of(size));
-            Ok::<_, Error>(())
+            Ok::<_, OpenError>(())
         });
         assert_eq!(first, Some(Some(44_100)));
     }
@@ -1414,6 +1493,18 @@ mod tests {
     }
 
     #[test]
+    fn back_to_back_callbacks_after_a_stall_stay_out_of_the_period() {
+        let c = StreamCounters::default();
+        for us in [10_000, 10_000, 600_000, 20, 25, 30, 1_999, 10_000] {
+            record_gap(&c, us);
+        }
+        let g = CallbackGapStats::from_counters(&c);
+        assert_eq!(g.period_count, 3);
+        assert_eq!(g.period_min_us, 10_000);
+        assert!((g.mean_period_ms().expect("a mean") - 10.0).abs() < 1e-9);
+    }
+
+    #[test]
     fn the_gap_clock_measures_a_real_pause_between_two_callbacks() {
         let c = StreamCounters::default();
         let mut gap = CallbackGap::new();
@@ -1443,6 +1534,7 @@ mod tests {
         assert_eq!(all.period_count, 2);
     }
 
+    #[cfg(feature = "test-hooks")]
     #[test]
     fn an_injected_pause_is_taken_once() {
         let c = StreamCounters::default();

@@ -6,6 +6,9 @@
 #![allow(unsafe_code)]
 
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc;
+use std::time::Duration;
 
 use windows::Win32::Foundation::{FILETIME, HANDLE};
 use windows::Win32::Media::Audio::{
@@ -185,15 +188,33 @@ pub struct BufferGrant {
 /// `GetDevicePeriod`, and releases it without starting it. cpal does not expose the granted size.
 /// Runs on a helper thread with its own COM apartment, so it cannot disturb the caller's.
 pub fn probe_shared_capture_buffer(endpoint_id: &str, requested_hns: i64) -> Option<BufferGrant> {
+    // One probe at a time: a driver that hangs inside Initialize leaves its helper thread behind,
+    // and a second one is not started on top of it.
+    if PROBE_BUSY.swap(true, Ordering::AcqRel) {
+        return None;
+    }
     let id = endpoint_id.to_string();
-    std::thread::Builder::new()
+    let (tx, rx) = mpsc::channel();
+    let spawned = std::thread::Builder::new()
         .name("wb-buffer-probe".into())
-        .spawn(move || probe_on_this_thread(&id, requested_hns))
-        .ok()?
-        .join()
-        .ok()
-        .flatten()
+        .spawn(move || {
+            let grant = probe_on_this_thread(&id, requested_hns);
+            PROBE_BUSY.store(false, Ordering::Release);
+            let _ = tx.send(grant);
+        });
+    if spawned.is_err() {
+        PROBE_BUSY.store(false, Ordering::Release);
+        return None;
+    }
+    // A hung driver must not hold the capture thread: give up after the timeout and carry on
+    // without the granted size (the thread, if it ever returns, frees the slot itself).
+    rx.recv_timeout(PROBE_TIMEOUT).ok().flatten()
 }
+
+/// Set while a probe helper thread runs.
+static PROBE_BUSY: AtomicBool = AtomicBool::new(false);
+/// How long the capture thread waits for the probe.
+const PROBE_TIMEOUT: Duration = Duration::from_secs(2);
 
 fn probe_on_this_thread(endpoint_id: &str, requested_hns: i64) -> Option<BufferGrant> {
     // SAFETY: COM is initialised for this helper thread only and uninitialised before it ends;

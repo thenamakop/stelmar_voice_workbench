@@ -7,7 +7,7 @@
 //! into the cable and must not run while a gate does:
 //!
 //!   $env:WB_CAPTURE_STALL_TEST = "1"
-//!   cargo test -p wb-recorder --test capture_stall -- --nocapture
+//!   cargo test -p wb-recorder --features test-hooks --test capture_stall -- --nocapture
 //!
 //! Without the variable (or without the cable) the test prints why it did nothing and passes.
 //! `WB_CAPTURE_STALL_IN` and `WB_CAPTURE_STALL_OUT` change the device names ("CABLE Output" and
