@@ -408,18 +408,26 @@ if ($Gate -eq 'hashing') {
   $endM = [regex]::Match($metaText, '"closed_at"\s*:\s*"([^"]+)"')
   $recStartMs = $(if ($startM.Success) { [DateTimeOffset]::Parse($startM.Groups[1].Value).ToUnixTimeMilliseconds() } else { 0 })
   $recEndMs = $(if ($endM.Success) { [DateTimeOffset]::Parse($endM.Groups[1].Value).ToUnixTimeMilliseconds() } else { 0 })
+  $hashMsInRun = [int64]0
   foreach ($h in $hashFiles) {
-    $hashBytes += $h.Bytes
     $ov = [math]::Min($h.EndMs, $recEndMs) - [math]::Max($h.StartMs, $recStartMs)
-    if ($ov -gt 0) { $hashOverlapS += $ov / 1000.0 }
+    # Only a file that checked out and was being read while the recording ran counts.
+    if ($ov -gt 0 -and $h.Result -eq 'ok') {
+      $hashOverlapS += $ov / 1000.0
+      $hashBytes += $h.Bytes
+      $hashMsInRun += $h.TookMs
+    }
   }
   $afterReboot = ($null -ne $r.UptimeMin -and [double]$r.UptimeMin -le $RebootWindowMinutes)
-  $sameDisk = ($r.ModelsDisk -and $r.RecDisk -and $r.ModelsDisk.Letter -eq $r.RecDisk.Letter -and ($null -eq $r.ModelsDisk.Disk -or $null -eq $r.RecDisk.Disk -or $r.ModelsDisk.Disk -eq $r.RecDisk.Disk))
+  $sameDisk = $false
+  if ($r.ModelsDisk -and $r.RecDisk) {
+    if ($null -ne $r.ModelsDisk.Disk -and $null -ne $r.RecDisk.Disk) { $sameDisk = ($r.ModelsDisk.Disk -eq $r.RecDisk.Disk) }
+    else { $sameDisk = ($r.ModelsDisk.Letter -eq $r.RecDisk.Letter) }
+  }
   $hashedGB = $hashBytes / 1e9
-  $hashMs = ($hashFiles | Measure-Object TookMs -Sum).Sum
-  $hashMBs = $(if ($hashMs -gt 0) { $hashBytes / 1e6 / ($hashMs / 1000.0) } else { 0 })
+  $hashMBs = $(if ($hashMsInRun -gt 0) { $hashBytes / 1e6 / ($hashMsInRun / 1000.0) } else { 0 })
   $checks['the models folder and the recording folder are on the same drive and physical disk (otherwise hashing cannot compete with the recorder for the disk)'] = [bool]$sameDisk
-  $checks["at least 1 GB of model files was hashed in the run ($([math]::Round($hashedGB, 2)) GB at $([math]::Round($hashMBs)) MB/s while the recorder wrote)"] = ($hashedGB -ge 1.0)
+  $checks["at least 1 GB of model files was hashed while the recording ran ($([math]::Round($hashedGB, 2)) GB at $([math]::Round($hashMBs)) MB/s while the recorder wrote)"] = ($hashedGB -ge 1.0)
   $checks["model files were hashed while the recording ran: $($hashFiles.Count) files, $([math]::Round($hashBytes / 1e9, 2)) GB, $([math]::Round($hashOverlapS, 1)) s of hashing inside the recording (at least 10 s)"] = ($hashFiles.Count -ge 1 -and $hashOverlapS -ge 10 -and $recStartMs -gt 0 -and $recEndMs -gt 0)
   $checks['every hashed file was read in Windows background mode (model_hash lines say background=true, memory priority 1)'] = ($hashFiles.Count -ge 1 -and @($hashFiles | Where-Object { -not $_.Background }).Count -eq 0)
 }

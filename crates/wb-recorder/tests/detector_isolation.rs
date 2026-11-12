@@ -315,7 +315,7 @@ fn zero_gaps_before_across_and_after_a_part_boundary_are_marked_at_their_audio_t
     std::thread::sleep(Duration::from_millis(100));
     let report = rec.stop()?;
 
-    assert!(report.parts.len() >= 2, "{} parts", report.parts.len());
+    assert_eq!(report.parts.len(), 3, "40,000 frames in parts of 16,000");
     assert!(
         recorded(&dir)? == audio,
         "every sample, across the rollover"

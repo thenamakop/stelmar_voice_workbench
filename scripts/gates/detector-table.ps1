@@ -48,9 +48,11 @@ $lines += 'rule: a shared upstream break is matched when a repeated_block or zer
 $lines += ''
 $lines += 'run | gate | profile | audio min | shared breaks | matched | missed | before recording | false alarms | lead-in | repeated_block events | zero_gap events | longest detector time on one block (us) | blocks over budget | detectors switched off | audio skipped by the budget (ms) | detector coverage % | gate verdict'
 $tot = [pscustomobject]@{ Min = 0.0; Breaks = 0; Matched = 0; Missed = 0; Before = 0; False = 0; Lead = 0; Over = 0; Off = 0; Max = 0 }
+$excluded = 0
 foreach ($r in $rows) {
   $c = $r.counters
-  $lines += ('{0} | {1} | {2} | {3:n1} | {4} | {5} | {6} | {7} | {8} | {9} | {10} | {11} | {12} | {13} | {14} | {15} | {16:n2} | {17}' -f $r.run, $r.gate, $r.profile, [double]$r.audio_minutes, $r.breaks, $r.matched, $r.missed, $r.before_recording, $r.false_alarms, $r.lead_in, $c.repeated_blocks, $c.zero_gaps, $c.detector_max_block_us, $c.detector_over_budget_blocks, $c.detectors_disabled, $c.detector_skipped_ms, $(if ([double]$r.audio_ms -gt 0 -and $null -ne $c.detector_skipped_ms) { 100.0 - 100.0 * [double]$c.detector_skipped_ms / [double]$r.audio_ms } else { 100.0 }), $r.verdict)
+  $lines += ('{0} | {1} | {2} | {3:n1} | {4} | {5} | {6} | {7} | {8} | {9} | {10} | {11} | {12} | {13} | {14} | {15} | {16} | {17}' -f $r.run, $r.gate, $r.profile, [double]$r.audio_minutes, $r.breaks, $r.matched, $r.missed, $r.before_recording, $r.false_alarms, $r.lead_in, $c.repeated_blocks, $c.zero_gaps, $c.detector_max_block_us, $c.detector_over_budget_blocks, $c.detectors_disabled, $c.detector_skipped_ms, $(if ($null -ne $r.audio_ms -and [double]$r.audio_ms -gt 0 -and $null -ne $c.detector_skipped_ms) { '{0:n2}' -f (100.0 - 100.0 * [double]$c.detector_skipped_ms / [double]$r.audio_ms) } else { 'n/a' }), $(if ($r.verdict) { $r.verdict } else { 'n/a' }))
+  if ($r.verdict -eq 'INVALID') { $excluded++; continue }
   $tot.Min += [double]$r.audio_minutes; $tot.Breaks += [int]$r.breaks; $tot.Matched += [int]$r.matched; $tot.Missed += [int]$r.missed
   $tot.Before += [int]$r.before_recording; $tot.False += [int]$r.false_alarms; $tot.Lead += [int]$r.lead_in
   $tot.Over += [int]$c.detector_over_budget_blocks; $tot.Off += [int]$c.detectors_disabled
@@ -58,6 +60,7 @@ foreach ($r in $rows) {
 }
 $lines += ('total | {0} runs | | {1:n1} | {2} | {3} | {4} | {5} | {6} | {7} | | | {8} | {9} | {10}' -f $rows.Count, $tot.Min, $tot.Breaks, $tot.Matched, $tot.Missed, $tot.Before, $tot.False, $tot.Lead, $tot.Max, $tot.Over, $tot.Off)
 $lines += ''
+if ($excluded -gt 0) { $lines += "$excluded INVALID run(s) are listed above and left out of the totals" }
 $lines += $(if ($rows.Count -eq 0) { 'no detector-check.json found: nothing to report' } else { "false alarms outside lead-in: $($tot.False); misses: $($tot.Missed); detectors switched off: $($tot.Off); blocks over the time budget: $($tot.Over)" })
 Write-WbEvidence -Path $OutFile -Lines $lines -MachineLabel $Machine
 Write-Host "DONE: $OutFile ($($rows.Count) runs)"
