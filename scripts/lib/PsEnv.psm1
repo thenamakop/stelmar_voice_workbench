@@ -55,6 +55,38 @@ function Invoke-WbWindowsPowerShell {
   $out
 }
 
+# Quotes one argument for a Windows command line (Start-Process joins its list with spaces and adds no quotes).
+function ConvertTo-WbCommandLineArg {
+  param([string]$Value)
+  if ($Value -eq '') { return '""' }
+  if ($Value -notmatch '[\s"]') { return $Value }
+  '"' + ($Value -replace '(\\*)"', '$1$1\"' -replace '(\\+)$', '$1$1') + '"'
+}
+
+# Like Invoke-WbWindowsPowerShell, but the child's output goes to FILES, not to a pipe. A child that
+# leaves orphan processes behind (a player or a capture that outlives a crashed gate) holds a pipe's
+# write end open, so `& powershell ... | ForEach-Object` never returns; with files nothing is held, and
+# this waits for the child process only (not for its descendants). Returns ExitCode, Output (stdout
+# lines) and Error (stderr lines); the files are -OutFile and -OutFile + '.err'.
+function Invoke-WbWindowsPowerShellToFile {
+  param([Parameter(Mandatory = $true)] [string[]]$ArgumentList, [Parameter(Mandatory = $true)] [string]$OutFile)
+  $exe = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+  $errFile = $OutFile + '.err'
+  $saved = $env:PSModulePath
+  try {
+    $env:PSModulePath = Get-WbWindowsPowerShellModulePath
+    $line = ($ArgumentList | ForEach-Object { ConvertTo-WbCommandLineArg ([string]$_) }) -join ' '
+    $p = Start-Process -FilePath $exe -ArgumentList $line -PassThru -WindowStyle Hidden -RedirectStandardOutput $OutFile -RedirectStandardError $errFile
+    $null = $p.Handle   # keep the handle, or ExitCode can be empty after the process ends
+    $p.WaitForExit()
+    $code = $p.ExitCode
+  } finally {
+    $env:PSModulePath = $saved
+  }
+  $o = $(if (Test-Path -LiteralPath $OutFile) { @(Get-Content -LiteralPath $OutFile) } else { @() })
+  $e = $(if (Test-Path -LiteralPath $errFile) { @(Get-Content -LiteralPath $errFile) } else { @() })
+  [pscustomobject]@{ ExitCode = $code; Output = @($o | ForEach-Object { "$_" }); Error = @($e | ForEach-Object { "$_" }) }
+}
 # With powershell -File, '-Gates a,b,c' arrives as the single string 'a,b,c'. Splits every item on
 # commas and white space, so the list works with -File, -Command and an array alike.
 function Split-WbList {
@@ -62,4 +94,4 @@ function Split-WbList {
   @($Items | ForEach-Object { "$_" -split '[,\s]+' } | Where-Object { $_ })
 }
 
-Export-ModuleMember -Function Get-WbWindowsPowerShellModulePath, Set-WbCleanPSModulePath, Set-WbInvariantCulture, Invoke-WbWindowsPowerShell, Split-WbList
+Export-ModuleMember -Function Get-WbWindowsPowerShellModulePath, Set-WbCleanPSModulePath, Set-WbInvariantCulture, Invoke-WbWindowsPowerShell, Invoke-WbWindowsPowerShellToFile, ConvertTo-WbCommandLineArg, Split-WbList

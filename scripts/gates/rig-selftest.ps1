@@ -42,6 +42,9 @@ try {
   Write-Host 'VB-CABLE driver devices:'
   foreach ($d in @(Get-WbCableDriverDevices)) { Write-Host ('  {0} [{1}]' -f $d.InstanceId, $d.Status) }
 
+  # No audio-enhancement program (Nahimic and the like) may be running in the audio path.
+  Assert-WbNoResidentAudio
+  Write-Host 'audio-enhancement programs (Nahimic, A-Volute, Waves, Dolby, Sonic Studio and the like): none running'
   $rig = Resolve-WbCableRig -Testbench $Testbench -PlayDevice $PlayDevice -CaptureDevice $CaptureDevice -Endpoints $endpoints
   Write-Host ''
   Write-Host "cable instance: $($rig.Instance)"
@@ -50,6 +53,13 @@ try {
   foreach ($n in @($rig.Notes)) { Write-Host "note: $n" }
   $roles = @(Assert-WbCableNotDefault -Testbench $Testbench -Rig $rig -Allow:$AllowCableDefault)
   Write-Host $(if ($roles.Count) { "default playback device: THE CABLE for $($roles -join ', ') (allowed by -AllowCableDefault)" } else { 'default playback device: not the cable' })
+
+  # Every audio session on the cable's playback endpoints now, by program. Anything playing refuses.
+  $sessions = @(Get-WbCableSessions -Testbench $Testbench -Names $rig.RenderNames)
+  if ($sessions.Count -eq 0) { Write-Host 'audio sessions on the cable now: none' }
+  foreach ($s in $sessions) { Write-Host ('audio session on the cable: {0}, {1}' -f (Format-WbCableSession $s), $(if ($s.Active) { 'PLAYING' } else { 'silent' })) }
+  $playing = @($sessions | Where-Object { $_.Active })
+  if ($playing.Count -gt 0) { throw ('RIG REFUSED: another program is playing into the cable: ' + ((@($playing) | ForEach-Object { Format-WbCableSession $_ }) -join '; ') + '. Stop it so only the gate player feeds the cable.') }
 
   if ($ListOnly) { Write-Host 'RIG OK (listing only; no signal was played)'; exit 0 }
   $t = Invoke-WbRigSelfTest -Rig $rig -Testbench $Testbench -WorkRoot $WorkRoot

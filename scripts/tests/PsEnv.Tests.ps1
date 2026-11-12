@@ -90,5 +90,31 @@ try {
 $rg = Get-Content -LiteralPath (Join-Path $here '..\gates\run-phase1-gates.ps1') -Raw
 Check 'run-phase1-gates.ps1 splits the gate list with Split-WbList' ($rg -match 'Split-WbList \$Gates')
 
+# Invoke-WbWindowsPowerShellToFile: the child's output goes to files, so an orphan the child leaves
+# running cannot hold a pipe open and hang the caller (the 12 Nov 18:10 hashing gate).
+Check 'ConvertTo-WbCommandLineArg leaves a plain word alone' ((ConvertTo-WbCommandLineArg 'abc') -eq 'abc')
+Check 'ConvertTo-WbCommandLineArg quotes a path with spaces' ((ConvertTo-WbCommandLineArg 'C:\a b\c.ps1') -eq '"C:\a b\c.ps1"')
+Check 'ConvertTo-WbCommandLineArg quotes an empty string' ((ConvertTo-WbCommandLineArg '') -eq '""')
+Check 'ConvertTo-WbCommandLineArg escapes an inner quote' ((ConvertTo-WbCommandLineArg 'say "hi"') -eq '"say \"hi\""')
+$tfOut = Join-Path ([IO.Path]::GetTempPath()) ('wb-tofile-' + [guid]::NewGuid().ToString('N') + '.out')
+$orphanPid = $null
+try {
+  $r1 = Invoke-WbWindowsPowerShellToFile -ArgumentList @('-NoProfile', '-Command', '[Console]::Out.WriteLine("hello out"); [Console]::Error.WriteLine("hello err"); exit 5') -OutFile $tfOut
+  Check 'the helper returns the exit code of the child' ($r1.ExitCode -eq 5)
+  Check 'the helper returns stdout and stderr as text lines' (($r1.Output -join '|') -match 'hello out' -and ($r1.Error -join '|') -match 'hello err')
+  Check 'an argument with spaces reaches the child as one argument' ((Invoke-WbWindowsPowerShellToFile -ArgumentList @('-NoProfile', '-Command', '[Console]::Out.WriteLine(''a   b'')') -OutFile $tfOut).Output[-1] -eq 'a   b')
+  # A child that starts a long-running grandchild and exits at once: the caller must come back at once.
+  $childCmd = '$p = Start-Process -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList "-NoProfile","-Command","Start-Sleep -Seconds 120" -PassThru -WindowStyle Hidden; [Console]::Out.WriteLine("orphan=" + $p.Id)'
+  $sw = [Diagnostics.Stopwatch]::StartNew()
+  $r2 = Invoke-WbWindowsPowerShellToFile -ArgumentList @('-NoProfile', '-Command', $childCmd) -OutFile $tfOut
+  $sw.Stop()
+  $m = [regex]::Match(($r2.Output -join ' '), 'orphan=(\d+)')
+  if ($m.Success) { $orphanPid = [int]$m.Groups[1].Value }
+  Check 'a child that leaves an orphan behind returns at once (no pipe is held)' ($sw.Elapsed.TotalSeconds -lt 30 -and $r2.ExitCode -eq 0 -and $m.Success)
+} finally {
+  if ($orphanPid) { Stop-Process -Id $orphanPid -Force -ErrorAction SilentlyContinue }
+  Remove-Item -LiteralPath $tfOut, ($tfOut + '.err') -ErrorAction SilentlyContinue
+}
+
 if ($fails) { Write-Host "$fails failed"; exit 1 }
 Write-Host 'PsEnv tests passed'

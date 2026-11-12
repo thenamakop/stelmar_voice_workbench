@@ -400,26 +400,175 @@ function Get-WbCableRigLines {
   $lines
 }
 
-# Sessions from other programs that play into the cable now (they would mix into the test signal),
-# on every playback endpoint of the cable, other than the process ids in -Allow.
-function Get-WbCableIntruders {
+# ---- Who plays into the cable --------------------------------------------------------------------
+
+# Parses the JSON of `wb-testbench sessions` into a flat list of { Pid, Active, Endpoint }.
+# In Windows PowerShell 5.1 a JSON array arrives from ConvertFrom-Json as ONE object, so
+# `@($json | ConvertFrom-Json)` has one element and `[int]$s.pid` of it threw "Cannot convert
+# System.Object[] to Int32" as soon as two sessions were listed (the player's and the always-present,
+# silent "System Sounds" entry, pid 0). That crashed the 12 Nov 18:10 hashing gate. Every element is
+# unrolled here, and a pid that is not a number is 0.
+function ConvertFrom-WbSessionJson {
   [CmdletBinding()]
-  param([Parameter(Mandatory = $true)] [string]$Testbench, [Parameter(Mandatory = $true)] [string[]]$Names, [int[]]$Allow = @())
-  $seen = @{}
-  $out = New-Object System.Collections.Generic.List[string]
-  foreach ($n in $Names) {
-    $res = Invoke-WbNative -FilePath $Testbench -ArgumentList @('sessions', '--device', $n)
-    if ($res.ExitCode -ne 0 -or $res.Output.Count -eq 0) { continue }
-    foreach ($s in @(($res.Output -join "`n") | ConvertFrom-Json)) {
-      if (-not $s.active -or $Allow -contains [int]$s.pid) { continue }
-      $key = "$($s.pid)|$($s.endpoint)"
-      if ($seen.ContainsKey($key)) { continue }
-      $seen[$key] = $true
-      $name = (Get-Process -Id $s.pid -ErrorAction SilentlyContinue).ProcessName
-      $out.Add("$name (pid $($s.pid)) on $($s.endpoint)")
+  param([string]$Text)
+  if (-not $Text -or -not $Text.Trim()) { return @() }
+  $parsed = $Text | ConvertFrom-Json
+  $out = New-Object System.Collections.Generic.List[object]
+  foreach ($item in @($parsed)) {
+    foreach ($s in @($item)) {
+      if ($null -eq $s) { continue }
+      $procId = 0
+      [void][int]::TryParse([string]@($s.pid)[0], [ref]$procId)
+      $out.Add([pscustomobject]@{ Pid = $procId; Active = [bool]@($s.active)[0]; Endpoint = [string]@($s.endpoint)[0] })
     }
   }
   @($out.ToArray())
+}
+
+# The program behind a process id: name and path (pid 0 is Windows's own "System Sounds" session).
+function Get-WbProcessLabel {
+  [CmdletBinding()]
+  param([int]$ProcessId)
+  if ($ProcessId -eq 0) { return [pscustomobject]@{ Name = 'System Sounds (Windows)'; Path = '' } }
+  $name = '(exited)'
+  $path = ''
+  try { $p = Get-Process -Id $ProcessId -ErrorAction Stop; $name = $p.ProcessName; try { $path = [string]$p.Path } catch { } } catch { }
+  if (-not $path) {
+    try {
+      $w = Get-CimInstance Win32_Process -Filter "ProcessId=$ProcessId" -ErrorAction Stop
+      if ($w) { $path = [string]$w.ExecutablePath; if ($name -eq '(exited)') { $name = [string]$w.Name } }
+    } catch { }
+  }
+  [pscustomobject]@{ Name = $name; Path = $path }
+}
+
+# Every audio session on the cable's playback endpoints, active or not, with its program.
+function Get-WbCableSessions {
+  [CmdletBinding()]
+  param([Parameter(Mandatory = $true)] [string]$Testbench, [Parameter(Mandatory = $true)] [string[]]$Names)
+  $out = New-Object System.Collections.Generic.List[object]
+  foreach ($n in $Names) {
+    $res = Invoke-WbNative -FilePath $Testbench -ArgumentList @('sessions', '--device', $n)
+    if ($res.ExitCode -ne 0) { throw "wb-testbench sessions failed (exit $($res.ExitCode)) for '$n': $(@($res.Error) -join ' ')" }
+    if ($res.Output.Count -eq 0) { continue }
+    foreach ($s in @(ConvertFrom-WbSessionJson -Text ($res.Output -join "`n"))) {
+      $label = Get-WbProcessLabel -ProcessId $s.Pid
+      $out.Add([pscustomobject]@{ Pid = $s.Pid; Active = $s.Active; Endpoint = $s.Endpoint; Process = $label.Name; Path = $label.Path })
+    }
+  }
+  @($out.ToArray())
+}
+
+function Format-WbCableSession {
+  param($S)
+  '{0} (pid {1}{2}) on {3}' -f $S.Process, $S.Pid, $(if ($S.Path) { ", $($S.Path)" } else { '' }), $S.Endpoint
+}
+
+# Sessions from other programs that play into the cable now (they would mix into the test signal),
+# on every playback endpoint of the cable, other than the process ids in -Allow. Used before a gate
+# starts; the gate's own poll uses Get-WbCablePoll.
+function Get-WbCableIntruders {
+  [CmdletBinding()]
+  param([Parameter(Mandatory = $true)] [string]$Testbench, [Parameter(Mandatory = $true)] [string[]]$Names, [int[]]$Allow = @())
+  try {
+    @(Get-WbCableSessions -Testbench $Testbench -Names $Names | Where-Object { $_.Active -and $Allow -notcontains $_.Pid } | ForEach-Object { Format-WbCableSession $_ })
+  } catch { @() }
+}
+
+# One look at the cable during a gate. Records every session it finds, by program name and path, in
+# -Seen (a hashtable the caller keeps for the evidence), and returns those that are playing and are
+# not the player (-Allow): Intruders (strings). It never throws: a failed look is returned in Error,
+# so a poll problem can never crash a gate; the gate fails on intruders instead.
+function Get-WbCablePoll {
+  [CmdletBinding()]
+  param([Parameter(Mandatory = $true)] [string]$Testbench, [Parameter(Mandatory = $true)] [string[]]$Names, [int[]]$Allow = @(), [Parameter(Mandatory = $true)] [hashtable]$Seen)
+  $intruders = New-Object System.Collections.Generic.List[string]
+  $err = $null
+  try {
+    $at = Get-Date -Format 'HH:mm:ss'
+    foreach ($s in @(Get-WbCableSessions -Testbench $Testbench -Names $Names)) {
+      $key = "$($s.Pid)|$($s.Endpoint)"
+      if (-not $Seen.ContainsKey($key)) {
+        $Seen[$key] = [pscustomobject]@{ Pid = $s.Pid; Process = $s.Process; Path = $s.Path; Endpoint = $s.Endpoint; FirstSeen = $at; LastSeen = $at; Polls = 0; ActivePolls = 0; IsPlayer = ($Allow -contains $s.Pid) }
+      }
+      $rec = $Seen[$key]
+      $rec.LastSeen = $at
+      $rec.Polls++
+      if ($s.Active) { $rec.ActivePolls++ }
+      if ($s.Active -and $Allow -notcontains $s.Pid) { $intruders.Add((Format-WbCableSession $s)) }
+    }
+  } catch { $err = $_.Exception.Message }
+  [pscustomobject]@{ Intruders = @($intruders.ToArray()); Error = $err }
+}
+
+# Evidence lines for the sessions a gate's poll found.
+function Get-WbCableSeenLines {
+  [CmdletBinding()]
+  param($Seen, [string]$PollError = '')
+  if ($null -eq $Seen) { return @('  cable sessions: not recorded for this run') }
+  $lines = @()
+  $recs = @($Seen.Values | Sort-Object FirstSeen, Pid)
+  if ($recs.Count -eq 0) { $lines += '  cable sessions seen by the 1-second poll: none' }
+  foreach ($r in $recs) {
+    $kind = $(if ($r.IsPlayer) { 'the gate player' } elseif ($r.Pid -eq 0 -and $r.ActivePolls -eq 0) { 'Windows System Sounds entry, silent' } elseif ($r.ActivePolls -gt 0) { 'OTHER PROGRAM PLAYING INTO THE CABLE (the gate fails)' } else { 'other program, silent' })
+    $lines += ("  cable session: {0} (pid {1}{2}) on '{3}': playing in {4} of {5} polls, first seen {6}, last {7}; {8}" -f $r.Process, $r.Pid, $(if ($r.Path) { ", $($r.Path)" } else { '' }), $r.Endpoint, $r.ActivePolls, $r.Polls, $r.FirstSeen, $r.LastSeen, $kind)
+  }
+  if ($PollError) { $lines += "  cable poll problem (the gate did not stop for it): $PollError" }
+  $lines
+}
+
+# ---- Cleanup after a gate that threw -------------------------------------------------------------
+
+# Used in the `finally` of a gate: whatever the body left running (the app's job, the player, the
+# reference capture, the host stress) is asked to stop with its stop files, given -GraceSeconds, and
+# then ended with its whole process tree. A crash must leave no orphan, because an orphan keeps the
+# runner's output pipe open and hangs the whole sequence (12 Nov 18:10). Returns what it did, as text.
+function Stop-WbRigLeftovers {
+  [CmdletBinding()]
+  param($Process = @(), [string[]]$StopFile = @(), [int]$GraceSeconds = 45)
+  $did = New-Object System.Collections.Generic.List[string]
+  $alive = @(@($Process) | Where-Object { $null -ne $_ } | Where-Object { try { -not $_.HasExited } catch { $false } })
+  if ($alive.Count -eq 0) { return @() }
+  foreach ($f in $StopFile) { if ($f) { try { Set-Content -LiteralPath $f -Value 'stop' -ErrorAction Stop } catch { } } }
+  $until = (Get-Date).AddSeconds($GraceSeconds)
+  foreach ($p in $alive) {
+    $left = [int][math]::Max(0, ($until - (Get-Date)).TotalMilliseconds)
+    $exited = $false
+    try { $exited = $p.WaitForExit($left) } catch { $exited = $true }
+    if ($exited) { $did.Add("process $($p.Id) stopped on its stop file"); continue }
+    $id = $p.Id
+    $null = Invoke-WbNative -FilePath 'taskkill.exe' -ArgumentList @('/F', '/T', '/PID', "$id")
+    $did.Add("process $id did not stop within $GraceSeconds s: ended with its process tree")
+  }
+  @($did.ToArray())
+}
+
+# ---- Resident audio programs ---------------------------------------------------------------------
+
+# Audio-enhancement programs that sit in the audio path (Nahimic, Waves, Dolby and the like). They are
+# not known to have touched the cable, but they can add sound or glitches between a program and the
+# endpoint, so a gate does not start while one is running. -Processes / -Services are for tests.
+function Get-WbResidentAudioPrograms {
+  [CmdletBinding()]
+  param($Processes = $null, $Services = $null)
+  if ($null -eq $Processes) { $Processes = @(Get-Process -ErrorAction SilentlyContinue | Select-Object ProcessName, Id, Path) }
+  if ($null -eq $Services) { $Services = @(Get-Service -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Running' } | Select-Object Name, DisplayName) }
+  $procPattern = '^(Nahimic|A-Volute|AVolute|WavesSvc|WavesSysSvc|MaxxAudio|DolbyDAX|DTSAudio|SonicStudio|SonicSuite|Voicemeeter|EqualizerAPO|SoundBlaster|CreativeAudio)'
+  $svcPattern = '^(Nahimic|A-Volute|AVolute|WavesSysSvc|DolbyDAX|SonicStudio)'
+  $found = New-Object System.Collections.Generic.List[string]
+  foreach ($p in @($Processes)) { if ($p.ProcessName -match $procPattern) { $found.Add("process $($p.ProcessName) (pid $($p.Id)$(if ($p.Path) { ", $($p.Path)" } else { '' }))") } }
+  foreach ($s in @($Services)) { if ($s.Name -match $svcPattern -or $s.DisplayName -match '^(Nahimic|A-Volute|Waves|Dolby|Sonic Studio)') { $found.Add("service $($s.Name) ($($s.DisplayName)) is running") } }
+  @($found.ToArray())
+}
+
+function Assert-WbNoResidentAudio {
+  [CmdletBinding()]
+  param($Found = $null)
+  if ($null -eq $Found) { $Found = Get-WbResidentAudioPrograms }
+  $Found = @($Found)
+  if ($Found.Count -gt 0) {
+    Stop-WbRig ("audio-enhancement programs are running: {0}. They sit in the audio path and can add sound or glitches to the test signal. Close the tray app (Nahimic: right-click its tray icon and exit) and stop its service (Services: 'Nahimic service' / NahimicService, set to Manual or Disabled; its scheduled tasks NahimicTask32 and NahimicTask64 can start it again), then run again." -f ($Found -join '; '))
+  }
 }
 
 # Windows roles whose default playback device is the cable; refuses unless -Allow. While the cable
@@ -441,4 +590,4 @@ function Assert-WbCableNotDefault {
   $roles
 }
 
-Export-ModuleMember -Function Assert-WbCableNotDefault, Get-WbCableEndpoints, Get-WbCableDriverDevices, Format-WbCableEndpointLine, Assert-WbCablePair, Select-WbCableEndpoint, Resolve-WbCableRig, Get-WbWavLevel, Get-WbRigToneVerdict, Invoke-WbRigSelfTest, Get-WbCableRigLines, Get-WbCableIntruders
+Export-ModuleMember -Function Assert-WbCableNotDefault, Get-WbCableEndpoints, Get-WbCableDriverDevices, Format-WbCableEndpointLine, Assert-WbCablePair, Select-WbCableEndpoint, Resolve-WbCableRig, Get-WbWavLevel, Get-WbRigToneVerdict, Invoke-WbRigSelfTest, Get-WbCableRigLines, ConvertFrom-WbSessionJson, Get-WbProcessLabel, Get-WbCableSessions, Format-WbCableSession, Get-WbCableIntruders, Get-WbCablePoll, Get-WbCableSeenLines, Stop-WbRigLeftovers, Get-WbResidentAudioPrograms, Assert-WbNoResidentAudio

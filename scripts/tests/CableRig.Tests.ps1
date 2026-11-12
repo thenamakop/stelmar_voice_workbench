@@ -137,6 +137,100 @@ try {
   Check 'a level past the end of the file is unreadable, not zero' ($null -eq (Get-WbWavLevel -Path $wav -StartMs 5000 -LengthMs 500))
 } finally { Remove-Item -LiteralPath $wav -ErrorAction SilentlyContinue }
 
+# ---- Sessions on the cable: the 12 Nov 18:10 crash --------------------------------------------------
+# Windows PowerShell 5.1 returns a JSON array from ConvertFrom-Json as ONE object. With two sessions
+# (the player and the always-present silent System Sounds entry, pid 0) `[int]$s.pid` threw and the
+# hashing gate crashed. The parser must give one entry per session.
+$two = '[{"endpoint":"Speakers (3- VB-Audio Virtual Cable)","pid":0,"active":false},{"endpoint":"Speakers (3- VB-Audio Virtual Cable)","pid":4242,"active":true}]'
+$one = '[{"endpoint":"Speakers (3- VB-Audio Virtual Cable)","pid":4242,"active":true}]'
+$single = '{"endpoint":"Speakers (3- VB-Audio Virtual Cable)","pid":7,"active":false}'
+$ps2 = @(ConvertFrom-WbSessionJson -Text $two)
+Check 'two sessions in the JSON give two entries (the 12 Nov crash)' ($ps2.Count -eq 2)
+Check 'the pids are numbers, 0 and 4242' ($ps2[0].Pid -eq 0 -and $ps2[1].Pid -eq 4242 -and $ps2[0].Pid -is [int])
+Check 'active flags are kept per session' (-not $ps2[0].Active -and $ps2[1].Active)
+Check 'one session in an array gives one entry' (@(ConvertFrom-WbSessionJson -Text $one).Count -eq 1)
+Check 'a bare object (not an array) gives one entry' (@(ConvertFrom-WbSessionJson -Text $single).Count -eq 1)
+Check 'an empty array gives no entries' (@(ConvertFrom-WbSessionJson -Text '[]').Count -eq 0)
+Check 'empty text gives no entries' (@(ConvertFrom-WbSessionJson -Text '').Count -eq 0)
+Check 'a pid that is not a number becomes 0, not an error' ((@(ConvertFrom-WbSessionJson -Text '[{"endpoint":"x","pid":"n/a","active":true}]'))[0].Pid -eq 0)
+$threw = $false; try { $null = ConvertFrom-WbSessionJson -Text 'this is not json' } catch { $threw = $true }
+Check 'text that is not JSON throws in the parser (the poll catches it)' $threw
+Check 'System Sounds (pid 0) is labelled by name' ((Get-WbProcessLabel -ProcessId 0).Name -match 'System Sounds')
+Check 'a process id that does not exist is labelled, not an error' ((Get-WbProcessLabel -ProcessId 2147483000).Name -eq '(exited)')
+Check 'this very process is labelled with its name' ((Get-WbProcessLabel -ProcessId $PID).Name -match 'powershell')
+
+# A fake wb-testbench: prints the JSON of a session list for `sessions`. Stands in for the real one so
+# the poll is tested with real parsing and no audio.
+$fakeDir = Join-Path ([IO.Path]::GetTempPath()) ('wb-fake-tb-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $fakeDir | Out-Null
+try {
+  $jsonFile = Join-Path $fakeDir 'sessions.json'
+  $fake = Join-Path $fakeDir 'fake-testbench.cmd'
+  Set-Content -LiteralPath $fake -Encoding ascii -Value @('@echo off', ('type "' + $jsonFile + '"'), 'exit /b 0')
+  Set-Content -LiteralPath $jsonFile -Encoding ascii -Value $two
+  $names = @('Speakers (3- VB-Audio Virtual Cable)')
+  $seen = @{}
+  $poll = Get-WbCablePoll -Testbench $fake -Names $names -Allow @(4242) -Seen $seen
+  Check 'poll with the player and System Sounds: no intruder, no error' (@($poll.Intruders).Count -eq 0 -and -not $poll.Error)
+  Check 'poll records both sessions by name' ($seen.Count -eq 2)
+  Check 'the player session is marked as the player, System Sounds is not' ($seen['4242|Speakers (3- VB-Audio Virtual Cable)'].IsPlayer -and -not $seen['0|Speakers (3- VB-Audio Virtual Cable)'].IsPlayer)
+  $lines = @(Get-WbCableSeenLines -Seen $seen)
+  Check 'evidence lines name System Sounds as silent and the player as the gate player' (($lines -join "`n") -match 'System Sounds' -and ($lines -join "`n") -match 'the gate player' -and ($lines -join "`n") -match 'silent')
+
+  # Another program playing into the cable is found, named, and is a result, not a crash.
+  Set-Content -LiteralPath $jsonFile -Encoding ascii -Value ('[{"endpoint":"Speakers (3- VB-Audio Virtual Cable)","pid":0,"active":false},{"endpoint":"Speakers (3- VB-Audio Virtual Cable)","pid":4242,"active":true},{"endpoint":"Speakers (3- VB-Audio Virtual Cable)","pid":' + $PID + ',"active":true}]')
+  $seen2 = @{}
+  $poll2 = Get-WbCablePoll -Testbench $fake -Names $names -Allow @(4242) -Seen $seen2
+  Check 'another program playing into the cable is an intruder, named with its pid' (@($poll2.Intruders).Count -eq 1 -and $poll2.Intruders[0] -match "pid $PID")
+  Check 'the intruder line carries the program name' ($poll2.Intruders[0] -match 'powershell')
+  Check 'the evidence says OTHER PROGRAM PLAYING INTO THE CABLE' ((@(Get-WbCableSeenLines -Seen $seen2) -join "`n") -match 'OTHER PROGRAM PLAYING INTO THE CABLE')
+  Check 'Get-WbCableIntruders (before the start) finds the same program' (@(Get-WbCableIntruders -Testbench $fake -Names $names -Allow @(4242)).Count -eq 1)
+  # An active System Sounds entry (pid 0) is not the player either.
+  Set-Content -LiteralPath $jsonFile -Encoding ascii -Value '[{"endpoint":"Speakers (3- VB-Audio Virtual Cable)","pid":0,"active":true},{"endpoint":"Speakers (3- VB-Audio Virtual Cable)","pid":4242,"active":true}]'
+  Check 'an active System Sounds session is an intruder' (@((Get-WbCablePoll -Testbench $fake -Names $names -Allow @(4242) -Seen @{}).Intruders).Count -eq 1)
+
+  # A parse problem or a failing testbench is reported in Error; the poll never throws.
+  Set-Content -LiteralPath $jsonFile -Encoding ascii -Value 'this is not json'
+  $bad = $null; $badThrew = $false
+  try { $bad = Get-WbCablePoll -Testbench $fake -Names $names -Allow @(4242) -Seen @{} } catch { $badThrew = $true }
+  Check 'unreadable testbench output: the poll does not throw' (-not $badThrew)
+  Check 'unreadable testbench output: the problem is in Error, no intruders' ($bad -and $bad.Error -and @($bad.Intruders).Count -eq 0)
+  $gone = $null; $goneThrew = $false
+  try { $gone = Get-WbCablePoll -Testbench (Join-Path $fakeDir 'nothing-here.exe') -Names $names -Allow @() -Seen @{} } catch { $goneThrew = $true }
+  Check 'a testbench that cannot start: the poll does not throw' ((-not $goneThrew) -and $gone -and $gone.Error)
+  Check 'the pre-start intruder check does not throw either' (@(Get-WbCableIntruders -Testbench (Join-Path $fakeDir 'nothing-here.exe') -Names $names).Count -eq 0)
+  $evErr = @(Get-WbCableSeenLines -Seen @{} -PollError 'boom') -join "`n"
+  Check 'a poll problem is written to the evidence' ($evErr -match 'cable poll problem' -and $evErr -match 'boom')
+} finally { Remove-Item -LiteralPath $fakeDir -Recurse -Force -ErrorAction SilentlyContinue }
+
+# ---- Resident audio programs (Nahimic and the like) --------------------------------------------------
+$procNahimic = @([pscustomobject]@{ ProcessName = 'NahimicSvc64'; Id = 1234; Path = 'C:\Program Files\Nahimic\NahimicSvc64.exe' })
+$procFine = @([pscustomobject]@{ ProcessName = 'chrome'; Id = 1; Path = 'C:\x\chrome.exe' }, [pscustomobject]@{ ProcessName = 'RtkAudUService64'; Id = 2; Path = 'C:\x\rtk.exe' })
+Check 'a running Nahimic process is found' (@(Get-WbResidentAudioPrograms -Processes $procNahimic -Services @()).Count -eq 1)
+Check 'the finding names the process and its path' ((@(Get-WbResidentAudioPrograms -Processes $procNahimic -Services @()))[0] -match 'NahimicSvc64 \(pid 1234, C:\\Program Files\\Nahimic')
+Check 'a running Nahimic service is found' (@(Get-WbResidentAudioPrograms -Processes @() -Services @([pscustomobject]@{ Name = 'NahimicService'; DisplayName = 'Nahimic service' })).Count -eq 1)
+Check 'a browser and the Realtek helper are not resident audio programs' (@(Get-WbResidentAudioPrograms -Processes $procFine -Services @()).Count -eq 0)
+Check 'A-Volute, Waves and Dolby are found too' (@(Get-WbResidentAudioPrograms -Processes @([pscustomobject]@{ ProcessName = 'AVolute'; Id = 3; Path = '' }, [pscustomobject]@{ ProcessName = 'WavesSvc64'; Id = 4; Path = '' }, [pscustomobject]@{ ProcessName = 'DolbyDAXAPI'; Id = 5; Path = '' }) -Services @()).Count -eq 3)
+Check 'with one running the rig refuses, naming it and what to close' (Refuses { Assert-WbNoResidentAudio -Found @('process NahimicSvc64 (pid 1234)') } @('NahimicSvc64', 'tray', 'NahimicService', 'NahimicTask64'))
+$noThrow = $true; try { Assert-WbNoResidentAudio -Found @() } catch { $noThrow = $false }
+Check 'with none running the rig goes on' $noThrow
+
+# ---- Cleanup after a gate that threw ----------------------------------------------------------------
+$stopF = Join-Path ([IO.Path]::GetTempPath()) ('wb-stop-' + [guid]::NewGuid().ToString('N'))
+$psExe = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+$p1 = Start-Process -FilePath $psExe -ArgumentList @('-NoProfile', '-Command', "while (-not (Test-Path '$stopF')) { Start-Sleep -Milliseconds 200 }") -PassThru -WindowStyle Hidden
+$p2 = Start-Process -FilePath $psExe -ArgumentList @('-NoProfile', '-Command', 'Start-Sleep -Seconds 600') -PassThru -WindowStyle Hidden
+try {
+  $null = $p1.Handle; $null = $p2.Handle
+  $did = @(Stop-WbRigLeftovers -Process @($p1, $p2, $null) -StopFile @($stopF) -GraceSeconds 3)
+  Check 'a process that watches its stop file is stopped by it' ($p1.HasExited -and ($did -join ' ') -match "process $($p1.Id) stopped on its stop file")
+  Check 'a process that ignores the stop file is ended after the grace time' ($p2.HasExited -and ($did -join ' ') -match "process $($p2.Id) did not stop")
+  Check 'nothing to stop: nothing done, no error' (@(Stop-WbRigLeftovers -Process @($p1, $p2, $null) -StopFile @($stopF) -GraceSeconds 1).Count -eq 0)
+} finally {
+  foreach ($p in @($p1, $p2)) { try { if (-not $p.HasExited) { $p.Kill() } } catch { } }
+  Remove-Item -LiteralPath $stopF -ErrorAction SilentlyContinue
+}
+
 # ---- The gates use it -------------------------------------------------------------------------------
 foreach ($name in 'recorder-gate.ps1', 'kill-gate.ps1') {
   $t = Get-Content -LiteralPath (Join-Path $here "..\gates\$name") -Raw
@@ -149,6 +243,20 @@ foreach ($name in 'recorder-gate.ps1', 'kill-gate.ps1') {
 $seq = Get-Content -LiteralPath (Join-Path $here '..\gates\run-phase1-gates.ps1') -Raw
 Check 'run-phase1-gates.ps1 checks the rig once before the first gate' ($seq -match 'rig-selftest\.ps1')
 Check 'run-phase1-gates.ps1 stops the sequence on a refused rig' ($seq -match 'RIG REFUSED\|RIG SELF-TEST FAILED')
+
+foreach ($name in 'recorder-gate.ps1', 'kill-gate.ps1') {
+  $g = Get-Content -LiteralPath (Join-Path $here "..\gates\$name") -Raw
+  Check "$name cleans up the app, the player and the reference capture in a finally block" ($g -match 'finally \{' -and $g -match 'Stop-WbRigLeftovers')
+  Check "$name polls the cable with Get-WbCablePoll (logs, never throws)" ($g -match 'Get-WbCablePoll')
+  Check "$name fails (not crashes) on another program playing into the cable" ($g -match "checks\['no other program played into the cable'\]")
+  Check "$name refuses to start while an audio-enhancement program runs" ($g -match 'Assert-WbNoResidentAudio')
+  Check "$name writes the cable sessions it saw to the evidence" ($g -match 'Get-WbCableSeenLines')
+}
+$st = Get-Content -LiteralPath (Join-Path $here '..\gates\rig-selftest.ps1') -Raw
+Check 'rig-selftest.ps1 refuses while an audio-enhancement program runs' ($st -match 'Assert-WbNoResidentAudio')
+Check 'rig-selftest.ps1 lists the sessions on the cable and refuses when one plays' ($st -match 'Get-WbCableSessions' -and $st -match 'another program is playing into the cable')
+Check 'run-phase1-gates.ps1 starts each gate with its output in a file, not a pipe' ($seq -match 'Invoke-WbWindowsPowerShellToFile' -and $seq -notmatch 'Invoke-WbWindowsPowerShell -ArgumentList')
+Check 'run-phase1-gates.ps1 ends leftover processes of a gate and logs them' ($seq -match 'left a process running')
 
 if ($fails) { Write-Host "$fails failed"; exit 1 }
 Write-Host 'CableRig tests passed'

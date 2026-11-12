@@ -145,6 +145,7 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
   # The rig, before anything starts: the player's and the capture's endpoints on the same cable
   # instance (refused otherwise), the cable not the default playback device, nobody else playing
   # into it, and a known signal heard on the capture. A refusal stops the gate here.
+  Assert-WbNoResidentAudio
   $cableRig = Resolve-WbCableRig -Testbench $Testbench -PlayDevice $PlayDevice -CaptureDevice $CaptureDevice
   $cableRoles = @(Assert-WbCableNotDefault -Testbench $Testbench -Rig $cableRig -Allow:$AllowCableDefault)
   $intruders = @(Get-CableIntruders -Names $cableRig.RenderNames)
@@ -157,6 +158,9 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
   $rigPlan = Get-WbRigPlan -Emulate $Emulate -Profile $Profile
   if ($rigPlan) { Assert-WbRigPlacement -JobMask $rigPlan.JobMask -PlayerMask $rigPlan.PlayerMask -ReferenceMask $rigPlan.ReferenceMask -What 'planned, before anything starts' }
   $interference = New-Object System.Collections.Generic.List[string]
+  $interferenceKeys = @{}
+  $cableSeen = @{}
+  $pollProblems = New-Object System.Collections.Generic.List[string]
   $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
   $run = Join-Path $WorkRoot "$Gate-$Profile-$stamp"
   $rec = Join-Path $run 'rec'
@@ -224,6 +228,10 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
     $inner += @('-Stress', '-Testbench', (Q $Testbench), '-GpuName', (Q $GpuName), '-StressStopFile', (Q $stressStop), '-StressReport', (Q (Join-Path $run 'stress.json')))
   }
   $emuArgs = @('--profile', $Profile, '--log', (Q (Join-Path $run 'emulate.log')), '--', 'powershell.exe') + $inner
+  $emu = $null; $refProc = $null; $play = $null; $hostStress = $null
+  $finished = $false
+  # Whatever happens below, nothing started here may outlive the body (see the finally block).
+  try {
   $emu = Start-Process -FilePath $Emulate -ArgumentList $emuArgs -PassThru -WindowStyle Hidden
 
   # Wait until the session records.
@@ -297,7 +305,11 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
   while (-not $play.HasExited) {
     if (((Get-Date) - $lastCable).TotalSeconds -ge 1) {
       $lastCable = Get-Date
-      foreach ($i in (Get-CableIntruders -Names $cableRig.RenderNames -Allow @($play.Id))) { $interference.Add("$(Get-Date -Format 'HH:mm:ss') $i") }
+      # Every session on the cable is recorded by program name and path in $cableSeen; a look that
+      # fails or cannot be read is a note in the evidence, never an error that ends the gate.
+      $poll = Get-WbCablePoll -Testbench $Testbench -Names $cableRig.RenderNames -Allow @($play.Id) -Seen $cableSeen
+      foreach ($i in $poll.Intruders) { if (-not $interferenceKeys.ContainsKey($i)) { $interferenceKeys[$i] = $true; $interference.Add("$(Get-Date -Format 'HH:mm:ss') first seen playing: $i") } }
+      if ($poll.Error -and $pollProblems.Count -lt 5) { $pollProblems.Add("$(Get-Date -Format 'HH:mm:ss') $($poll.Error)") }
     }
     if (((Get-Date) - $lastProgress).TotalSeconds -ge 60) {
       $lastProgress = Get-Date
@@ -343,7 +355,17 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
     Reference = (Read-Json (Join-Path $run 'reference.json')); RefAnalysis = (Read-Json (Join-Path $run 'reference-analysis.json'))
     AnalysisError = $analysisErr; RefAnalysisError = $refAnalysisErr; CableDefaultRoles = $cableRoles; Rig = $rig
     CacheNote = $cacheNote; BootTime = $bootTime; UptimeMin = $uptimeMin; FastStartup = $fastStartup; ModelsDisk = $modelsDisk; RecDisk = $recDisk
-    CableRig = $cableRig; CableTest = $cableTest
+    CableRig = $cableRig; CableTest = $cableTest; CableSeen = $cableSeen; CablePollProblems = @(ConvertTo-WbArray $pollProblems)
+  }
+  $finished = $true
+  } finally {
+    # On any error in the body: stop the app (its job), the player, the reference capture and the host
+    # stress, so a crash leaves no orphan holding the runner's pipes. On the normal path they have
+    # already stopped and this does nothing.
+    if (-not $finished) {
+      $left = @(Stop-WbRigLeftovers -Process @($emu, $play, $refProc, $hostStress) -StopFile @($stopFile, $refStop, $stressStop) -GraceSeconds 45)
+      foreach ($l in $left) { Write-Host "cleanup after an error: $l" }
+    }
   }
 }
 }
@@ -512,6 +534,7 @@ $lines += Get-WbRigLines -Rig $r.Rig -Play $r.Play -Reference $r.Reference
 $breakSources = @(@($r.Analysis.unmatched_ranges) | ForEach-Object { [double]$_.source_ms }) + @(@($r.Analysis.discontinuities) | ForEach-Object { [double]$_.source_ms })
 $lines += Get-WbLateCallbackLines -Play $r.Play -BreakSourceMs @($breakSources | Sort-Object -Unique)
 $lines += "  $lines_cable"
+if ($null -ne $r.CableSeen) { $lines += @(Get-WbCableSeenLines -Seen $r.CableSeen -PollError (@($r.CablePollProblems) -join "; ")) }
 $lines += $(if ($null -eq $r.CableDefaultRoles) { '  default playback device: not recorded for this run' } elseif (@($r.CableDefaultRoles).Count -gt 0) { "  default playback device: THE CABLE for $(@($r.CableDefaultRoles) -join ', ') (run with -AllowCableDefault: other sounds on this computer can reach the test signal)" } else { '  default playback device: not the cable (checked at start)' })
 $playStart = [DateTimeOffset]::Parse($r.Play.started_at)
 $lines += ("  signal starts at source frame {0} ({1:n1} ms of the source's start never reached the captures: playback start-up); leading audio before the signal: {2:n0} ms" -f $r.Analysis.content_first_source_frame, ($r.Analysis.content_first_source_frame / 48.0), $r.Analysis.leading_junk_ms)

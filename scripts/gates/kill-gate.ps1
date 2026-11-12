@@ -85,6 +85,7 @@ $result = Invoke-WbGate -Name "phase1-kill-$Profile" -Body {
   if (Get-Process stelmar-voice-workbench -ErrorAction SilentlyContinue) { throw 'The app is already running; close it first.' }
   # The rig, before anything starts (see recorder-gate.ps1): same cable instance, cable not the
   # default playback device, nobody else playing into it, a known signal heard on the capture.
+  Assert-WbNoResidentAudio
   $cableRig = Resolve-WbCableRig -Testbench $Testbench -PlayDevice $PlayDevice -CaptureDevice $CaptureDevice
   $cableRoles = @(Assert-WbCableNotDefault -Testbench $Testbench -Rig $cableRig -Allow:$AllowCableDefault)
   $intruders = @(Get-CableIntruders -Names $cableRig.RenderNames)
@@ -119,11 +120,19 @@ $result = Invoke-WbGate -Name "phase1-kill-$Profile" -Body {
   $progress = New-Object System.Collections.Generic.List[string]
   $interference = New-Object System.Collections.Generic.List[string]
   $rounds = New-Object System.Collections.Generic.List[object]
+  $interferenceKeys = @{}
+  $cableSeen = @{}
+  $pollProblems = New-Object System.Collections.Generic.List[string]
 
   $refDir = Join-Path $run 'reference'
   $refStop = Join-Path $run 'STOP-REF'
   $goFile = Join-Path $run 'GO-RIG'
   # Their error text goes to files: a player or capture that cannot start must leave its reason.
+  $refProc = $null; $play = $null; $current = $null
+  $finished = $false
+  $playStop = Join-Path $run 'STOP-PLAY'
+  # Whatever happens below, nothing started here may outlive the body (see the finally block).
+  try {
   $refProc = Start-Process -FilePath $Testbench -ArgumentList @('capture', '--device', (Q $capName), '--dir', (Q $refDir), '--stop-file', (Q $refStop), '--go-file', (Q $goFile), '--report', (Q (Join-Path $run 'reference.json'))) -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $run 'reference.out') -RedirectStandardError (Join-Path $run 'reference.err')
   Start-Sleep -Seconds 1
   $playStop = Join-Path $run 'STOP-PLAY'
@@ -162,7 +171,10 @@ $result = Invoke-WbGate -Name "phase1-kill-$Profile" -Body {
     $wait = $rng.Next($MinRunSeconds, $MaxRunSeconds + 1)
     $until = (Get-Date).AddSeconds($wait)
     while ((Get-Date) -lt $until) {
-      foreach ($i in (Get-CableIntruders -Names $cableRig.RenderNames -Allow @($play.Id))) { $interference.Add("$(Get-Date -Format 'HH:mm:ss') $i") }
+      # Every session on the cable is recorded by program name and path; a failed look is a note, never an error.
+      $poll = Get-WbCablePoll -Testbench $Testbench -Names $cableRig.RenderNames -Allow @($play.Id) -Seen $cableSeen
+      foreach ($i in $poll.Intruders) { if (-not $interferenceKeys.ContainsKey($i)) { $interferenceKeys[$i] = $true; $interference.Add("$(Get-Date -Format 'HH:mm:ss') first seen playing: $i") } }
+      if ($poll.Error -and $pollProblems.Count -lt 5) { $pollProblems.Add("$(Get-Date -Format 'HH:mm:ss') $($poll.Error)") }
       Start-Sleep -Seconds 1
     }
     # Aim at a part rollover: -500 ms (end of a part) for kills 1 and 3, +500 ms (first second of
@@ -225,7 +237,17 @@ $result = Invoke-WbGate -Name "phase1-kill-$Profile" -Body {
     RefAnalysis = (Read-Json (Join-Path $run 'reference-analysis.json')); Reference = (Read-Json (Join-Path $run 'reference.json'))
     AnalysisError = $analysisErr; RefAnalysisError = $refAnalysisErr; CableDefaultRoles = $cableRoles; Rig = $rig; Compare = (Read-Json (Join-Path $run 'compare.json')); CompareError = $(if ($cmp.ExitCode -ne 0) { (@($cmp.Error) + @($cmp.Output)) -join ' ' } else { $null }); Play = (Read-Json (Join-Path $run 'play.json'))
     PartsCheck = (Read-Json (Join-Path $run 'parts-check.json')); Meta = (Read-Json (Join-Path $sessionDir 'session.json')); AppLog = $appLog
-    CableRig = $cableRig; CableTest = $cableTest
+    CableRig = $cableRig; CableTest = $cableTest; CableSeen = $cableSeen; CablePollProblems = @(ConvertTo-WbArray $pollProblems)
+  }
+  $finished = $true
+  } finally {
+    # On any error in the body: stop the app (its job), the player and the reference capture, so a
+    # crash leaves no orphan holding the runner's pipes. On the normal path they have already stopped.
+    if (-not $finished) {
+      $emus = @(); if ($current) { $emus = @($current.Emu) }
+      $left = @(Stop-WbRigLeftovers -Process (@($emus) + @($play, $refProc)) -StopFile @($env:WB_GATE_STOP_FILE, $playStop, $refStop) -GraceSeconds 45)
+      foreach ($l in $left) { Write-Host "cleanup after an error: $l" }
+    }
   }
 }
 
@@ -342,6 +364,7 @@ if ($r.Analysis -and (Test-Path -LiteralPath $sessionJson)) {
 }
 $lines += Get-WbLateCallbackLines -Play $r.Play -BreakSourceMs @(@($r.Analysis.unmatched_ranges) | ForEach-Object { [double]$_.source_ms })
 $lines += "cable interference: $(if ($r.Interference.Count) { $r.Interference -join '; ' } else { 'none' })"
+if ($null -ne $r.CableSeen) { $lines += @(Get-WbCableSeenLines -Seen $r.CableSeen -PollError (@($r.CablePollProblems) -join '; ')) }
 $lines += $(if (@($r.CableDefaultRoles).Count -gt 0) { "default playback device: THE CABLE for $(@($r.CableDefaultRoles) -join ', ') (run with -AllowCableDefault: other sounds on this computer can reach the test signal)" } else { 'default playback device: not the cable (checked at start)' })
 $killPlayStart = $(if ($r.Play -and (Test-WbHasProperty $r.Play 'started_at')) { [DateTimeOffset]::Parse($r.Play.started_at) } else { $null })
 $lines += Get-WbReferenceXrunLines -RefAnalysis $r.RefAnalysis -Reference $r.Reference -PlayStarted $killPlayStart -BreakSourceMs @(@($r.Analysis.unmatched_ranges) | ForEach-Object { [double]$_.source_ms })

@@ -1,0 +1,26 @@
+﻿source: commit 7857211
+build: stelmar-voice-workbench.exe sha256 0722e4c3f958c060f71e26d56eb65ba43a1cea366560b520d01ab11c15f4f006 (built 2026-11-12 16:31)
+build: wb-testbench.exe sha256 4cf668272f027a0d35d9f38606da9a2b3b84cf0a3312072bda1aaf6e4acb0672 (built 2026-11-12 16:31)
+build: wb-emulate.exe sha256 db54485692bd6faee263d9e4cda4ff422452ac6cfd7c5a932e6713dbe72da46e (built 2026-11-12 16:31)
+gate: phase1-hashing-emu-low
+started: 2026-11-12 18:09:49 +05:30
+machine: Legion
+emulation profile: emu-low
+overlay tools closed: yes (RTSS.exe and MSIAfterburner.exe not running when the gate started)
+overlay tools at the end: none running
+engine builds: none running when the gate started (D:\Projects\stelmar-build.lock absent; no cargo.exe, rustc.exe, cl.exe, link.exe, cmake.exe, ninja.exe, nvcc.exe, glslc.exe, MSBuild.exe, cicc.exe, ptxas.exe, fatbinary.exe, nvlink.exe process)
+engine builds at the end: none running
+Track B paused: D:\Projects\stelmar-gate.lock held for the whole run (removed in a finally block)
+Track B busy lock: D:\Projects\stelmar-eval-busy.lock absent at start
+free RAM: 19.4 GB at start (needs 14 GB), 18.9 GB at end
+verdict: FAIL (the gate did not complete)
+
+reason: the hashing gate stopped on an error: Cannot convert the "System.Object[]" value of type "System.Object[]" to type "System.Int32".
+
+details:
+  System.Management.Automation.RuntimeException: Cannot convert the "System.Object[]" value of type "System.Object[]" to type "System.Int32".
+  at Get-WbCableIntruders, D:\Projects\stelmar_voice_workbench\scripts\lib\CableRig.psm1: line 414
+  at Get-CableIntruders, D:\Projects\stelmar_voice_workbench\scripts\gates\recorder-gate.ps1: line 102
+  at <ScriptBlock>, D:\Projects\stelmar_voice_workbench\scripts\gates\recorder-gate.ps1: line 300
+  at Invoke-WbGate, D:\Projects\stelmar_voice_workbench\scripts\lib\GateRun.psm1: line 113
+  at <ScriptBlock>, D:\Projects\stelmar_voice_workbench\scripts\gates\recorder-gate.ps1: line 143

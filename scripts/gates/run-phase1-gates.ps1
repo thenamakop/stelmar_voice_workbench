@@ -38,6 +38,7 @@ $Gates = Split-WbList $Gates
 Set-WbCleanPSModulePath
 Set-WbInvariantCulture
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Log) | Out-Null
+$logDir = Split-Path -Parent $Log
 
 function Write-Log([string]$Line) {
   $stamped = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') $Line"
@@ -59,8 +60,9 @@ try {
     Write-Log 'rig check: starting (pairs the cable endpoints by cable instance and plays a known signal through the pair)'
     $rigArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $here 'rig-selftest.ps1'))
     if ($AllowCableDefault) { $rigArgs += '-AllowCableDefault' }
-    $rigOut = @(Invoke-WbWindowsPowerShell -ArgumentList $rigArgs)
-    $rigCode = $LASTEXITCODE
+    $rigRun = Invoke-WbWindowsPowerShellToFile -ArgumentList $rigArgs -OutFile (Join-Path $logDir 'run-all-rig.out')
+    $rigOut = @($rigRun.Output) + @($rigRun.Error)
+    $rigCode = $rigRun.ExitCode
     $rigLine = @($rigOut | Where-Object { $_ -match '^RIG ' } | Select-Object -Last 1)
     if ($rigCode -ne 0) {
       $stopReason = "rig check failed: $(if ($rigLine.Count) { $rigLine[0] } else { 'exit ' + $rigCode + '; last output: ' + (($rigOut | Select-Object -Last 3) -join ' | ') })"
@@ -84,9 +86,17 @@ try {
     if ($Minutes -gt 0 -and $g -in @('panic', 'webview', 'load', 'soak', 'hashing')) { $argList += @('-Minutes', $Minutes) }
     if ($AllowCableDefault -and $g -ne 'emulator') { $argList += '-AllowCableDefault' }
     # The helper gives the child Windows PowerShell 5.1's own module path (a parent shell's
-    # PowerShell 7 path makes Get-FileHash vanish) and collects stderr as text.
-    $out = @(Invoke-WbWindowsPowerShell -ArgumentList $argList)
-    $code = $LASTEXITCODE
+    # PowerShell 7 path makes Get-FileHash vanish). The child's output goes to a FILE, not a pipe: an
+    # orphan the gate left behind (a player, a capture) would hold a pipe open and hang this sequence.
+    $gateRun = Invoke-WbWindowsPowerShellToFile -ArgumentList $argList -OutFile (Join-Path $logDir "run-all-$g.out")
+    $out = @($gateRun.Output) + @($gateRun.Error)
+    $code = $gateRun.ExitCode
+    # Anything the gate left running would feed or load the next gate: it is named in the log and ended.
+    $orphans = @(Get-Process -Name wb-testbench, wb-emulate, stelmar-voice-workbench -ErrorAction SilentlyContinue)
+    foreach ($o in $orphans) {
+      Write-Log "$g : left a process running: $($o.ProcessName) (pid $($o.Id)); ending it"
+      Stop-Process -Id $o.Id -Force -ErrorAction SilentlyContinue
+    }
     $text = $out -join "`n"
     $verdict = @($out | Where-Object { $_ -match '^(PASS|FAIL|INVALID): ' } | Select-Object -Last 1)
     if ($text -match 'Ask the user before running gate') {
