@@ -129,7 +129,7 @@ function Get-ResultFromRun([string]$run) {
     LastStatus = (Read-Json (Join-Path $run 'status.json')); HostStress = (Read-Json (Join-Path $run 'host-stress.json'))
     Reference = (Read-Json (Join-Path $run 'reference.json')); RefAnalysis = (Read-Json (Join-Path $run 'reference-analysis.json'))
     AnalysisError = $analysisErr; RefAnalysisError = $refAnalysisErr; Rig = $null
-    CacheNote = $null; BootTime = $null; UptimeMin = $null
+    CacheNote = $null; BootTime = $null; UptimeMin = $null; FastStartup = $null; ModelsDisk = $null; RecDisk = $null
   }
 }
 
@@ -183,14 +183,33 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
   $cacheNote = $null
   $bootTime = $null
   $uptimeMin = $null
+  $fastStartup = $null
+  $modelsDisk = $null
+  $recDisk = $null
   if ($Gate -eq 'hashing') {
     $cacheFile = Join-Path (Join-Path $env:APPDATA 'in.edu.bmu.stelmar.voiceworkbench') 'verified-models.json'
     $existed = Test-Path -LiteralPath $cacheFile
     if ($existed) { Remove-Item -LiteralPath $cacheFile -Force }
     if (Test-Path -LiteralPath $cacheFile) { throw 'verified-models.json could not be removed: the hash cache is not cold' }
     $cacheNote = "hash cache cleared before the app started: verified-models.json $(if ($existed) { 'removed' } else { 'was already absent' }); present now: no"
+    # The last full start of the kernel (event 12 of Microsoft-Windows-Kernel-General). With Fast
+    # Startup on, Windows's own LastBootUpTime can stay at an older value across a shutdown.
     $bootTime = (Get-CimInstance Win32_OperatingSystem).LastBootUpTime
+    try {
+      $ev = Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = 'Microsoft-Windows-Kernel-General'; Id = 12 } -MaxEvents 1 -ErrorAction Stop
+      if ($ev.TimeCreated -gt $bootTime) { $bootTime = $ev.TimeCreated }
+    } catch { }
     $uptimeMin = ((Get-Date) - $bootTime).TotalMinutes
+    $fastStartup = $(try { [int](Get-ItemPropertyValue 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power' -Name HiberbootEnabled) } catch { -1 })
+    # Which physical disk the models folder and the recording folder are on.
+    $diskOf = {
+      param([string]$p)
+      $letter = (Split-Path -Qualifier $p).TrimEnd(':')
+      $n = $(try { (Get-Partition -DriveLetter $letter -ErrorAction Stop).DiskNumber } catch { $null })
+      [pscustomobject]@{ Letter = $letter.ToUpper(); Disk = $n }
+    }
+    $modelsDisk = & $diskOf (Join-Path $repo 'models')
+    $recDisk = & $diskOf $rec
   }
 
   $inner = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Q (Join-Path $here 'recorder-gate-inner.ps1')),
@@ -316,7 +335,7 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
     LastStatus = $lastStatus; HostStress = (Read-Json (Join-Path $run 'host-stress.json'))
     Reference = (Read-Json (Join-Path $run 'reference.json')); RefAnalysis = (Read-Json (Join-Path $run 'reference-analysis.json'))
     AnalysisError = $analysisErr; RefAnalysisError = $refAnalysisErr; CableDefaultRoles = $cableRoles; Rig = $rig
-    CacheNote = $cacheNote; BootTime = $bootTime; UptimeMin = $uptimeMin
+    CacheNote = $cacheNote; BootTime = $bootTime; UptimeMin = $uptimeMin; FastStartup = $fastStartup; ModelsDisk = $modelsDisk; RecDisk = $recDisk
   }
 }
 }
@@ -395,10 +414,20 @@ if ($Gate -eq 'hashing') {
     if ($ov -gt 0) { $hashOverlapS += $ov / 1000.0 }
   }
   $afterReboot = ($null -ne $r.UptimeMin -and [double]$r.UptimeMin -le $RebootWindowMinutes)
+  $sameDisk = ($r.ModelsDisk -and $r.RecDisk -and $r.ModelsDisk.Letter -eq $r.RecDisk.Letter -and ($null -eq $r.ModelsDisk.Disk -or $null -eq $r.RecDisk.Disk -or $r.ModelsDisk.Disk -eq $r.RecDisk.Disk))
+  $hashedGB = $hashBytes / 1e9
+  $hashMs = ($hashFiles | Measure-Object TookMs -Sum).Sum
+  $hashMBs = $(if ($hashMs -gt 0) { $hashBytes / 1e6 / ($hashMs / 1000.0) } else { 0 })
+  $checks['the models folder and the recording folder are on the same drive and physical disk (otherwise hashing cannot compete with the recorder for the disk)'] = [bool]$sameDisk
+  $checks["at least 1 GB of model files was hashed in the run ($([math]::Round($hashedGB, 2)) GB at $([math]::Round($hashMBs)) MB/s while the recorder wrote)"] = ($hashedGB -ge 1.0)
   $checks["model files were hashed while the recording ran: $($hashFiles.Count) files, $([math]::Round($hashBytes / 1e9, 2)) GB, $([math]::Round($hashOverlapS, 1)) s of hashing inside the recording (at least 10 s)"] = ($hashFiles.Count -ge 1 -and $hashOverlapS -ge 10 -and $recStartMs -gt 0 -and $recEndMs -gt 0)
   $checks['every hashed file was read in Windows background mode (model_hash lines say background=true, memory priority 1)'] = ($hashFiles.Count -ge 1 -and @($hashFiles | Where-Object { -not $_.Background }).Count -eq 0)
 }
 $hashNote = $(if ($Gate -eq 'hashing' -and -not $afterReboot) { '; warm cache, not conclusive for R5' } else { '' })
+# Coverage of the live detectors (R1): audio the time budget made them skip. Reported, not gated:
+# the detectors are not the recording.
+$skippedPct = $(if ((Test-WbHasProperty $rec 'detector_skipped_ms') -and [double]$rec.audio_ms -gt 0) { 100.0 * [double]$rec.detector_skipped_ms / [double]$rec.audio_ms } else { 0.0 })
+$coverageNote = $(if ($skippedPct -gt 1.0) { ('; detector coverage {0:n1}% (the time budget skipped more than 1% of the audio): the live detector table is not conclusive for this run' -f (100.0 - $skippedPct)) } else { '' })
 $checks['every part decodes in Media Foundation'] = [bool]$r.Decode.all_playable
 $checks['mirror SHA-256 equals the originals'] = [bool]$stopped.mirror.all_match
 $checks['player had no underruns (source played cleanly)'] = ([int64]$r.Play.underrun_callbacks -eq 0)
@@ -426,7 +455,7 @@ $lines_cable = $(if ($null -eq $r.Interference) { 'cable interference polling: n
 $lines = @()
 $lines += Get-WbGateHeader -Machine $Machine -Profile $Profile -Builds @($Exe, $Testbench, $Emulate)
 $lines += "app build: target\gate\stelmar-voice-workbench.exe (cargo profile gate, features gate-hooks + custom-protocol)"
-$lines += "verdict: $(if ($verdict -eq 'INVALID') { 'INVALID (no verdict; the run must be repeated)' } elseif ($verdict -eq 'PASS' -and $Profile -ne 'native') { "PASS (PROVISIONAL: emulated$hashNote)" } else { $verdict })"
+$lines += "verdict: $(if ($verdict -eq 'INVALID') { 'INVALID (no verdict; the run must be repeated)' } elseif ($verdict -eq 'PASS' -and $Profile -ne 'native') { "PASS (PROVISIONAL: emulated$hashNote$coverageNote)" } elseif ($verdict -eq 'PASS') { "PASS$hashNote$coverageNote" } else { $verdict })"
 $lines += ''
 $lines += 'checks:'
 foreach ($k in $checks.Keys) { $lines += "  [$(if ($checks[$k]) { 'x' } else { ' ' })] $k" }
@@ -440,12 +469,15 @@ $lines += ("  source: {0:n1} min of known noise, 48 kHz stereo, played by wb-tes
 $lines += ("  recorded content: {0:n3} s against source {1:n3} s (difference {2:n1} ms); discontinuities {3}; silent gaps {4:n1} ms; unmatched {5:n1} ms; lowest block correlation {6:n4}" -f ($r.Analysis.content_ms / 1000.0), ($r.Analysis.source_ms / 1000.0), $r.Analysis.duration_diff_ms, @($r.Analysis.discontinuities).Count, $r.Analysis.silent_gap_ms, $r.Analysis.unmatched_ms, $r.Analysis.min_block_correlation)
 $lines += ("  parts: {0}; audio {1:n1} s; overrun samples {2}; driver xruns {3}; samples dropped by the writer {4}; recorder restarts {5}" -f @($rec.parts).Count, ($rec.audio_ms / 1000.0), $rec.overrun_samples, $rec.xruns, $rec.dropped_samples, $rec.recorder_restarts)
 if (Test-WbHasProperty $rec 'detector_max_block_us') {
+  $lines += ("  detector coverage: the time budget skipped {0} ms of {1:n0} ms of audio ({2:n2}%)" -f $rec.detector_skipped_ms, $rec.audio_ms, $skippedPct)
   $lines += ("  detectors (R1: they run after the WAV write, each in catch_unwind, with a budget of 1/20 of the block's audio time, at least 2 ms): longest time on one block {0:n0} us; blocks over budget {1}; audio the detectors skipped {2} ms; detectors switched off {3}" -f $rec.detector_max_block_us, $rec.detector_over_budget_blocks, $rec.detector_skipped_ms, @($rec.detectors_disabled).Count)
 }
 if ($Gate -eq 'hashing') {
   $lines += ''
   $lines += 'cold-cache model hashing while recording (R5):'
   $lines += "  $($r.CacheNote)"
+  $lines += ("  Fast Startup (HiberbootEnabled): {0}; boot time is the later of Windows's LastBootUpTime and the last kernel start event 12; use Restart, not Shut down, for a cold start" -f $(if ($null -eq $r.FastStartup) { 'unknown' } else { $r.FastStartup }))
+  $lines += ("  models folder on drive {0}{1}, recording folder on drive {2}{3}: same disk {4}; hashed {5:n2} GB at {6:n0} MB/s over {7} files" -f $r.ModelsDisk.Letter, $(if ($null -ne $r.ModelsDisk.Disk) { " (physical disk $($r.ModelsDisk.Disk))" } else { '' }), $r.RecDisk.Letter, $(if ($null -ne $r.RecDisk.Disk) { " (physical disk $($r.RecDisk.Disk))" } else { '' }), $(if ($sameDisk) { 'yes' } else { 'NO' }), $hashedGB, $hashMBs, $hashFiles.Count)
   $lines += ("  started after a reboot: {0} (the machine booted at {1}; it had been up {2:n1} min when the gate launched the app; 'yes' means at most {3} min)" -f $(if ($afterReboot) { 'yes' } else { 'no' }), $(if ($r.BootTime) { ([datetime]$r.BootTime).ToString('yyyy-MM-dd HH:mm') } else { 'unknown' }), [double]$r.UptimeMin, $RebootWindowMinutes)
   if (-not $afterReboot) { $lines += '  R5 IS NOT CONCLUSIVE FROM THIS RUN: the operating system file cache was probably warm (the model files were read recently), so the disk contention was lighter than on a freshly started laptop. A hashing-only re-run after the next reboot is an open item.' }
   $lines += '  limit: the operating system file cache cannot be emptied without administrator rights; a reboot is how this gate gets a cold cache.'
@@ -483,7 +515,7 @@ if ($r.Analysis -and (Test-Path -LiteralPath $sessionJson)) {
   $detCheck = Get-WbDetectorMatches -Breaks @($rv.Breaks) -Analysis $r.Analysis -Events @($sessionMeta.events)
   $lines += Get-WbDetectorLines -Check $detCheck -Rec $rec
   # Kept beside the run, so scripts\gates\detector-table.ps1 can put one table together.
-  Save-WbDetectorCheck -RunDir $r.Run -Gate $Gate -Profile $Profile -Check $detCheck -Rec $rec -AudioMs ([double]$rec.audio_ms)
+  Save-WbDetectorCheck -RunDir $r.Run -Gate $Gate -Profile $Profile -Check $detCheck -Rec $rec -AudioMs ([double]$rec.audio_ms) -Verdict $verdict
 } else {
   $lines += 'live detector check: not available (no analysis or session.json for this run)'
 }

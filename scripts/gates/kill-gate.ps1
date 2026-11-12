@@ -329,7 +329,7 @@ if ($r.Analysis -and (Test-Path -LiteralPath $sessionJson)) {
   $sessionMeta = Get-Content -LiteralPath $sessionJson -Raw | ConvertFrom-Json
   $detCheck = Get-WbDetectorMatches -Breaks @($rv.Breaks) -Analysis $r.Analysis -Events @($sessionMeta.events)
   $lines += Get-WbDetectorLines -Check $detCheck -Rec $null
-  Save-WbDetectorCheck -RunDir $r.Run -Gate 'kill' -Profile $Profile -Check $detCheck -Rec $stopped.recorder -AudioMs ([double]$stopped.recorder.audio_ms)
+  Save-WbDetectorCheck -RunDir $r.Run -Gate 'kill' -Profile $Profile -Check $detCheck -Rec $stopped.recorder -AudioMs ([double]$stopped.recorder.audio_ms) -Verdict $verdict
   $lines += '  (position counters are per run of the app; the force-killed runs have no report, so none are given here)'
 } else {
   $lines += 'live detector check: not available (no analysis or session.json for this run)'

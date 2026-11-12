@@ -4,7 +4,7 @@
 //! same block of samples twice (on the Legion: 490 to 580 frames, one WASAPI period). The driver
 //! reports no xrun and the timestamps look normal, so nothing else in the app sees it. This
 //! detector finds the repeat in the recorded audio itself, in the recorder thread, after the
-//! samples are in the ring and before they are written.
+//! samples are in the ring and after the block is written, with a time budget (Phase 2b).
 //!
 //! A repeated block is a stretch of at least [`MIN_RUN`] frames that equals the stretch exactly
 //! `lag` frames before it, sample for sample, with `lag` between [`MIN_LAG`] and [`MAX_LAG`]. Real

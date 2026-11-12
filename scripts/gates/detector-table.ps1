@@ -46,11 +46,11 @@ $lines += 'Live detector table: the recorder''s repeated_block and zero_gap dete
 $lines += "source: commit $rev; machine: $Machine; run folders at or after $($Since.ToString('yyyy-MM-dd HH:mm')) with a detector-check.json (written by the gate scripts)"
 $lines += 'rule: a shared upstream break is matched when a repeated_block or zero_gap event lies within +-50 ms of the break''s span in the app''s audio time; an event with no shared break is a false alarm unless it lies before the first source sample that reached the recording (lead-in)'
 $lines += ''
-$lines += 'run | gate | profile | audio min | shared breaks | matched | missed | before recording | false alarms | lead-in | repeated_block events | zero_gap events | longest detector time on one block (us) | blocks over budget | detectors switched off'
+$lines += 'run | gate | profile | audio min | shared breaks | matched | missed | before recording | false alarms | lead-in | repeated_block events | zero_gap events | longest detector time on one block (us) | blocks over budget | detectors switched off | audio skipped by the budget (ms) | detector coverage % | gate verdict'
 $tot = [pscustomobject]@{ Min = 0.0; Breaks = 0; Matched = 0; Missed = 0; Before = 0; False = 0; Lead = 0; Over = 0; Off = 0; Max = 0 }
 foreach ($r in $rows) {
   $c = $r.counters
-  $lines += ('{0} | {1} | {2} | {3:n1} | {4} | {5} | {6} | {7} | {8} | {9} | {10} | {11} | {12} | {13} | {14}' -f $r.run, $r.gate, $r.profile, [double]$r.audio_minutes, $r.breaks, $r.matched, $r.missed, $r.before_recording, $r.false_alarms, $r.lead_in, $c.repeated_blocks, $c.zero_gaps, $c.detector_max_block_us, $c.detector_over_budget_blocks, $c.detectors_disabled)
+  $lines += ('{0} | {1} | {2} | {3:n1} | {4} | {5} | {6} | {7} | {8} | {9} | {10} | {11} | {12} | {13} | {14} | {15} | {16:n2} | {17}' -f $r.run, $r.gate, $r.profile, [double]$r.audio_minutes, $r.breaks, $r.matched, $r.missed, $r.before_recording, $r.false_alarms, $r.lead_in, $c.repeated_blocks, $c.zero_gaps, $c.detector_max_block_us, $c.detector_over_budget_blocks, $c.detectors_disabled, $c.detector_skipped_ms, $(if ([double]$r.audio_ms -gt 0 -and $null -ne $c.detector_skipped_ms) { 100.0 - 100.0 * [double]$c.detector_skipped_ms / [double]$r.audio_ms } else { 100.0 }), $r.verdict)
   $tot.Min += [double]$r.audio_minutes; $tot.Breaks += [int]$r.breaks; $tot.Matched += [int]$r.matched; $tot.Missed += [int]$r.missed
   $tot.Before += [int]$r.before_recording; $tot.False += [int]$r.false_alarms; $tot.Lead += [int]$r.lead_in
   $tot.Over += [int]$c.detector_over_budget_blocks; $tot.Off += [int]$c.detectors_disabled

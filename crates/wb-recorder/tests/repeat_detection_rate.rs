@@ -160,7 +160,9 @@ fn measured_detection_rate_of_spliced_repeats_in_real_speech()
             controls += 1;
             false_alarms += scan(&base).len() as u32;
             for k in 0..SPLICES_PER_CLIP {
-                let seed = (ci as u64) << 16 ^ (k as u64) << 4 ^ u64::from(lang.as_bytes()[0]);
+                let seed = splitmix(
+                    ((ci as u64) << 32) ^ ((k as u64) << 8) ^ u64::from(lang.as_bytes()[0]),
+                );
                 let lag = draw(seed ^ 0xA1, 400, 1_200);
                 let len = draw(seed ^ 0xB2, 256, 1_200);
                 let hi = base.len() - len - MARGIN;

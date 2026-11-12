@@ -161,7 +161,7 @@ function Get-WbDetectorLines {
 
 # Saves a run's detector check next to the run (detector-check.json) for detector-table.ps1.
 function Save-WbDetectorCheck {
-  param([string]$RunDir, [string]$Gate, [string]$Profile, $Check, $Rec, [double]$AudioMs)
+  param([string]$RunDir, [string]$Gate, [string]$Profile, $Check, $Rec, [double]$AudioMs, [string]$Verdict = '')
   $has = { param($o, $n) $null -ne $o -and $null -ne $o.PSObject.Properties[$n] }
   $counters = [ordered]@{}
   foreach ($n in 'repeated_blocks', 'zero_gaps', 'detector_max_block_us', 'detector_over_budget_blocks', 'detector_skipped_ms') {
@@ -171,6 +171,8 @@ function Save-WbDetectorCheck {
   $doc = [pscustomobject]@{
     gate = $Gate
     profile = $Profile
+    verdict = $Verdict
+    audio_ms = $AudioMs
     run = (Split-Path -Leaf $RunDir)
     audio_minutes = [math]::Round($AudioMs / 60000.0, 1)
     breaks = @($Check.Rows).Count

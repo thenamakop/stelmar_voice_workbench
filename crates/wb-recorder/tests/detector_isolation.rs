@@ -39,6 +39,10 @@ fn input() -> InputInfo {
 }
 
 fn setup(name: &str) -> Result<Setup, Box<dyn std::error::Error>> {
+    setup_parts(name, 600)
+}
+
+fn setup_parts(name: &str, part_seconds: u32) -> Result<Setup, Box<dyn std::error::Error>> {
     let root = TempDir::new(name)?;
     let spec = SessionSpec::unscheduled(name);
     let dir = session::create_session_dir(root.path(), &spec, now_ist())?;
@@ -48,7 +52,7 @@ fn setup(name: &str) -> Result<Setup, Box<dyn std::error::Error>> {
     let rec = RecorderHandle::spawn(
         RecorderConfig {
             session_dir: dir.clone(),
-            part_seconds: 600,
+            part_seconds,
             meta,
             index: PartsIndex::new(),
         },
@@ -289,5 +293,43 @@ fn the_audio_is_on_disk_while_a_detector_is_still_working_on_it() -> TestResult 
     let report = rec.stop()?;
     assert_eq!(report.dropped_samples, 0);
     assert!(recorded(&dir)? == block);
+    Ok(())
+}
+
+#[test]
+fn zero_gaps_before_across_and_after_a_part_boundary_are_marked_at_their_audio_time() -> TestResult
+{
+    // Parts of 1 s (16,000 frames). Three gaps of 160 frames (10 ms): one wholly before the
+    // boundary, one straddling it, one in the second part.
+    let (_root, dir, rec, _events) = setup_parts("iso-rollover", 1)?;
+    let (mut prod, handle) = StreamHandle::manual(input(), 20);
+    rec.send(RecorderMsg::Stream(handle))?;
+    let mut audio = noise(40_000, 61);
+    let starts = [15_000usize, 15_920, 24_000];
+    for at in starts {
+        for s in &mut audio[at..at + 160] {
+            *s = 0;
+        }
+    }
+    feed(&mut prod, &audio);
+    std::thread::sleep(Duration::from_millis(100));
+    let report = rec.stop()?;
+
+    assert!(report.parts.len() >= 2, "{} parts", report.parts.len());
+    assert!(
+        recorded(&dir)? == audio,
+        "every sample, across the rollover"
+    );
+    assert_eq!(report.zero_gaps, 3, "{report:?}");
+    let marked = events_of(&dir, "zero_gap")?;
+    assert_eq!(marked.len(), 3, "{marked:?}");
+    for (m, at) in marked.iter().zip(starts) {
+        let want = at as f64 * 1000.0 / f64::from(RATE);
+        assert!(
+            (m.audio_ms as f64 - want).abs() <= 3.0,
+            "gap at frame {at}: expected {want} ms, marked at {} ms",
+            m.audio_ms
+        );
+    }
     Ok(())
 }

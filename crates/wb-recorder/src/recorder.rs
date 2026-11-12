@@ -456,6 +456,10 @@ struct Recorder {
     detector_max_block_us: u64,
     detectors_disabled: Vec<String>,
     last_budget_log: Option<Instant>,
+    /// The detectors have started on the pending batch: a restart that finishes the batch does
+    /// not show them the same block again (a panic in the event logging would otherwise repeat
+    /// its events).
+    detectors_started: bool,
     zero_gaps: u64,
     zero_gap_events_in_meta: usize,
     last_zero_gap_notice: Option<Instant>,
@@ -571,6 +575,7 @@ fn run(cfg: RecorderConfig, rx: &Receiver<RecorderMsg>, events: Sender<Event>) {
         detector_max_block_us: 0,
         detectors_disabled: Vec::new(),
         last_budget_log: None,
+        detectors_started: false,
         zero_gaps: 0,
         zero_gap_events_in_meta: 0,
         last_zero_gap_notice: None,
@@ -694,6 +699,7 @@ impl Recorder {
             self.batch_len = 0;
             self.batch_done = 0;
             self.batch_panics = 0;
+            self.detectors_started = false;
         }
         // The drain buffer may have been moved out when the panic hit: rebuild it.
         self.rebuild_scratch();
@@ -982,6 +988,7 @@ impl Recorder {
                 self.batch_len = 0;
                 self.batch_done = 0;
                 self.batch_panics = 0;
+                self.detectors_started = false;
             }
             Err(payload) => {
                 self.batch_panics = self.batch_panics.saturating_add(1);
@@ -1041,11 +1048,31 @@ impl Recorder {
             session::append_log(&self.dir, at, &format!("audio_started audio_ms={audio_ms}"));
             self.save_meta();
         }
-        self.write_samples(samples, done, &input, channels);
-        // The block is on its way to disk (written, or carried to the next part). Only now do
-        // the detectors look at it: a slow or failing detector can no longer delay the write.
-        // A restart that finishes a batch gets here once, when the batch is complete.
-        self.run_detectors(samples, &input);
+        let on_the_clock = self.write_samples(samples, done, &input, channels);
+        // Only now do the detectors look at the block: a slow or failing detector can no longer
+        // delay the write. They see a block once, also when a restart finishes the batch.
+        if !self.detectors_started {
+            self.detectors_started = true;
+            if on_the_clock {
+                self.run_detectors(samples, &input);
+            } else {
+                // The block was carried to a later part or dropped, so it is not on the audio
+                // clock yet and its events would be placed a block too early. The detectors skip
+                // it and start afresh after it; the skip is counted.
+                self.skip_detectors(samples.len() / channels, input.sample_rate);
+            }
+        }
+    }
+
+    /// The detectors do not see a block that is not on the audio clock: end what they follow,
+    /// start afresh, and count the audio as skipped.
+    fn skip_detectors(&mut self, frames: usize, rate: u32) {
+        if self.repeat.is_none() && self.dropout.is_none() {
+            return;
+        }
+        self.finish_repeat();
+        self.detector_over_budget_blocks += 1;
+        self.detector_skipped_ms += frames_to_ms(frames as u64, rate);
     }
 
     /// Writes `samples` from the cursor `done` on into the open part, opening the next part at a
@@ -1056,7 +1083,9 @@ impl Recorder {
         done: &mut usize,
         input: &InputInfo,
         channels: usize,
-    ) {
+    ) -> bool {
+        // True while every sample of the block went into a part that is on the audio clock.
+        let mut on_the_clock = true;
         let part_frames = u64::from(self.part_seconds) * u64::from(input.sample_rate);
         while *done < samples.len() {
             let rest = &samples[*done..];
@@ -1065,6 +1094,7 @@ impl Recorder {
                     OpenResult::Opened => {
                         if !self.write_carry() {
                             // The new part failed at once; write_failed has handled it.
+                            on_the_clock = false;
                             continue;
                         }
                     }
@@ -1073,7 +1103,7 @@ impl Recorder {
                         // batch (it goes into the next part, after the carried samples).
                         self.carry.extend(rest.iter().map(|&s| f32_to_i16(s)));
                         *done = samples.len();
-                        return;
+                        return false;
                     }
                     OpenResult::Failed => {
                         // The next part cannot be opened either: what the failed part owed and
@@ -1082,13 +1112,13 @@ impl Recorder {
                         self.dropped_samples += (self.carry.len() + rest.len()) as u64;
                         self.carry.clear();
                         *done = samples.len();
-                        return;
+                        return false;
                     }
                 }
             }
             let Some(writer) = self.writer.as_mut() else {
                 *done = samples.len();
-                return;
+                return false;
             };
             let room = part_frames.saturating_sub(writer.frames()) as usize * channels;
             let take = rest.len().min(room.max(channels));
@@ -1098,6 +1128,7 @@ impl Recorder {
                 // reach the disk into the next part; the rest of the batch follows it.
                 *done += take;
                 self.write_failed(e);
+                on_the_clock = false;
                 continue;
             }
             *done += take;
@@ -1111,6 +1142,7 @@ impl Recorder {
                 self.first_write_pending = false;
                 if let Some(Err(e)) = self.writer.as_mut().map(PartWriter::flush) {
                     self.write_failed(e);
+                    on_the_clock = false;
                     continue;
                 }
             }
@@ -1122,6 +1154,7 @@ impl Recorder {
                 self.close_part();
             }
         }
+        on_the_clock
     }
 
     fn open_part(&mut self, input: &InputInfo) -> OpenResult {
