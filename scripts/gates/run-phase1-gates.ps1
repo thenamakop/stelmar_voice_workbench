@@ -29,6 +29,8 @@ param(
   [double]$Minutes = 0
 )
 $ErrorActionPreference = 'Stop'
+# With powershell -File, -Gates a,b,c arrives as the single string 'a,b,c'; split it so both forms work.
+$Gates = @($Gates | ForEach-Object { $_ -split '[,\s]+' } | Where-Object { $_ })
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 Import-Module (Join-Path $here '..\lib\PsEnv.psm1') -Force
 Set-WbCleanPSModulePath
