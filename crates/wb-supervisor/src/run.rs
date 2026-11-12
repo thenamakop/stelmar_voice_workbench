@@ -194,20 +194,15 @@ pub fn run_batch(
                         Event::Progress {
                             committed_until_ms, ..
                         } => {
-                            if let Err(err) = flush_chunk(
-                                committer,
-                                &mut pending,
-                                *committed_until_ms,
-                                observer,
-                            ) {
+                            if let Err(err) =
+                                flush_chunk(committer, &mut pending, *committed_until_ms, observer)
+                            {
                                 engine.kill();
                                 return Err(RunError::Commit(err));
                             }
                         }
                         Event::Done(summary) => {
-                            if let Err(err) =
-                                flush_chunk(committer, &mut pending, 0, observer)
-                            {
+                            if let Err(err) = flush_chunk(committer, &mut pending, 0, observer) {
                                 engine.kill();
                                 return Err(RunError::Commit(err));
                             }

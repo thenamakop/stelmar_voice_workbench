@@ -141,7 +141,11 @@ fn main() {
             }
         }
         std::thread::sleep(std::time::Duration::from_millis(delay));
-        if std::env::var("MOCK_SKIP").ok().and_then(|v| v.parse::<u64>().ok()) == Some(i) {
+        if std::env::var("MOCK_SKIP")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            == Some(i)
+        {
             // A chunk the engine could not decode (too short): a warning, no segment, then the chunk is closed.
             emit(&Event::Warning {
                 code: "chunk_too_short".into(),

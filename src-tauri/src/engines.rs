@@ -385,7 +385,10 @@ pub fn refresh_engines(registry: &Registry, state: &AppState) {
 /// `avx512` build): then it is an info line (log only, and the System screen shows the row), and the Toast
 /// is reserved for "no engine can run here".
 pub fn engine_notices(rows: &[EngineRow]) -> Vec<(NoticeLevel, String)> {
-    let usable = rows.iter().filter(|r| matches!(r.state, EngineState::Ok)).count();
+    let usable = rows
+        .iter()
+        .filter(|r| matches!(r.state, EngineState::Ok))
+        .count();
     let mut out = Vec::new();
     for r in rows {
         let message = match r.state {
@@ -400,7 +403,11 @@ pub fn engine_notices(rows: &[EngineRow]) -> Vec<(NoticeLevel, String)> {
                 r.message.clone().unwrap_or_else(|| "it failed".into())
             ),
         };
-        let level = if usable > 0 { NoticeLevel::Info } else { NoticeLevel::Warning };
+        let level = if usable > 0 {
+            NoticeLevel::Info
+        } else {
+            NoticeLevel::Warning
+        };
         out.push((level, message));
     }
     if usable == 0 && !rows.is_empty() {
@@ -594,9 +601,16 @@ mod tests {
         assert_eq!(speech_engine_state(&[], true), SpeechEngine::NoneFound);
         // Before the first look has finished the answer is "checking", never "none".
         assert_eq!(speech_engine_state(&[], false), SpeechEngine::Checking);
-        assert_eq!(speech_engine_state(&[row(EngineState::Checking)], false), SpeechEngine::Checking);
+        assert_eq!(
+            speech_engine_state(&[row(EngineState::Checking)], false),
+            SpeechEngine::Checking
+        );
         // Files present but none can run here.
-        let bad = [row(EngineState::CpuMismatch), row(EngineState::Failed), row(EngineState::Timeout)];
+        let bad = [
+            row(EngineState::CpuMismatch),
+            row(EngineState::Failed),
+            row(EngineState::Timeout),
+        ];
         assert_eq!(speech_engine_state(&bad, true), SpeechEngine::NoneUsable);
         // One good engine is enough, even while the others are still being probed.
         let mixed = [row(EngineState::CpuMismatch), row(EngineState::Ok)];
@@ -616,12 +630,20 @@ mod tests {
         let n = engine_notices(&mixed);
         assert_eq!(n.len(), 1);
         assert!(matches!(n[0].0, NoticeLevel::Info), "{n:?}");
-        assert!(n[0].1.contains("avx512") && !n[0].1.contains("avx512f"), "plain wording, no feature list: {}", n[0].1);
+        assert!(
+            n[0].1.contains("avx512") && !n[0].1.contains("avx512f"),
+            "plain wording, no feature list: {}",
+            n[0].1
+        );
         // Nothing can run: a warning per build and one error that says so.
         let none = [row(EngineState::CpuMismatch), row(EngineState::Failed)];
         let n = engine_notices(&none);
         assert_eq!(n.len(), 3);
-        assert!(n[..2].iter().all(|(l, _)| matches!(l, NoticeLevel::Warning)));
+        assert!(
+            n[..2]
+                .iter()
+                .all(|(l, _)| matches!(l, NoticeLevel::Warning))
+        );
         assert!(matches!(n[2].0, NoticeLevel::Error));
         assert!(n[2].1.contains("Recording is not affected"));
         // All good, or nothing found (that case has its own notice): silence.

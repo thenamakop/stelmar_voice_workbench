@@ -76,7 +76,9 @@ pub struct SpawnSpec {
 /// True for the variables the app family uses to steer development and gate runs.
 pub fn is_wb_variable(name: &str) -> bool {
     // Bytes, not a string slice: a name such as "ab€" has no character boundary at byte 3.
-    name.as_bytes().get(..3).is_some_and(|p| p.eq_ignore_ascii_case(b"WB_"))
+    name.as_bytes()
+        .get(..3)
+        .is_some_and(|p| p.eq_ignore_ascii_case(b"WB_"))
 }
 
 /// One line the engine wrote to stdout.

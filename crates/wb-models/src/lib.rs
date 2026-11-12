@@ -525,10 +525,17 @@ mod tests {
 
     #[test]
     fn source_reads_both_the_object_and_the_local_string_form() {
-        let a: Source = serde_json::from_str(r#"{"repo":"ggerganov/whisper.cpp","revision":"5359861c"}"#).expect("object");
-        let b: Source = serde_json::from_str(r#""https://huggingface.co/ggerganov/whisper.cpp@5359861c""#).expect("string");
+        let a: Source =
+            serde_json::from_str(r#"{"repo":"ggerganov/whisper.cpp","revision":"5359861c"}"#)
+                .expect("object");
+        let b: Source =
+            serde_json::from_str(r#""https://huggingface.co/ggerganov/whisper.cpp@5359861c""#)
+                .expect("string");
         let c: Source = serde_json::from_str(r#""https://huggingface.co/vasista22/whisper-hindi-small@abc (convert-h5-to-ggml.py, then quantize)""#).expect("with note");
         assert_eq!(a, b);
-        assert_eq!((c.repo.as_str(), c.revision.as_str()), ("vasista22/whisper-hindi-small", "abc"));
+        assert_eq!(
+            (c.repo.as_str(), c.revision.as_str()),
+            ("vasista22/whisper-hindi-small", "abc")
+        );
     }
 }

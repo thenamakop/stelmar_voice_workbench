@@ -286,16 +286,27 @@ fn an_engine_killed_between_the_two_halves_of_a_split_chunk_loses_and_repeats_no
     assert_eq!(segs.len(), 16, "two halves of each of 8 chunks");
     for (i, s) in segs.iter().enumerate() {
         let (chunk, half) = (i as u64 / 2, i as u64 % 2);
-        assert_eq!(s.chunk as u64, chunk, "in order, no half missing or repeated");
+        assert_eq!(
+            s.chunk as u64, chunk,
+            "in order, no half missing or repeated"
+        );
         assert_eq!(s.start_ms, chunk * 1000 + half * 500);
         assert_eq!(s.end_ms, chunk * 1000 + 500 + half * 500);
     }
-    assert_eq!(c.repeats_refused(), 0, "the half that was never committed is not refused later");
+    assert_eq!(
+        c.repeats_refused(),
+        0,
+        "the half that was never committed is not refused later"
+    );
     // The cursor when the engine died was the end of the last finished chunk, not the middle of chunk 3.
     assert!(
         obs.notices.iter().any(|n| matches!(
             n,
-            Notice::Died { committed_until_ms: 3_000, restart: 1, .. }
+            Notice::Died {
+                committed_until_ms: 3_000,
+                restart: 1,
+                ..
+            }
         )),
         "{:?}",
         obs.notices
@@ -330,7 +341,10 @@ fn a_chunk_is_shown_only_after_all_of_it_is_committed() {
     assert_eq!(obs.shown.len(), 6);
     // When the first half of a chunk is shown, both halves are already on disk (fsynced before shown).
     for (k, n) in obs.committed_when_shown.iter().enumerate() {
-        assert!(*n >= (k / 2 + 1) * 2, "segment {k} shown with only {n} on disk");
+        assert!(
+            *n >= (k / 2 + 1) * 2,
+            "segment {k} shown with only {n} on disk"
+        );
     }
 }
 
@@ -381,7 +395,10 @@ fn a_chunk_with_no_segment_still_moves_the_cursor_so_nothing_is_decoded_twice() 
     assert!(
         obs.notices.iter().any(|n| matches!(
             n,
-            Notice::Died { committed_until_ms: 6_000, .. }
+            Notice::Died {
+                committed_until_ms: 6_000,
+                ..
+            }
         )),
         "the cursor passed the empty chunk: {:?}",
         obs.notices

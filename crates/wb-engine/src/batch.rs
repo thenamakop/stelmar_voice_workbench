@@ -13,7 +13,9 @@ use wb_engine_core::chunker::{self, Chunk, Params};
 use wb_engine_core::guards::{self, Metrics};
 use wb_engine_core::lang::{self, Candidate, Detection, Plan, Reason, Rules};
 use wb_engine_core::text::{self, ScriptCounts};
-use wb_protocol::{BatchRequest, DoneSummary, Event, LangProb, SegmentEvent, SegmentFlag, Source, Stats};
+use wb_protocol::{
+    BatchRequest, DoneSummary, Event, LangProb, SegmentEvent, SegmentFlag, Source, Stats,
+};
 
 use crate::asr::{Decoded, Model, Vad};
 use crate::out;
@@ -36,7 +38,12 @@ impl Models {
             let idx = match by_id.get(&model.id) {
                 Some(i) => *i,
                 None => {
-                    loaded.push(Model::load(model, req.device, gpu_ordinal, req.settings.flash_attn)?);
+                    loaded.push(Model::load(
+                        model,
+                        req.device,
+                        gpu_ordinal,
+                        req.settings.flash_attn,
+                    )?);
                     by_id.insert(model.id.clone(), loaded.len() - 1);
                     loaded.len() - 1
                 }
@@ -114,7 +121,9 @@ fn too_short(samples: usize) -> bool {
 }
 
 fn too_short_message(chunk_no: u32, start_ms: u64, end_ms: u64) -> String {
-    format!("chunk {chunk_no} ({start_ms} to {end_ms} ms) holds under 100 ms of audio and was not decoded")
+    format!(
+        "chunk {chunk_no} ({start_ms} to {end_ms} ms) holds under 100 ms of audio and was not decoded"
+    )
 }
 
 /// Why a decode of a chunk (or half a chunk) is not usable as it is.
@@ -178,13 +187,24 @@ impl AttemptLog {
             Source::Session { dir } => dir.clone(),
         };
         Self {
-            path: std::env::var("WB_ATTEMPT_LOG").ok().filter(|p| !p.is_empty()),
+            path: std::env::var("WB_ATTEMPT_LOG")
+                .ok()
+                .filter(|p| !p.is_empty()),
             source: name,
         }
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn record(&self, chunk: u32, start_ms: u64, end_ms: u64, step: &str, a: &Attempt, m: &Metrics, v: &Verdict) {
+    fn record(
+        &self,
+        chunk: u32,
+        start_ms: u64,
+        end_ms: u64,
+        step: &str,
+        a: &Attempt,
+        m: &Metrics,
+        v: &Verdict,
+    ) {
         use std::io::Write;
         let Some(path) = &self.path else { return };
         let line = serde_json::json!({
@@ -194,7 +214,11 @@ impl AttemptLog {
             "avg_logprob": m.avg_logprob, "no_speech_prob": m.no_speech_prob, "speech_ratio": m.speech_ratio,
             "truncated": a.decoded.truncated, "verdict": format!("{v:?}"),
         });
-        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+        {
             let _ = writeln!(f, "{line}");
         }
     }
@@ -234,7 +258,10 @@ impl ChunkCtx<'_> {
         self.det
             .probs
             .iter()
-            .map(|(l, p)| LangProb { lang: l.clone(), prob: *p })
+            .map(|(l, p)| LangProb {
+                lang: l.clone(),
+                prob: *p,
+            })
             .collect()
     }
 }
@@ -415,9 +442,13 @@ fn emit_kept_or_unclear(
                     cx.chunk_no
                 ),
             );
-            emit_text(sink, summary, context, cx, a, m, start_ms, end_ms, true, true)
+            emit_text(
+                sink, summary, context, cx, a, m, start_ms, end_ms, true, true,
+            )
         }
-        _ => emit_unclear(sink, summary, context, cx, lang, model_id, failure, start_ms, end_ms, hint),
+        _ => emit_unclear(
+            sink, summary, context, cx, lang, model_id, failure, start_ms, end_ms, hint,
+        ),
     }
 }
 
@@ -644,7 +675,9 @@ pub fn run(
             } else {
                 verdict
             };
-            attempt_log.record(chunk_no, start_abs, end_abs, "first", &attempt, &metrics, &verdict);
+            attempt_log.record(
+                chunk_no, start_abs, end_abs, "first", &attempt, &metrics, &verdict,
+            );
             let cx = ChunkCtx {
                 unit: unit.index,
                 chunk_no,
@@ -656,7 +689,18 @@ pub fn run(
             };
             match verdict {
                 Verdict::Good => {
-                    emit_text(sink, &mut summary, &mut context, &cx, &attempt, &metrics, start_abs, end_abs, false, false)?;
+                    emit_text(
+                        sink,
+                        &mut summary,
+                        &mut context,
+                        &cx,
+                        &attempt,
+                        &metrics,
+                        start_abs,
+                        end_abs,
+                        false,
+                        false,
+                    )?;
                 }
                 Verdict::Skip(reason) => {
                     out::warn(
@@ -705,9 +749,18 @@ pub fn run(
                         }
                         let mut req_a = retry_req.clone();
                         req_a.settings.start_temperature = t;
-                        let a = decode(&mut models, &lang, chunk_pcm, &no_context, &req_a, threads)?;
+                        let a =
+                            decode(&mut models, &lang, chunk_pcm, &no_context, &req_a, threads)?;
                         let (va, ma) = judge(&a, speech_ratio, speech_s);
-                        attempt_log.record(chunk_no, start_abs, end_abs, &format!("a_t{t:.1}"), &a, &ma, &va);
+                        attempt_log.record(
+                            chunk_no,
+                            start_abs,
+                            end_abs,
+                            &format!("a_t{t:.1}"),
+                            &a,
+                            &ma,
+                            &va,
+                        );
                         match va {
                             Verdict::Good => {
                                 rescued_a = Some((a, ma, t));
@@ -715,7 +768,8 @@ pub fn run(
                             }
                             Verdict::Fail(Failure::LowCoverage) => {
                                 let longer = low_a.as_ref().is_none_or(|(b, _)| {
-                                    guards::letter_count(&a.decoded.text.text) > guards::letter_count(&b.decoded.text.text)
+                                    guards::letter_count(&a.decoded.text.text)
+                                        > guards::letter_count(&b.decoded.text.text)
                                 });
                                 if longer {
                                     low_a = Some((a, ma));
@@ -742,22 +796,51 @@ pub fn run(
                     if let Some((a, m, t)) = rescued_a {
                         out::warn(
                             "chunk_rescued",
-                            format!("chunk {chunk_no}: rescued by step a (decoded again without previous-text context at temperature {t:.1})"),
+                            format!(
+                                "chunk {chunk_no}: rescued by step a (decoded again without previous-text context at temperature {t:.1})"
+                            ),
                         );
-                        emit_text(sink, &mut summary, &mut context, &cx, &a, &m, start_abs, end_abs, true, false)?;
-                    } else if let Some(split_ms) = chunker::split_point_ms(&speech, c, &audio.pcm, 16_000) {
-                        let cut = ((split_ms.saturating_sub(c.start_ms)) as usize * 16).min(chunk_pcm.len());
-                        let halves = [(c.start_ms, split_ms, &chunk_pcm[..cut]), (split_ms, c.end_ms, &chunk_pcm[cut..])];
+                        emit_text(
+                            sink,
+                            &mut summary,
+                            &mut context,
+                            &cx,
+                            &a,
+                            &m,
+                            start_abs,
+                            end_abs,
+                            true,
+                            false,
+                        )?;
+                    } else if let Some(split_ms) =
+                        chunker::split_point_ms(&speech, c, &audio.pcm, 16_000)
+                    {
+                        let cut = ((split_ms.saturating_sub(c.start_ms)) as usize * 16)
+                            .min(chunk_pcm.len());
+                        let halves = [
+                            (c.start_ms, split_ms, &chunk_pcm[..cut]),
+                            (split_ms, c.end_ms, &chunk_pcm[cut..]),
+                        ];
                         let mut outcome: Vec<(u64, u64, Half)> = Vec::new();
                         for (n, (a_ms, b_ms, pcm)) in halves.into_iter().enumerate() {
                             let dur_s = (b_ms - a_ms) as f64 / 1000.0;
-                            let half_speech_s =
-                                chunker::speech_seconds(&speech, a_ms as f64 / 1000.0, b_ms as f64 / 1000.0);
+                            let half_speech_s = chunker::speech_seconds(
+                                &speech,
+                                a_ms as f64 / 1000.0,
+                                b_ms as f64 / 1000.0,
+                            );
                             let ratio = (half_speech_s / dur_s.max(1e-9)) as f32;
                             let half = if pcm.len() < 1_600 || ratio < guards::MIN_SPEECH_RATIO {
                                 Half::Silent
                             } else {
-                                let d = decode(&mut models, &lang, pcm, &no_context, &retry_req, threads)?;
+                                let d = decode(
+                                    &mut models,
+                                    &lang,
+                                    pcm,
+                                    &no_context,
+                                    &retry_req,
+                                    threads,
+                                )?;
                                 let (vh, mh) = judge(&d, ratio, half_speech_s);
                                 attempt_log.record(
                                     chunk_no,
@@ -771,7 +854,9 @@ pub fn run(
                                 match vh {
                                     Verdict::Good => Half::Text(Box::new(d), mh),
                                     Verdict::Skip(_) => Half::Silent,
-                                    Verdict::Fail(Failure::LowCoverage) => Half::Low(Box::new(d), mh),
+                                    Verdict::Fail(Failure::LowCoverage) => {
+                                        Half::Low(Box::new(d), mh)
+                                    }
                                     Verdict::Fail(f) => Half::Failed(f),
                                 }
                             };
@@ -788,50 +873,131 @@ pub fn run(
                             }
                         }
                         if outcome.iter().all(|(_, _, h)| matches!(h, Half::Failed(_))) {
-                            emit_kept_or_unclear(sink, &mut summary, &mut context, &cx, keep, &lang, &model_id, failure, start_abs, end_abs, hint.as_deref())?;
+                            emit_kept_or_unclear(
+                                sink,
+                                &mut summary,
+                                &mut context,
+                                &cx,
+                                keep,
+                                &lang,
+                                &model_id,
+                                failure,
+                                start_abs,
+                                end_abs,
+                                hint.as_deref(),
+                            )?;
                         } else {
                             if outcome.iter().any(|(_, _, h)| matches!(h, Half::Text(..))) {
                                 out::warn(
                                     "chunk_rescued",
-                                    format!("chunk {chunk_no}: rescued by step b (cut at {} ms, each half decoded without context)", abs(split_ms)),
+                                    format!(
+                                        "chunk {chunk_no}: rescued by step b (cut at {} ms, each half decoded without context)",
+                                        abs(split_ms)
+                                    ),
                                 );
                             } else if outcome.iter().any(|(_, _, h)| matches!(h, Half::Low(..))) {
                                 out::warn(
                                     "chunk_low_coverage",
-                                    format!("chunk {chunk_no}: a half (cut at {} ms) stays far shorter than its speech; the text is kept and flagged low_coverage", abs(split_ms)),
+                                    format!(
+                                        "chunk {chunk_no}: a half (cut at {} ms) stays far shorter than its speech; the text is kept and flagged low_coverage",
+                                        abs(split_ms)
+                                    ),
                                 );
                             } else {
                                 out::warn(
                                     "chunk_split_no_text",
-                                    format!("chunk {chunk_no}: no half (cut at {} ms) gave usable text; the failed halves are flagged unclear and the silent ones are reported below", abs(split_ms)),
+                                    format!(
+                                        "chunk {chunk_no}: no half (cut at {} ms) gave usable text; the failed halves are flagged unclear and the silent ones are reported below",
+                                        abs(split_ms)
+                                    ),
                                 );
                             }
                             for (a_ms, b_ms, half) in outcome {
                                 match half {
                                     Half::Text(d, m) => {
-                                        emit_text(sink, &mut summary, &mut context, &cx, &d, &m, abs(a_ms), abs(b_ms), true, false)?;
+                                        emit_text(
+                                            sink,
+                                            &mut summary,
+                                            &mut context,
+                                            &cx,
+                                            &d,
+                                            &m,
+                                            abs(a_ms),
+                                            abs(b_ms),
+                                            true,
+                                            false,
+                                        )?;
                                     }
                                     Half::Low(d, m) => {
                                         if d.decoded.text.text.trim().is_empty() {
-                                            emit_unclear(sink, &mut summary, &mut context, &cx, &lang, &model_id, Failure::LowCoverage, abs(a_ms), abs(b_ms), hint.as_deref())?;
+                                            emit_unclear(
+                                                sink,
+                                                &mut summary,
+                                                &mut context,
+                                                &cx,
+                                                &lang,
+                                                &model_id,
+                                                Failure::LowCoverage,
+                                                abs(a_ms),
+                                                abs(b_ms),
+                                                hint.as_deref(),
+                                            )?;
                                         } else {
-                                            emit_text(sink, &mut summary, &mut context, &cx, &d, &m, abs(a_ms), abs(b_ms), true, true)?;
+                                            emit_text(
+                                                sink,
+                                                &mut summary,
+                                                &mut context,
+                                                &cx,
+                                                &d,
+                                                &m,
+                                                abs(a_ms),
+                                                abs(b_ms),
+                                                true,
+                                                true,
+                                            )?;
                                         }
                                     }
                                     Half::Failed(f) => {
-                                        emit_unclear(sink, &mut summary, &mut context, &cx, &lang, &model_id, f, abs(a_ms), abs(b_ms), hint.as_deref())?;
+                                        emit_unclear(
+                                            sink,
+                                            &mut summary,
+                                            &mut context,
+                                            &cx,
+                                            &lang,
+                                            &model_id,
+                                            f,
+                                            abs(a_ms),
+                                            abs(b_ms),
+                                            hint.as_deref(),
+                                        )?;
                                     }
                                     Half::Silent => {
                                         out::warn(
                                             "half_silent",
-                                            format!("chunk {chunk_no}: the half {} to {} ms holds no speech worth decoding (too little speech or judged not speech) and gives no segment", abs(a_ms), abs(b_ms)),
+                                            format!(
+                                                "chunk {chunk_no}: the half {} to {} ms holds no speech worth decoding (too little speech or judged not speech) and gives no segment",
+                                                abs(a_ms),
+                                                abs(b_ms)
+                                            ),
                                         );
                                     }
                                 }
                             }
                         }
                     } else {
-                        emit_kept_or_unclear(sink, &mut summary, &mut context, &cx, keep, &lang, &model_id, failure, start_abs, end_abs, hint.as_deref())?;
+                        emit_kept_or_unclear(
+                            sink,
+                            &mut summary,
+                            &mut context,
+                            &cx,
+                            keep,
+                            &lang,
+                            &model_id,
+                            failure,
+                            start_abs,
+                            end_abs,
+                            hint.as_deref(),
+                        )?;
                     }
                 }
             }
@@ -973,7 +1139,10 @@ mod tests {
         assert!(too_short(0) && too_short(1_599));
         assert!(!too_short(1_600));
         let m = too_short_message(7, 61_250, 61_300);
-        assert!(m.contains("chunk 7") && m.contains("61250 to 61300 ms") && m.contains("not decoded"), "{m}");
+        assert!(
+            m.contains("chunk 7") && m.contains("61250 to 61300 ms") && m.contains("not decoded"),
+            "{m}"
+        );
     }
 
     #[test]
@@ -988,8 +1157,18 @@ mod tests {
 
     #[test]
     fn an_unclear_segment_carries_the_original_text_as_a_hint_and_no_text() -> Result<()> {
-        let det = Detection { probs: vec![("hi".to_string(), 0.9), ("en".to_string(), 0.1)] };
-        let cx = ChunkCtx { unit: 0, chunk_no: 3, det: &det, locked: false, multi: true, chose_both: false, context_chars: 0 };
+        let det = Detection {
+            probs: vec![("hi".to_string(), 0.9), ("en".to_string(), 0.1)],
+        };
+        let cx = ChunkCtx {
+            unit: 0,
+            chunk_no: 3,
+            det: &det,
+            locked: false,
+            multi: true,
+            chose_both: false,
+            context_chars: 0,
+        };
         let mut events: Vec<Event> = Vec::new();
         let mut summary = DoneSummary {
             segments: 0,
@@ -1010,16 +1189,47 @@ mod tests {
                 Ok(())
             };
             let mut sink = Sink { emit: &mut emit };
-            emit_unclear(&mut sink, &mut summary, &mut context, &cx, "hi", "m", Failure::LowCoverage, 1_000, 6_000, Some(original))?;
-            emit_unclear(&mut sink, &mut summary, &mut context, &cx, "hi", "m", Failure::Loop, 6_000, 9_000, None)?;
+            emit_unclear(
+                &mut sink,
+                &mut summary,
+                &mut context,
+                &cx,
+                "hi",
+                "m",
+                Failure::LowCoverage,
+                1_000,
+                6_000,
+                Some(original),
+            )?;
+            emit_unclear(
+                &mut sink,
+                &mut summary,
+                &mut context,
+                &cx,
+                "hi",
+                "m",
+                Failure::Loop,
+                6_000,
+                9_000,
+                None,
+            )?;
         }
         let segments: Vec<SegmentEvent> = events
             .into_iter()
-            .filter_map(|e| if let Event::Segment(s) = e { Some(s) } else { None })
+            .filter_map(|e| {
+                if let Event::Segment(s) = e {
+                    Some(s)
+                } else {
+                    None
+                }
+            })
             .collect();
         assert_eq!(segments.len(), 2);
         assert!(segments[0].flags.contains(&SegmentFlag::Unclear));
-        assert!(segments[0].text.is_empty(), "an unclear segment has no text");
+        assert!(
+            segments[0].text.is_empty(),
+            "an unclear segment has no text"
+        );
         assert_eq!(segments[0].hint_text.as_deref(), Some(original));
         assert_eq!(segments[1].hint_text, None);
         assert_eq!(summary.unclear_chunks, 2);

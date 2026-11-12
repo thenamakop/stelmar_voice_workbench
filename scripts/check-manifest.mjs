@@ -12,11 +12,28 @@ import { join } from "node:path";
 
 const FILE = join("models", "manifest.json");
 const ENTRY_KEYS = new Set([
-  "id", "file", "sha256", "bytes", "kind", "base", "quant", "languages", "candidate_roles",
-  "validated_roles", "licence", "source", "conversion",
+  "id",
+  "file",
+  "sha256",
+  "bytes",
+  "kind",
+  "base",
+  "quant",
+  "languages",
+  "candidate_roles",
+  "validated_roles",
+  "licence",
+  "source",
+  "conversion",
 ]);
 const REQUIRED = ["id", "file", "sha256", "bytes", "licence", "source"];
-const CONVERSION_KEYS = new Set(["script", "settings", "input_sha256", "whisper_cpp_commit", "deterministic"]);
+const CONVERSION_KEYS = new Set([
+  "script",
+  "settings",
+  "input_sha256",
+  "whisper_cpp_commit",
+  "deterministic",
+]);
 const TOP_KEYS = new Set(["version", "_note", "models"]);
 
 const problems = [];
@@ -60,13 +77,18 @@ for (const [i, m] of (doc.models ?? []).entries()) {
   ids.add(m.id);
   if (!sha.test(m.sha256 ?? "")) bad(`${where}: sha256 is not 64 lower-case hex characters`);
   if (!Number.isInteger(m.bytes) || m.bytes <= 0) bad(`${where}: bytes must be a positive integer`);
-  if (typeof m.file === "string" && (m.file.startsWith("/") || m.file.includes(":"))) bad(`${where}: file must be relative to models/`);
+  if (typeof m.file === "string" && (m.file.startsWith("/") || m.file.includes(":")))
+    bad(`${where}: file must be relative to models/`);
   const s = m.source ?? {};
-  if (!s.repo || !/^[0-9a-f]{12,40}$/.test(s.revision ?? "")) bad(`${where}: source needs a repo and an exact revision (hex commit)`);
-  for (const k of Object.keys(s)) if (k !== "repo" && k !== "revision") bad(`${where}: source key '${k}' is not allowed`);
+  if (!s.repo || !/^[0-9a-f]{12,40}$/.test(s.revision ?? ""))
+    bad(`${where}: source needs a repo and an exact revision (hex commit)`);
+  for (const k of Object.keys(s))
+    if (k !== "repo" && k !== "revision") bad(`${where}: source key '${k}' is not allowed`);
   if (m.conversion) {
-    for (const k of Object.keys(m.conversion)) if (!CONVERSION_KEYS.has(k)) bad(`${where}: conversion key '${k}' is not allowed`);
-    if (m.conversion.deterministic === undefined || m.conversion.deterministic === null) bad(`${where}: conversion.deterministic must be true or false (measured)`);
+    for (const k of Object.keys(m.conversion))
+      if (!CONVERSION_KEYS.has(k)) bad(`${where}: conversion key '${k}' is not allowed`);
+    if (m.conversion.deterministic === undefined || m.conversion.deterministic === null)
+      bad(`${where}: conversion.deterministic must be true or false (measured)`);
     if (!sha.test(m.conversion.input_sha256 ?? "")) {
       // A conversion from a checkpoint folder has no single input file; the script then names the source revision.
       if (m.conversion.input_sha256) bad(`${where}: conversion.input_sha256 is not a SHA-256`);
@@ -76,7 +98,10 @@ for (const [i, m] of (doc.models ?? []).entries()) {
 
 // No ignore rule may hide the manifest.
 try {
-  const out = execFileSync("git", ["check-ignore", "-v", FILE], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+  const out = execFileSync("git", ["check-ignore", "-v", FILE], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+  });
   if (out.trim()) bad(`a git ignore rule matches ${FILE}: ${out.trim()}`);
 } catch {
   // exit status 1 = not ignored: what we want

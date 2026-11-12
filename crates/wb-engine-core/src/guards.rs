@@ -91,7 +91,10 @@ pub fn chars_per_speech_second(text: &str, speech_s: f64) -> Option<f32> {
 
 /// True when `text` is far below the normal rate for `lang` given `speech_s` seconds of speech.
 pub fn low_coverage(text: &str, lang: &str, speech_s: f64) -> bool {
-    match (coverage_floor(lang), chars_per_speech_second(text, speech_s)) {
+    match (
+        coverage_floor(lang),
+        chars_per_speech_second(text, speech_s),
+    ) {
         (Some(floor), Some(rate)) => rate < floor,
         _ => false,
     }
@@ -351,7 +354,11 @@ mod tests {
         }
         assert!(compression_ratio_utf8(hindi) > compression_ratio(hindi));
         // A real loop is over the threshold in each script.
-        for unit in ["धन्यवाद आप सभी का ", "شکریہ آپ سب کا ", "thank you all of you "] {
+        for unit in [
+            "धन्यवाद आप सभी का ",
+            "شکریہ آپ سب کا ",
+            "thank you all of you ",
+        ] {
             let looped = unit.repeat(12);
             assert!(
                 compression_ratio(&looped) > COMPRESSION_ABOVE,

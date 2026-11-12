@@ -125,7 +125,10 @@ mod tests {
         assert!(!computing(5_000, 0, 0), "never ticked");
         assert!(computing(5_000, 4_000, 0));
         assert!(computing(25_000, 5_000, 0), "exactly the freshness limit");
-        assert!(!computing(25_001, 5_000, 0), "stale: a hung compute stops the heartbeats");
+        assert!(
+            !computing(25_001, 5_000, 0),
+            "stale: a hung compute stops the heartbeats"
+        );
     }
 
     #[test]
@@ -133,7 +136,10 @@ mod tests {
         // Last tick long ago (the detection pass has no callback), hold until 400 s.
         assert!(computing(100_000, 1_000, 400_000), "inside the hold");
         assert!(computing(400_000, 1_000, 400_000), "at the end of the hold");
-        assert!(!computing(400_001, 1_000, 400_000), "past the hold: a real hang is caught");
+        assert!(
+            !computing(400_001, 1_000, 400_000),
+            "past the hold: a real hang is caught"
+        );
     }
 
     #[test]
@@ -142,6 +148,10 @@ mod tests {
         let a = LAST_TICK_MS.load(Ordering::Relaxed);
         assert!(a > 0);
         tick();
-        assert_eq!(LAST_TICK_MS.load(Ordering::Relaxed), a, "a second tick right after does not store");
+        assert_eq!(
+            LAST_TICK_MS.load(Ordering::Relaxed),
+            a,
+            "a second tick right after does not store"
+        );
     }
 }

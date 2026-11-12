@@ -723,7 +723,8 @@ mod tests {
     }
 
     #[test]
-    fn hint_text_travels_with_an_unclear_segment_and_is_not_in_the_transcript() -> Result<(), serde_json::Error> {
+    fn hint_text_travels_with_an_unclear_segment_and_is_not_in_the_transcript()
+    -> Result<(), serde_json::Error> {
         let hint = "यह मूल पाठ है";
         let mut ok = unclear_segment(10_000, None);
         ok.text = "सामान्य पाठ".into();
@@ -732,9 +733,16 @@ mod tests {
         // The hint survives a round trip (review reads it from the committed JSONL) ...
         let line = Event::Segment(segments[1].clone()).to_line()?;
         assert!(line.contains("hint_text"));
-        assert_eq!(Event::from_line(&line)?, Event::Segment(segments[1].clone()));
+        assert_eq!(
+            Event::from_line(&line)?,
+            Event::Segment(segments[1].clone())
+        );
         // ... a segment without one writes no field at all ...
-        assert!(!Event::Segment(segments[0].clone()).to_line()?.contains("hint_text"));
+        assert!(
+            !Event::Segment(segments[0].clone())
+                .to_line()?
+                .contains("hint_text")
+        );
         // ... and the transcript text never contains it.
         let text = transcript_text(&segments);
         assert_eq!(text, "सामान्य पाठ");

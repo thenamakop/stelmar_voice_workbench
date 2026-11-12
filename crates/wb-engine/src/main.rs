@@ -446,7 +446,8 @@ fn cmd_bench(args: &[String]) -> Result<(), Fail> {
 fn cmd_detect(args: &[String]) -> Result<(), Fail> {
     begin()?;
     let req = eval_request(args)?;
-    let out_path = args_value(args, "--out").ok_or_else(|| Fail::usage("--out FILE.jsonl is required"))?;
+    let out_path =
+        args_value(args, "--out").ok_or_else(|| Fail::usage("--out FILE.jsonl is required"))?;
     let mut file = BufWriter::new(
         File::create(out_path)
             .map_err(|e| Fail::usage(format!("cannot create {out_path}: {e}")))?,
@@ -457,7 +458,8 @@ fn cmd_detect(args: &[String]) -> Result<(), Fail> {
         writeln!(file, "{v}")?;
         file.flush()
     };
-    let n = batch::detect_only(&req, picked.gpu_ordinal, &mut emit).map_err(|e| Fail::from_error(&e))?;
+    let n = batch::detect_only(&req, picked.gpu_ordinal, &mut emit)
+        .map_err(|e| Fail::from_error(&e))?;
     out::emit(&Event::Done(wb_protocol::DoneSummary {
         segments: 0,
         chunks: n,
@@ -468,7 +470,11 @@ fn cmd_detect(args: &[String]) -> Result<(), Fail> {
         unclear_chunks: 0,
         low_coverage_chunks: 0,
     }))
-    .map_err(|e| Fail { code: exit::ERROR, error_code: "io", message: e.to_string() })
+    .map_err(|e| Fail {
+        code: exit::ERROR,
+        error_code: "io",
+        message: e.to_string(),
+    })
 }
 
 /// `chunks`: the chunks `batch` would decode for a file, from the VAD alone (no model, no language
@@ -476,14 +482,25 @@ fn cmd_detect(args: &[String]) -> Result<(), Fail> {
 fn cmd_chunks(args: &[String]) -> Result<(), Fail> {
     begin()?;
     let file = args_value(args, "--file").ok_or_else(|| Fail::usage("--file WAV is required"))?;
-    let out_path = args_value(args, "--out").ok_or_else(|| Fail::usage("--out FILE.json is required"))?;
+    let out_path =
+        args_value(args, "--out").ok_or_else(|| Fail::usage("--out FILE.json is required"))?;
     let dir = find_models_dir(args);
-    let vad_model = resolve_model(&dir, args_value(args, "--vad-model").unwrap_or("silero-v6.2.0"))?;
-    let max_chunk_s: f32 = args_value(args, "--max-chunk-s").and_then(|v| v.parse().ok()).unwrap_or(15.0);
-    let settings = Settings { max_chunk_s, ..Settings::default() };
+    let vad_model = resolve_model(
+        &dir,
+        args_value(args, "--vad-model").unwrap_or("silero-v6.2.0"),
+    )?;
+    let max_chunk_s: f32 = args_value(args, "--max-chunk-s")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(15.0);
+    let settings = Settings {
+        max_chunk_s,
+        ..Settings::default()
+    };
     let pcm = audio::read_wav_16k(Path::new(file)).map_err(|e| Fail::from_error(&e))?;
     let mut vad = asr::Vad::load(&vad_model.path, 2).map_err(|e| Fail::from_error(&e))?;
-    let speech = vad.speech(&pcm, &settings).map_err(|e| Fail::from_error(&e))?;
+    let speech = vad
+        .speech(&pcm, &settings)
+        .map_err(|e| Fail::from_error(&e))?;
     let params = wb_engine_core::chunker::Params {
         max_chunk_s: f64::from(max_chunk_s),
         sentence_split: !args.iter().any(|a| a == "--greedy"),
@@ -495,9 +512,13 @@ fn cmd_chunks(args: &[String]) -> Result<(), Fail> {
         .enumerate()
         .map(|(i, c)| serde_json::json!({ "chunk": i, "start_ms": c.start_ms, "end_ms": c.end_ms, "speech_ratio": c.speech_ratio() }))
         .collect();
-    let doc = serde_json::json!({ "file": file, "duration_ms": pcm.len() as u64 / 16, "chunks": list });
-    std::fs::write(out_path, serde_json::to_vec_pretty(&doc).map_err(|e| Fail::usage(e.to_string()))?)
-        .map_err(|e| Fail::usage(format!("cannot write {out_path}: {e}")))?;
+    let doc =
+        serde_json::json!({ "file": file, "duration_ms": pcm.len() as u64 / 16, "chunks": list });
+    std::fs::write(
+        out_path,
+        serde_json::to_vec_pretty(&doc).map_err(|e| Fail::usage(e.to_string()))?,
+    )
+    .map_err(|e| Fail::usage(format!("cannot write {out_path}: {e}")))?;
     out::emit(&Event::Done(wb_protocol::DoneSummary {
         segments: 0,
         chunks: chunks.len() as u32,
@@ -508,7 +529,11 @@ fn cmd_chunks(args: &[String]) -> Result<(), Fail> {
         unclear_chunks: 0,
         low_coverage_chunks: 0,
     }))
-    .map_err(|e| Fail { code: exit::ERROR, error_code: "io", message: e.to_string() })
+    .map_err(|e| Fail {
+        code: exit::ERROR,
+        error_code: "io",
+        message: e.to_string(),
+    })
 }
 
 fn cmd_live(args: &[String]) -> Result<(), Fail> {

@@ -40,7 +40,8 @@ impl Committer {
             let data = std::fs::read(path)?;
             let mut offset = 0usize;
             while offset < data.len() {
-                let (line, next, terminated) = match data[offset..].iter().position(|b| *b == b'\n') {
+                let (line, next, terminated) = match data[offset..].iter().position(|b| *b == b'\n')
+                {
                     Some(i) => (&data[offset..offset + i], offset + i + 1, true),
                     None => (&data[offset..], data.len(), false),
                 };
@@ -296,7 +297,11 @@ mod tests {
             Err(e) => e,
         };
         assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
-        assert_eq!(std::fs::read(&p).expect("read"), before, "nothing was cut off");
+        assert_eq!(
+            std::fs::read(&p).expect("read"),
+            before,
+            "nothing was cut off"
+        );
     }
 
     #[test]
@@ -328,12 +333,18 @@ mod tests {
             c.commit(&seg(0, 3_000, "a")).expect("commit");
         }
         let mut f = OpenOptions::new().append(true).open(&p).expect("append");
-        f.write_all(b"{\"unit\":0,\"chu
+        f.write_all(
+            b"{\"unit\":0,\"chu
 
-").expect("write");
+",
+        )
+        .expect("write");
         drop(f);
         let c = Committer::open(&p).expect("reopen");
         assert_eq!((c.committed_until_ms(), c.segments()), (3_000, 1));
-        assert_eq!(std::fs::read_to_string(&p).expect("read").lines().count(), 1);
+        assert_eq!(
+            std::fs::read_to_string(&p).expect("read").lines().count(),
+            1
+        );
     }
 }

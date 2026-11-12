@@ -1,10 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "bundle": {
-    "externalBin": [
-      "binaries/wb-engine-avx2",
-      "binaries/wb-engine-avx512",
-      "binaries/wb-engine-vulkan"
-    ]
+    "externalBin": ["binaries/wb-engine-avx2", "binaries/wb-engine-avx512", "binaries/wb-engine-vulkan"]
   }
 }

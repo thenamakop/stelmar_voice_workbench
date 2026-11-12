@@ -192,9 +192,17 @@ fn five_random_kills_leave_the_transcript_unchanged() {
     )
     .expect("baseline run");
     let baseline_s = t0.elapsed().as_secs_f64();
-    assert_eq!(rep.restarts, 0, "the baseline must not need a restart: {:?}", quiet.notices);
+    assert_eq!(
+        rep.restarts, 0,
+        "the baseline must not need a restart: {:?}",
+        quiet.notices
+    );
     let baseline = read_segments(&base_path);
-    assert!(baseline.len() >= 12, "too few segments for five kills: {}", baseline.len());
+    assert!(
+        baseline.len() >= 12,
+        "too few segments for five kills: {}",
+        baseline.len()
+    );
 
     // 2. Five random kill points among segments 2 .. n-2, distinct.
     let n = baseline.len() as u64;
@@ -227,11 +235,37 @@ fn five_random_kills_leave_the_transcript_unchanged() {
 
     // 4. Compare.
     let mut report = String::new();
-    writeln!(report, "segments in the uninterrupted run: {}", baseline.len()).unwrap();
-    writeln!(report, "kill points (after segment number, audio ms): {:?}", killer.killed).unwrap();
-    writeln!(report, "restarts: {} (kills sent: {})", rep.restarts, killer.killed.len()).unwrap();
-    writeln!(report, "segments after the kills: {}; repeats refused by the committer: {}", after.len(), committer.repeats_refused()).unwrap();
-    writeln!(report, "wall time: uninterrupted {baseline_s:.0} s, with kills {killed_s:.0} s").unwrap();
+    writeln!(
+        report,
+        "segments in the uninterrupted run: {}",
+        baseline.len()
+    )
+    .unwrap();
+    writeln!(
+        report,
+        "kill points (after segment number, audio ms): {:?}",
+        killer.killed
+    )
+    .unwrap();
+    writeln!(
+        report,
+        "restarts: {} (kills sent: {})",
+        rep.restarts,
+        killer.killed.len()
+    )
+    .unwrap();
+    writeln!(
+        report,
+        "segments after the kills: {}; repeats refused by the committer: {}",
+        after.len(),
+        committer.repeats_refused()
+    )
+    .unwrap();
+    writeln!(
+        report,
+        "wall time: uninterrupted {baseline_s:.0} s, with kills {killed_s:.0} s"
+    )
+    .unwrap();
     let mut problems: Vec<String> = Vec::new();
     if killer.killed.len() != 5 {
         problems.push(format!("sent {} kills, wanted 5", killer.killed.len()));
@@ -258,10 +292,24 @@ fn five_random_kills_leave_the_transcript_unchanged() {
     if after.windows(2).any(|w| w[1].start_ms < w[0].end_ms) {
         problems.push("segments overlap".into());
     }
-    writeln!(report, "segment times equal to the uninterrupted run: {}", times(&baseline) == times(&after)).unwrap();
+    writeln!(
+        report,
+        "segment times equal to the uninterrupted run: {}",
+        times(&baseline) == times(&after)
+    )
+    .unwrap();
     writeln!(report, "segments with different text: {text_diffs}").unwrap();
     writeln!(report, "notices: {:?}", killer.notices).unwrap();
-    writeln!(report, "result: {}", if problems.is_empty() { "PASS".to_string() } else { format!("FAIL: {}", problems.join("; ")) }).unwrap();
+    writeln!(
+        report,
+        "result: {}",
+        if problems.is_empty() {
+            "PASS".to_string()
+        } else {
+            format!("FAIL: {}", problems.join("; "))
+        }
+    )
+    .unwrap();
     std::fs::write(out.join("report.txt"), &report).unwrap();
     println!("{report}");
     assert!(problems.is_empty(), "{problems:?}");
@@ -312,10 +360,17 @@ fn kills_inside_the_second_half_of_a_split_chunk_lose_and_repeat_no_half() {
     )
     .expect("baseline run");
     let baseline_s = t0.elapsed().as_secs_f64();
-    assert_eq!(rep.restarts, 0, "the baseline must not need a restart: {:?}", quiet.notices);
+    assert_eq!(
+        rep.restarts, 0,
+        "the baseline must not need a restart: {:?}",
+        quiet.notices
+    );
     let baseline = read_segments(&base_path);
     let split_chunks = quiet.halves;
-    assert!(split_chunks >= 8, "too few split chunks for three kills: {split_chunks}");
+    assert!(
+        split_chunks >= 8,
+        "too few split chunks for three kills: {split_chunks}"
+    );
 
     // 2. Three kill points among the split chunks (the n-th 'first half done' report), 2 .. n-2, never
     //    adjacent: the redone chunk reports its first half again and must not be hit a second time.
@@ -364,7 +419,11 @@ fn kills_inside_the_second_half_of_a_split_chunk_lose_and_repeat_no_half() {
         problems.push(format!("only {} restarts after 3 kills", rep.restarts));
     }
     if times(&baseline) != times(&after) {
-        problems.push(format!("segment times differ: {} against {}", baseline.len(), after.len()));
+        problems.push(format!(
+            "segment times differ: {} against {}",
+            baseline.len(),
+            after.len()
+        ));
     }
     if text_diffs > 0 {
         problems.push(format!("{text_diffs} segments have different text"));
@@ -373,7 +432,10 @@ fn kills_inside_the_second_half_of_a_split_chunk_lose_and_repeat_no_half() {
         problems.push("segments overlap".into());
     }
     if committer.repeats_refused() != 0 {
-        problems.push(format!("the committer refused {} repeated segments", committer.repeats_refused()));
+        problems.push(format!(
+            "the committer refused {} repeated segments",
+            committer.repeats_refused()
+        ));
     }
     // Nothing of the killed chunk was committed: at each death the cursor stood where the previous chunk
     // ended, i.e. at the end of the last segment the observer had been shown.
@@ -381,7 +443,9 @@ fn kills_inside_the_second_half_of_a_split_chunk_lose_and_repeat_no_half() {
         .notices
         .iter()
         .filter_map(|n| match n {
-            Notice::Died { committed_until_ms, .. } => Some(*committed_until_ms),
+            Notice::Died {
+                committed_until_ms, ..
+            } => Some(*committed_until_ms),
             _ => None,
         })
         .collect();
@@ -392,15 +456,50 @@ fn kills_inside_the_second_half_of_a_split_chunk_lose_and_repeat_no_half() {
     let mut report = String::new();
     writeln!(report, "split case: every chunk of 4 s or more is cut at its deepest pause and decoded as two halves (debug_force_split)").unwrap();
     writeln!(report, "chunks that reported a first half done in the uninterrupted run: {split_chunks}; segments: {}", baseline.len()).unwrap();
-    writeln!(report, "kill points (number of the first-half-done report, committed audio ms at that time): {:?}", killer.killed).unwrap();
+    writeln!(
+        report,
+        "kill points (number of the first-half-done report, committed audio ms at that time): {:?}",
+        killer.killed
+    )
+    .unwrap();
     writeln!(report, "the cursor at each death equalled the end of the last committed segment ({last_ends:?}): nothing of the killed chunk was committed").unwrap();
-    writeln!(report, "restarts: {} (kills sent: {})", rep.restarts, killer.killed.len()).unwrap();
-    writeln!(report, "segments after the kills: {}; repeats refused by the committer: {}", after.len(), committer.repeats_refused()).unwrap();
-    writeln!(report, "wall time: uninterrupted {baseline_s:.0} s, with kills {killed_s:.0} s").unwrap();
-    writeln!(report, "segment times equal to the uninterrupted run: {}", times(&baseline) == times(&after)).unwrap();
+    writeln!(
+        report,
+        "restarts: {} (kills sent: {})",
+        rep.restarts,
+        killer.killed.len()
+    )
+    .unwrap();
+    writeln!(
+        report,
+        "segments after the kills: {}; repeats refused by the committer: {}",
+        after.len(),
+        committer.repeats_refused()
+    )
+    .unwrap();
+    writeln!(
+        report,
+        "wall time: uninterrupted {baseline_s:.0} s, with kills {killed_s:.0} s"
+    )
+    .unwrap();
+    writeln!(
+        report,
+        "segment times equal to the uninterrupted run: {}",
+        times(&baseline) == times(&after)
+    )
+    .unwrap();
     writeln!(report, "segments with different text: {text_diffs}").unwrap();
     writeln!(report, "notices: {:?}", killer.notices).unwrap();
-    writeln!(report, "result: {}", if problems.is_empty() { "PASS".to_string() } else { format!("FAIL: {}", problems.join("; ")) }).unwrap();
+    writeln!(
+        report,
+        "result: {}",
+        if problems.is_empty() {
+            "PASS".to_string()
+        } else {
+            format!("FAIL: {}", problems.join("; "))
+        }
+    )
+    .unwrap();
     std::fs::write(out.join("report.txt"), &report).unwrap();
     println!("{report}");
     assert!(problems.is_empty(), "{problems:?}");
@@ -458,7 +557,11 @@ fn a_decode_of_over_two_minutes_is_not_a_hang() {
         scrub_env: false,
         ..Policy::default()
     };
-    assert_eq!(policy.watchdog, Duration::from_secs(60), "this test runs the default watchdog");
+    assert_eq!(
+        policy.watchdog,
+        Duration::from_secs(60),
+        "this test runs the default watchdog"
+    );
     let mut req = request(&wav, &model, &vad, threads, false);
     req.models_by_lang = BTreeMap::from([(
         "hi".to_string(),
@@ -482,12 +585,26 @@ fn a_decode_of_over_two_minutes_is_not_a_hang() {
         notices: vec![],
     };
     let t0 = Instant::now();
-    let rep = run_batch(&exe, req, &mut committer, &out.join("work"), &policy, &mut gaps).expect("slow run");
+    let rep = run_batch(
+        &exe,
+        req,
+        &mut committer,
+        &out.join("work"),
+        &policy,
+        &mut gaps,
+    )
+    .expect("slow run");
     let wall = t0.elapsed().as_secs_f64();
-    let hung = gaps.notices.iter().any(|n| matches!(n, Notice::Hung { .. }));
+    let hung = gaps
+        .notices
+        .iter()
+        .any(|n| matches!(n, Notice::Hung { .. }));
     let mut problems: Vec<String> = Vec::new();
     if rep.restarts != 0 || hung {
-        problems.push(format!("the engine was restarted ({} restarts, hung: {hung})", rep.restarts));
+        problems.push(format!(
+            "the engine was restarted ({} restarts, hung: {hung})",
+            rep.restarts
+        ));
     }
     if gaps.longest < Duration::from_secs(120) {
         problems.push(format!(
@@ -501,11 +618,31 @@ fn a_decode_of_over_two_minutes_is_not_a_hang() {
     let mut report = String::new();
     writeln!(report, "slow-decode case: large-v3 q5_0, Hindi, {threads} threads, 30 s chunks, default watchdog {} s", policy.watchdog.as_secs()).unwrap();
     writeln!(report, "longest time between two committed chunks (all decodes of one chunk, retries included; the first is counted from the start of the run): {:.0} s", gaps.longest.as_secs_f64()).unwrap();
-    writeln!(report, "heartbeats seen by the supervisor: {}; segments committed: {}", gaps.heartbeats, gaps.segments).unwrap();
-    writeln!(report, "restarts: {}; watchdog kills: {}", rep.restarts, u32::from(hung)).unwrap();
+    writeln!(
+        report,
+        "heartbeats seen by the supervisor: {}; segments committed: {}",
+        gaps.heartbeats, gaps.segments
+    )
+    .unwrap();
+    writeln!(
+        report,
+        "restarts: {}; watchdog kills: {}",
+        rep.restarts,
+        u32::from(hung)
+    )
+    .unwrap();
     writeln!(report, "wall time: {wall:.0} s").unwrap();
     writeln!(report, "notices: {:?}", gaps.notices).unwrap();
-    writeln!(report, "result: {}", if problems.is_empty() { "PASS".to_string() } else { format!("FAIL: {}", problems.join("; ")) }).unwrap();
+    writeln!(
+        report,
+        "result: {}",
+        if problems.is_empty() {
+            "PASS".to_string()
+        } else {
+            format!("FAIL: {}", problems.join("; "))
+        }
+    )
+    .unwrap();
     std::fs::write(out.join("report.txt"), &report).unwrap();
     println!("{report}");
     assert!(problems.is_empty(), "{problems:?}");
@@ -560,21 +697,43 @@ fn a_language_detection_pass_longer_than_the_watchdog_is_not_a_hang() {
         notices: vec![],
     };
     let t0 = Instant::now();
-    let rep = match run_batch(&exe, req, &mut committer, &out.join("work"), &policy, &mut gaps) {
+    let rep = match run_batch(
+        &exe,
+        req,
+        &mut committer,
+        &out.join("work"),
+        &policy,
+        &mut gaps,
+    ) {
         Ok(rep) => rep,
         Err(e) => {
-            let msg = format!("the run failed: {e:?}; notices: {:?}; heartbeats: {}", gaps.notices, gaps.heartbeats);
-            std::fs::write(out.join("report.txt"), format!("result: FAIL: {msg}
-")).unwrap();
+            let msg = format!(
+                "the run failed: {e:?}; notices: {:?}; heartbeats: {}",
+                gaps.notices, gaps.heartbeats
+            );
+            std::fs::write(
+                out.join("report.txt"),
+                format!(
+                    "result: FAIL: {msg}
+"
+                ),
+            )
+            .unwrap();
             panic!("{msg}");
         }
     };
     let wall = t0.elapsed().as_secs_f64();
     let first = gaps.first_segment.unwrap_or_default();
-    let hung = gaps.notices.iter().any(|n| matches!(n, Notice::Hung { .. }));
+    let hung = gaps
+        .notices
+        .iter()
+        .any(|n| matches!(n, Notice::Hung { .. }));
     let mut problems: Vec<String> = Vec::new();
     if rep.restarts != 0 || hung {
-        problems.push(format!("the engine was restarted ({} restarts, hung: {hung})", rep.restarts));
+        problems.push(format!(
+            "the engine was restarted ({} restarts, hung: {hung})",
+            rep.restarts
+        ));
     }
     if first < Duration::from_secs(40) {
         problems.push(format!(
@@ -588,11 +747,31 @@ fn a_language_detection_pass_longer_than_the_watchdog_is_not_a_hang() {
     let mut report = String::new();
     writeln!(report, "detection-on case: large-v3 q5_0 for en and hi, languages en+hi with detection on, {threads} threads, watchdog {} s (the default is 60 s)", policy.watchdog.as_secs()).unwrap();
     writeln!(report, "time to the first committed chunk (load, language detection, decode): {:.0} s; it must exceed 40 s (20 s watchdog + 20 s heartbeat freshness) for the test to prove the hold", first.as_secs_f64()).unwrap();
-    writeln!(report, "heartbeats seen by the supervisor: {}; segments committed: {}", gaps.heartbeats, gaps.segments).unwrap();
-    writeln!(report, "restarts: {}; watchdog kills: {}", rep.restarts, u32::from(hung)).unwrap();
+    writeln!(
+        report,
+        "heartbeats seen by the supervisor: {}; segments committed: {}",
+        gaps.heartbeats, gaps.segments
+    )
+    .unwrap();
+    writeln!(
+        report,
+        "restarts: {}; watchdog kills: {}",
+        rep.restarts,
+        u32::from(hung)
+    )
+    .unwrap();
     writeln!(report, "wall time: {wall:.0} s").unwrap();
     writeln!(report, "notices: {:?}", gaps.notices).unwrap();
-    writeln!(report, "result: {}", if problems.is_empty() { "PASS".to_string() } else { format!("FAIL: {}", problems.join("; ")) }).unwrap();
+    writeln!(
+        report,
+        "result: {}",
+        if problems.is_empty() {
+            "PASS".to_string()
+        } else {
+            format!("FAIL: {}", problems.join("; "))
+        }
+    )
+    .unwrap();
     std::fs::write(out.join("report.txt"), &report).unwrap();
     println!("{report}");
     assert!(problems.is_empty(), "{problems:?}");
