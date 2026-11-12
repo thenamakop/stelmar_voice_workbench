@@ -22,20 +22,21 @@ $repo = (Resolve-Path (Join-Path $here '..\..')).Path
 Import-Module (Join-Path $repo 'scripts\lib\PsEnv.psm1') -Force
 Set-WbCleanPSModulePath
 Set-WbInvariantCulture
+Import-Module (Join-Path $repo 'scripts\lib\GateRun.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Redact.psm1') -Force
 if (-not $OutFile) { $OutFile = Join-Path $repo 'docs\evidence\phase-2b\repeat-detection-rate.txt' }
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $OutFile) | Out-Null
 
 Push-Location $repo
-$ErrorActionPreference = 'Continue'  # cargo writes its progress to stderr
 try {
-  $out = & cargo test -p wb-recorder --release --test repeat_detection_rate -- --ignored --nocapture 2>&1
-  $code = $LASTEXITCODE
+  # Invoke-WbNative keeps cargo's progress text on stderr from becoming a script error.
+  $run = Invoke-WbNative -FilePath 'cargo' -ArgumentList @('test', '-p', 'wb-recorder', '--release', '--test', 'repeat_detection_rate', '--', '--ignored', '--nocapture')
+  $code = $run.ExitCode
+  $out = @($run.Output) + @($run.Error)
 } finally {
   Pop-Location
-  $ErrorActionPreference = 'Stop'
 }
-$rate = @($out | ForEach-Object { "$_" } | Where-Object { $_ -match '^RATE ' } | ForEach-Object { $_ -replace '^RATE ', '' })
+$rate = @($run.Output | ForEach-Object { "$_" } | Where-Object { $_ -match '^RATE ' } | ForEach-Object { $_ -replace '^RATE ', '' })
 $rev = (& git -C $repo rev-parse --short HEAD) -join ''
 $dirty = @(& git -C $repo status --porcelain -- . ':!docs/evidence').Count -gt 0
 $lines = @()
