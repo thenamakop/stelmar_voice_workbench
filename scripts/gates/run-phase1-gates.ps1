@@ -30,9 +30,9 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 # With powershell -File, -Gates a,b,c arrives as the single string 'a,b,c'; split it so both forms work.
-$Gates = @($Gates | ForEach-Object { $_ -split '[,\s]+' } | Where-Object { $_ })
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 Import-Module (Join-Path $here '..\lib\PsEnv.psm1') -Force
+$Gates = Split-WbList $Gates
 Set-WbCleanPSModulePath
 Set-WbInvariantCulture
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Log) | Out-Null

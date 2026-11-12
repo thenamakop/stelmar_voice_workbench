@@ -73,5 +73,22 @@ try {
   [System.Threading.Thread]::CurrentThread.CurrentCulture = $savedCulture
 }
 
+# Split-WbList: a comma list given with -File arrives as one string.
+Check 'Split-WbList splits one comma string' (((Split-WbList @('hashing,panic,webview,kill,load,soak')) -join '|') -eq 'hashing|panic|webview|kill|load|soak')
+Check 'Split-WbList keeps an array as it is' (((Split-WbList @('a', 'b')) -join '|') -eq 'a|b')
+Check 'Split-WbList drops empty items and spaces' (((Split-WbList @('a, b,,c', '')) -join '|') -eq 'a|b|c')
+$probeScript = Join-Path ([IO.Path]::GetTempPath()) ('wb-split-probe-' + [guid]::NewGuid().ToString('N') + '.ps1')
+try {
+  Set-Content -LiteralPath $probeScript -Encoding ascii -Value @(
+    'param([string[]]$Gates = @("x"))',
+    ('Import-Module "' + (Join-Path $here '..\lib\PsEnv.psm1') + '" -Force'),
+    '$Gates = Split-WbList $Gates',
+    '[Console]::Out.WriteLine(($Gates.Count.ToString() + ":" + ($Gates -join "|")))')
+  $o = @(Invoke-WbWindowsPowerShell -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $probeScript, '-Gates', 'hashing,panic,webview'))
+  Check 'a real powershell -File call with -Gates a,b,c gives three gates' ($o[-1] -eq '3:hashing|panic|webview')
+} finally { Remove-Item -LiteralPath $probeScript -ErrorAction SilentlyContinue }
+$rg = Get-Content -LiteralPath (Join-Path $here '..\gates\run-phase1-gates.ps1') -Raw
+Check 'run-phase1-gates.ps1 splits the gate list with Split-WbList' ($rg -match 'Split-WbList \$Gates')
+
 if ($fails) { Write-Host "$fails failed"; exit 1 }
 Write-Host 'PsEnv tests passed'

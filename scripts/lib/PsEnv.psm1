@@ -55,4 +55,11 @@ function Invoke-WbWindowsPowerShell {
   $out
 }
 
-Export-ModuleMember -Function Get-WbWindowsPowerShellModulePath, Set-WbCleanPSModulePath, Set-WbInvariantCulture, Invoke-WbWindowsPowerShell
+# With powershell -File, '-Gates a,b,c' arrives as the single string 'a,b,c'. Splits every item on
+# commas and white space, so the list works with -File, -Command and an array alike.
+function Split-WbList {
+  param([string[]]$Items)
+  @($Items | ForEach-Object { "$_" -split '[,\s]+' } | Where-Object { $_ })
+}
+
+Export-ModuleMember -Function Get-WbWindowsPowerShellModulePath, Set-WbCleanPSModulePath, Set-WbInvariantCulture, Invoke-WbWindowsPowerShell, Split-WbList
