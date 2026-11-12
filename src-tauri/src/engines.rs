@@ -476,7 +476,22 @@ pub fn refresh_models(registry: &Registry, state: &AppState) {
     let mut cache = Cache::load(&cache_path);
     for (i, entry) in manifest.models.iter().enumerate() {
         let mut hashed = false;
+        let started_ms = epoch_ms();
+        let started = std::time::Instant::now();
         let status = wb_models::verify(&dir, entry, &mut cache, &mut hashed);
+        if hashed {
+            tracing::info!(
+                "{}",
+                model_hash_line(
+                    &entry.file,
+                    entry.bytes,
+                    started_ms,
+                    started.elapsed(),
+                    &status,
+                    wb_recorder::sys::background_state(),
+                )
+            );
+        }
         let message = (!status.is_ok()).then(|| status.describe());
         if !status.is_ok() && !matches!(status, Status::NoChecksum | Status::Missing) {
             notice(
@@ -495,6 +510,44 @@ pub fn refresh_models(registry: &Registry, state: &AppState) {
     lock(&registry.inner).models_done = true;
 }
 
+fn epoch_ms() -> u128 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis())
+}
+
+/// The app.log line for one model file that was hashed (not taken from the cache). It carries
+/// the file name only, never the models folder or any other local path, so the line can go into
+/// evidence files as it is. The recorder gate reads `start_ms`, `end_ms` and `background`.
+fn model_hash_line(
+    file: &str,
+    bytes: u64,
+    start_ms: u128,
+    took: std::time::Duration,
+    status: &Status,
+    background: wb_recorder::sys::BackgroundState,
+) -> String {
+    let name = Path::new(file).file_name().map_or_else(
+        || "unknown".to_string(),
+        |n| n.to_string_lossy().into_owned(),
+    );
+    let ms = took.as_millis();
+    format!(
+        "model_hash file={name} bytes={bytes} start_ms={start_ms} end_ms={} took_ms={ms} mb_per_s={:.0} result={} background={} memory_priority={}",
+        start_ms + ms,
+        if ms == 0 {
+            0.0
+        } else {
+            bytes as f64 / 1e6 / (ms as f64 / 1000.0)
+        },
+        if status.is_ok() { "ok" } else { "not_ok" },
+        background.is_background(),
+        background
+            .memory_priority
+            .map_or_else(|| "unknown".to_string(), |p| p.to_string()),
+    )
+}
+
 /// Starts the engine probe and the model check on threads of their own. They never block start-up
 /// or the recorder, and a panic in either ends only that thread.
 pub fn start(app: &tauri::AppHandle) {
@@ -503,7 +556,25 @@ pub fn start(app: &tauri::AppHandle) {
         let spawned = std::thread::Builder::new()
             .name(name.into())
             .spawn(move || {
-                wb_recorder::sys::lower_current_thread();
+                // The model check reads multi-GB files: it runs in Windows background mode (low
+                // CPU, I/O and memory priority) so it never competes with a recording for the
+                // disk. The guard ends the mode when the thread finishes, also if it panics.
+                let _background = if models {
+                    let guard = wb_recorder::sys::BackgroundGuard::enter();
+                    match &guard.failure {
+                        None => tracing::info!(
+                            "model check thread started in background mode (memory priority {:?})",
+                            wb_recorder::sys::background_state().memory_priority
+                        ),
+                        Some(why) => tracing::warn!(
+                            "model check thread could not enter background mode: {why}"
+                        ),
+                    }
+                    Some(guard)
+                } else {
+                    wb_recorder::sys::lower_current_thread();
+                    None
+                };
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     let state = handle.state::<AppState>();
                     let registry = handle.state::<Registry>();
@@ -553,6 +624,32 @@ mod tests {
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).expect("temp dir");
         d
+    }
+
+    #[test]
+    fn the_model_hash_line_names_the_file_only_and_no_local_path() {
+        let bg = wb_recorder::sys::BackgroundState {
+            memory_priority: Some(1),
+        };
+        let took = std::time::Duration::from_millis(2_000);
+        let dir = r"D:\Projects\stelmar_voice_workbench\models";
+        let with_dir = format!(r"{dir}\ggml-small.bin");
+        for file in [
+            "ggml-medium.bin",
+            "converted/ggml-hinglish-q5_0.bin",
+            with_dir.as_str(),
+        ] {
+            let line = model_hash_line(file, 1_500_000_000, 1_000, took, &Status::Ok, bg);
+            assert!(line.starts_with("model_hash file=ggml-"), "{line}");
+            assert!(!line.contains('\\') && !line.contains('/'), "{line}");
+            assert!(!line.contains("Projects") && !line.contains("D:"), "{line}");
+            assert!(
+                line.contains("start_ms=1000 end_ms=3000 took_ms=2000"),
+                "{line}"
+            );
+            assert!(line.contains("mb_per_s=750"), "{line}");
+            assert!(line.contains("background=true memory_priority=1"), "{line}");
+        }
     }
 
     #[test]

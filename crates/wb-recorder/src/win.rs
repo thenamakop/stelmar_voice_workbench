@@ -1,5 +1,5 @@
-//! Windows calls the recorder needs: MMCSS registration, thread priority, keeping the machine
-//! awake, thread CPU time, free disk space and the performance counter.
+//! Windows calls the recorder needs: MMCSS registration, thread priority and background mode,
+//! keeping the machine awake, thread CPU time, free disk space and the performance counter.
 //!
 //! This is the only module in `wb-recorder` that may use `unsafe` (docs/UNSAFE.md). Each block
 //! holds one call and says why it is sound. Callers use the safe functions in `crate::sys`.
@@ -15,8 +15,9 @@ use windows::Win32::System::Power::{
 };
 use windows::Win32::System::Threading::{
     AvRevertMmThreadCharacteristics, AvSetMmThreadCharacteristicsW, GetCurrentThread,
-    GetThreadTimes, SetThreadPriority, THREAD_PRIORITY, THREAD_PRIORITY_BELOW_NORMAL,
-    THREAD_PRIORITY_HIGHEST,
+    GetThreadInformation, GetThreadTimes, MEMORY_PRIORITY_INFORMATION, SetThreadPriority,
+    THREAD_MODE_BACKGROUND_BEGIN, THREAD_MODE_BACKGROUND_END, THREAD_PRIORITY,
+    THREAD_PRIORITY_BELOW_NORMAL, THREAD_PRIORITY_HIGHEST, ThreadMemoryPriority,
 };
 use windows::core::HSTRING;
 
@@ -58,6 +59,39 @@ pub fn set_current_thread_highest() -> windows::core::Result<()> {
 /// Lowers the current thread to THREAD_PRIORITY_BELOW_NORMAL (mirror and hashing threads).
 pub fn set_current_thread_below_normal() -> windows::core::Result<()> {
     set_current_thread_priority(THREAD_PRIORITY_BELOW_NORMAL)
+}
+
+/// Puts the current thread in background mode: lower CPU priority, lower I/O priority and lower
+/// memory priority, so work such as hashing multi-GB model files does not compete with the
+/// recorder for the disk. Ends with [`end_background_mode`] on the same thread. Fails with
+/// ERROR_THREAD_MODE_ALREADY_BACKGROUND when the thread is in the mode already.
+pub fn begin_background_mode() -> windows::core::Result<()> {
+    set_current_thread_priority(THREAD_MODE_BACKGROUND_BEGIN)
+}
+
+/// Leaves background mode and restores the thread's earlier priorities.
+pub fn end_background_mode() -> windows::core::Result<()> {
+    set_current_thread_priority(THREAD_MODE_BACKGROUND_END)
+}
+
+/// The current thread's memory priority (1 very low to 5 normal). Background mode lowers it to
+/// 1, which is how the mode is confirmed from outside.
+pub fn current_memory_priority() -> Option<u32> {
+    let mut info = MEMORY_PRIORITY_INFORMATION::default();
+    // SAFETY: GetCurrentThread returns a pseudo-handle that needs no cleanup.
+    let thread = unsafe { GetCurrentThread() };
+    // SAFETY: `info` is a live MEMORY_PRIORITY_INFORMATION and the size passed is its size, as
+    // the ThreadMemoryPriority class requires.
+    unsafe {
+        GetThreadInformation(
+            thread,
+            ThreadMemoryPriority,
+            std::ptr::addr_of_mut!(info).cast(),
+            std::mem::size_of::<MEMORY_PRIORITY_INFORMATION>() as u32,
+        )
+    }
+    .ok()?;
+    Some(info.MemoryPriority.0)
 }
 
 /// Keeps the system out of sleep while the calling thread lives, or until `allow_sleep` is called
