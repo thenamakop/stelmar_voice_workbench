@@ -1,6 +1,8 @@
 <#
 .SYNOPSIS
-  Runs the six Phase 1 gates in order: panic, webview, emulator, kill, load, soak.
+  Runs the listed gates in order. Default: the six Phase 1 gates (panic, webview, emulator, kill,
+  load, soak). The Phase 2b night adds hashing (the cold-cache model-hashing gate) and uses
+  -Gates hashing,panic,webview,kill,load,soak.
 
 .DESCRIPTION
   Holds D:\Projects\stelmar-gate-request.flag for the whole sequence (removed in a finally block,
@@ -29,9 +31,9 @@ param(
   [double]$Minutes = 0
 )
 $ErrorActionPreference = 'Stop'
-# With powershell -File, -Gates a,b,c arrives as the single string 'a,b,c'; split it so both forms work.
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 Import-Module (Join-Path $here '..\lib\PsEnv.psm1') -Force
+# With powershell -File, -Gates a,b,c arrives as the single string 'a,b,c'; split it so both forms work.
 $Gates = Split-WbList $Gates
 Set-WbCleanPSModulePath
 Set-WbInvariantCulture

@@ -58,7 +58,7 @@ foreach ($r in $rows) {
   $tot.Over += [int]$c.detector_over_budget_blocks; $tot.Off += [int]$c.detectors_disabled
   $tot.Max = [math]::Max([double]$tot.Max, [double]$c.detector_max_block_us)
 }
-$lines += ('total | {0} runs | | {1:n1} | {2} | {3} | {4} | {5} | {6} | {7} | | | {8} | {9} | {10}' -f $rows.Count, $tot.Min, $tot.Breaks, $tot.Matched, $tot.Missed, $tot.Before, $tot.False, $tot.Lead, $tot.Max, $tot.Over, $tot.Off)
+$lines += ('total | {0} runs | | {1:n1} | {2} | {3} | {4} | {5} | {6} | {7} | | | {8} | {9} | {10}' -f ($rows.Count - $excluded), $tot.Min, $tot.Breaks, $tot.Matched, $tot.Missed, $tot.Before, $tot.False, $tot.Lead, $tot.Max, $tot.Over, $tot.Off)
 $lines += ''
 if ($excluded -gt 0) { $lines += "$excluded INVALID run(s) are listed above and left out of the totals" }
 $lines += $(if ($rows.Count -eq 0) { 'no detector-check.json found: nothing to report' } else { "false alarms outside lead-in: $($tot.False); misses: $($tot.Missed); detectors switched off: $($tot.Off); blocks over the time budget: $($tot.Over)" })
