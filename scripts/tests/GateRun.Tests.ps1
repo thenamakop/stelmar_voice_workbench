@@ -279,5 +279,14 @@ Check 'the evidence header says no engine build was running at the start and at 
 
 Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
 
+# ---- Split-WbBreakSources: which breaks the reference capture shows too ----
+$appB = [pscustomobject]@{ unmatched_ranges = @([pscustomobject]@{ source_ms = 47049.0; ms = 51 }, [pscustomobject]@{ source_ms = 90000.0; ms = 20 }); discontinuities = @([pscustomobject]@{ source_ms = 47100.0 }, [pscustomobject]@{ source_ms = 130750.0 }) }
+$refB = [pscustomobject]@{ unmatched_ranges = @([pscustomobject]@{ source_ms = 90030.0; ms = 20 }); discontinuities = @() }
+$sb = Split-WbBreakSources -App $appB -Reference $refB
+Check 'a break the reference also has (within 100 ms) is shared' (@($sb.Shared).Count -eq 1 -and $sb.Shared[0] -eq 90000.0)
+Check 'breaks only the app has are app-only' (@($sb.AppOnly).Count -eq 3 -and $sb.AppOnly -contains 47049.0 -and $sb.AppOnly -contains 130750.0)
+$sn = Split-WbBreakSources -App $appB -Reference ([pscustomobject]@{ unmatched_ranges = @(); discontinuities = @() })
+Check 'a reference with no breaks makes every app break app-only' (@($sn.Shared).Count -eq 0 -and @($sn.AppOnly).Count -eq 4)
+Check 'no reference analysis at all: every break is app-only' (@((Split-WbBreakSources -App $appB -Reference $null).AppOnly).Count -eq 4)
 if ($fails) { Write-Host "$fails failed"; exit 1 }
 Write-Host 'GateRun tests passed'

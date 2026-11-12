@@ -222,7 +222,7 @@ function Get-WbRigLines {
 # than its 100 ms output buffer, the only kind that can run the buffer dry), and how many fall
 # within $WindowMs of each given source position (the shared breaks).
 function Get-WbLateCallbackLines {
-  param($Play, [double[]]$BreakSourceMs = @(), [double]$WindowMs = 500)
+  param($Play, [double[]]$BreakSourceMs = @(), [double]$WindowMs = 500, [string]$Label = 'shared break')
   if ($null -eq $Play -or -not (Test-WbHasProperty $Play 'late_callbacks')) {
     return @('  player late callbacks: not recorded for this run (an earlier player)')
   }
@@ -240,9 +240,9 @@ function Get-WbLateCallbackLines {
   foreach ($b in $BreakSourceMs) {
     $near = @($events | Where-Object { [math]::Abs([double]$_.source_ms - $b) -le $WindowMs })
     if ($near.Count -gt 0) {
-      $lines += ("    shared break at source {0:n3} s: {1} late player callback(s) within {2:n0} ms of it" -f ($b / 1000.0), $near.Count, $WindowMs)
+      $lines += ("    $Label at source {0:n3} s: {1} late player callback(s) within {2:n0} ms of it" -f ($b / 1000.0), $near.Count, $WindowMs)
     } else {
-      $lines += ("    shared break at source {0:n3} s: no late player callback within {1:n0} ms of it; the longest callback gap in the whole run was {2:n1} ms, so the player never ran its output buffer dry" -f ($b / 1000.0), $WindowMs, $maxGap)
+      $lines += ("    $Label at source {0:n3} s: no late player callback within {1:n0} ms of it; the longest callback gap in the whole run was {2:n1} ms, so the player never ran its output buffer dry" -f ($b / 1000.0), $WindowMs, $maxGap)
     }
   }
   $lines
@@ -257,7 +257,8 @@ function Get-WbReferenceXrunLines {
     $RefAnalysis,
     $Reference,
     $PlayStarted,
-    [double[]]$BreakSourceMs = @()
+    [double[]]$BreakSourceMs = @(),
+    [string]$Label = 'shared break'
   )
   if ($null -eq $RefAnalysis -or -not (Test-WbHasProperty $RefAnalysis 'content_start_ms')) {
     return @('  reference xruns: not available (no reference analysis)')
@@ -283,7 +284,7 @@ function Get-WbReferenceXrunLines {
     if ($null -eq $PlayStarted) { continue }
     $when = ([DateTimeOffset]$PlayStarted).AddMilliseconds($b - $first)
     $near = $items | Sort-Object { [math]::Abs(($_.Wall - $when).TotalMilliseconds) } | Select-Object -First 1
-    $text = ("    shared break at source {0:n3} s, {1:HH:mm:ss.fff} IST (to the second: {1:HH:mm:ss}): " -f ($b / 1000.0), $when)
+    $text = ("    $Label at source {0:n3} s, {1:HH:mm:ss.fff} IST (to the second: {1:HH:mm:ss}): " -f ($b / 1000.0), $when)
     $d = ($near.Wall - $when).TotalMilliseconds
     if ([math]::Abs($d) -le 2000) {
       if ([math]::Abs($d) -lt 1) {

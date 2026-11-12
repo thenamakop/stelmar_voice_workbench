@@ -54,6 +54,11 @@ param(
   # Run even though the cable is a default playback device (every sound the machine makes then
   # goes into the test signal). The evidence says so.
   [switch]$AllowCableDefault,
+  # A diagnostic run: not a verdict. The note says why it was run; the evidence says "DIAGNOSTIC, NOT A
+  # VERDICT" and what the checks would have said. -Sample adds per-second sampling of the machine
+  # (scripts/lib/Sampler.psm1) and the correlation of the app's xruns with it (xrun-correlate.ps1).
+  [string]$DiagnosticNote = '',
+  [switch]$Sample,
   [string]$FromRun,
   [string]$OriginalStarted,
   [double]$OriginalFreeRamStart = 0,
@@ -78,6 +83,7 @@ Import-Module (Join-Path $repo 'scripts\lib\Rig.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\CableRig.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Fidelity.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Detector.psm1') -Force
+Import-Module (Join-Path $repo 'scripts\lib\Sampler.psm1') -Force
 foreach ($f in @($Exe, $Testbench, $Emulate)) { if (-not (Test-Path $f)) { throw "Missing $f; build it first (scripts\gates\build-gate.ps1)" } }
 
 function Q([string]$v) { ConvertTo-WbArg $v }
@@ -228,10 +234,15 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
     $inner += @('-Stress', '-Testbench', (Q $Testbench), '-GpuName', (Q $GpuName), '-StressStopFile', (Q $stressStop), '-StressReport', (Q (Join-Path $run 'stress.json')))
   }
   $emuArgs = @('--profile', $Profile, '--log', (Q (Join-Path $run 'emulate.log')), '--', 'powershell.exe') + $inner
-  $emu = $null; $refProc = $null; $play = $null; $hostStress = $null
+  $emu = $null; $refProc = $null; $play = $null; $hostStress = $null; $sampler = $null; $samplerCsv = $null
+  $machineState = @(Get-WbMachineStateLines)
   $finished = $false
   # Whatever happens below, nothing started here may outlive the body (see the finally block).
   try {
+  if ($Sample) {
+    $samplerCsv = Join-Path $run 'sampler.csv'
+    $sampler = Start-WbSampler -OutCsv $samplerCsv -Seconds ($seconds + 420)
+  }
   $emu = Start-Process -FilePath $Emulate -ArgumentList $emuArgs -PassThru -WindowStyle Hidden
 
   # Wait until the session records.
@@ -246,6 +257,7 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
   $sessionDir = $st.recorder.session_dir
   $progress = New-Object System.Collections.Generic.List[string]
   $progress.Add("$(Get-Date -Format 'HH:mm:ss') recording in $sessionDir")
+  if ($sampler) { $progress.Add("$(Get-Date -Format 'HH:mm:ss') sampler running (typeperf, once a second, pinned to logical processors 0-11, High priority class): $samplerCsv") }
 
   # Load test: also load every logical processor of the host outside the job, at normal priority,
   # so the audio engine and the cable driver (which run outside the job) are contended too.
@@ -356,14 +368,16 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
     AnalysisError = $analysisErr; RefAnalysisError = $refAnalysisErr; CableDefaultRoles = $cableRoles; Rig = $rig
     CacheNote = $cacheNote; BootTime = $bootTime; UptimeMin = $uptimeMin; FastStartup = $fastStartup; ModelsDisk = $modelsDisk; RecDisk = $recDisk
     CableRig = $cableRig; CableTest = $cableTest; CableSeen = $cableSeen; CablePollProblems = @(ConvertTo-WbArray $pollProblems)
+    MachineState = $machineState; SamplerCsv = $samplerCsv
   }
+  Stop-WbSampler -Process $sampler
   $finished = $true
   } finally {
     # On any error in the body: stop the app (its job), the player, the reference capture and the host
     # stress, so a crash leaves no orphan holding the runner's pipes. On the normal path they have
     # already stopped and this does nothing.
     if (-not $finished) {
-      $left = @(Stop-WbRigLeftovers -Process @($emu, $play, $refProc, $hostStress) -StopFile @($stopFile, $refStop, $stressStop) -GraceSeconds 45)
+      $left = @(Stop-WbRigLeftovers -Process @($emu, $play, $refProc, $hostStress, $sampler) -StopFile @($stopFile, $refStop, $stressStop) -GraceSeconds 45)
       foreach ($l in $left) { Write-Host "cleanup after an error: $l" }
     }
   }
@@ -493,7 +507,12 @@ $lines_cable = $(if ($null -eq $r.Interference) { 'cable interference polling: n
 $lines = @()
 $lines += Get-WbGateHeader -Machine $Machine -Profile $Profile -Builds @($Exe, $Testbench, $Emulate)
 $lines += "app build: target\gate\stelmar-voice-workbench.exe (cargo profile gate, features gate-hooks + custom-protocol)"
-$lines += "verdict: $(if ($verdict -eq 'INVALID') { 'INVALID (no verdict; the run must be repeated)' } elseif ($verdict -eq 'PASS' -and $Profile -ne 'native') { "PASS (PROVISIONAL: emulated$hashNote$coverageNote)" } elseif ($verdict -eq 'PASS') { "PASS$hashNote$coverageNote" } else { $verdict })"
+$verdictText = "verdict: $(if ($verdict -eq 'INVALID') { 'INVALID (no verdict; the run must be repeated)' } elseif ($verdict -eq 'PASS' -and $Profile -ne 'native') { "PASS (PROVISIONAL: emulated$hashNote$coverageNote)" } elseif ($verdict -eq 'PASS') { "PASS$hashNote$coverageNote" } else { $verdict })"
+if ($DiagnosticNote) {
+  $lines += "verdict: DIAGNOSTIC, NOT A VERDICT. $DiagnosticNote"
+  $lines += "  what the checks below say about this run (not the gate result): $($verdictText -replace '^verdict: ', '')"
+} else { $lines += $verdictText }
+if ($r.MachineState) { $lines += @($r.MachineState) }
 $lines += ''
 $lines += 'checks:'
 foreach ($k in $checks.Keys) { $lines += "  [$(if ($checks[$k]) { 'x' } else { ' ' })] $k" }
@@ -531,8 +550,10 @@ $lines += ("  exit codes (information, not gated): the app {0} (read inside the 
 $lines += ("  mirror: {0} files compared, all equal: {1} (mirror on the same machine, separate drive pending: C: instead of an external SSD)" -f @($stopped.mirror.files).Count, $stopped.mirror.all_match)
 $lines += ("  player: {0} frames of {1}, underrun callbacks {2}, render thread priority {3}, output buffer {4}" -f $r.Play.frames_played, $r.Play.frames_in_file, $r.Play.underrun_callbacks, $r.Play.render_priority, $r.Play.buffer)
 $lines += Get-WbRigLines -Rig $r.Rig -Play $r.Play -Reference $r.Reference
-$breakSources = @(@($r.Analysis.unmatched_ranges) | ForEach-Object { [double]$_.source_ms }) + @(@($r.Analysis.discontinuities) | ForEach-Object { [double]$_.source_ms })
-$lines += Get-WbLateCallbackLines -Play $r.Play -BreakSourceMs @($breakSources | Sort-Object -Unique)
+$breakSplit = Split-WbBreakSources -App $r.Analysis -Reference $r.RefAnalysis
+# A break the reference capture also shows is upstream ("shared break"); one only the app shows is the app's ("app-only break").
+$lines += Get-WbLateCallbackLines -Play $r.Play -BreakSourceMs @($breakSplit.Shared) -Label 'shared break'
+$lines += Get-WbLateCallbackLines -Play $r.Play -BreakSourceMs @($breakSplit.AppOnly) -Label 'app-only break (not in the reference capture)' | Where-Object { $_ -match 'app-only break' }
 $lines += "  $lines_cable"
 if ($null -ne $r.CableSeen) { $lines += @(Get-WbCableSeenLines -Seen $r.CableSeen -PollError (@($r.CablePollProblems) -join "; ")) }
 $lines += $(if ($null -eq $r.CableDefaultRoles) { '  default playback device: not recorded for this run' } elseif (@($r.CableDefaultRoles).Count -gt 0) { "  default playback device: THE CABLE for $(@($r.CableDefaultRoles) -join ', ') (run with -AllowCableDefault: other sounds on this computer can reach the test signal)" } else { '  default playback device: not the cable (checked at start)' })
@@ -543,7 +564,8 @@ foreach ($u in @($r.Analysis.unmatched_ranges)) {
   $when = $playStart.AddMilliseconds([double]$u.source_ms - [double]$r.Analysis.content_first_source_frame / 48.0)
   $lines += ("  unmatched stretch: source {0:n2} s (about {1} IST), {2:n0} ms; also in the reference capture: {3}" -f ([double]$u.source_ms / 1000.0), $when.ToString('HH:mm:ss'), [double]$u.ms, $alsoRef)
 }
-$lines += Get-WbReferenceXrunLines -RefAnalysis $r.RefAnalysis -Reference $r.Reference -PlayStarted $playStart -BreakSourceMs @(@($r.Analysis.unmatched_ranges) | ForEach-Object { [double]$_.source_ms })
+$lines += Get-WbReferenceXrunLines -RefAnalysis $r.RefAnalysis -Reference $r.Reference -PlayStarted $playStart -BreakSourceMs @($breakSplit.Shared) -Label 'shared break'
+$lines += Get-WbReferenceXrunLines -RefAnalysis $r.RefAnalysis -Reference $r.Reference -PlayStarted $playStart -BreakSourceMs @($breakSplit.AppOnly) -Label 'app-only break (not in the reference capture)' | Where-Object { $_ -match 'app-only break' }
 $lines += ("  reference capture (separate cpal + hound recorder outside the job; shares the audio engine, cable driver and cpal with the app): {0} breaks, unmatched {1} ms, its overruns {2}, xruns {3}" -f @($r.RefAnalysis.discontinuities).Count, $refUnmatched, $r.Reference.overrun_samples, $r.Reference.xruns)
 $lines += ("  breaks in the app recording: recorder's own {0}; shared with the reference (upstream; see the upstream breaks section) {1}; start-up repeats within the old allowance {2} {3}" -f $split.Own.Count, $split.Chain.Count, $split.Excused.Count, ((@($split.Excused) | ForEach-Object { "(at source $([math]::Round([double]$_.source_ms)) ms, $([math]::Round([double]$_.source_jump_ms, 1)) ms)" }) -join ' '))
 $lines += ("  capture position breaks counted in the app's callback (device time not following on): {0}" -f $rec.position_breaks)
@@ -580,10 +602,17 @@ $lines += 'app log for this run (warnings, errors, session lines):'
 $lines += (@($r.AppLog) | Where-Object { $_ -match 'WARN|ERROR|session|part closed|recovery|display|gate|panic' } | Select-Object -Last 80 | ForEach-Object { "  $_" })
 $lines += ''
 $lines += "audio and reports: $($r.Run) (not in the repository)"
+if ($r.SamplerCsv -and (Test-Path -LiteralPath $r.SamplerCsv)) { $lines += "per-second sampler: $($r.SamplerCsv) (not in the repository); its correlation with the app's xruns is in $Gate-$Profile.xrun-correlation.txt" }
 
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 $evidence = Join-Path $OutDir "$Gate-$Profile.txt"
 Write-WbEvidence -Path $evidence -Lines $lines -MachineLabel $Machine
-Write-Host "${verdict}: $evidence"
+if ($r.SamplerCsv -and (Test-Path -LiteralPath $r.SamplerCsv)) {
+  try {
+    & (Join-Path $here 'xrun-correlate.ps1') -RunDir $r.Run -SessionDir $r.SessionDir -SamplerCsv $r.SamplerCsv -Out (Join-Path $OutDir "$Gate-$Profile.xrun-correlation.txt") -Machine $Machine
+  } catch { Write-Host "xrun correlation failed: $($_.Exception.Message)" }
+}
+Write-Host "$(if ($DiagnosticNote) { 'DIAGNOSTIC (not a verdict; the checks say ' + $verdict + ')' } else { $verdict }): $evidence"
+if ($DiagnosticNote) { exit 0 }
 if ($verdict -eq 'INVALID') { exit 3 }
 if ($verdict -eq 'FAIL') { exit 1 }

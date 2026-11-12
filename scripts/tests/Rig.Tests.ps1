@@ -146,5 +146,12 @@ $rl2 = (Get-WbRigLines -Rig $rig -Play $null -Reference $null) -join "`n"
 Check "the evidence shows each process's CPU set next to its mask" ($rl2 -match 'player: pid 11, mask 0xc000 \(logical processors 14-15\), priority class High; CPU set none' -and $rl2 -match 'reference capture: pid 12, mask 0x3000 \(logical processors 12-13\), priority class High; CPU set 12-13')
 
 Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
+# ---- The label says whose break it is (12 Nov load FAIL: app-only breaks were labelled "shared") ----
+$lblPlay = [pscustomobject]@{ late_callbacks = 0; max_callback_interval_ms = 21.4; callback_gaps_ge_20ms = 5; callback_gaps_ge_30ms = 0; callback_gaps_ge_50ms = 0; late_callback_events = @() }
+$lt = (Get-WbLateCallbackLines -Play $lblPlay -BreakSourceMs @(47049.0) -Label 'app-only break (not in the reference capture)') -join "`n"
+Check 'a break given another label is not called a shared break (late callbacks)' ($lt -match 'app-only break \(not in the reference capture\) at source 47.049 s' -and $lt -notmatch 'shared break')
+$lx = (Get-WbReferenceXrunLines -RefAnalysis $refA -Reference $refR -PlayStarted $playAt -BreakSourceMs @(90000.0) -Label 'app-only break (not in the reference capture)') -join "`n"
+Check 'a break given another label is not called a shared break (reference xruns)' ($lx -match 'app-only break \(not in the reference capture\) at source 90.000 s' -and $lx -notmatch 'shared break at')
+Check 'the default label stays shared break' ($text -match 'shared break at source 51.979 s')
 if ($fails) { Write-Host "$fails failed"; exit 1 }
 Write-Host 'Rig tests passed'

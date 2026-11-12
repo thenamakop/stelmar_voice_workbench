@@ -362,7 +362,9 @@ if ($r.Analysis -and (Test-Path -LiteralPath $sessionJson)) {
 } else {
   $lines += 'live detector check: not available (no analysis or session.json for this run)'
 }
-$lines += Get-WbLateCallbackLines -Play $r.Play -BreakSourceMs @(@($r.Analysis.unmatched_ranges) | ForEach-Object { [double]$_.source_ms })
+$killSplit = Split-WbBreakSources -App $r.Analysis -Reference $r.RefAnalysis
+$lines += Get-WbLateCallbackLines -Play $r.Play -BreakSourceMs @($killSplit.Shared) -Label 'shared break'
+$lines += Get-WbLateCallbackLines -Play $r.Play -BreakSourceMs @($killSplit.AppOnly) -Label 'app-only break (not in the reference capture)' | Where-Object { $_ -match 'app-only break' }
 $lines += "cable interference: $(if ($r.Interference.Count) { $r.Interference -join '; ' } else { 'none' })"
 if ($null -ne $r.CableSeen) { $lines += @(Get-WbCableSeenLines -Seen $r.CableSeen -PollError (@($r.CablePollProblems) -join '; ')) }
 $lines += $(if (@($r.CableDefaultRoles).Count -gt 0) { "default playback device: THE CABLE for $(@($r.CableDefaultRoles) -join ', ') (run with -AllowCableDefault: other sounds on this computer can reach the test signal)" } else { 'default playback device: not the cable (checked at start)' })

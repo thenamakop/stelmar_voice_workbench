@@ -255,6 +255,23 @@ function Split-WbDiscontinuities {
   [pscustomobject]@{ Excused = $excused; Chain = $chain; Own = $own }
 }
 
+# Source positions (ms) of the app recording's breaks (unmatched stretches and discontinuities), split
+# into those the reference capture shows too (within 100 ms of one of its own: Shared, upstream) and
+# those only the app shows (AppOnly). The evidence labels them by this split: a break the reference
+# does not have is the app's, whatever the player's callbacks did.
+function Split-WbBreakSources {
+  param($App, $Reference)
+  $refSrc = @()
+  if ($Reference) {
+    $refSrc = @(@($Reference.unmatched_ranges) | ForEach-Object { [double]$_.source_ms }) + @(@($Reference.discontinuities) | ForEach-Object { [double]$_.source_ms })
+  }
+  $appSrc = @(@($App.unmatched_ranges) | ForEach-Object { [double]$_.source_ms }) + @(@($App.discontinuities) | ForEach-Object { [double]$_.source_ms })
+  $shared = @(); $only = @()
+  foreach ($s in @($appSrc | Sort-Object -Unique)) {
+    if (@($refSrc | Where-Object { [math]::Abs($_ - $s) -le 100 }).Count -gt 0) { $shared += $s } else { $only += $s }
+  }
+  [pscustomobject]@{ Shared = @($shared); AppOnly = @($only) }
+}
 # Milliseconds of the app recording's unmatched stretches (by source position) that lie outside
 # +-100 ms of every discontinuity in $Near. Only the overlap with those windows is explained: a
 # long stretch that merely starts next to a break still counts, beyond the window, as unexplained.
@@ -496,4 +513,4 @@ function Write-WbGateCrashEvidence {
   Write-WbEvidence -Path $Path -Lines $lines -MachineLabel $Machine
 }
 
-Export-ModuleMember -Function Get-WbOverlayTools, Get-WbRunningBuilds, Assert-WbNoBuilds, Assert-WbNoOverlayTools, Invoke-WbGate, Get-WbGateHeader, ConvertTo-WbArg, Split-WbDiscontinuities, Get-WbUnexplainedUnmatchedMs, Test-WbGateData, Write-WbGateCrashEvidence, Get-WbFreeRamGB, Set-WbGateContext, Invoke-WbAnalyse, Test-WbHasProperty, Get-WbCableDefaultRoles, Get-WbCableDefaultRolesFromDevices, ConvertTo-WbArray, Get-WbXrunVerdict, Invoke-WbNative, Get-WbRepoRoot
+Export-ModuleMember -Function Get-WbOverlayTools, Get-WbRunningBuilds, Assert-WbNoBuilds, Assert-WbNoOverlayTools, Invoke-WbGate, Get-WbGateHeader, ConvertTo-WbArg, Split-WbDiscontinuities, Split-WbBreakSources, Get-WbUnexplainedUnmatchedMs, Test-WbGateData, Write-WbGateCrashEvidence, Get-WbFreeRamGB, Set-WbGateContext, Invoke-WbAnalyse, Test-WbHasProperty, Get-WbCableDefaultRoles, Get-WbCableDefaultRolesFromDevices, ConvertTo-WbArray, Get-WbXrunVerdict, Invoke-WbNative, Get-WbRepoRoot
