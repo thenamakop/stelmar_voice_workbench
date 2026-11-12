@@ -175,11 +175,12 @@ fn a_stream_whose_grant_could_not_be_read_makes_the_margin_unknown() -> TestResu
 #[test]
 fn a_stall_still_going_on_at_stop_counts() -> TestResult {
     let run = start("margin-in-progress")?;
-    // No callback ever arrives (the manual stream's counter stays at 0): the capture thread is
-    // "away" from the moment the stream opens. After about a second the session stops.
-    run.rec
-        .send(RecorderMsg::Stream(stream(Some(1500.0), &[])))?;
-    std::thread::sleep(Duration::from_millis(1_000));
+    // One callback arrives and then none: the capture thread is "away" from then on. After about
+    // a second the session stops.
+    let h = stream(Some(1500.0), &[]);
+    h.counters.callbacks.store(1, Ordering::Relaxed);
+    run.rec.send(RecorderMsg::Stream(h))?;
+    std::thread::sleep(Duration::from_millis(1_100));
     let (report, log, json) = finish(run)?;
     assert!(
         report.capture_max_callback_gap_ms >= 900.0,
@@ -190,5 +191,52 @@ fn a_stall_still_going_on_at_stop_counts() -> TestResult {
     assert!(margin < 600.0, "margin {margin}");
     assert!(log.contains("still_going_on=true"), "{log}");
     assert!(json.contains("capture_stall"));
+    assert_eq!(
+        log.matches("still_going_on=true").count(),
+        1,
+        "one event for one stall, not one every status tick: {log}"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_stream_that_has_not_called_back_yet_is_starting_up_not_stalled() -> TestResult {
+    let run = start("margin-startup")?;
+    // The handle reaches the recorder before the device's first callback (play() comes after).
+    run.rec
+        .send(RecorderMsg::Stream(stream(Some(1000.0), &[])))?;
+    std::thread::sleep(Duration::from_millis(900));
+    let (report, log, json) = finish(run)?;
+    assert!(
+        report.capture_max_callback_gap_ms < 1.0,
+        "{}",
+        report.capture_max_callback_gap_ms
+    );
+    assert!(!log.contains("capture_stall"), "{log}");
+    assert!(!json.contains("capture_stall"));
+    Ok(())
+}
+
+#[test]
+fn a_stall_that_ends_the_stream_is_in_the_margin() -> TestResult {
+    let run = start("margin-lost")?;
+    // One callback, then silence, then the capture thread reports the input lost (what the 3 s
+    // watchdog does): the stall never saw a next callback, so only the recorder's clock knows it.
+    let h = stream(Some(1500.0), &[]);
+    h.counters.callbacks.store(1, Ordering::Relaxed);
+    run.rec.send(RecorderMsg::Stream(h))?;
+    std::thread::sleep(Duration::from_millis(1_200));
+    run.rec.send(RecorderMsg::InputLost {
+        reason: "the capture thread was away".into(),
+    })?;
+    std::thread::sleep(Duration::from_millis(300));
+    let (report, _log, _json) = finish(run)?;
+    assert!(
+        report.capture_max_callback_gap_ms >= 1_100.0,
+        "the stall that ended the stream counts: {}",
+        report.capture_max_callback_gap_ms
+    );
+    let margin = report.capture_margin_ms.ok_or("no margin")?;
+    assert!(margin < 400.0, "margin {margin}");
     Ok(())
 }

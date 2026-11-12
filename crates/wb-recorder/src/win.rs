@@ -198,8 +198,9 @@ pub fn probe_shared_capture_buffer(endpoint_id: &str, requested_hns: i64) -> Opt
     let spawned = std::thread::Builder::new()
         .name("wb-buffer-probe".into())
         .spawn(move || {
+            // Released on every exit, a panic included.
+            let _busy = ProbeSlot;
             let grant = probe_on_this_thread(&id, requested_hns);
-            PROBE_BUSY.store(false, Ordering::Release);
             let _ = tx.send(grant);
         });
     if spawned.is_err() {
@@ -213,6 +214,15 @@ pub fn probe_shared_capture_buffer(endpoint_id: &str, requested_hns: i64) -> Opt
 
 /// Set while a probe helper thread runs.
 static PROBE_BUSY: AtomicBool = AtomicBool::new(false);
+
+/// Frees the probe slot when the helper thread ends, normally or by a panic.
+struct ProbeSlot;
+
+impl Drop for ProbeSlot {
+    fn drop(&mut self) {
+        PROBE_BUSY.store(false, Ordering::Release);
+    }
+}
 /// How long the capture thread waits for the probe.
 const PROBE_TIMEOUT: Duration = Duration::from_secs(2);
 

@@ -252,9 +252,10 @@ impl BufferInfo {
     }
 }
 
-/// Longest the buffer ladder keeps trying: each attempt can wait for the driver for up to the 5 s
-/// stream timeout, and a session start gives the whole open 15 s.
-const FALLBACK_BUDGET: Duration = Duration::from_secs(8);
+/// Longest the buffer ladder keeps trying sized requests: each attempt can wait for the driver for
+/// up to the 5 s stream timeout, the probe for 2 s, and a session start gives the whole open 15 s.
+/// The last rung, the device default, is always tried once.
+const FALLBACK_BUDGET: Duration = Duration::from_secs(6);
 
 /// Why one attempt to open the stream failed, and whether a smaller buffer could cure it.
 #[derive(Debug)]
@@ -307,14 +308,24 @@ impl OpenError {
 /// last attempt's error, is returned as it is.
 pub fn open_with_fallback<T>(
     sample_rate: u32,
+    open: impl FnMut(Option<u32>, cpal::BufferSize) -> Result<T, OpenError>,
+) -> Result<(T, Option<u32>, Vec<u32>), Error> {
+    open_with_fallback_within(sample_rate, FALLBACK_BUDGET, open)
+}
+
+/// [`open_with_fallback`] with the time budget given (tests).
+pub fn open_with_fallback_within<T>(
+    sample_rate: u32,
+    budget: Duration,
     mut open: impl FnMut(Option<u32>, cpal::BufferSize) -> Result<T, OpenError>,
 ) -> Result<(T, Option<u32>, Vec<u32>), Error> {
     let started = std::time::Instant::now();
     let mut refused = Vec::new();
     let mut last: Option<Error> = None;
     for request in BUFFER_REQUESTS_MS {
-        if last.is_some() && started.elapsed() > FALLBACK_BUDGET {
-            break;
+        // Out of time: skip the sized requests that are left, but still try the device default.
+        if request.is_some() && last.is_some() && started.elapsed() > budget {
+            continue;
         }
         let size = match request {
             Some(ms) => cpal::BufferSize::Fixed(
@@ -1430,6 +1441,23 @@ mod tests {
         .expect_err("fails");
         assert_eq!(n, 1, "no further size is tried");
         assert!(err.to_string().contains("busy"));
+    }
+
+    #[test]
+    fn out_of_time_the_sized_requests_are_skipped_but_the_default_is_still_tried() {
+        let mut asked = Vec::new();
+        let (_, request, _) = open_with_fallback_within(48_000, Duration::ZERO, |r, _| {
+            asked.push(r);
+            if r.is_none() {
+                Ok(())
+            } else {
+                std::thread::sleep(Duration::from_millis(5));
+                Err(OpenError::smaller(Error::Device("slow".into())))
+            }
+        })
+        .expect("opens");
+        assert_eq!(asked, vec![Some(1000), None]);
+        assert_eq!(request, None);
     }
 
     #[test]

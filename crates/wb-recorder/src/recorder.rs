@@ -148,6 +148,8 @@ pub enum PanicPoint {
 const MAX_PANICS_PER_BATCH: u8 = 3;
 /// `recorder_restarted` events (session.json, toast) are written at most this often; the restart
 /// counter still counts every restart.
+/// `capture_buffer` events in session.json: one per stream opened (a flapping device opens many).
+const MAX_CAPTURE_BUFFER_EVENTS: u32 = 20;
 const RESTART_EVENT_EVERY: Duration = Duration::from_secs(5);
 
 /// What the recorder left behind at Stop.
@@ -464,7 +466,12 @@ struct Recorder {
     margin_closed_ms: Option<f64>,
     margin_closed_unknown: bool,
     /// `capture_stall` events written to session.json (capped), and the gap of the last one.
-    stall_events: u32,
+    stall_events_done: u32,
+    stall_events_live: u32,
+    /// The stall going on now already has its `still_going_on` event.
+    live_stall_logged: bool,
+    /// `capture_buffer` events written to session.json (capped; session.log gets every one).
+    capture_buffer_events: u32,
     /// Longest callback gap already written to session.log, in microseconds.
     logged_max_gap_us: u64,
     overruns_before: u64,
@@ -596,7 +603,10 @@ fn run(cfg: RecorderConfig, rx: &Receiver<RecorderMsg>, events: Sender<Event>) {
         granted_ms_min: None,
         margin_closed_ms: None,
         margin_closed_unknown: false,
-        stall_events: 0,
+        stall_events_done: 0,
+        stall_events_live: 0,
+        live_stall_logged: false,
+        capture_buffer_events: 0,
         logged_max_gap_us: 0,
         overruns_before: 0,
         xruns_before: 0,
@@ -845,6 +855,9 @@ impl Recorder {
     }
 
     fn take_stream(&mut self) {
+        // A stall that ends in a reopen (the 3 s or 5 s watchdog, a lost device) never saw its next
+        // callback, so the counters do not hold it: it counts here.
+        let open_gap_us = self.open_gap_us();
         if let Some(old) = self.stream.take() {
             self.overruns_before += old.counters.overrun_samples.load(Ordering::Relaxed);
             self.xruns_before += old.counters.xruns.load(Ordering::Relaxed);
@@ -852,13 +865,13 @@ impl Recorder {
             self.timestamp_outliers_before +=
                 old.counters.timestamp_outliers.load(Ordering::Relaxed);
             self.pair_flags_before += old.counters.position_pair_flags.load(Ordering::Relaxed);
-            self.gaps_before
-                .merge(&CallbackGapStats::from_counters(&old.counters));
+            let mut old_gaps = CallbackGapStats::from_counters(&old.counters);
+            old_gaps.max_gap_us = old_gaps.max_gap_us.max(open_gap_us);
+            self.gaps_before.merge(&old_gaps);
             // This stream's own margin: its granted buffer against its own longest gap.
             match old.buffer.granted_ms {
                 Some(g) => {
-                    let gap_ms =
-                        old.counters.max_callback_gap_us.load(Ordering::Relaxed) as f64 / 1000.0;
+                    let gap_ms = old_gaps.max_gap_ms();
                     let margin = g - gap_ms;
                     self.margin_closed_ms =
                         Some(self.margin_closed_ms.map_or(margin, |m| m.min(margin)));
@@ -918,7 +931,16 @@ impl Recorder {
                 self.input_lost_since = None;
                 self.last_callbacks = (0, Instant::now());
                 self.meta.input = Some(input.clone());
-                self.event("capture_buffer", Some(buffer_label));
+                if self.capture_buffer_events < MAX_CAPTURE_BUFFER_EVENTS {
+                    self.capture_buffer_events += 1;
+                    self.event("capture_buffer", Some(buffer_label));
+                } else {
+                    session::append_log(
+                        &self.dir,
+                        now_ist(),
+                        &format!("capture_buffer audio_ms={} {buffer_label}", self.audio_ms()),
+                    );
+                }
                 if restored {
                     self.event(
                         "input_restored",
@@ -1830,9 +1852,10 @@ impl Recorder {
     /// the next callback ends it.
     fn open_gap_us(&self) -> u64 {
         let Some(stream) = &self.stream else { return 0 };
-        if !self.input_ok
-            || stream.counters.callbacks.load(Ordering::Relaxed) != self.last_callbacks.0
-        {
+        let callbacks = stream.counters.callbacks.load(Ordering::Relaxed);
+        // Before its first callback a stream is starting up (a slow device, a slow play()), not
+        // stalled; the 5 s watchdog covers one that never calls back.
+        if !self.input_ok || callbacks == 0 || callbacks != self.last_callbacks.0 {
             return 0;
         }
         u64::try_from(self.last_callbacks.1.elapsed().as_micros()).unwrap_or(u64::MAX)
@@ -1873,31 +1896,47 @@ impl Recorder {
     /// Writes a `capture_stall` event (session.log and session.json) when the longest gap between
     /// capture callbacks of the open stream reaches a new high of at least 100 ms, and at least
     /// 50 ms above the last one written, next to the buffer granted: a near miss is on record at
-    /// its audio time even if the app is killed later. A stall still going on counts. At most 20
-    /// events a session; the status tick calls this.
+    /// its audio time even if the app is killed later. A stall still going on gets one event (up to 5
+    /// a session), completed gaps up to 15 more; the status tick calls this.
     fn log_capture_margin(&mut self) {
         const MIN_US: u64 = 100_000;
         const STEP_US: u64 = 50_000;
-        const MAX_EVENTS: u32 = 20;
+        const MAX_DONE: u32 = 15;
+        const MAX_LIVE: u32 = 5;
         let Some(stream) = &self.stream else { return };
         let done_us = stream.counters.max_callback_gap_us.load(Ordering::Relaxed);
         let live_us = self.open_gap_us();
+        if live_us == 0 {
+            self.live_stall_logged = false;
+        }
+        let from_live = live_us > done_us;
         let max_us = done_us.max(live_us);
-        if self.stall_events >= MAX_EVENTS
-            || max_us < MIN_US
+        if max_us < MIN_US
             || (self.logged_max_gap_us > 0 && max_us < self.logged_max_gap_us + STEP_US)
         {
             return;
         }
+        if from_live {
+            // One event for a stall that is going on; its end is its own event if it was longer.
+            if self.live_stall_logged || self.stall_events_live >= MAX_LIVE {
+                return;
+            }
+            self.live_stall_logged = true;
+            self.stall_events_live += 1;
+        } else {
+            if self.stall_events_done >= MAX_DONE {
+                return;
+            }
+            self.stall_events_done += 1;
+        }
         self.logged_max_gap_us = max_us;
-        self.stall_events += 1;
         let granted = stream.buffer.granted_ms;
         let granted_txt = granted.map_or_else(|| "unknown".to_string(), |g| format!("{g:.0}"));
         let margin_txt = granted.map_or_else(
             || "unknown".to_string(),
             |g| format!("{:.1}", g - max_us as f64 / 1000.0),
         );
-        let still = if live_us >= done_us {
+        let still = if from_live {
             " still_going_on=true"
         } else {
             ""
