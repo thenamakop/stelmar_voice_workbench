@@ -1,6 +1,6 @@
-AVX-512 instruction scan of the portable engines (Phase 2, gate 11)
-date: 2026-11-12 12:32 (IST on the Legion); machine: Legion; tool: scripts/check-no-zmm.ps1 (dumpbin /disasm, streamed, stops at the first zmm register); overlay tools closed: yes (no timing involved); engines rebuilt 12 Nov 2026 (final) after the second ASR audit (heartbeat hold around the detection pass and every decode, test-hook gate)
-CI runs the same script on the avx2 build (.github/workflows/ci.yml, "no zmm" step). The vulkan engine is also compiled for the CPU with the avx2 flags (GGML_NATIVE=OFF), so it is scanned here too (ASR audit, 12 Nov 2026); CI builds avx2 only.
+﻿AVX-512 instruction scan of the portable engines (Phase 2, gate 11)
+date: 2026-11-12 14:31 (IST on the Legion); machine: Legion; tool: scripts/check-no-zmm.ps1 run by scripts/gates/zmm-scan.ps1 (dumpbin /disasm, streamed, stops at the first zmm register); overlay tools closed: yes (no timing involved)
+CI runs the same script on the avx2 build (.github/workflows/ci.yml, "no zmm" step). The vulkan engine is also compiled for the CPU with the avx2 flags (GGML_NATIVE=OFF), so it is scanned here too; CI builds avx2 only.
 
 1. wb-engine-avx2-x86_64-pc-windows-msvc.exe (sha256 1d60a86f52f7ae91765fbcc8589040d0fe69d9a6b012764ef4d096adbeae2b88), expected: no zmm register
    result: no zmm register in 715,684 lines of disassembly. OK

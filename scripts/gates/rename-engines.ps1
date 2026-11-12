@@ -145,7 +145,7 @@ foreach ($u in @($ui1, $ui2)) {
   foreach ($sh in $u.Shots) { $lines += "     $(Split-Path $sh.Path -Leaf), $($sh.Seconds) s after launch: rendered $($sh.Rendered), obscured $($sh.Obscured)" }
 }
 $lines += $(if ($ok3 -and $ok4) { '   => the banner shows with the engines renamed away and not with them present: ok' } else { '   => WRONG: the banner is missing with the engines renamed away, or shows with them present' })
-$lines += '   Read from the PNGs (by the agent, not by the script): see the note at the end of this file.'
+$lines += '   Read from the PNGs (by the agent, not by the script): see rename-engines-emu-low-note.txt (a separate file, written by whoever read them).'
 $lines += ''
 $lines += "the recorder evidence of both runs: $($run1.Evidence) and $($run2.Evidence) (scratch folder, not committed; audio never leaves D:\STELMAR-Gate)"
 if (-not $ok1) { $lines += ($run1.Console | ForEach-Object { "   console: $_" }) }

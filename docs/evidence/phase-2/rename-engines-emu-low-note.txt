@@ -1,0 +1,6 @@
+Note on the renamed-engines screenshots (Phase 2), written by the coding agent, not by a script
+date: 12 Nov 2026; read after the run of scripts/gates/rename-engines.ps1 that wrote rename-engines-emu-low.txt (final engine builds and gate build)
+what was read: ui/rename-engines-emu-low-renamed-shot1.png and ui/rename-engines-emu-low-intact-shot1.png (shot2 and shot3 of the renamed run are the same size and were not opened separately)
+renamed-shot1: the Record screen. Below the Transcript tabs a warning banner reads "No speech engine found. Recording is not affected. Sessions are recorded now; transcription needs a working speech engine. See System." Under it the sample-text notice and the four sample lines (English, Hindi, Hindi-English, Urdu in Nastaliq) render in their scripts. The header shows OFFLINE and "System check not run".
+intact-shot1: the same screen with no banner; the sample-text notice sits directly under the tabs and the lines are shifted up by the banner's height.
+limits of this note: it is a reading by an agent of two images, not a measurement; the script's own check (the banner text found in the window's accessibility tree: True with the engines renamed, False with them present) is in rename-engines-emu-low.txt. The captures are whole-window 2308x1343 images, not 1536x864 (GATES row, Phase 3).

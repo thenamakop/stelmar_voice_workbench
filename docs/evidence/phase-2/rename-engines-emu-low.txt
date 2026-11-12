@@ -1,11 +1,11 @@
 ﻿Renamed-engines test (Phase 2), profile emu-low
-date: 2026-11-12 13:08 (IST on the Legion); machine: Legion; gate build target\gate\stelmar-voice-workbench.exe; recorder run 3 min each through recorder-gate.ps1 -Gate soak -Minutes 3
+date: 2026-11-12 14:41 (IST on the Legion); machine: Legion; gate build target\gate\stelmar-voice-workbench.exe; recorder run 3 min each through recorder-gate.ps1 -Gate soak -Minutes 3
 engines renamed: avx2, avx512, vulkan, cuda (copies named wb-engine-<variant>-x86_64-pc-windows-msvc.exe.renamed in a scratch folder; the app is pointed at it with WB_ENGINES_DIR)
 
 1. engines renamed away
    recorder run: exit code 0; verdict: PASS (PROVISIONAL: emulated)
    app log lines holding the message (1):
-     2026-11-12T07:31:31.469135Z  WARN wb-events No speech engine found in D:\STELMAR-Gate\rename-engines\renamed. Recording is not affected; sessions are recorded now and need a working speech engine to be transcribed. source="engines"
+     2026-11-12T09:04:47.598806Z  WARN wb-events No speech engine found in D:\STELMAR-Gate\rename-engines\renamed. Recording is not affected; sessions are recorded now and need a working speech engine to be transcribed. source="engines"
    => the recording ran and passed its own checks, and the app said so: ok
 
 2. control, engines intact (same run, WB_ENGINES_DIR = the intact copies)
@@ -16,15 +16,13 @@ engines renamed: avx2, avx512, vulkan, cuda (copies named wb-engine-<variant>-x8
 
 3. what the operator sees: the Record screen (opened through the window's accessibility tree; windows captured: bounds only, foreground-checked, never the desktop)
    engines renamed away : Record opened True; text 'No speech engine found.' found in the window: True
-     rename-engines-emu-low-renamed-shot1.png, 3 s after launch: rendered True, obscured False
+     rename-engines-emu-low-renamed-shot1.png, 4 s after launch: rendered True, obscured False
      rename-engines-emu-low-renamed-shot2.png, 6 s after launch: rendered True, obscured False
-     rename-engines-emu-low-renamed-shot3.png, 8 s after launch: rendered True, obscured False
+     rename-engines-emu-low-renamed-shot3.png, 9 s after launch: rendered True, obscured False
    control, engines present : Record opened True; text 'No speech engine found.' found in the window: False
-     rename-engines-emu-low-intact-shot1.png, 17 s after launch: rendered True, obscured False
+     rename-engines-emu-low-intact-shot1.png, 18 s after launch: rendered True, obscured False
    => the banner shows with the engines renamed away and not with them present: ok
-   Read from the PNGs (by the agent, not by the script): see the note at the end of this file.
+   Read from the PNGs (by the agent, not by the script): see rename-engines-emu-low-note.txt (a separate file, written by whoever read them).
 
 the recorder evidence of both runs: D:\STELMAR-Gate\rename-engines\recorder-renamed\soak-emu-low.txt and D:\STELMAR-Gate\rename-engines\recorder-intact\soak-emu-low.txt (scratch folder, not committed; audio never leaves D:\STELMAR-Gate)
 verdict: PASS (PROVISIONAL: emulated)
-
-agent-read note (12 Nov 2026, final engine builds and gate build): the PNGs were viewed. rename-engines-emu-low-renamed-shot1.png shows the Record screen with the warning banner "No speech engine found. Recording is not affected. Sessions are recorded now; transcription needs a working speech engine. See System." under the tabs; rename-engines-emu-low-intact-shot1.png (engines present) shows no banner. Both are window captures of the app's own window through the gate build (foreground-checked, not obscured).
