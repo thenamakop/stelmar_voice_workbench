@@ -49,7 +49,7 @@ $bare = @(Get-ChildItem -Path $root -Recurse -Include *.ps1 -File |
   Where-Object { (Get-Content -LiteralPath $_.FullName -Raw) -match '&\s*powershell\.exe' })
 Check ('no script calls powershell.exe bare: ' + (($bare | ForEach-Object { $_.Name }) -join ', ')) ($bare.Count -eq 0)
 $launchers = @('gates\recorder-gate.ps1', 'gates\kill-gate.ps1', 'gates\emulator-check.ps1', 'gates\run-phase1-gates.ps1',
-  'offline-check.ps1', 'offline-session-check.ps1', 'tests\run-tests.ps1')
+  'gates\rig-selftest.ps1', 'offline-check.ps1', 'offline-session-check.ps1', 'tests\run-tests.ps1')
 foreach ($name in $launchers) {
   $t = Get-Content -LiteralPath (Join-Path $root $name) -Raw
   Check "$name repairs or sets the module path" ($t -match 'Set-WbCleanPSModulePath|Invoke-WbWindowsPowerShell')
@@ -57,7 +57,7 @@ foreach ($name in $launchers) {
 
 # Numbers in evidence follow the invariant culture: no 87,76,800 on an en-IN machine.
 $gateScripts = @('gates\recorder-gate.ps1', 'gates\kill-gate.ps1', 'gates\emulator-check.ps1', 'gates\run-phase1-gates.ps1',
-  'gates\rescore-run.ps1', 'offline-check.ps1', 'offline-session-check.ps1')
+  'gates\rescore-run.ps1', 'gates\rig-selftest.ps1', 'offline-check.ps1', 'offline-session-check.ps1')
 foreach ($name in $gateScripts) {
   $t = Get-Content -LiteralPath (Join-Path $root $name) -Raw
   Check "$name sets the invariant culture" ($t -match 'Set-WbInvariantCulture')

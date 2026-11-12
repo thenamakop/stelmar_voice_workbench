@@ -329,18 +329,30 @@ function Invoke-WbAnalyse {
 # virtual cable (name contains $Cable). While it is, every sound the machine makes (notification
 # chimes, any app on the default device) is played into the test signal: seen in Phase 1, where a
 # two-tone chime reached the cable five times in 3 hours and failed the load and soak gates.
-function Get-WbCableDefaultRoles {
-  param([Parameter(Mandatory = $true)] [string]$Testbench, [string]$Cable = 'CABLE Input')
-  $res = Invoke-WbNative -FilePath $Testbench -ArgumentList @('devices')
-  if ($res.ExitCode -ne 0 -or $res.Output.Count -eq 0) { return @() }
-  $d = ($res.Output -join "`n") | ConvertFrom-Json
-  if (-not (Test-WbHasProperty $d 'default_roles') -or $null -eq $d.default_roles) { return @() }
+#
+# -Cable is a list of names; a role matches when its default device's name contains any of them.
+# The default list holds the product name too: after the 12 Nov 2026 restart the cable's playback
+# endpoint is called "Speakers (3- VB-Audio Virtual Cable)", which contains no "CABLE Input", and
+# the old check let the cable stay the default device.
+function Get-WbCableDefaultRolesFromDevices {
+  param($Devices, [string[]]$Cable = @('CABLE Input', 'VB-Audio Virtual Cable'))
+  if ($null -eq $Devices -or -not (Test-WbHasProperty $Devices 'default_roles') -or $null -eq $Devices.default_roles) { return @() }
   $roles = @()
   foreach ($role in 'console', 'multimedia', 'communications') {
-    $name = $d.default_roles.$role
-    if ($name -and $name -like "*$Cable*") { $roles += $role }
+    $name = [string]$Devices.default_roles.$role
+    if (-not $name) { continue }
+    foreach ($c in $Cable) {
+      if ($c -and $name.IndexOf($c, [StringComparison]::OrdinalIgnoreCase) -ge 0) { $roles += $role; break }
+    }
   }
   $roles
+}
+
+function Get-WbCableDefaultRoles {
+  param([Parameter(Mandatory = $true)] [string]$Testbench, [string[]]$Cable = @('CABLE Input', 'VB-Audio Virtual Cable'))
+  $res = Invoke-WbNative -FilePath $Testbench -ArgumentList @('devices')
+  if ($res.ExitCode -ne 0 -or $res.Output.Count -eq 0) { return @() }
+  Get-WbCableDefaultRolesFromDevices -Devices (($res.Output -join "`n") | ConvertFrom-Json) -Cable $Cable
 }
 
 # Copies a List (or any collection) to an array. In Windows PowerShell 5.1, @($list) throws
@@ -484,4 +496,4 @@ function Write-WbGateCrashEvidence {
   Write-WbEvidence -Path $Path -Lines $lines -MachineLabel $Machine
 }
 
-Export-ModuleMember -Function Get-WbOverlayTools, Get-WbRunningBuilds, Assert-WbNoBuilds, Assert-WbNoOverlayTools, Invoke-WbGate, Get-WbGateHeader, ConvertTo-WbArg, Split-WbDiscontinuities, Get-WbUnexplainedUnmatchedMs, Test-WbGateData, Write-WbGateCrashEvidence, Get-WbFreeRamGB, Set-WbGateContext, Invoke-WbAnalyse, Test-WbHasProperty, Get-WbCableDefaultRoles, ConvertTo-WbArray, Get-WbXrunVerdict, Invoke-WbNative, Get-WbRepoRoot
+Export-ModuleMember -Function Get-WbOverlayTools, Get-WbRunningBuilds, Assert-WbNoBuilds, Assert-WbNoOverlayTools, Invoke-WbGate, Get-WbGateHeader, ConvertTo-WbArg, Split-WbDiscontinuities, Get-WbUnexplainedUnmatchedMs, Test-WbGateData, Write-WbGateCrashEvidence, Get-WbFreeRamGB, Set-WbGateContext, Invoke-WbAnalyse, Test-WbHasProperty, Get-WbCableDefaultRoles, Get-WbCableDefaultRolesFromDevices, ConvertTo-WbArray, Get-WbXrunVerdict, Invoke-WbNative, Get-WbRepoRoot

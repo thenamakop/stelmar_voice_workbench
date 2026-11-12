@@ -36,8 +36,10 @@ param(
   [string]$Machine = 'Legion',
   [string]$WorkRoot = 'D:\STELMAR-Gate',
   [string]$BackupRoot = 'C:\STELMAR-Gate-Backup',
-  [string]$CaptureDevice = 'CABLE Output',
-  [string]$PlayDevice = 'CABLE Input',
+  # Empty = found automatically: the cable's capture and playback endpoints are paired by cable
+  # instance and proven with a known signal before the gate starts (scripts\lib\CableRig.psm1).
+  [string]$CaptureDevice = '',
+  [string]$PlayDevice = '',
   [string]$GpuName = 'UHD',
   [string]$OutDir,
   # The hashing gate counts as started after a reboot when the machine had been up at most this
@@ -73,6 +75,7 @@ Import-Module (Join-Path $repo 'scripts\lib\GateRun.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Redact.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\AppProcess.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Rig.psm1') -Force
+Import-Module (Join-Path $repo 'scripts\lib\CableRig.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Fidelity.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Detector.psm1') -Force
 foreach ($f in @($Exe, $Testbench, $Emulate)) { if (-not (Test-Path $f)) { throw "Missing $f; build it first (scripts\gates\build-gate.ps1)" } }
@@ -92,15 +95,11 @@ function Get-NvidiaPids {
   $pids
 }
 
-# Audio sessions playing into the cable now, other than $Allow (process ids). Anything else
-# mixes into the test signal (seen in Phase 1: a browser tab routed to CABLE Input).
-function Get-CableIntruders([int[]]$Allow = @()) {
-  $res = Invoke-WbNative -FilePath $Testbench -ArgumentList @('sessions', '--device', $PlayDevice)
-  if ($res.ExitCode -ne 0 -or $res.Output.Count -eq 0) { return @() }
-  @((($res.Output -join "`n") | ConvertFrom-Json) | Where-Object { $_.active -and $Allow -notcontains [int]$_.pid } | ForEach-Object {
-    $name = (Get-Process -Id $_.pid -ErrorAction SilentlyContinue).ProcessName
-    "$name (pid $($_.pid)) on $($_.endpoint)"
-  })
+# Audio sessions playing into the cable now (on any of its playback endpoints), other than $Allow
+# (process ids). Anything else mixes into the test signal (seen in Phase 1: a browser tab routed to
+# the cable).
+function Get-CableIntruders([string[]]$Names, [int[]]$Allow = @()) {
+  @(Get-WbCableIntruders -Testbench $Testbench -Names $Names -Allow $Allow)
 }
 
 function Read-Json([string]$Path) {
@@ -130,6 +129,7 @@ function Get-ResultFromRun([string]$run) {
     Reference = (Read-Json (Join-Path $run 'reference.json')); RefAnalysis = (Read-Json (Join-Path $run 'reference-analysis.json'))
     AnalysisError = $analysisErr; RefAnalysisError = $refAnalysisErr; Rig = $null
     CacheNote = $null; BootTime = $null; UptimeMin = $null; FastStartup = $null; ModelsDisk = $null; RecDisk = $null
+    CableRig = $null; CableTest = $null
   }
 }
 
@@ -142,10 +142,16 @@ if ($FromRun) {
 } else {
 $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
   if (Get-Process stelmar-voice-workbench -ErrorAction SilentlyContinue) { throw 'The app is already running; close it first.' }
-  $cableRoles = @(Get-WbCableDefaultRoles -Testbench $Testbench -Cable $PlayDevice)
-  if ($cableRoles.Count -gt 0 -and -not $AllowCableDefault) { throw ("The default playback device ($($cableRoles -join ', ')) is ${PlayDevice}: every sound this computer makes would play into the test signal. Set the default playback device to the speakers (Windows Settings > System > Sound), then run the gate again (or pass -AllowCableDefault).") }
-  $intruders = @(Get-CableIntruders)
-  if ($intruders.Count -gt 0) { throw ("Another program is playing into $PlayDevice : " + ($intruders -join ', ') + '. Stop it (or close it) so only the gate player feeds the cable.') }
+  # The rig, before anything starts: the player's and the capture's endpoints on the same cable
+  # instance (refused otherwise), the cable not the default playback device, nobody else playing
+  # into it, and a known signal heard on the capture. A refusal stops the gate here.
+  $cableRig = Resolve-WbCableRig -Testbench $Testbench -PlayDevice $PlayDevice -CaptureDevice $CaptureDevice
+  $cableRoles = @(Assert-WbCableNotDefault -Testbench $Testbench -Rig $cableRig -Allow:$AllowCableDefault)
+  $intruders = @(Get-CableIntruders -Names $cableRig.RenderNames)
+  if ($intruders.Count -gt 0) { throw ("RIG REFUSED: Another program is playing into the cable ($($cableRig.RenderNames -join '; ')): " + ($intruders -join ', ') + '. Stop it (or close it) so only the gate player feeds the cable.') }
+  $cableTest = Invoke-WbRigSelfTest -Rig $cableRig -Testbench $Testbench -WorkRoot $WorkRoot
+  $playName = $cableTest.PlayName
+  $capName = $cableTest.CaptureName
   # Where the player and the reference capture will run: outside the job's cores. The gate does
   # not start if the plan overlaps the job or itself.
   $rigPlan = Get-WbRigPlan -Emulate $Emulate -Profile $Profile
@@ -169,7 +175,7 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
   $env:WB_GATE_ROOT = $rec
   $env:WB_GATE_BACKUP = $backup
   $env:WB_GATE_START = "Gate $Gate $stamp"
-  $env:WB_GATE_DEVICE = $CaptureDevice
+  $env:WB_GATE_DEVICE = $capName
   $env:WB_GATE_STOP_FILE = $stopFile
   $env:WB_GATE_REPORT = Join-Path $run 'stop-report.json'
   $env:WB_GATE_STATUS_FILE = Join-Path $run 'status.json'
@@ -243,9 +249,10 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
   $refDir = Join-Path $run 'reference'
   $refStop = Join-Path $run 'STOP-REF'
   $goFile = Join-Path $run 'GO-RIG'
-  $refProc = Start-Process -FilePath $Testbench -ArgumentList @('capture', '--device', (Q $CaptureDevice), '--dir', (Q $refDir), '--stop-file', (Q $refStop), '--go-file', (Q $goFile), '--report', (Q (Join-Path $run 'reference.json'))) -PassThru -WindowStyle Hidden
+  # Their error text goes to files: a player or capture that cannot start must leave its reason.
+  $refProc = Start-Process -FilePath $Testbench -ArgumentList @('capture', '--device', (Q $capName), '--dir', (Q $refDir), '--stop-file', (Q $refStop), '--go-file', (Q $goFile), '--report', (Q (Join-Path $run 'reference.json'))) -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $run 'reference.out') -RedirectStandardError (Join-Path $run 'reference.err')
   Start-Sleep -Seconds 1
-  $play = Start-Process -FilePath $Testbench -ArgumentList @('play', '--device', (Q $PlayDevice), '--file', (Q $source), '--go-file', (Q $goFile), '--report', (Q (Join-Path $run 'play.json'))) -PassThru -WindowStyle Hidden
+  $play = Start-Process -FilePath $Testbench -ArgumentList @('play', '--device', (Q $playName), '--file', (Q $source), '--go-file', (Q $goFile), '--report', (Q (Join-Path $run 'play.json'))) -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $run 'play.out') -RedirectStandardError (Join-Path $run 'play.err')
   # Pin both to cores outside the job at HIGH priority class; they wait for the go file before
   # they open their streams, so no callback runs unpinned. Then check what they really have.
   $rig = Set-WbRigPins -Plan $rigPlan -Player $play -Reference $refProc -GoFile $goFile
@@ -290,7 +297,7 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
   while (-not $play.HasExited) {
     if (((Get-Date) - $lastCable).TotalSeconds -ge 1) {
       $lastCable = Get-Date
-      foreach ($i in (Get-CableIntruders -Allow @($play.Id))) { $interference.Add("$(Get-Date -Format 'HH:mm:ss') $i") }
+      foreach ($i in (Get-CableIntruders -Names $cableRig.RenderNames -Allow @($play.Id))) { $interference.Add("$(Get-Date -Format 'HH:mm:ss') $i") }
     }
     if (((Get-Date) - $lastProgress).TotalSeconds -ge 60) {
       $lastProgress = Get-Date
@@ -336,6 +343,7 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
     Reference = (Read-Json (Join-Path $run 'reference.json')); RefAnalysis = (Read-Json (Join-Path $run 'reference-analysis.json'))
     AnalysisError = $analysisErr; RefAnalysisError = $refAnalysisErr; CableDefaultRoles = $cableRoles; Rig = $rig
     CacheNote = $cacheNote; BootTime = $bootTime; UptimeMin = $uptimeMin; FastStartup = $fastStartup; ModelsDisk = $modelsDisk; RecDisk = $recDisk
+    CableRig = $cableRig; CableTest = $cableTest
   }
 }
 }
@@ -473,7 +481,8 @@ if ($r.CompareError) { $lines += "comparison error: $($r.CompareError)" }
 if ($Gate -eq 'webview' -and @($r.AppLog).Count -eq 0) { $lines += 'display recovery: not re-evaluated here (the live app log is not saved); the original run''s evidence stands' }
 $lines += ''
 $lines += 'measurements:'
-$lines += ("  source: {0:n1} min of known noise, 48 kHz stereo, played by wb-testbench into '{1}' from outside the job" -f ($r.Analysis.source_ms / 60000.0), $PlayDevice)
+$lines += ("  source: {0:n1} min of known noise, 48 kHz stereo, played by wb-testbench into '{1}' from outside the job" -f ($r.Analysis.source_ms / 60000.0), $(if ($r.CableTest) { $r.CableTest.PlayName } else { 'the cable (name not recorded for this run)' }))
+$lines += Get-WbCableRigLines -Rig $r.CableRig -SelfTest $r.CableTest
 $lines += ("  recorded content: {0:n3} s against source {1:n3} s (difference {2:n1} ms); discontinuities {3}; silent gaps {4:n1} ms; unmatched {5:n1} ms; lowest block correlation {6:n4}" -f ($r.Analysis.content_ms / 1000.0), ($r.Analysis.source_ms / 1000.0), $r.Analysis.duration_diff_ms, @($r.Analysis.discontinuities).Count, $r.Analysis.silent_gap_ms, $r.Analysis.unmatched_ms, $r.Analysis.min_block_correlation)
 $lines += ("  parts: {0}; audio {1:n1} s; overrun samples {2}; driver xruns {3}; samples dropped by the writer {4}; recorder restarts {5}" -f @($rec.parts).Count, ($rec.audio_ms / 1000.0), $rec.overrun_samples, $rec.xruns, $rec.dropped_samples, $rec.recorder_restarts)
 if (Test-WbHasProperty $rec 'detector_max_block_us') {

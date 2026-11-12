@@ -51,7 +51,26 @@ Set-Content -LiteralPath $Log -Value "phase 1 gate sequence ($($Gates -join ', '
 Set-Content -LiteralPath $RequestFlag -Value "requested by=phase1 gate sequence`r`nstarted=$((Get-Date).ToString('o'))`r`npid=$PID`r`ngates=$($Gates -join ',')" -Encoding ascii
 $stopReason = $null
 try {
-  foreach ($g in $Gates) {
+  # The rig first, once, before any gate: the cable's playback and capture endpoints paired by cable
+  # instance, the cable not the default playback device, and a known signal heard on the capture.
+  # (Each gate repeats this check itself.) A failure stops the sequence with nothing started.
+  $gatesToRun = $Gates
+  if (@($Gates | Where-Object { $_ -ne 'emulator' }).Count -gt 0) {
+    Write-Log 'rig check: starting (pairs the cable endpoints by cable instance and plays a known signal through the pair)'
+    $rigArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $here 'rig-selftest.ps1'))
+    if ($AllowCableDefault) { $rigArgs += '-AllowCableDefault' }
+    $rigOut = @(Invoke-WbWindowsPowerShell -ArgumentList $rigArgs)
+    $rigCode = $LASTEXITCODE
+    $rigLine = @($rigOut | Where-Object { $_ -match '^RIG ' } | Select-Object -Last 1)
+    if ($rigCode -ne 0) {
+      $stopReason = "rig check failed: $(if ($rigLine.Count) { $rigLine[0] } else { 'exit ' + $rigCode + '; last output: ' + (($rigOut | Select-Object -Last 3) -join ' | ') })"
+      $gatesToRun = @()
+      Write-Log "rig check: FAILED. No gate was started. $stopReason"
+    } else {
+      Write-Log "rig check: $(if ($rigLine.Count) { $rigLine[0] } else { 'passed' })"
+    }
+  }
+  foreach ($g in $gatesToRun) {
     Write-Log "$g : starting (free RAM $(Get-FreeRamGB) GB)"
     $script = $(switch ($g) {
         'emulator' { Join-Path $here 'emulator-check.ps1' }
@@ -74,7 +93,9 @@ try {
       $stopReason = "$g : Track B's busy lock was held for more than 30 minutes"
     } elseif ($text -match 'GB of RAM free; gate .* needs at least') {
       $stopReason = "$g : less than 14 GB of RAM free"
-    } elseif ($text -match 'The default playback device .* is CABLE Input') {
+    } elseif ($text -match 'RIG REFUSED|RIG SELF-TEST FAILED') {
+      $stopReason = "$g : the cable rig was refused or failed its signal check ($(@($out | Where-Object { $_ -match 'RIG (REFUSED|SELF-TEST FAILED)' } | Select-Object -First 1)))"
+    } elseif ($text -match 'The default playback device .* is (CABLE Input|the virtual cable)') {
       $stopReason = "$g : the virtual cable is a default playback device"
     } elseif ($text -match 'Overlay tools are running') {
       $stopReason = "$g : overlay tools are running"
