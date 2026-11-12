@@ -252,10 +252,11 @@ impl BufferInfo {
     }
 }
 
-/// Longest the buffer ladder keeps trying sized requests: each attempt can wait for the driver for
-/// up to the 5 s stream timeout, the probe for 2 s, and a session start gives the whole open 15 s.
+/// Longest the buffer ladder keeps starting sized requests: a rung that has started can wait for the
+/// driver for up to the 5 s stream timeout, the always-tried device default for another 5 s and
+/// the probe for 2 s, and a session start gives the whole open 15 s (3 + 5 + 5 + 2).
 /// The last rung, the device default, is always tried once.
-const FALLBACK_BUDGET: Duration = Duration::from_secs(6);
+const FALLBACK_BUDGET: Duration = Duration::from_secs(3);
 
 /// Why one attempt to open the stream failed, and whether a smaller buffer could cure it.
 #[derive(Debug)]

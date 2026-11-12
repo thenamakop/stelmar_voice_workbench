@@ -148,9 +148,9 @@ pub enum PanicPoint {
 const MAX_PANICS_PER_BATCH: u8 = 3;
 /// `recorder_restarted` events (session.json, toast) are written at most this often; the restart
 /// counter still counts every restart.
+const RESTART_EVENT_EVERY: Duration = Duration::from_secs(5);
 /// `capture_buffer` events in session.json: one per stream opened (a flapping device opens many).
 const MAX_CAPTURE_BUFFER_EVENTS: u32 = 20;
-const RESTART_EVENT_EVERY: Duration = Duration::from_secs(5);
 
 /// What the recorder left behind at Stop.
 #[derive(Debug, Clone, Serialize)]
@@ -922,8 +922,11 @@ impl Recorder {
                 if let Some(ms) = handle.buffer.granted_ms {
                     self.granted_ms_min = Some(self.granted_ms_min.map_or(ms, |m| m.min(ms)));
                 }
-                self.capture_buffers.push(buffer_label.clone());
+                if self.capture_buffers.len() < MAX_CAPTURE_BUFFER_EVENTS as usize {
+                    self.capture_buffers.push(buffer_label.clone());
+                }
                 self.logged_max_gap_us = 0;
+                self.live_stall_logged = false;
                 self.stream = Some(handle);
                 self.rebuild_scratch();
                 self.had_stream = true;
@@ -1906,7 +1909,9 @@ impl Recorder {
         let Some(stream) = &self.stream else { return };
         let done_us = stream.counters.max_callback_gap_us.load(Ordering::Relaxed);
         let live_us = self.open_gap_us();
-        if live_us == 0 {
+        // Callbacks are back (the gap in progress is below the logging floor): the next stall is a
+        // new one. The gap is never exactly 0 once the recorder has seen a callback.
+        if live_us < MIN_US {
             self.live_stall_logged = false;
         }
         let from_live = live_us > done_us;

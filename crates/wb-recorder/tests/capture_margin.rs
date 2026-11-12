@@ -200,6 +200,31 @@ fn a_stall_still_going_on_at_stop_counts() -> TestResult {
 }
 
 #[test]
+fn two_separate_stalls_each_get_their_own_event() -> TestResult {
+    let run = start("margin-two-stalls")?;
+    let h = stream(Some(1500.0), &[]);
+    let counters = Arc::clone(&h.counters);
+    counters.callbacks.store(1, Ordering::Relaxed);
+    run.rec.send(RecorderMsg::Stream(h))?;
+    // First stall: about 600 ms with no callback.
+    std::thread::sleep(Duration::from_millis(600));
+    // Callbacks come back for a while (the recorder sees the counter move) ...
+    let tick = Ticker::start(&counters);
+    std::thread::sleep(Duration::from_millis(600));
+    drop(tick);
+    // ... and then a second stall, still going on when the session stops.
+    std::thread::sleep(Duration::from_millis(600));
+    let (_report, log, json) = finish(run)?;
+    assert_eq!(
+        log.matches("still_going_on=true").count(),
+        2,
+        "each stall gets one event: {log}"
+    );
+    assert!(json.matches("capture_stall").count() >= 2);
+    Ok(())
+}
+
+#[test]
 fn a_stream_that_has_not_called_back_yet_is_starting_up_not_stalled() -> TestResult {
     let run = start("margin-startup")?;
     // The handle reaches the recorder before the device's first callback (play() comes after).

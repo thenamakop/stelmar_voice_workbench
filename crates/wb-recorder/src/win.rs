@@ -201,6 +201,8 @@ pub fn probe_shared_capture_buffer(endpoint_id: &str, requested_hns: i64) -> Opt
             // Released on every exit, a panic included.
             let _busy = ProbeSlot;
             let grant = probe_on_this_thread(&id, requested_hns);
+            // Free the slot before the answer goes out, so the next probe can start at once.
+            drop(_busy);
             let _ = tx.send(grant);
         });
     if spawned.is_err() {
