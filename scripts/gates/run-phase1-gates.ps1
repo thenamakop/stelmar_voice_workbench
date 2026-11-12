@@ -55,10 +55,10 @@ try {
         default { Join-Path $here 'recorder-gate.ps1' }
       })
     $argList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $script)
-    if ($g -in @('panic', 'webview', 'load', 'soak')) { $argList += @('-Gate', $g, '-Profile', $Profile) }
+    if ($g -in @('panic', 'webview', 'load', 'soak', 'hashing')) { $argList += @('-Gate', $g, '-Profile', $Profile) }
     if ($g -eq 'kill') { $argList += @('-Profile', $Profile) }
     if ($OutDir) { $argList += @('-OutDir', $OutDir) }
-    if ($Minutes -gt 0 -and $g -in @('panic', 'webview', 'load', 'soak')) { $argList += @('-Minutes', $Minutes) }
+    if ($Minutes -gt 0 -and $g -in @('panic', 'webview', 'load', 'soak', 'hashing')) { $argList += @('-Minutes', $Minutes) }
     if ($AllowCableDefault -and $g -ne 'emulator') { $argList += '-AllowCableDefault' }
     # The helper gives the child Windows PowerShell 5.1's own module path (a parent shell's
     # PowerShell 7 path makes Get-FileHash vanish) and collects stderr as text.

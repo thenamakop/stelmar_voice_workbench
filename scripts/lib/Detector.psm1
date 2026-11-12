@@ -159,4 +159,30 @@ function Get-WbDetectorLines {
   $lines
 }
 
-Export-ModuleMember -Function Get-WbAppOffsetMs, Get-WbAppAnalysisSpans, Get-WbDetectorMatches, Get-WbDetectorLines
+# Saves a run's detector check next to the run (detector-check.json) for detector-table.ps1.
+function Save-WbDetectorCheck {
+  param([string]$RunDir, [string]$Gate, [string]$Profile, $Check, $Rec, [double]$AudioMs)
+  $has = { param($o, $n) $null -ne $o -and $null -ne $o.PSObject.Properties[$n] }
+  $counters = [ordered]@{}
+  foreach ($n in 'repeated_blocks', 'zero_gaps', 'detector_max_block_us', 'detector_over_budget_blocks', 'detector_skipped_ms') {
+    $counters[$n] = $(if (& $has $Rec $n) { $Rec.$n } else { $null })
+  }
+  $counters['detectors_disabled'] = $(if (& $has $Rec 'detectors_disabled') { @($Rec.detectors_disabled).Count } else { $null })
+  $doc = [pscustomobject]@{
+    gate = $Gate
+    profile = $Profile
+    run = (Split-Path -Leaf $RunDir)
+    audio_minutes = [math]::Round($AudioMs / 60000.0, 1)
+    breaks = @($Check.Rows).Count
+    matched = $Check.Matched
+    missed = $Check.Missed
+    before_recording = $Check.BeforeRecording
+    false_alarms = @($Check.FalseAlarms).Count
+    lead_in = @($Check.LeadIn).Count
+    events = $Check.EventCount
+    counters = $counters
+  }
+  ($doc | ConvertTo-Json -Depth 5) | Set-Content -LiteralPath (Join-Path $RunDir 'detector-check.json') -Encoding utf8
+}
+
+Export-ModuleMember -Function Get-WbAppOffsetMs, Get-WbAppAnalysisSpans, Get-WbDetectorMatches, Get-WbDetectorLines, Save-WbDetectorCheck
