@@ -173,6 +173,13 @@ fn has_engines(dir: &Path) -> bool {
     !discover(dir).is_empty()
 }
 
+/// Whether the engines the app starts get an environment without any `WB_*` variable: in release builds
+/// (installed app) yes, in debug and gate builds no (gate runs pass `WB_EMULATE*` and the folders on purpose).
+/// Every engine start of the app (the `info` probe here, the batch supervisor's `Policy::scrub_env`) uses it.
+pub fn scrub_engine_env() -> bool {
+    !cfg!(any(debug_assertions, feature = "gate-hooks"))
+}
+
 /// The folder named by an environment variable, in development and gate builds only. An installed app
 /// ignores `WB_ENGINES_DIR` and `WB_MODELS_DIR`, so the environment cannot choose which executable it launches.
 fn dev_override(name: &str) -> Option<PathBuf> {
@@ -253,6 +260,7 @@ pub fn probe_engine(variant: &str, exe: &Path, log_dir: &Path) -> EngineRow {
         priority: Priority::Normal,
         stderr_log: log_dir.join(format!("info-{variant}.log")),
         env: Vec::new(),
+        scrub_env: scrub_engine_env(),
     };
     let started = Instant::now();
     let mut proc = match EngineProcess::spawn(&spec) {

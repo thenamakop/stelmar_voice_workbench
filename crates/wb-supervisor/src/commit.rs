@@ -109,6 +109,45 @@ impl Committer {
         self.repeats_refused
     }
 
+    /// Appends every segment of ONE finished chunk as a unit: one write and one fsync, so a chunk that was
+    /// split into halves is committed whole or not at all when the ENGINE dies (its pending segments are
+    /// never written). An app crash or power loss in the middle of the one write can still leave a prefix of
+    /// the chunk's lines; `open` then puts the cursor at the end of the last complete segment, the chunk is
+    /// decoded again and the repeated lines are refused, so nothing is lost, but the join may show a seam
+    /// (Phase 4 hardening: write a chunk marker line or a side journal). A segment that starts before the cursor is
+    /// refused as a repeat, as in [`Committer::commit`]. Afterwards the cursor is at least `cursor_ms`
+    /// (the end of the chunk, also when the chunk gave no segment). Returns, per segment, whether it was
+    /// committed.
+    pub fn commit_chunk(
+        &mut self,
+        segs: &[SegmentEvent],
+        cursor_ms: u64,
+    ) -> std::io::Result<Vec<bool>> {
+        let mut buf: Vec<u8> = Vec::new();
+        let mut accepted = Vec::with_capacity(segs.len());
+        let mut cursor = self.committed_until_ms;
+        let mut n = 0u64;
+        for seg in segs {
+            if seg.start_ms < cursor {
+                self.repeats_refused += 1;
+                accepted.push(false);
+                continue;
+            }
+            serde_json::to_writer(&mut buf, seg).map_err(std::io::Error::other)?;
+            buf.push(b'\n');
+            cursor = cursor.max(seg.end_ms);
+            n += 1;
+            accepted.push(true);
+        }
+        if !buf.is_empty() {
+            self.file.write_all(&buf)?;
+            self.file.sync_data()?;
+        }
+        self.committed_until_ms = cursor.max(cursor_ms);
+        self.segments += n;
+        Ok(accepted)
+    }
+
     /// Appends the segment as one line and fsyncs it. Returns `Ok(false)` when it was refused
     /// because it starts before the cursor (a repeat of something committed).
     pub fn commit(&mut self, seg: &SegmentEvent) -> std::io::Result<bool> {

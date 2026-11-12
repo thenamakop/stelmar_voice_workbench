@@ -4,7 +4,12 @@
 //! Environment:
 //!   MOCK_CHUNKS   chunks in the job (default 20); chunk i spans [i*1000, (i+1)*1000) ms
 //!   MOCK_PLAN     what each launch does, comma separated, the last repeats: ok | die:K | hang:K |
-//!                 fatal:CODE  (die and hang act after K segments of that launch)
+//!                 fatal:CODE | die_between:K | slow:S | slow_silent:S
+//!                 (die and hang act after K chunks of that launch; die_between emits the FIRST half of
+//!                 chunk K and then dies, before the chunk's Progress; slow works for S seconds on the
+//!                 first chunk sending a heartbeat every 200 ms, slow_silent for S seconds sending nothing)
+//!   MOCK_SKIP     chunk index that gives a warning and no segment (a chunk too short to decode)
+//!   MOCK_SPLIT    1: every chunk is two segments (a split chunk: two halves), then one Progress
 //!   MOCK_COUNTER  a file that counts launches
 //!   MOCK_DELAY_MS pause between chunks (default 2)
 
@@ -79,28 +84,14 @@ fn main() {
         Some((k, n)) => (k, n.parse().unwrap_or(0)),
         None => (step, u64::MAX),
     };
-    let mut emitted = 0u64;
-    for i in 0..chunks {
-        let (start, end) = (i * 1000, (i + 1) * 1000);
-        if end <= resume {
-            continue;
-        }
-        if emitted == after {
-            match kind {
-                "die" => std::process::exit(1),
-                "hang" => loop {
-                    std::thread::sleep(std::time::Duration::from_secs(3600));
-                },
-                _ => {}
-            }
-        }
-        std::thread::sleep(std::time::Duration::from_millis(delay));
+    let split = std::env::var("MOCK_SPLIT").is_ok_and(|v| v == "1");
+    let segment = |i: u64, start: u64, end: u64, label: &str| {
         emit(&Event::Segment(SegmentEvent {
             unit: 0,
             chunk: i as u32,
             start_ms: start,
             end_ms: end,
-            text: format!("segment {i} नमस्ते"),
+            text: format!("segment {i}{label} नमस्ते"),
             lang: "hi".into(),
             lang_prob: 1.0,
             mixed: false,
@@ -115,6 +106,53 @@ fn main() {
             truncated: false,
             hint_text: None,
         }));
+    };
+    let mut emitted = 0u64;
+    let mut worked = false;
+    for i in 0..chunks {
+        let (start, end) = (i * 1000, (i + 1) * 1000);
+        if end <= resume {
+            continue;
+        }
+        if emitted == after && kind != "slow" && kind != "slow_silent" {
+            match kind {
+                "die" => std::process::exit(1),
+                "hang" => loop {
+                    std::thread::sleep(std::time::Duration::from_secs(3600));
+                },
+                "die_between" => {
+                    segment(i, start, start + 500, "a");
+                    std::process::exit(1);
+                }
+                _ => {}
+            }
+        }
+        if !worked && (kind == "slow" || kind == "slow_silent") {
+            worked = true;
+            let until = std::time::Instant::now() + std::time::Duration::from_secs(after);
+            while std::time::Instant::now() < until {
+                if kind == "slow" {
+                    emit(&Event::Heartbeat {
+                        unit: 0,
+                        phase: "decode".into(),
+                    });
+                }
+                std::thread::sleep(std::time::Duration::from_millis(200));
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(delay));
+        if std::env::var("MOCK_SKIP").ok().and_then(|v| v.parse::<u64>().ok()) == Some(i) {
+            // A chunk the engine could not decode (too short): a warning, no segment, then the chunk is closed.
+            emit(&Event::Warning {
+                code: "chunk_too_short".into(),
+                message: format!("chunk {i} holds under 100 ms of audio and was not decoded"),
+            });
+        } else if split {
+            segment(i, start, start + 500, "a");
+            segment(i, start + 500, end, "b");
+        } else {
+            segment(i, start, end, "");
+        }
         emit(&Event::Progress {
             unit: 0,
             committed_until_ms: end,

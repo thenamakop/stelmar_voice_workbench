@@ -89,6 +89,11 @@ pub struct Settings {
     /// temperature fallback never fires when our loop check is what failed.
     #[serde(default)]
     pub start_temperature: f32,
+    /// TEST ONLY: treat every chunk of 4 s or more as having failed its first decode and its step-a retries, so
+    /// the ladder goes straight to the split (step b). Lets the kill test exercise a split chunk with a real
+    /// model. Never set by the app.
+    #[serde(default)]
+    pub debug_force_split: bool,
 }
 
 impl Default for Settings {
@@ -109,6 +114,7 @@ impl Default for Settings {
             vad_min_silence_ms: 100,
             flash_attn: true,
             start_temperature: 0.0,
+            debug_force_split: false,
         }
     }
 }
@@ -479,11 +485,20 @@ pub enum Event {
         models: Vec<String>,
         load_s: f64,
     },
+    /// Sent after every finished chunk (segments, warnings and all): the chunk is complete, the supervisor
+    /// commits its segments as one unit and moves the cursor to `committed_until_ms`.
     Progress {
         unit: u32,
         /// Audio time up to which every chunk of this unit is decoded.
         committed_until_ms: u64,
         unit_end_ms: u64,
+    },
+    /// The engine is alive and computing: sent from whisper.cpp's callbacks while a decode runs (at least
+    /// every 10 s while any compute is going on), so a long decode of one chunk is not taken for a hang.
+    /// It carries no data and does not move any cursor.
+    Heartbeat {
+        unit: u32,
+        phase: String,
     },
     Segment(SegmentEvent),
     Stats(Stats),
@@ -745,6 +760,10 @@ mod tests {
                 unit: 0,
                 committed_until_ms: 5_000,
                 unit_end_ms: 300_000,
+            },
+            Event::Heartbeat {
+                unit: 0,
+                phase: "decode".into(),
             },
             Event::Vad {
                 start_ms: 0,

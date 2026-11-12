@@ -101,6 +101,22 @@ fn tail_chars(s: &str, n: usize) -> String {
     s.chars().skip(count.saturating_sub(n)).collect()
 }
 
+/// Test hooks (`debug_force_split`) work only when the environment says so. The tests that need them pass
+/// `WB_ENGINE_TEST_HOOKS=1`; the app's supervisor removes every `WB_*` variable from an engine's
+/// environment in release builds, so a request file cannot switch them on there.
+fn test_hooks_enabled() -> bool {
+    std::env::var("WB_ENGINE_TEST_HOOKS").is_ok_and(|v| v == "1")
+}
+
+/// whisper.cpp refuses audio under 100 ms (1,600 samples at 16 kHz).
+fn too_short(samples: usize) -> bool {
+    samples < 1_600
+}
+
+fn too_short_message(chunk_no: u32, start_ms: u64, end_ms: u64) -> String {
+    format!("chunk {chunk_no} ({start_ms} to {end_ms} ms) holds under 100 ms of audio and was not decoded")
+}
+
 /// Why a decode of a chunk (or half a chunk) is not usable as it is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Failure {
@@ -464,7 +480,15 @@ pub fn run(
             entry.lang = None;
         }
     }
+    // Heartbeats while any compute runs (see heartbeat.rs): a long decode of one chunk is not a hang.
+    let _ticker = crate::heartbeat::start();
     let s = &req.settings;
+    if s.debug_force_split && !test_hooks_enabled() {
+        out::warn(
+            "test_hook_ignored",
+            "debug_force_split is a test setting and is ignored (WB_ENGINE_TEST_HOOKS is not 1)",
+        );
+    }
     let multi = req.languages.len() > 1 && req.detect_language;
     let params = Params {
         max_chunk_s: f64::from(s.max_chunk_s),
@@ -490,11 +514,14 @@ pub fn run(
 
     for unit in reader.units(&req.units) {
         let unit_started = Instant::now();
+        crate::heartbeat::set_unit(unit.index);
         let audio = reader.unit_audio(unit.start_ms, unit.end_ms)?;
         if audio.pcm.is_empty() {
             continue;
         }
+        crate::heartbeat::tick();
         let speech = vad.speech(&audio.pcm, s)?;
+        crate::heartbeat::tick();
         let chunks: Vec<Chunk> = chunker::chunks(&speech, &audio.pcm, 16_000, &params);
         let abs = |ms: u64| audio.start_ms + ms;
         let slice = |c: &Chunk| -> &[f32] {
@@ -523,13 +550,6 @@ pub fn run(
             let idx = models.detector_index();
             let raw = models.loaded[idx].detect_languages(slice(c), detect_threads)?;
             detections.push(Some(Detection::restrict(&raw, &req.languages)));
-            // Detection of a whole unit can take longer than the supervisor's watchdog on a slow machine and
-            // nothing else is sent meanwhile: a heartbeat per chunk (the cursor does not move).
-            sink.send(&Event::Progress {
-                unit: unit.index,
-                committed_until_ms: req.resume_from_ms.max(unit.start_ms).min(unit.end_ms),
-                unit_end_ms: unit.end_ms,
-            })?;
         }
 
         // Second pass: decide, decode, guard, emit.
@@ -538,8 +558,20 @@ pub fn run(
         let mut decode_s = 0.0f64;
         for (i, c) in todo.iter().enumerate() {
             let chunk_pcm = slice(c);
-            if chunk_pcm.len() < 1_600 {
-                continue; // under 100 ms: whisper.cpp refuses it
+            if too_short(chunk_pcm.len()) {
+                // Under 100 ms: whisper.cpp refuses it. Not dropped silently: a warning names the range, and
+                // the chunk is closed (Progress) so the supervisor's cursor moves past it.
+                out::warn(
+                    "chunk_too_short",
+                    too_short_message(chunk_no, abs(c.start_ms), abs(c.end_ms)),
+                );
+                chunk_no += 1;
+                sink.send(&Event::Progress {
+                    unit: unit.index,
+                    committed_until_ms: abs(c.end_ms),
+                    unit_end_ms: unit.end_ms,
+                })?;
+                continue;
             }
             let locked = lang::locked_language(&lang_log, abs(c.start_ms)).map(str::to_string);
             let det = detections[i]
@@ -603,6 +635,15 @@ pub fn run(
             let speech_s = c.duration_s() * c.speech_ratio();
             let (start_abs, end_abs) = (abs(c.start_ms), abs(c.end_ms));
             let (verdict, metrics) = judge(&attempt, speech_ratio, speech_s);
+            // TEST ONLY (`debug_force_split`): the first decode of every chunk of 4 s or more counts as a loop
+            // and step a is skipped, so the ladder goes straight to the split and the kill test can kill a
+            // real engine inside the second half.
+            let force_split = s.debug_force_split && test_hooks_enabled() && c.duration_s() >= 4.0;
+            let verdict = if force_split {
+                Verdict::Fail(Failure::Loop)
+            } else {
+                verdict
+            };
             attempt_log.record(chunk_no, start_abs, end_abs, "first", &attempt, &metrics, &verdict);
             let cx = ChunkCtx {
                 unit: unit.index,
@@ -659,6 +700,9 @@ pub fn run(
                     let mut low_a: Option<(Attempt, Metrics)> = None;
                     let mut rescued_a: Option<(Attempt, Metrics, f32)> = None;
                     for t in STEP_A_TEMPERATURES {
+                        if force_split {
+                            break;
+                        }
                         let mut req_a = retry_req.clone();
                         req_a.settings.start_temperature = t;
                         let a = decode(&mut models, &lang, chunk_pcm, &no_context, &req_a, threads)?;
@@ -732,6 +776,16 @@ pub fn run(
                                 }
                             };
                             outcome.push((a_ms, b_ms, half));
+                            if n == 0 {
+                                out::warn(
+                                    "chunk_half_done",
+                                    format!(
+                                        "chunk {chunk_no}: first half ({} to {} ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)",
+                                        abs(a_ms),
+                                        abs(b_ms)
+                                    ),
+                                );
+                            }
                         }
                         if outcome.iter().all(|(_, _, h)| matches!(h, Half::Failed(_))) {
                             emit_kept_or_unclear(sink, &mut summary, &mut context, &cx, keep, &lang, &model_id, failure, start_abs, end_abs, hint.as_deref())?;
@@ -741,10 +795,15 @@ pub fn run(
                                     "chunk_rescued",
                                     format!("chunk {chunk_no}: rescued by step b (cut at {} ms, each half decoded without context)", abs(split_ms)),
                                 );
-                            } else {
+                            } else if outcome.iter().any(|(_, _, h)| matches!(h, Half::Low(..))) {
                                 out::warn(
                                     "chunk_low_coverage",
-                                    format!("chunk {chunk_no}: both halves (cut at {} ms) stay far shorter than their speech; the text is kept and flagged low_coverage", abs(split_ms)),
+                                    format!("chunk {chunk_no}: a half (cut at {} ms) stays far shorter than its speech; the text is kept and flagged low_coverage", abs(split_ms)),
+                                );
+                            } else {
+                                out::warn(
+                                    "chunk_split_no_text",
+                                    format!("chunk {chunk_no}: no half (cut at {} ms) gave usable text; the failed halves are flagged unclear and the silent ones are reported below", abs(split_ms)),
                                 );
                             }
                             for (a_ms, b_ms, half) in outcome {
@@ -762,7 +821,12 @@ pub fn run(
                                     Half::Failed(f) => {
                                         emit_unclear(sink, &mut summary, &mut context, &cx, &lang, &model_id, f, abs(a_ms), abs(b_ms), hint.as_deref())?;
                                     }
-                                    Half::Silent => {}
+                                    Half::Silent => {
+                                        out::warn(
+                                            "half_silent",
+                                            format!("chunk {chunk_no}: the half {} to {} ms holds no speech worth decoding (too little speech or judged not speech) and gives no segment", abs(a_ms), abs(b_ms)),
+                                        );
+                                    }
                                 }
                             }
                         }
@@ -903,6 +967,14 @@ fn decode(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_range_under_100_ms_is_reported_by_name_not_dropped_silently() {
+        assert!(too_short(0) && too_short(1_599));
+        assert!(!too_short(1_600));
+        let m = too_short_message(7, 61_250, 61_300);
+        assert!(m.contains("chunk 7") && m.contains("61250 to 61300 ms") && m.contains("not decoded"), "{m}");
+    }
 
     #[test]
     fn context_keeps_the_last_characters_not_bytes() {

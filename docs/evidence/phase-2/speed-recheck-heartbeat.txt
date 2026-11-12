@@ -1,0 +1,13 @@
+Speed re-check after the heartbeat callbacks (Phase 2, 12 Nov 2026)
+date: 2026-11-12 12:45 (IST on the Legion); machine: Legion (i9-14900HX); profile: emu-low (4 E-cores, 11 GB job); overlay tools closed: yes; gate lock held, no build running
+cell: wb-engine bench, medium, Hindi (60.2 s FLEURS clip, 0.8 s joins), rolling settings (beam 5, temperature fallback, 15 s VAD chunks), CPU avx2, 3 threads; one run after one warm-up (single run because RTF is above 2, the rule of the speed tables)
+why: the engine now sets whisper abort and progress callbacks that call a rate-limited atomic store (the heartbeat); the owner asked for one cell compared with Night 2 and a stop if it is more than 3% slower (re-run on the final engine after the second ASR audit and the encoder hold). The bench path sets the callbacks but does not start the heartbeat thread (only batch does); the thread wakes every 2 s and writes one short line (the batch runs of the kill test carry it: case 3 below the speed cell in `supervisor-kill-emu-low.txt`)
+
+Night 2 (11 Nov 2026, 14:10, engine sha256 49ecdebd4c21f2631ab1805d3764452b5ac36fb3fe5e7bac4a4de65e24c09b26): RTF 6.570, warm-up 6.551, load 2.04 s, peak working set 2187 MiB
+now             (12 Nov 2026, 12:45, engine sha256 1d60a86f52f7ae91765fbcc8589040d0fe69d9a6b012764ef4d096adbeae2b88): RTF 6.409, warm-up 6.463, load 2.24 s, peak working set 2188 MiB
+earlier run on the build before the detection-pass hold (12 Nov 2026, 09:02, engine sha256 11015b905cf4b02bc7236c2d525e39f57f73ddaf7b634dca6b56f7a6e58bc325): RTF 6.541, warm-up 6.514
+earlier run on the build with the detection-pass hold only (12 Nov 2026, 10:37, engine sha256 14de24bab81ab18fd76e15a7e0c52694f50b8148b882e1caac43476465760e64): RTF 6.443, warm-up 6.451
+difference in RTF: -2.44 % (negative is faster); the limit is +3 %
+whisper.cpp: 1.9.5-dev commit d1be6fde11ac6e0407606b4e42fe72d34add8037 tree e736b4c9a5be2bc0e9b294102e261fe69c2a439976652ff6107b0c361f8667fb
+verdict: PASS (within the 3% limit)
+note: a single run under the emulator has run-to-run noise of its own; each warm-up agrees with the run that follows it to under 1%, and the four results (Night 2 6.570, the earlier runs 6.541 and 6.443, this run 6.409) lie within 2.5% of each other, so no heartbeat cost is visible at this precision

@@ -15,6 +15,10 @@ use whisper_rs::{
 
 /// The model emits its first special token (end of text) at this id in every multilingual Whisper
 /// vocabulary; tokens from here on are not text.
+/// How long the heartbeats may continue through one model call whose encoder pass has no callback (seconds).
+/// A call that really hangs for longer stops them and the supervisor's watchdog acts (`heartbeat::hold`).
+const HOLD_S: u64 = 300;
+
 const FIRST_SPECIAL_TOKEN: i32 = 50_257;
 /// Whisper stops a decode at half its text context (224 tokens); a chunk that reaches about this
 /// many has probably been cut (`docs/GATES.md`, 5a -> 2).
@@ -80,6 +84,11 @@ impl Model {
 
     /// Whisper's probability for every language it knows, for `pcm` (16 kHz mono).
     pub fn detect_languages(&mut self, pcm: &[f32], threads: usize) -> Result<Vec<(String, f32)>> {
+        // The encoder pass below has no abort or progress callback (they belong to `full`), and with a large
+        // model on a slow CPU it can take longer than the supervisor's watchdog: heartbeats continue for it,
+        // for at most five minutes.
+        let _hold = crate::heartbeat::hold(std::time::Duration::from_secs(HOLD_S));
+        crate::heartbeat::tick();
         self.state
             .pcm_to_mel(pcm, threads)
             .map_err(|e| anyhow!("mel spectrogram failed: {e}"))?;
@@ -87,6 +96,7 @@ impl Model {
             .state
             .lang_detect(0, threads)
             .map_err(|e| anyhow!("language detection failed: {e}"))?;
+        crate::heartbeat::tick();
         let max = get_lang_max_id();
         Ok((0..=max)
             .filter_map(|id| {
@@ -137,9 +147,23 @@ impl Model {
         } else {
             p.set_initial_prompt(prompt);
         }
+        // Proof of life for the supervisor's watchdog (see heartbeat.rs): whisper.cpp polls the abort callback
+        // between graph nodes (CPU) and calls the progress callback once per decoding window (every backend).
+        p.set_abort_callback_safe(|| {
+            crate::heartbeat::tick();
+            false
+        });
+        p.set_progress_callback_safe(|_percent| crate::heartbeat::tick());
+        // The encoder pass at the start of `full` (a 30 s window, about a minute for large-v3 q5_0 on the
+        // `emu-low` CPU, found with a timestamped trace on 12 Nov 2026) is not covered by those callbacks:
+        // the heartbeats would stop 20 s into it and a slower machine would be killed as hung. They continue
+        // through the whole call for at most five minutes (see `heartbeat::hold`).
+        let _hold = crate::heartbeat::hold(std::time::Duration::from_secs(HOLD_S));
+        crate::heartbeat::tick();
         self.state
             .full(p, pcm)
             .map_err(|e| anyhow!("decoding failed: {e}"))?;
+        crate::heartbeat::tick();
         self.collect()
     }
 

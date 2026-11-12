@@ -1,18 +1,52 @@
-﻿Supervisor kill test with the real engine (Phase 2), profile emu-low
-date: 2026-11-12 04:04 (IST on the Legion); ran 944 s
+﻿Supervisor kill tests with the real engine (Phase 2), profile emu-low
+date: 2026-11-12 14:16 (IST on the Legion)
 overlay tools closed: yes
-no engine build was running when the test started (checked); the test binary was built before it ran
-engine: wb-engine avx2 (copy named wb-engine-killtest.exe, sha256 6548fa546e85302d1fc5747ffe5364142adacb8847ef3abe1ca2d6ec1d14514d), model small f16, 3 threads, previous-text context off
-audio: concat-5min.wav: 313.3 s from 30 fleurs-en utterances, sha256 61dca3313321a61bd671d983e15f2b595ca5c9362c7b23e13863688f4be62184 (FLEURS English test utterances in id order joined with 0.8 s of silence; not committed)
-test: crates/wb-supervisor/tests/kill_real.rs; kill points drawn with a fixed seed (20261110) among the segments of the uninterrupted run; the engine is killed with taskkill /F while decoding the next chunk
-test exit code: 0
+no engine build was running when the tests started (checked); the test binary was built before they ran
+engine: wb-engine avx2 (copy named wb-engine-killtest.exe, sha256 1d60a86f52f7ae91765fbcc8589040d0fe69d9a6b012764ef4d096adbeae2b88), 3 threads, previous-text context off
+test file: crates/wb-supervisor/tests/kill_real.rs; kill points drawn with a fixed seed (20261110); the engine is killed with taskkill /F
 
+== Case 1: five kills between chunks (small f16, 931 s, test exit code 0) ==
+audio: concat-5min.wav: 313.3 s from 30 fleurs-en utterances, sha256 61dca3313321a61bd671d983e15f2b595ca5c9362c7b23e13863688f4be62184 (FLEURS English test utterances in id order joined with 0.8 s of silence; not committed)
 segments in the uninterrupted run: 25
 kill points (after segment number, audio ms): [(4, 54225), (8, 86950), (12, 138410), (16, 192650), (17, 202850)]
 restarts: 5 (kills sent: 5)
 segments after the kills: 25; repeats refused by the committer: 0
-wall time: uninterrupted 466 s, with kills 476 s
+wall time: uninterrupted 454 s, with kills 476 s
 segment times equal to the uninterrupted run: true
 segments with different text: 0
 notices: [Died { exit: Some(1), restart: 1, committed_until_ms: 54225 }, Died { exit: Some(1), restart: 2, committed_until_ms: 86950 }, Died { exit: Some(1), restart: 3, committed_until_ms: 138410 }, Died { exit: Some(1), restart: 4, committed_until_ms: 192650 }, Died { exit: Some(1), restart: 5, committed_until_ms: 202850 }]
+result: PASS
+
+== Case 2: three kills inside the second half of a split chunk (small f16, 1292 s, test exit code 0) ==
+audio: concat-150s.wav: 163.3 s from 16 fleurs-en utterances, sha256 84cc11d1d601e0a425d69449e8d393868fdd0c68c5b7e52a452cddc35acc92e7 (the same construction, 150 s)
+split case: every chunk of 4 s or more is cut at its deepest pause and decoded as two halves (debug_force_split)
+chunks that reported a first half done in the uninterrupted run: 13; segments: 26
+kill points (number of the first-half-done report, committed audio ms at that time): [(2, 9030), (5, 38660), (8, 64810)]
+the cursor at each death equalled the end of the last committed segment ([9030, 38660, 64810]): nothing of the killed chunk was committed
+restarts: 3 (kills sent: 3)
+segments after the kills: 26; repeats refused by the committer: 0
+wall time: uninterrupted 593 s, with kills 699 s
+segment times equal to the uninterrupted run: true
+segments with different text: 0
+notices: [Died { exit: Some(1), restart: 1, committed_until_ms: 9030 }, Died { exit: Some(1), restart: 2, committed_until_ms: 38660 }, Died { exit: Some(1), restart: 3, committed_until_ms: 64810 }]
+result: PASS
+
+== Case 3: a decode of over two minutes under the default 60 s watchdog (large-v3 q5_0, 1554 s, test exit code 0) ==
+engine: wb-engine avx2 (copy named wb-engine-slowtest.exe, sha256 1d60a86f52f7ae91765fbcc8589040d0fe69d9a6b012764ef4d096adbeae2b88); audio: 60 s FLEURS Hindi clip (not committed)
+slow-decode case: large-v3 q5_0, Hindi, 3 threads, 30 s chunks, default watchdog 60 s
+longest time between two committed chunks (all decodes of one chunk, retries included; the first is counted from the start of the run): 785 s
+heartbeats seen by the supervisor: 775; segments committed: 4
+restarts: 0; watchdog kills: 0
+wall time: 1553 s
+notices: []
+result: PASS
+
+== Case 4: a language-detection pass longer than a 20 s watchdog (large-v3 q5_0, en+hi, detection on, 333 s, test exit code 0) ==
+engine: wb-engine avx2 (the slowtest copy); audio: concat-hi-10s.wav: 24.5 s from 2 fleurs-hi utterances, sha256 d68f2acbc0dd2ac43d1434a74e5bf93a779292b9a476d4102d82fd70b343c290 (FLEURS Hindi, not committed)
+detection-on case: large-v3 q5_0 for en and hi, languages en+hi with detection on, 3 threads, watchdog 20 s (the default is 60 s)
+time to the first committed chunk (load, language detection, decode): 232 s; it must exceed 40 s (20 s watchdog + 20 s heartbeat freshness) for the test to prove the hold
+heartbeats seen by the supervisor: 165; segments committed: 2
+restarts: 0; watchdog kills: 0
+wall time: 332 s
+notices: []
 result: PASS

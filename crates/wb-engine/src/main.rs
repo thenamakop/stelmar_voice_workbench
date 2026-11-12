@@ -24,6 +24,7 @@ mod batch;
 mod bench;
 mod cpu;
 mod devices;
+mod heartbeat;
 mod info;
 mod live;
 mod out;

@@ -270,3 +270,121 @@ fn a_resumed_job_continues_after_what_an_earlier_run_committed() {
     run_batch(&mock(), request(), &mut c, &d, &policy, &mut obs).expect("run");
     assert_exactly_once_in_order(&committed(&path), 20);
 }
+
+#[test]
+fn an_engine_killed_between_the_two_halves_of_a_split_chunk_loses_and_repeats_no_half() {
+    let d = temp("split");
+    let mut c = Committer::open(&d.join("post-1.jsonl")).expect("open");
+    let mut obs = Recorder::default();
+    // Every chunk is two segments (a split chunk). The first launch emits the first half of chunk 3 and dies
+    // before the chunk is finished; the second finishes the job.
+    let mut policy = with_plan(fast(4), &d, "die_between:3,ok", 8);
+    policy.engine_env.push(("MOCK_SPLIT".into(), "1".into()));
+    let report = run_batch(&mock(), request(), &mut c, &d, &policy, &mut obs).expect("run");
+    assert_eq!(report.restarts, 1);
+    let segs = committed(c.path());
+    assert_eq!(segs.len(), 16, "two halves of each of 8 chunks");
+    for (i, s) in segs.iter().enumerate() {
+        let (chunk, half) = (i as u64 / 2, i as u64 % 2);
+        assert_eq!(s.chunk as u64, chunk, "in order, no half missing or repeated");
+        assert_eq!(s.start_ms, chunk * 1000 + half * 500);
+        assert_eq!(s.end_ms, chunk * 1000 + 500 + half * 500);
+    }
+    assert_eq!(c.repeats_refused(), 0, "the half that was never committed is not refused later");
+    // The cursor when the engine died was the end of the last finished chunk, not the middle of chunk 3.
+    assert!(
+        obs.notices.iter().any(|n| matches!(
+            n,
+            Notice::Died { committed_until_ms: 3_000, restart: 1, .. }
+        )),
+        "{:?}",
+        obs.notices
+    );
+}
+
+#[test]
+fn a_chunk_is_shown_only_after_all_of_it_is_committed() {
+    struct Order {
+        shown: Vec<(u32, u64)>,
+        file: PathBuf,
+        committed_when_shown: Vec<usize>,
+    }
+    impl Observer for Order {
+        fn event(&mut self, e: &Event) {
+            if let Event::Segment(s) = e {
+                self.shown.push((s.chunk, s.start_ms));
+                self.committed_when_shown.push(committed(&self.file).len());
+            }
+        }
+    }
+    let d = temp("shown");
+    let mut c = Committer::open(&d.join("post-1.jsonl")).expect("open");
+    let mut obs = Order {
+        shown: vec![],
+        file: c.path().to_path_buf(),
+        committed_when_shown: vec![],
+    };
+    let mut policy = with_plan(fast(1), &d, "ok", 3);
+    policy.engine_env.push(("MOCK_SPLIT".into(), "1".into()));
+    run_batch(&mock(), request(), &mut c, &d, &policy, &mut obs).expect("run");
+    assert_eq!(obs.shown.len(), 6);
+    // When the first half of a chunk is shown, both halves are already on disk (fsynced before shown).
+    for (k, n) in obs.committed_when_shown.iter().enumerate() {
+        assert!(*n >= (k / 2 + 1) * 2, "segment {k} shown with only {n} on disk");
+    }
+}
+
+#[test]
+fn a_long_decode_that_sends_heartbeats_is_not_a_hang() {
+    let d = temp("heartbeat");
+    let mut c = Committer::open(&d.join("post-1.jsonl")).expect("open");
+    let mut obs = Recorder::default();
+    // The first chunk takes 5 s of "decoding" with no segment, a 2 s watchdog, and a heartbeat every 200 ms.
+    let policy = with_plan(fast(3), &d, "slow:5", 4);
+    let report = run_batch(&mock(), request(), &mut c, &d, &policy, &mut obs).expect("run");
+    assert_eq!(report.restarts, 0, "{:?}", obs.notices);
+    assert!(obs.notices.is_empty(), "{:?}", obs.notices);
+    assert_exactly_once_in_order(&committed(c.path()), 4);
+}
+
+#[test]
+fn control_a_long_silent_decode_is_a_hang_and_is_restarted() {
+    let d = temp("silent");
+    let mut c = Committer::open(&d.join("post-1.jsonl")).expect("open");
+    let mut obs = Recorder::default();
+    let policy = with_plan(fast(3), &d, "slow_silent:5,ok", 4);
+    let report = run_batch(&mock(), request(), &mut c, &d, &policy, &mut obs).expect("run");
+    assert_eq!(report.restarts, 1);
+    assert!(
+        obs.notices
+            .iter()
+            .any(|n| matches!(n, Notice::Hung { restart: 1, .. })),
+        "{:?}",
+        obs.notices
+    );
+    assert_exactly_once_in_order(&committed(c.path()), 4);
+}
+
+#[test]
+fn a_chunk_with_no_segment_still_moves_the_cursor_so_nothing_is_decoded_twice() {
+    let d = temp("skip");
+    let mut c = Committer::open(&d.join("post-1.jsonl")).expect("open");
+    let mut obs = Recorder::default();
+    // Chunk 5 is too short to decode (a warning, no segment); the engine dies right after it, in chunk 6.
+    let mut policy = with_plan(fast(3), &d, "die:6,ok", 10);
+    policy.engine_env.push(("MOCK_SKIP".into(), "5".into()));
+    let report = run_batch(&mock(), request(), &mut c, &d, &policy, &mut obs).expect("run");
+    assert_eq!(report.restarts, 1);
+    let segs = committed(c.path());
+    assert_eq!(segs.len(), 9, "ten chunks, one of them has no segment");
+    assert!(segs.iter().all(|s| s.chunk != 5));
+    assert!(
+        obs.notices.iter().any(|n| matches!(
+            n,
+            Notice::Died { committed_until_ms: 6_000, .. }
+        )),
+        "the cursor passed the empty chunk: {:?}",
+        obs.notices
+    );
+    assert_eq!(c.repeats_refused(), 0);
+}

@@ -28,6 +28,10 @@ pub struct Policy {
     pub priority: Priority,
     /// Extra environment for every engine started (for example `WB_MODELS_DIR`).
     pub engine_env: Vec<(String, String)>,
+    /// Remove every `WB_*` variable (`WB_EMULATE*`, `WB_ENGINES_DIR`, `WB_MODELS_DIR`, ...) from the
+    /// environment of the engines, whether inherited or listed in `engine_env`. On in release builds, off in
+    /// debug builds; the app turns it off for gate builds, which pass them on purpose.
+    pub scrub_env: bool,
 }
 
 impl Default for Policy {
@@ -39,6 +43,7 @@ impl Default for Policy {
             backoff_s: vec![1, 2, 5, 10],
             priority: Priority::BelowNormal,
             engine_env: Vec::new(),
+            scrub_env: !cfg!(debug_assertions),
         }
     }
 }
@@ -144,6 +149,7 @@ pub fn run_batch(
             priority: policy.priority,
             stderr_log: work_dir.join("engine.log"),
             env: policy.engine_env.clone(),
+            scrub_env: policy.scrub_env,
         };
         let mut engine = match EngineProcess::spawn(&spec) {
             Ok(e) => e,
@@ -170,23 +176,43 @@ pub fn run_batch(
         let mut done: Option<DoneSummary> = None;
         let mut fatal: Option<(String, String)> = None;
         let mut hung = false;
+        // The segments of the chunk the engine is working on. They are committed together when the engine
+        // reports the chunk finished (`Progress`), so a chunk that was split into halves is never half
+        // committed: an engine killed anywhere inside a chunk loses nothing that was committed and the whole
+        // chunk is decoded again. Segments are shown (observer) only after they are committed.
+        let mut pending: Vec<wb_protocol::SegmentEvent> = Vec::new();
         loop {
             match engine.events.recv_timeout(Duration::from_millis(500)) {
                 Ok(Line::Event(e)) => {
                     last_event = Instant::now();
                     match &*e {
                         Event::Ready { .. } => ready = true,
-                        Event::Segment(seg) => match committer.commit(seg) {
-                            Ok(true) => {}
-                            Ok(false) => observer.notice(&Notice::RepeatRefused {
-                                start_ms: seg.start_ms,
-                            }),
-                            Err(err) => {
+                        Event::Segment(seg) => {
+                            pending.push(seg.clone());
+                            continue;
+                        }
+                        Event::Progress {
+                            committed_until_ms, ..
+                        } => {
+                            if let Err(err) = flush_chunk(
+                                committer,
+                                &mut pending,
+                                *committed_until_ms,
+                                observer,
+                            ) {
                                 engine.kill();
                                 return Err(RunError::Commit(err));
                             }
-                        },
-                        Event::Done(summary) => done = Some(summary.clone()),
+                        }
+                        Event::Done(summary) => {
+                            if let Err(err) =
+                                flush_chunk(committer, &mut pending, 0, observer)
+                            {
+                                engine.kill();
+                                return Err(RunError::Commit(err));
+                            }
+                            done = Some(summary.clone());
+                        }
                         Event::Error {
                             code,
                             message,
@@ -256,6 +282,27 @@ pub fn run_batch(
         }
         std::thread::sleep(backoff(policy, restarts));
     }
+}
+
+/// Commits the pending segments of a finished chunk as one unit and moves the cursor to `cursor_ms`, then
+/// shows them. Segments refused as repeats are reported.
+fn flush_chunk(
+    committer: &mut Committer,
+    pending: &mut Vec<wb_protocol::SegmentEvent>,
+    cursor_ms: u64,
+    observer: &mut dyn Observer,
+) -> std::io::Result<()> {
+    let segs = std::mem::take(pending);
+    let accepted = committer.commit_chunk(&segs, cursor_ms)?;
+    for (seg, ok) in segs.into_iter().zip(accepted) {
+        if !ok {
+            observer.notice(&Notice::RepeatRefused {
+                start_ms: seg.start_ms,
+            });
+        }
+        observer.event(&Event::Segment(seg));
+    }
+    Ok(())
 }
 
 fn backoff(policy: &Policy, restart: u32) -> Duration {

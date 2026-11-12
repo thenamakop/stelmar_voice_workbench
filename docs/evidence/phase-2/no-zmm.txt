@@ -1,11 +1,11 @@
 AVX-512 instruction scan of the portable engines (Phase 2, gate 11)
-date: 2026-11-12 03:32 (IST on the Legion); machine: Legion; tool: scripts/check-no-zmm.ps1 (dumpbin /disasm, streamed, stops at the first zmm register); overlay tools closed: yes (no timing involved); engines rebuilt 12 Nov 2026 after the ASR-audit fixes (BMI2 joined the runtime CPU check)
+date: 2026-11-12 12:32 (IST on the Legion); machine: Legion; tool: scripts/check-no-zmm.ps1 (dumpbin /disasm, streamed, stops at the first zmm register); overlay tools closed: yes (no timing involved); engines rebuilt 12 Nov 2026 (final) after the second ASR audit (heartbeat hold around the detection pass and every decode, test-hook gate)
 CI runs the same script on the avx2 build (.github/workflows/ci.yml, "no zmm" step). The vulkan engine is also compiled for the CPU with the avx2 flags (GGML_NATIVE=OFF), so it is scanned here too (ASR audit, 12 Nov 2026); CI builds avx2 only.
 
-1. wb-engine-avx2-x86_64-pc-windows-msvc.exe (sha256 6548fa546e85302d1fc5747ffe5364142adacb8847ef3abe1ca2d6ec1d14514d), expected: no zmm register
-   result: no zmm register in 708,603 lines of disassembly. OK
-2. wb-engine-vulkan-x86_64-pc-windows-msvc.exe (sha256 e93d7578c346f90dd78db2415c1de398b7a300b68b15d642d23856e49bc5d7b3), expected: no zmm register
-   result: no zmm register in 914,321 lines of disassembly. OK
-3. positive control, wb-engine-avx512-x86_64-pc-windows-msvc.exe (sha256 01a8cd3cac58e7bbb9a04639eb463cf9789ff5e8fe3d472e06c87536bc20c14a), expected: a zmm register
-   result: a zmm register appears after 468,646 lines of disassembly (00000001401EC485: vmovups zmm0,zmmword ptr [...]). OK; the scan can see them.
+1. wb-engine-avx2-x86_64-pc-windows-msvc.exe (sha256 1d60a86f52f7ae91765fbcc8589040d0fe69d9a6b012764ef4d096adbeae2b88), expected: no zmm register
+   result: no zmm register in 715,684 lines of disassembly. OK
+2. wb-engine-vulkan-x86_64-pc-windows-msvc.exe (sha256 ee3075018b3d4b0126c19db9af82cefb09cef5ee087e9c43e10c1133517fe44c), expected: no zmm register
+   result: no zmm register in 921,346 lines of disassembly. OK
+3. positive control, wb-engine-avx512-x86_64-pc-windows-msvc.exe (sha256 7d68cd126045bd1ec7982c4b4ffc006667939f242c88afd0f3ede092f46ca7f4), expected: a zmm register
+   result: a zmm register appears after 475,443 lines of disassembly (00000001401F2555: vmovups zmm0,zmmword ptr [...]). OK; the scan can see them.
 verdict: PASS

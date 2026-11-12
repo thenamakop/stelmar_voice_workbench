@@ -1,9 +1,9 @@
 ﻿Engine builds (Phase 2)
-date: 2026-11-12 03:31 (IST on the Legion)
+date: 2026-11-12 12:31 (IST on the Legion)
 target root: D:\wbt; whisper.cpp tree hash pinned in third_party/README.md: e736b4c9a5be2bc0e9b294102e261fe69c2a439976652ff6107b0c361f8667fb
 every build: GGML_NATIVE=OFF, CMAKE_{C,CXX}_FLAGS_RELEASE=/O2 /Ob2 /DNDEBUG (checked in the CMake cache); no build ran during a timing-sensitive run (build lock)
 
-== avx2 : 42 s, 3.53 MB, SHA-256 6548fa546e85302d1fc5747ffe5364142adacb8847ef3abe1ca2d6ec1d14514d
+== avx2 : 34 s, 3.57 MB, SHA-256 1d60a86f52f7ae91765fbcc8589040d0fe69d9a6b012764ef4d096adbeae2b88
    whisper.cpp printed by the engine: v1.9.5 commit d1be6fde11ac6e0407606b4e42fe72d34add8037
    tree hash printed by the engine: e736b4c9a5be2bc0e9b294102e261fe69c2a439976652ff6107b0c361f8667fb (equals the pin)
    CMake cache:
@@ -21,7 +21,7 @@ every build: GGML_NATIVE=OFF, CMAKE_{C,CXX}_FLAGS_RELEASE=/O2 /Ob2 /DNDEBUG (che
      -- Including CPU backend
      -- Adding CPU backend variant ggml-cpu: /arch:AVX2 GGML_AVX2;GGML_FMA;GGML_F16C;__BMI2__;GGML_BMI2
 
-== avx512 : 41 s, 3.57 MB, SHA-256 01a8cd3cac58e7bbb9a04639eb463cf9789ff5e8fe3d472e06c87536bc20c14a
+== avx512 : 34 s, 3.61 MB, SHA-256 7d68cd126045bd1ec7982c4b4ffc006667939f242c88afd0f3ede092f46ca7f4
    whisper.cpp printed by the engine: v1.9.5 commit d1be6fde11ac6e0407606b4e42fe72d34add8037
    tree hash printed by the engine: e736b4c9a5be2bc0e9b294102e261fe69c2a439976652ff6107b0c361f8667fb (equals the pin)
    CMake cache:
@@ -39,7 +39,7 @@ every build: GGML_NATIVE=OFF, CMAKE_{C,CXX}_FLAGS_RELEASE=/O2 /Ob2 /DNDEBUG (che
      -- Including CPU backend
      -- Adding CPU backend variant ggml-cpu: /arch:AVX512 GGML_AVX512;__BMI2__;GGML_BMI2
 
-== vulkan : 40 s, 46.6 MB, SHA-256 e93d7578c346f90dd78db2415c1de398b7a300b68b15d642d23856e49bc5d7b3
+== vulkan : 33 s, 46.63 MB, SHA-256 ee3075018b3d4b0126c19db9af82cefb09cef5ee087e9c43e10c1133517fe44c
    whisper.cpp printed by the engine: v1.9.5 commit d1be6fde11ac6e0407606b4e42fe72d34add8037
    tree hash printed by the engine: e736b4c9a5be2bc0e9b294102e261fe69c2a439976652ff6107b0c361f8667fb (equals the pin)
    CMake cache:

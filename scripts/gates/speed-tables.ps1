@@ -33,6 +33,7 @@ param(
   [string]$Machine = 'Legion',
   [int]$CellTimeoutMin = 60,
   [int]$Runs = 3,
+  [string]$Cell,   # run only the cell with this key (a re-check: use a separate -Work folder; no evidence file is written)
   [switch]$ReportOnly,
   [switch]$Smoke
 )
@@ -218,6 +219,7 @@ function Get-GpuIndex([string]$Profile, [string]$Variant, [string]$Match) {
 function Invoke-Cell($Table, $def, $row, $order, $variant, $device, $threads, $mode, $m, $lang, $modelOrder) {
   $profile = $def.Profile
   $key = "$Table|$row|$($m.Id)|$lang|$mode|$threads"
+  if ($Cell -and $key -ne $Cell) { return }
   $resFile = Join-Path $Work "results-$Table.jsonl"
   if (Test-Path $resFile) {
     $done = @(Get-Content $resFile -Encoding UTF8 | Where-Object { $_ -like "*`"key`":`"$key`"*" } | ForEach-Object { $_ | ConvertFrom-Json } | Where-Object { $_.status -in @('ok', 'does_not_fit', 'timeout') })
@@ -268,7 +270,7 @@ function Invoke-Table([string]$Table) {
     if (-not $engines.ContainsKey('avx2')) { continue }
     for ($i = 0; $i -lt $ms.Count; $i++) { foreach ($l in $langs) { Invoke-Cell $Table $def "CPU avx2, $th threads" $order 'avx2' @{ kind = 'cpu' } $th 'rolling' $ms[$i] $l $i } }
   }
-  if ($Smoke) { return }
+  if ($Smoke -or $Cell) { return }
   # GPU rows
   foreach ($g in $def.Gpu) {
     $order++
@@ -289,7 +291,7 @@ if ($ownsFlag) { Set-Content -LiteralPath $requestFlag -Value "requested by=spee
 try {
   foreach ($t in $Tables) {
     Invoke-WbGate -Name "speed table $t" -Body { Invoke-Table $t }
-    Write-TableEvidence $t
+    if (-not $Cell) { Write-TableEvidence $t }
   }
 } finally {
   if ($ownsFlag) { Remove-Item -LiteralPath $requestFlag -Force -ErrorAction SilentlyContinue }

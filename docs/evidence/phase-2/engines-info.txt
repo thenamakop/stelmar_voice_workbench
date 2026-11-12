@@ -1,9 +1,9 @@
 ﻿Engines-only info check (Phase 2)
-date: 2026-11-12 03:31 (IST on the Legion)
+date: 2026-11-12 12:31 (IST on the Legion)
 PATH while running: C:\WINDOWS\System32;C:\WINDOWS (no cargo, cmake, CUDA, Vulkan SDK or Python)
 overlay tools closed: yes
 
-== avx2 : engines-only folder 3.5 MB; extra DLLs: none
+== avx2 : engines-only folder 3.6 MB; extra DLLs: none
 -- profile emu-low : exit code 0
    whisper.cpp printed at runtime: v1.9.5 commit d1be6fde11ac6e0407606b4e42fe72d34add8037 tree e736b4c9a5be2bc0e9b294102e261fe69c2a439976652ff6107b0c361f8667fb
    stderr: wb-emulate: profile=emu-low
@@ -46,7 +46,7 @@ overlay tools closed: yes
    note: No GPU device is usable by this build (avx2). Adapters Windows lists: Intel(R) UHD Graphics (driver 32.0.101.7092); NVIDIA GeForce RTX 4070 Laptop GPU (driver 32.0.16.2114); Intel(R) UHD Graphics (driver 32.0.101.7092); Microsoft Basic Render Driver (driver 10.0.26100.9711)
 -- profile native : exit code 0
    whisper.cpp printed at runtime: v1.9.5 commit d1be6fde11ac6e0407606b4e42fe72d34add8037 tree e736b4c9a5be2bc0e9b294102e261fe69c2a439976652ff6107b0c361f8667fb
-   backends: CPU; logical processors allowed 32; available RAM 17.6 GiB; raw device entries 1
+   backends: CPU; logical processors allowed 32; available RAM 18.1 GiB; raw device entries 1
    device 0: CPU / Intel(R) Core(TM) i9-14900HX / cpu / 31.7 GiB / driver  / duplicates dropped 0
    note: No GPU device is usable by this build (avx2). Adapters Windows lists: Intel(R) UHD Graphics (driver 32.0.101.7092); NVIDIA GeForce RTX 4070 Laptop GPU (driver 32.0.16.2114); Intel(R) UHD Graphics (driver 32.0.101.7092); Microsoft Basic Render Driver (driver 10.0.26100.9711)
 
@@ -144,7 +144,7 @@ overlay tools closed: yes
    stderr: ggml_vulkan: Found 2 Vulkan devices:
    stderr: ggml_vulkan: 0 = Intel(R) RaptorLake-S Mobile Graphics Controller (Intel Corporation) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 32 | shared memory: 32768 | int dot: 1 | matrix cores: none
    stderr: ggml_vulkan: 1 = NVIDIA GeForce RTX 4070 Laptop GPU (NVIDIA) | uma: 0 | fp16: 1 | bf16: 1 | fp4: 0 | warp size: 32 | shared memory: 49152 | int dot: 1 | matrix cores: NV_coopmat2v
-   backends: Vulkan, CPU; logical processors allowed 32; available RAM 17.6 GiB; raw device entries 3
+   backends: Vulkan, CPU; logical processors allowed 32; available RAM 18 GiB; raw device entries 3
    device 0: Vulkan / Intel(R) RaptorLake-S Mobile Graphics Controller / igpu / 15.9 GiB, shared with RAM up to 15.9 GiB / driver 32.0.101.7092 / duplicates dropped 0
    device 1: Vulkan / NVIDIA GeForce RTX 4070 Laptop GPU / gpu / 7.8 GiB / driver 32.0.16.2114 / duplicates dropped 0
    device 2: CPU / Intel(R) Core(TM) i9-14900HX / cpu / 31.7 GiB / driver  / duplicates dropped 0

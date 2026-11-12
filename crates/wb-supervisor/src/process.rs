@@ -66,6 +66,17 @@ pub struct SpawnSpec {
     pub stderr_log: PathBuf,
     /// Extra environment variables.
     pub env: Vec<(String, String)>,
+    /// Remove every `WB_*` variable from the child's environment (inherited ones and `env` entries alike).
+    /// Release builds of the app turn this on: a stray `WB_EMULATE*`, `WB_ENGINES_DIR` or `WB_MODELS_DIR` in
+    /// an operator's environment must not change what an engine believes about the machine or where it
+    /// looks for models. Gate and debug builds leave it off because they pass those variables on purpose.
+    pub scrub_env: bool,
+}
+
+/// True for the variables the app family uses to steer development and gate runs.
+pub fn is_wb_variable(name: &str) -> bool {
+    // Bytes, not a string slice: a name such as "ab€" has no character boundary at byte 3.
+    name.as_bytes().get(..3).is_some_and(|p| p.eq_ignore_ascii_case(b"WB_"))
 }
 
 /// One line the engine wrote to stdout.
@@ -100,7 +111,17 @@ impl EngineProcess {
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::from(stderr));
+        if spec.scrub_env {
+            for (k, _) in std::env::vars_os() {
+                if k.to_str().is_some_and(is_wb_variable) {
+                    cmd.env_remove(&k);
+                }
+            }
+        }
         for (k, v) in &spec.env {
+            if spec.scrub_env && is_wb_variable(k) {
+                continue;
+            }
             cmd.env(k, v);
         }
         #[cfg(windows)]
