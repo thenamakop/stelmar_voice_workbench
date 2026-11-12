@@ -37,7 +37,7 @@ try {
 }
 $rate = @($out | ForEach-Object { "$_" } | Where-Object { $_ -match '^RATE ' } | ForEach-Object { $_ -replace '^RATE ', '' })
 $rev = (& git -C $repo rev-parse --short HEAD) -join ''
-$dirty = @(& git -C $repo status --porcelain).Count -gt 0
+$dirty = @(& git -C $repo status --porcelain -- . ':!docs/evidence').Count -gt 0
 $lines = @()
 $lines += 'repeated_block detection rate on real speech with spliced repeats (R3, Phase 2b)'
 $lines += "source: commit $rev$(if ($dirty) { ' with uncommitted or untracked changes' })"
