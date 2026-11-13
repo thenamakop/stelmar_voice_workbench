@@ -20,6 +20,7 @@ import sys
 from pathlib import Path
 
 RUNS = ["quick-emu-low", "quick-emu-mid", "quick-native", "full-emu-low"]
+TARGET_S = 360.0  # the quick check aims to end by this (the hard bar is 480 s)
 START_BAR_MS = 3000.0  # Start during a check gives a recording within this (the recorder itself starts in well under a second)
 FLAG = 0.10
 HYBRID_GAIN = 0.10
@@ -76,7 +77,13 @@ def section(label: str, report: dict, lines: list[str]) -> dict | None:
         if wall is not None
         else f"check time: {check['duration_s']:.0f} s"
     )
+    if check["kind"] == "quick":
+        lines.append(
+            f"quick-check target {TARGET_S:.0f} s: {'met' if check['duration_s'] <= TARGET_S else 'NOT met'} ({check['duration_s']:.0f} s)"
+        )
     lines.append(f"tier {dec['tier']}; provisional {dec['provisional']}; partial {dec['partial']}; saved profile fingerprint {view.get('fingerprint_id')}")
+    for sk in cap.get("skipped") or []:
+        lines.append(f"skipped: {sk['step']}: {sk['reason']}")
     if dec.get("record_only_reason"):
         lines.append(f"record-only reason: {dec['record_only_reason']}")
     if dec.get("config"):
@@ -107,7 +114,10 @@ def section(label: str, report: dict, lines: list[str]) -> dict | None:
         )
         lines.append(f"  rule (at least +10% and recorder-safe) says hybrid {want}; the verdict chose hybrid {chosen_hybrid}: {'CONSISTENT' if want == chosen_hybrid else 'INCONSISTENT'}")
     else:
-        lines.append(f"hybrid test: none recorded; the verdict chose hybrid {chosen_hybrid}: {'CONSISTENT' if not chosen_hybrid else 'INCONSISTENT'}")
+        why = next((s["reason"] for s in cap.get("skipped") or [] if s["step"] == "hybrid test"), None)
+        lines.append(
+            f"hybrid test: none recorded{' (' + why + ')' if why else ''}; the verdict chose hybrid {chosen_hybrid}: {'CONSISTENT' if not chosen_hybrid else 'INCONSISTENT'}"
+        )
     for s in cap["recorder_safety"]:
         lines.append(f"recorder safety {cfg_key(s['config'])}: {s['duration_s']:.0f} s, overruns {s['overruns']}, driver xruns {s['driver_xruns']}, passed {s['passed']}")
     if cap["injectors"]:
@@ -158,6 +168,14 @@ def compare(quick: dict | None, full: dict | None, lines: list[str]):
                 mark += " DECIDING"
         lines.append(f"  {m['model']:<22} {m['lang']} {cfg_key(m['config']):<9} quick {q['rtf']:.3f}  full {m['rtf']:.3f}  {diff * 100:+.1f}%{mark}")
     lines.append(f"cells compared {compared}; flagged {flagged}; flagged and deciding {deciding_flagged}")
+    for lang in ("en", "hi"):
+        for m in full["measurements"]:
+            if m["lang"] == lang and m["mode"] == "rolling" and "turbo" in m["model"] and m["config"].get("kind") == "gpu":
+                q = qmap.get(cell_key(m))
+                if q:
+                    lines.append(
+                        f"deciding cell, {lang} turbo on the graphics adapter: quick {q['rtf']:.3f} (30 s excerpt), full {m['rtf']:.3f} (60 s clip): {(q['rtf'] / m['rtf'] - 1.0) * 100:+.1f}%; against the emulated bar 0.75: quick {'meets' if q['rtf'] <= 0.75 else 'misses'}, full {'meets' if m['rtf'] <= 0.75 else 'misses'}"
+                    )
     q_hi_turbo = [c for c in quick["measurements"] if c["lang"] == "hi" and "turbo" in c["model"] and c["mode"] == "rolling"]
     if not q_hi_turbo:
         lines.append("Hindi turbo: no rolling cell in the quick run (the ladder stopped before it)")

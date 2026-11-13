@@ -409,6 +409,7 @@ export interface Capability {
     passed: boolean;
   }[];
   injectors: string[];
+  skipped?: { step: string; reason: string }[];
   decision: CapDecision;
   overrides: { kind: OverrideKind; enabled: boolean; at: string; confirmed: boolean }[];
 }

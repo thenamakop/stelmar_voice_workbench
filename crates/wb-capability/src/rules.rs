@@ -402,6 +402,10 @@ fn live_decision(
             find(p, &rk.model, lang, Mode::NearLive, DeviceConfig::Cpu, false).map(|m| (rk, m))
         });
         match measured {
+            None if !ranked.iter().any(|rk| rk.validated) => hard.push(format!(
+                "Not measured: no validated near-live model for {}.",
+                lang.name()
+            )),
             None => hard.push(format!(
                 "The near-live speed for {} has not been measured yet.",
                 lang.name()

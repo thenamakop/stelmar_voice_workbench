@@ -544,6 +544,50 @@ fn near_live_with_truncated_chunks_is_a_hard_block() {
 }
 
 #[test]
+fn near_live_not_measured_for_want_of_a_validated_model_says_so_and_stays_off() {
+    let mut p = emu_low();
+    p.measurements.retain(|m| m.mode != Mode::NearLive);
+    // No near-live model is validated: the check does not time one, and the reason says why.
+    let d = decide_with(&p, false);
+    for lang in [Lang::En, Lang::Hi] {
+        let live = &d.languages[&lang].live;
+        assert!(!live.offered, "{lang:?}");
+        assert!(
+            live.hard_reasons
+                .iter()
+                .any(|r| r.contains("Not measured: no validated near-live model")),
+            "{lang:?}: {:?}",
+            live.hard_reasons
+        );
+    }
+    // With a validated model an unmeasured speed is still a hard reason, with the older wording.
+    let v = decide_with(&p, true);
+    assert!(
+        v.languages[&Lang::En]
+            .live
+            .hard_reasons
+            .iter()
+            .any(|r| r.contains("has not been measured yet"))
+    );
+}
+
+#[test]
+fn a_profile_saved_before_the_skipped_list_still_loads_and_the_list_round_trips() {
+    let c = cap(emu_low(), false);
+    let mut v: serde_json::Value = serde_json::to_value(&c).unwrap();
+    v.as_object_mut().unwrap().remove("skipped");
+    let old = parse_capability(&v.to_string()).unwrap();
+    assert!(old.profile.skipped.is_empty());
+    let mut c2 = c.clone();
+    c2.profile.skipped.push(Skipped {
+        step: "hybrid test".into(),
+        reason: "predicted".into(),
+    });
+    let text = serde_json::to_string(&c2).unwrap();
+    assert_eq!(parse_capability(&text).unwrap().profile.skipped.len(), 1);
+}
+
+#[test]
 fn capability_json_round_trips_and_refuses_another_schema() {
     let c = cap(legion_native(), false);
     let text = serde_json::to_string_pretty(&c).unwrap();

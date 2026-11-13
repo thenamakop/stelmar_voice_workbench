@@ -137,6 +137,7 @@ pub fn profile(emulated: Option<&str>, hw: Hardware) -> Profile {
         hybrid: None,
         recorder_safety: vec![],
         injectors: vec![],
+        skipped: vec![],
     }
 }
 

@@ -242,6 +242,16 @@ pub struct Profile {
     pub recorder_safety: Vec<RecorderSafety>,
     /// Window-hook programs found running (RTSS, MSI Afterburner, ...).
     pub injectors: Vec<String>,
+    /// Steps the check left out, and why (nothing to measure, a prediction, left for the full check).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub skipped: Vec<Skipped>,
+}
+
+/// A step the check did not run. Shown in the evidence; never an error.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Skipped {
+    pub step: String,
+    pub reason: String,
 }
 
 /// One ranked candidate of a language and role (from `provisional_rank` in `models/manifest.json`).

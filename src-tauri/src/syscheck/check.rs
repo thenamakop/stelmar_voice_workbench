@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 
 use wb_capability::{
     CheckInfo, CheckKind, DeviceConfig, GpuKind, HybridMeasurement, Lang, Measurement, Mode,
-    Options, Profile, Rankings, RecorderSafety, SCHEMA_VERSION, decide, model_fits,
+    Options, Profile, Rankings, RecorderSafety, SCHEMA_VERSION, Skipped, decide, model_fits,
 };
 use wb_machine::Machine;
 use wb_models::{Cache, Manifest};
@@ -30,9 +30,19 @@ use crate::engines::{self, EngineRow, EngineState};
 /// The quick check must finish within this on the low-baseline laptop.
 pub const QUICK_BAR_S: f64 = 480.0;
 
+/// The quick check aims to end by this on the low-baseline laptop. Optional steps that would start too late
+/// for it are left for the full check; `QUICK_BAR_S` stays the hard limit.
+pub const QUICK_TARGET_S: f64 = 360.0;
+
 /// The least time the hybrid and recorder safety step needs (the safety run lasts 120 s).
 const HYBRID_SAFETY_MIN_S: f64 = 150.0;
 const SAFETY_SECONDS: f64 = 120.0;
+/// Seconds of audio the CPU engine decodes in each round of the hybrid test.
+const HYBRID_CPU_CLIP_S: f64 = 10.0;
+/// The most the full check waits for one CPU round of the hybrid test.
+const HYBRID_CPU_LIMIT_FULL_S: u64 = 300;
+/// A cell whose warm-up runs slower than this gets one timed run only ("impractical: single run").
+const SINGLE_RUN_ABOVE_RTF: f64 = 2.0;
 const VAD_ID: &str = "silero-v6.2.0";
 
 #[derive(Debug, thiserror::Error)]
@@ -252,6 +262,7 @@ fn empty_profile(env: &CheckEnv, kind: CheckKind) -> Profile {
         hybrid: None,
         recorder_safety: vec![],
         injectors: vec![],
+        skipped: vec![],
     }
 }
 
@@ -303,6 +314,71 @@ impl Run<'_> {
                     .min(left.max(15.0) as u64),
             ),
             None => Duration::from_secs(long_limit_s),
+        }
+    }
+
+    /// Notes a step the check left out (once per step).
+    fn skip(&mut self, step: &str, reason: String) {
+        if !self.profile.skipped.iter().any(|s| s.step == step) {
+            self.profile.skipped.push(Skipped {
+                step: step.to_string(),
+                reason,
+            });
+        }
+    }
+
+    /// Whether an optional step of the quick check that needs `seconds` at the least can still start in time
+    /// for the 360 s target. A step that cannot is left for the full check and the profile says `partial`.
+    fn fits_target(&mut self, seconds: f64, step: &str) -> bool {
+        if self.kind != CheckKind::Quick {
+            return true;
+        }
+        let elapsed = self.started.elapsed().as_secs_f64();
+        if QUICK_TARGET_S - elapsed >= seconds {
+            return true;
+        }
+        self.partial = true;
+        self.skip(
+            step,
+            format!(
+                "left for the full check: the quick check aims to end by {QUICK_TARGET_S:.0} s and {elapsed:.0} s had passed"
+            ),
+        );
+        false
+    }
+
+    /// The measured speed of a rolling cell, if there is one.
+    fn rolling_rtf(&self, model: &str, lang: Lang, config: DeviceConfig) -> Option<f64> {
+        self.profile
+            .measurements
+            .iter()
+            .find(|m| {
+                m.model == model && m.lang == lang && m.mode == Mode::Rolling && m.config == config
+            })
+            .map(|m| m.rtf)
+    }
+
+    /// Whether the cells measured so far already show that a CPU engine cannot make the graphics adapter
+    /// `hybrid_min_gain` faster: the CPU alone adds `gpu_rtf / cpu_rtf` of the adapter's speed at the most.
+    fn predicted_hybrid_gain_too_small(&self, model: &str, lang: Lang, gpu: u32) -> Option<String> {
+        let g = self.rolling_rtf(model, lang, DeviceConfig::Gpu { index: gpu })?;
+        let c = self.rolling_rtf(model, lang, DeviceConfig::Cpu)?;
+        let most = g / c;
+        (most < self.env.options.hybrid_min_gain).then(|| {
+            format!(
+                "predicted from the measured cells: {model} {} runs at RTF {c:.2} on the processor and {g:.2} on the graphics adapter, so both together could be {:.0}% faster than the adapter alone at the most (the rule needs {:.0}%); the hybrid configuration is not chosen",
+                lang.name(),
+                most * 100.0,
+                self.env.options.hybrid_min_gain * 100.0
+            )
+        })
+    }
+
+    /// The time limit of the CPU half of the hybrid test: it ends with the recorder test.
+    fn hybrid_cpu_limit(&self) -> Duration {
+        match self.remaining_s() {
+            Some(left) => Duration::from_secs(SAFETY_SECONDS.min(left.max(15.0)) as u64),
+            None => Duration::from_secs(HYBRID_CPU_LIMIT_FULL_S),
         }
     }
 
@@ -404,7 +480,7 @@ impl Run<'_> {
             },
             threads,
             runs: if self.full() { 3 } else { 1 },
-            single_run_above_rtf: Some(1.5),
+            single_run_above_rtf: Some(SINGLE_RUN_ABOVE_RTF),
             settings,
         })
     }
@@ -489,12 +565,20 @@ impl Run<'_> {
             device_name: report.device_name.clone(),
             threads: report.threads,
             method: format!(
-                "bench clip {clip_name}, first {excerpt_s:.0} s, {}, warm-up + {runs} run(s), single run above RTF 1.5, {} threads",
+                "bench clip {clip_name}, first {excerpt_s:.0} s, {}, warm-up + {runs} run(s), single run above RTF {SINGLE_RUN_ABOVE_RTF:.0}, {} threads{}",
                 match mode {
                     Mode::Rolling => "rolling settings",
                     Mode::NearLive => "near-live settings",
                 },
-                report.threads
+                report.threads,
+                if report.single_run {
+                    format!(
+                        "; impractical: single run (warm-up RTF {:.2}, one timed run)",
+                        report.warmup_rtf
+                    )
+                } else {
+                    String::new()
+                }
             ),
             clip_seconds: report.clip_seconds,
             rtf: report.rtf_median,
@@ -595,6 +679,14 @@ impl Run<'_> {
                 if (first_only && i > 0) || self.over_budget() {
                     break;
                 }
+                // With a graphics adapter the quick check's CPU cells are optional: they start only if they
+                // can end by the target.
+                if first_only
+                    && config == DeviceConfig::Cpu
+                    && !self.fits_target(90.0, "CPU speed of the ranked models")
+                {
+                    return Ok(met);
+                }
                 let Some(m) = self.measure(Spec {
                     model: &rk.model,
                     lang,
@@ -664,7 +756,8 @@ impl Run<'_> {
             .iter()
             .any(|m| matches!(m.config, DeviceConfig::Gpu { .. }));
         let mut safety_done = false;
-        if had_gpu && self.fits(HYBRID_SAFETY_MIN_S) {
+        // The full check measures the CPU cells first: the hybrid test is then predicted from them.
+        if had_gpu && !self.full() && self.fits(HYBRID_SAFETY_MIN_S) {
             self.hybrid_and_safety(false)?;
             safety_done = true;
         }
@@ -754,30 +847,61 @@ impl Run<'_> {
         if cpu_tail_only {
             // Nothing before the tail.
         } else if let (Some(gpu), true) = (gpu_index, self.cpu_variant.is_some()) {
-            self.tick(
-                "Testing both processors at once",
-                "while a test recording runs",
-            )?;
-            let config = DeviceConfig::Hybrid { gpu };
-            let safety = SafetyRun::start(&self.env.work_dir, &self.env.app_version, config);
-            let hybrid = self.hybrid_pair(
-                &pick.model,
-                lang,
-                gpu,
-                hybrid_cpu_threads,
-                safety.as_ref().ok(),
-            );
-            let hybrid = match hybrid {
-                Err(CheckError::Cancelled) => {
+            let gpu_config = DeviceConfig::Gpu { index: gpu };
+            if let Some(reason) = self.predicted_hybrid_gain_too_small(&pick.model, lang, gpu) {
+                // The measured cells show the CPU cannot add enough: no hybrid test, but the recorder is
+                // still tested under the graphics engine's load.
+                self.skip("hybrid test", reason);
+                self.tick(
+                    "Testing the recorder under load",
+                    "while a test recording runs",
+                )?;
+                let safety =
+                    SafetyRun::start(&self.env.work_dir, &self.env.app_version, gpu_config);
+                if let Err(CheckError::Cancelled) = self.load_until_done(
+                    gpu_config,
+                    &pick.model,
+                    lang,
+                    batch.min(2),
+                    safety.as_ref().ok(),
+                ) {
                     discard_safety(safety);
                     return Err(CheckError::Cancelled);
                 }
-                other => other?,
-            };
-            if let Some(h) = hybrid {
-                self.profile.hybrid = Some(h);
+                self.finish_safety(safety, &[gpu_config])?;
+            } else {
+                self.tick(
+                    "Testing both processors at once",
+                    "while a test recording runs",
+                )?;
+                let config = DeviceConfig::Hybrid { gpu };
+                let safety = SafetyRun::start(&self.env.work_dir, &self.env.app_version, config);
+                let gpu_alone = self
+                    .rolling_rtf(&pick.model, lang, gpu_config)
+                    .unwrap_or(pick.rtf);
+                let hybrid = self.hybrid_pair(
+                    &pick.model,
+                    lang,
+                    gpu,
+                    gpu_alone,
+                    hybrid_cpu_threads,
+                    safety.as_ref().ok(),
+                );
+                let hybrid = match hybrid {
+                    Err(CheckError::Cancelled) => {
+                        discard_safety(safety);
+                        return Err(CheckError::Cancelled);
+                    }
+                    other => other?,
+                };
+                match hybrid {
+                    HybridOutcome::Measured(h) => self.profile.hybrid = Some(h),
+                    HybridOutcome::Predicted(reason) | HybridOutcome::NotMeasured(reason) => {
+                        self.skip("hybrid test", reason);
+                    }
+                }
+                self.finish_safety(safety, &[config, gpu_config])?;
             }
-            self.finish_safety(safety, &[config, DeviceConfig::Gpu { index: gpu }])?;
         } else if gpu_index.is_none() {
             // No usable graphics adapter: the safety run is for the CPU configuration itself.
             self.tick(
@@ -786,9 +910,13 @@ impl Run<'_> {
             )?;
             let config = DeviceConfig::Cpu;
             let safety = SafetyRun::start(&self.env.work_dir, &self.env.app_version, config);
-            if let Err(CheckError::Cancelled) =
-                self.load_cpu_until_done(&pick.model, lang, batch, safety.as_ref().ok())
-            {
+            if let Err(CheckError::Cancelled) = self.load_until_done(
+                DeviceConfig::Cpu,
+                &pick.model,
+                lang,
+                batch,
+                safety.as_ref().ok(),
+            ) {
                 discard_safety(safety);
                 return Err(CheckError::Cancelled);
             }
@@ -810,9 +938,13 @@ impl Run<'_> {
             self.tick("Testing the recorder under load", "CPU configuration")?;
             let safety =
                 SafetyRun::start(&self.env.work_dir, &self.env.app_version, DeviceConfig::Cpu);
-            if let Err(CheckError::Cancelled) =
-                self.load_cpu_until_done(&pick.model, lang, batch, safety.as_ref().ok())
-            {
+            if let Err(CheckError::Cancelled) = self.load_until_done(
+                DeviceConfig::Cpu,
+                &pick.model,
+                lang,
+                batch,
+                safety.as_ref().ok(),
+            ) {
                 discard_safety(safety);
                 return Err(CheckError::Cancelled);
             }
@@ -845,15 +977,21 @@ impl Run<'_> {
         Ok(())
     }
 
-    /// Runs the CPU engine on the chosen model until the safety run has lasted its time.
-    fn load_cpu_until_done(
+    /// Runs the engine of `config` (the CPU engine, or the graphics adapter's) on the chosen model until the
+    /// safety run has lasted its time.
+    fn load_until_done(
         &mut self,
+        config: DeviceConfig,
         model_id: &str,
         lang: Lang,
         threads: u32,
         safety: Option<&SafetyRun>,
     ) -> Result<(), CheckError> {
-        let Some((variant, exe)) = self.cpu_variant.clone() else {
+        let engine = match config {
+            DeviceConfig::Gpu { .. } => self.gpu_variant.clone(),
+            _ => self.cpu_variant.clone(),
+        };
+        let Some((variant, exe)) = engine else {
             return Ok(());
         };
         let Some((model, _)) = self.model_ref(model_id) else {
@@ -862,14 +1000,8 @@ impl Run<'_> {
         let clip = self.clip(&clip_file(lang.code()), 0.0, 15.0)?;
         let timeout = self.beside_safety(600);
         loop {
-            let Some(request) = self.request(
-                &model,
-                lang,
-                &clip,
-                Mode::Rolling,
-                DeviceConfig::Cpu,
-                threads,
-            ) else {
+            let Some(request) = self.request(&model, lang, &clip, Mode::Rolling, config, threads)
+            else {
                 return Ok(());
             };
             let cell = Cell {
@@ -901,26 +1033,32 @@ impl Run<'_> {
         model_id: &str,
         lang: Lang,
         gpu: u32,
+        gpu_alone_rtf: f64,
         cpu_threads: u32,
         safety: Option<&SafetyRun>,
-    ) -> Result<Option<HybridMeasurement>, CheckError> {
+    ) -> Result<HybridOutcome, CheckError> {
         let (Some((cpu_variant, cpu_exe)), Some((gpu_variant, gpu_exe))) =
             (self.cpu_variant.clone(), self.gpu_variant.clone())
         else {
-            return Ok(None);
+            return Ok(HybridOutcome::NotMeasured(
+                "the hybrid test needs a processor engine and a graphics engine".into(),
+            ));
         };
         let Some((model, _)) = self.model_ref(model_id) else {
-            return Ok(None);
+            return Ok(HybridOutcome::NotMeasured(format!(
+                "the model {model_id} is not usable"
+            )));
         };
         let a = self.clip(&clip_file(lang.code()), 0.0, 30.0)?;
-        let b = self.clip(&clip_file(lang.code()), 30.0, 15.0)?;
+        let b = self.clip(&clip_file(lang.code()), 30.0, HYBRID_CPU_CLIP_S)?;
         let gpu_threads = (self.env.machine.batch_threads() as u32).min(2);
         let mut gpu_rtfs: Vec<f64> = Vec::new();
         let mut cpu_rtfs: Vec<f64> = Vec::new();
         let mut cpu_peak: u64 = 0;
         let mut gpu_peak: (u64, Option<u64>) = (0, None);
         let started = Instant::now();
-        let cpu_timeout = self.beside_safety(900);
+        let cpu_timeout = self.hybrid_cpu_limit();
+        let mut cpu_timed_out = false;
         loop {
             let (Some(cpu_req), Some(gpu_req)) = (
                 self.request(
@@ -940,7 +1078,9 @@ impl Run<'_> {
                     gpu_threads,
                 ),
             ) else {
-                return Ok(None);
+                return Ok(HybridOutcome::NotMeasured(
+                    "the hybrid test could not build its requests".into(),
+                ));
             };
             let work = self.env.work_dir.clone();
             let cancel = self.cancel;
@@ -992,6 +1132,7 @@ impl Run<'_> {
                     cpu_peak = cpu_peak.max(rep.peak_commit_bytes);
                 }
                 Ok(Err(BenchError::Cancelled)) => return Err(CheckError::Cancelled),
+                Ok(Err(BenchError::Timeout(_))) => cpu_timed_out = true,
                 Ok(Err(e)) => tracing::warn!("system check: hybrid CPU run failed: {e}"),
                 Err(_) => tracing::warn!("system check: hybrid CPU run panicked"),
             }
@@ -1005,7 +1146,10 @@ impl Run<'_> {
                 "while a test recording runs",
             )?;
             let long_enough = safety.is_none_or(|s| s.elapsed().as_secs_f64() >= SAFETY_SECONDS);
-            if long_enough || started.elapsed().as_secs_f64() > 4.0 * SAFETY_SECONDS {
+            if long_enough
+                || cpu_timed_out
+                || started.elapsed().as_secs_f64() > 4.0 * SAFETY_SECONDS
+            {
                 break;
             }
         }
@@ -1014,9 +1158,31 @@ impl Run<'_> {
             v.get(v.len() / 2).copied()
         };
         let (Some(g), Some(c)) = (median(&mut gpu_rtfs), median(&mut cpu_rtfs)) else {
-            return Ok(None);
+            if cpu_timed_out {
+                // The CPU engine did not finish HYBRID_CPU_CLIP_S seconds of audio in the time it had, so it
+                // decodes less than that many seconds in that time: an upper bound on what it adds.
+                let secs = cpu_timeout.as_secs_f64();
+                let most = HYBRID_CPU_CLIP_S / secs * gpu_alone_rtf;
+                let reason = format!(
+                    "{model_id} {}: the processor engine ({cpu_threads} threads) did not finish {HYBRID_CPU_CLIP_S:.0} s of audio in {secs:.0} s beside the recorder test (RTF above {:.1}); the graphics adapter runs at {gpu_alone_rtf:.2}, so the processor could add {:.0}% at the most (the rule needs {:.0}%)",
+                    lang.name(),
+                    secs / HYBRID_CPU_CLIP_S,
+                    most * 100.0,
+                    self.env.options.hybrid_min_gain * 100.0
+                );
+                return Ok(if most < self.env.options.hybrid_min_gain {
+                    HybridOutcome::Predicted(format!(
+                        "predicted, not measured: {reason}; the hybrid configuration is not chosen"
+                    ))
+                } else {
+                    HybridOutcome::NotMeasured(format!("not measured: {reason}"))
+                });
+            }
+            return Ok(HybridOutcome::NotMeasured(
+                "the hybrid test produced no complete round".into(),
+            ));
         };
-        Ok(Some(HybridMeasurement {
+        Ok(HybridOutcome::Measured(HybridMeasurement {
             model: model_id.to_string(),
             lang,
             gpu,
@@ -1027,7 +1193,7 @@ impl Run<'_> {
             gpu_peak_commit_bytes: gpu_peak.0,
             gpu_local_bytes: gpu_peak.1,
             method: format!(
-                "CPU engine ({cpu_threads} threads, 15 s of the clip) and GPU engine (30 s) at the same time, rolling settings, with a test recording running; {} GPU run(s), {} CPU run(s)",
+                "CPU engine ({cpu_threads} threads, {HYBRID_CPU_CLIP_S:.0} s of the clip) and GPU engine (30 s) at the same time, rolling settings, with a test recording running; {} GPU run(s), {} CPU run(s)",
                 gpu_rtfs.len(),
                 cpu_rtfs.len()
             ),
@@ -1047,7 +1213,16 @@ impl Run<'_> {
                 .get(&lang)
                 .cloned()
                 .unwrap_or_default();
-            if let Some(rk) = list.first() {
+            // Near-live text is offered only from a validated model, so a model nobody has validated is not
+            // timed: the minutes go to the steps that decide something.
+            if !list.is_empty() && !list.iter().any(|rk| rk.validated) {
+                self.skip(
+                    &format!("near-live speed on the processor ({})", lang.name()),
+                    "not measured: no validated near-live model".into(),
+                );
+                continue;
+            }
+            if let Some(rk) = list.iter().find(|rk| rk.validated) {
                 self.measure(Spec {
                     model: &rk.model,
                     lang,
@@ -1104,6 +1279,9 @@ impl Run<'_> {
         let Some(config) = self.best_config() else {
             return Ok(());
         };
+        if !self.fits_target(90.0, "night model speed") {
+            return Ok(());
+        }
         let limit = self.env.options.night_window_hours / self.env.options.day_audio_hours;
         let hi_rtf = self
             .decided()
@@ -1160,6 +1338,14 @@ impl Run<'_> {
         })?;
         Ok(())
     }
+}
+
+/// What the hybrid test came to.
+enum HybridOutcome {
+    Measured(HybridMeasurement),
+    /// The processor could not finish its share in the time given: it cannot add the gain the rule needs.
+    Predicted(String),
+    NotMeasured(String),
 }
 
 fn config_name(config: DeviceConfig) -> String {

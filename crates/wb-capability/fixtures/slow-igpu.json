@@ -304,7 +304,7 @@
           "rtf": null,
           "soft_reasons": [],
           "hard_reasons": [
-            "The near-live speed for English has not been measured yet."
+            "Not measured: no validated near-live model for English."
           ]
         }
       },
@@ -327,7 +327,7 @@
           "rtf": null,
           "soft_reasons": [],
           "hard_reasons": [
-            "The near-live speed for Hindi (Devanagari) has not been measured yet."
+            "Not measured: no validated near-live model for Hindi (Devanagari)."
           ]
         }
       },
