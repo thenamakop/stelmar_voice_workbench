@@ -88,6 +88,42 @@ fn tier_g_needs_live_offered_for_at_least_one_language() {
 }
 
 #[test]
+fn the_hybrid_gain_is_compared_with_the_graphics_engine_alone_on_the_same_excerpt() {
+    // The single-device cell was timed on a longer excerpt and reads faster than the hybrid test's own
+    // excerpt does (the quick check times Hindi on the whole clip, the hybrid test on 30 s).
+    let mut p = emu_mid_hybrid();
+    let model = p.hybrid.as_ref().unwrap().model.clone();
+    let lang = p.hybrid.as_ref().unwrap().lang;
+    for m in p.measurements.iter_mut().filter(|m| {
+        m.model == model
+            && m.lang == lang
+            && m.mode == Mode::Rolling
+            && m.config == DeviceConfig::Gpu { index: 0 }
+    }) {
+        m.rtf = 0.5;
+    }
+    {
+        let h = p.hybrid.as_mut().unwrap();
+        h.gpu_rtf_concurrent = 0.8;
+        h.cpu_rtf_concurrent = 2.0;
+        h.gpu_alone_rtf = None;
+    }
+    // Against the cell alone (2.0 audio/s) the combined 1.75 is slower: not chosen.
+    let d = decide_with(&p, false);
+    assert!(!matches!(
+        d.config.as_ref().unwrap().config,
+        DeviceConfig::Hybrid { .. }
+    ));
+    // Against the engine alone on the same excerpt (0.7, 1.43 audio/s) the gain is 22%: chosen.
+    p.hybrid.as_mut().unwrap().gpu_alone_rtf = Some(0.7);
+    let d = decide_with(&p, false);
+    assert!(matches!(
+        d.config.as_ref().unwrap().config,
+        DeviceConfig::Hybrid { .. }
+    ));
+}
+
+#[test]
 fn processing_while_recording_override_lapses_when_a_later_check_did_not_pass_the_safety_test() {
     let mut c = cap(emu_low(), false);
     assert!(

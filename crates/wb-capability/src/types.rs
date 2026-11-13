@@ -186,6 +186,11 @@ pub struct HybridMeasurement {
     /// The graphics adapter's memory in use during the test.
     #[serde(default)]
     pub gpu_local_bytes: Option<u64>,
+    /// The graphics engine alone, on the same excerpt as its half of the test, measured just before it. The
+    /// gain is compared with this when present: the single-device cell of the same model can have been timed
+    /// on a longer excerpt (the quick check times Hindi and Urdu on the whole clip), which is not comparable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_alone_rtf: Option<f64>,
     pub method: String,
 }
 

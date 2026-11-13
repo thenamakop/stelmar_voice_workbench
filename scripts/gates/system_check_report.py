@@ -51,12 +51,18 @@ def cell_key(m: dict) -> tuple:
     return (m["model"], m["lang"], m["mode"], cfg_key(m["config"]))
 
 
-def single_throughput(cap: dict, model: str, lang: str):
-    """Best audio-per-second of one device on this model and language (rolling cells)."""
+def single_throughput(cap: dict, model: str, lang: str, gpu_alone_rtf: float | None = None):
+    """Best audio-per-second of one device on this model and language (rolling cells). When the hybrid test
+    measured the graphics engine alone on its own excerpt, that figure stands in for the graphics cell (the cell
+    can have been timed on a longer excerpt)."""
     best = 0.0
     for m in cap["measurements"]:
         if m["model"] == model and m["lang"] == lang and m["mode"] == "rolling" and m["config"].get("kind") != "hybrid":
+            if gpu_alone_rtf and m["config"].get("kind") == "gpu":
+                continue
             best = max(best, 1.0 / m["rtf"])
+    if gpu_alone_rtf:
+        best = max(best, 1.0 / gpu_alone_rtf)
     return best
 
 
@@ -119,7 +125,7 @@ def section(label: str, report: dict, lines: list[str], written: str = "") -> di
     chosen_hybrid = bool(dec.get("config") and dec["config"]["config"].get("kind") == "hybrid")
     if hyb:
         comb = 1.0 / hyb["gpu_rtf_concurrent"] + 1.0 / hyb["cpu_rtf_concurrent"]
-        base = single_throughput(cap, hyb["model"], hyb["lang"])
+        base = single_throughput(cap, hyb["model"], hyb["lang"], hyb.get("gpu_alone_rtf"))
         gain = comb / base - 1.0 if base else float("nan")
         safe = any(s["config"].get("kind") == "hybrid" and s["passed"] for s in cap["recorder_safety"])
         want = gain >= HYBRID_GAIN and safe

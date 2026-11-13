@@ -87,7 +87,13 @@ fn hybrid_effective<'a>(p: &'a Profile, o: &Options) -> Option<(&'a HybridMeasur
         false,
     )?;
     let cpu_alone = find(p, &h.model, h.lang, Mode::Rolling, DeviceConfig::Cpu, false);
-    let single = f64::max(1.0 / gpu_alone.rtf, cpu_alone.map_or(0.0, |c| 1.0 / c.rtf));
+    // The graphics engine alone on the hybrid test's own excerpt, when the test measured it; else the cell.
+    let cpu_alone_throughput = cpu_alone.map_or(0.0, |c| 1.0 / c.rtf);
+    let single_cell = f64::max(1.0 / gpu_alone.rtf, cpu_alone_throughput);
+    let single = f64::max(
+        1.0 / h.gpu_alone_rtf.unwrap_or(gpu_alone.rtf),
+        cpu_alone_throughput,
+    );
     let combined = h.combined_throughput();
     let gain = combined / single;
     let safe = safety_of(p, DeviceConfig::Hybrid { gpu: h.gpu }).is_some_and(|s| s.passed);
@@ -111,7 +117,9 @@ fn hybrid_effective<'a>(p: &'a Profile, o: &Options) -> Option<(&'a HybridMeasur
     let need = gpu_peak.saturating_add(cpu_peak).saturating_add(igpu_local);
     let fits = p.hardware.available_ram_bytes.saturating_sub(need) >= o.min_free_ram_bytes;
     if gain >= o.hybrid_min_gain && safe && fits {
-        Some((h, gain, 1.0 / combined))
+        // The hybrid's effective speed is the single-device cell's speed times the measured gain, so it is
+        // compared with the other cells on the same footing (the cell and the test can use different excerpts).
+        Some((h, gain, 1.0 / (single_cell * gain)))
     } else {
         None
     }

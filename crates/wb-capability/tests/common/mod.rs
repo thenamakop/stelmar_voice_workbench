@@ -362,6 +362,7 @@ pub fn emu_mid_hybrid() -> Profile {
         near_live("small", Lang::Hi, 0.662, 2),
     ];
     p.hybrid = Some(HybridMeasurement {
+        gpu_alone_rtf: None,
         model: "large-v3-turbo-q5_0".into(),
         lang: Lang::Hi,
         gpu: 0,
@@ -466,6 +467,7 @@ pub fn slow_igpu() -> Profile {
         rolling("small", Lang::Ur, g, 0.60, 1.4, Some(0.8)),
     ];
     p.hybrid = Some(HybridMeasurement {
+        gpu_alone_rtf: None,
         model: "large-v3-turbo-q5_0".into(),
         lang: Lang::Hi,
         gpu: 0,

@@ -1116,6 +1116,10 @@ impl Run<'_> {
         let started = Instant::now();
         let cpu_timeout = self.hybrid_cpu_limit();
         let mut cpu_timed_out = false;
+        // The graphics engine alone on the excerpt its half of the test decodes, so the gain is compared like with
+        // like (the cell of this model can have been timed on a longer excerpt). It runs beside the recorder
+        // test, which it counts towards.
+        let gpu_alone_same = self.hybrid_gpu_alone(&model, lang, &a, gpu, gpu_threads)?;
         loop {
             let (Some(cpu_req), Some(gpu_req)) = (
                 self.request(
@@ -1249,12 +1253,55 @@ impl Run<'_> {
             cpu_peak_commit_bytes: cpu_peak,
             gpu_peak_commit_bytes: gpu_peak.0,
             gpu_local_bytes: gpu_peak.1,
+            gpu_alone_rtf: gpu_alone_same,
             method: format!(
-                "CPU engine ({cpu_threads} threads, {HYBRID_CPU_CLIP_S:.0} s of the clip) and GPU engine (30 s) at the same time, rolling settings, with a test recording running; {} GPU run(s), {} CPU run(s)",
+                "CPU engine ({cpu_threads} threads, {HYBRID_CPU_CLIP_S:.0} s of the clip) and GPU engine (30 s) at the same time, rolling settings, with a test recording running; {} GPU run(s), {} CPU run(s); the gain is against the GPU engine alone on the same 30 s, measured just before",
                 gpu_rtfs.len(),
                 cpu_rtfs.len()
             ),
         }))
+    }
+
+    /// One bench of the graphics engine alone on `clip`; `None` if it did not finish (the rules then compare
+    /// with the single-device cell).
+    fn hybrid_gpu_alone(
+        &mut self,
+        model: &ModelRef,
+        lang: Lang,
+        clip: &Path,
+        gpu: u32,
+        threads: u32,
+    ) -> Result<Option<f64>, CheckError> {
+        let Some((gpu_variant, gpu_exe)) = self.gpu_variant.clone() else {
+            return Ok(None);
+        };
+        let Some(request) = self.request(
+            model,
+            lang,
+            clip,
+            Mode::Rolling,
+            DeviceConfig::Gpu { index: gpu },
+            threads,
+        ) else {
+            return Ok(None);
+        };
+        let cell = Cell {
+            exe: &gpu_exe,
+            variant: &gpu_variant,
+            request,
+            work_dir: &self.env.work_dir,
+            timeout: Duration::from_secs(300),
+        };
+        match bench::run_bench(&cell, self.cancel) {
+            Ok(rep) => Ok(Some(rep.rtf_median)),
+            Err(BenchError::Cancelled) => Err(CheckError::Cancelled),
+            Err(e) => {
+                tracing::warn!(
+                    "system check: the graphics engine alone on the hybrid excerpt failed: {e}"
+                );
+                Ok(None)
+            }
+        }
     }
 
     fn near_live(&mut self) -> Result<(), CheckError> {
