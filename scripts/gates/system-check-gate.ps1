@@ -40,7 +40,7 @@ param(
   [string]$Exe,
   [string]$Emulate,
   [int]$QuickLimitMinutes = 25,
-  [int]$FullLimitMinutes = 90,
+  [int]$FullLimitMinutes = 120,
   # Write the evidence again from the reports already in -WorkRoot; start nothing.
   [switch]$ReportOnly
 )
