@@ -102,6 +102,25 @@ fn stream(granted: Option<f64>, gaps_us: &[u64]) -> StreamHandle {
     handle
 }
 
+/// Waits until session.log holds `needle` at least `count` times. The recorder thread decides when
+/// it has looked at a stream (a status tick every 250 ms, and fsyncs that can take a long time on a
+/// loaded CI disk), so the tests wait for what it wrote instead of for a fixed time.
+fn wait_for_log(dir: &std::path::Path, needle: &str, count: usize) -> TestResult {
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    loop {
+        let log = std::fs::read_to_string(dir.join("session.log")).unwrap_or_default();
+        if log.matches(needle).count() >= count {
+            return Ok(());
+        }
+        if std::time::Instant::now() > deadline {
+            return Err(
+                format!("no {count} x '{needle}' in session.log after 20 s:\n{log}").into(),
+            );
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
 fn finish(run: Run) -> Result<(StopReport, String, String), Box<dyn std::error::Error>> {
     let report = run.rec.stop()?;
     let log = std::fs::read_to_string(run.dir.join("session.log")).unwrap_or_default();
@@ -119,11 +138,11 @@ fn each_stream_is_measured_against_its_own_grant_and_the_session_keeps_the_small
     let a = stream(Some(1000.0), &[10_000, 600_000, 10_000]);
     let _tick_a = Ticker::start(&a.counters);
     run.rec.send(RecorderMsg::Stream(a))?;
-    std::thread::sleep(Duration::from_millis(700));
+    wait_for_log(&run.dir, "granted_buffer_ms=1000", 1)?;
     let b = stream(Some(200.0), &[10_000, 150_000, 10_000]);
     let _tick_b = Ticker::start(&b.counters);
     run.rec.send(RecorderMsg::Stream(b))?;
-    std::thread::sleep(Duration::from_millis(700));
+    wait_for_log(&run.dir, "granted_buffer_ms=200", 1)?;
     let (report, log, json) = finish(run)?;
     assert_eq!(
         report.capture_buffers.len(),
@@ -180,7 +199,10 @@ fn a_stall_still_going_on_at_stop_counts() -> TestResult {
     let h = stream(Some(1500.0), &[]);
     h.counters.callbacks.store(1, Ordering::Relaxed);
     run.rec.send(RecorderMsg::Stream(h))?;
-    std::thread::sleep(Duration::from_millis(1_100));
+    // Once the recorder has logged the stall it has seen the callback, so a further second of
+    // silence is a gap of more than a second from its point of view however slow its loop was.
+    wait_for_log(&run.dir, "still_going_on=true", 1)?;
+    std::thread::sleep(Duration::from_millis(1_000));
     let (report, log, json) = finish(run)?;
     assert!(
         report.capture_max_callback_gap_ms >= 900.0,
@@ -206,14 +228,15 @@ fn two_separate_stalls_each_get_their_own_event() -> TestResult {
     let counters = Arc::clone(&h.counters);
     counters.callbacks.store(1, Ordering::Relaxed);
     run.rec.send(RecorderMsg::Stream(h))?;
-    // First stall: about 600 ms with no callback.
-    std::thread::sleep(Duration::from_millis(600));
-    // Callbacks come back for a while (the recorder sees the counter move) ...
+    // First stall: no callback until the recorder has logged it.
+    wait_for_log(&run.dir, "still_going_on=true", 1)?;
+    // Callbacks come back for a while (the recorder sees the counter move, over several status
+    // ticks) ...
     let tick = Ticker::start(&counters);
-    std::thread::sleep(Duration::from_millis(600));
+    std::thread::sleep(Duration::from_millis(1_500));
     drop(tick);
     // ... and then a second stall, still going on when the session stops.
-    std::thread::sleep(Duration::from_millis(600));
+    wait_for_log(&run.dir, "still_going_on=true", 2)?;
     let (_report, log, json) = finish(run)?;
     assert_eq!(
         log.matches("still_going_on=true").count(),
@@ -250,6 +273,7 @@ fn a_stall_that_ends_the_stream_is_in_the_margin() -> TestResult {
     let h = stream(Some(1500.0), &[]);
     h.counters.callbacks.store(1, Ordering::Relaxed);
     run.rec.send(RecorderMsg::Stream(h))?;
+    wait_for_log(&run.dir, "still_going_on=true", 1)?;
     std::thread::sleep(Duration::from_millis(1_200));
     run.rec.send(RecorderMsg::InputLost {
         reason: "the capture thread was away".into(),
