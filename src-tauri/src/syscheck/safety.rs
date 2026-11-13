@@ -117,8 +117,8 @@ impl SafetyRun {
         Ok(RecorderSafety {
             config: self.config,
             duration_s,
-            overruns: overruns.min(u64::from(u32::MAX)) as u32
-                + dropped.min(u64::from(u32::MAX)) as u32,
+            overruns: (overruns.min(u64::from(u32::MAX)) as u32)
+                .saturating_add(dropped.min(u64::from(u32::MAX)) as u32),
             driver_xruns: xruns.min(u64::from(u32::MAX)) as u32,
             passed: overruns == 0 && dropped == 0 && xruns == 0,
         })

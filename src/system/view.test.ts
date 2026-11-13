@@ -101,6 +101,14 @@ describe("overrides", () => {
     cap.overrides.push({ kind: "allow_live_anyway", enabled: true, confirmed: false, at: "2026-11-13T10:01:00Z" });
     expect(overrideOn(cap, "allow_live_anyway")).toBe(false);
   });
+
+  it("keeps processing while recording off when the saved safety test did not pass, whatever was logged", () => {
+    const cap = profile("tier-c-low");
+    cap.overrides.push({ kind: "process_while_recording", enabled: true, confirmed: true, at: "2026-11-13T10:00:00Z" });
+    expect(overrideOn(cap, "process_while_recording")).toBe(true);
+    cap.decision.process_while_recording = false;
+    expect(overrideOn(cap, "process_while_recording")).toBe(false);
+  });
 });
 
 describe("the Start Session plan", () => {

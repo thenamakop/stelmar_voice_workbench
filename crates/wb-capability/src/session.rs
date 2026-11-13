@@ -76,6 +76,15 @@ pub fn override_enabled(overrides: &[OverrideRecord], kind: OverrideKind) -> boo
         .is_some_and(|o| o.enabled && o.confirmed)
 }
 
+/// An override as it applies to this profile: processing while recording stays off, whatever an earlier
+/// override says, when the profile's own recorder safety test did not pass (a later check can change that).
+pub fn override_applies(cap: &Capability, kind: OverrideKind) -> bool {
+    if kind == OverrideKind::ProcessWhileRecording && !cap.decision.process_while_recording {
+        return false;
+    }
+    override_enabled(&cap.overrides, kind)
+}
+
 /// Is live text selectable for this language, counting the operator's overrides? The hard reasons
 /// (slower than real time, lost speech) cannot be overridden.
 pub fn live_state_for(cap: &Capability, lang: Lang) -> LiveState {

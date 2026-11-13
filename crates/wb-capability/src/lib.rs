@@ -13,8 +13,8 @@ pub mod types;
 pub use fingerprint::{Fingerprint, GpuPrint};
 pub use rules::{bars, decide, memory_ok, model_fits, ready_after_stop_min};
 pub use session::{
-    HindiUrduScript, LiveState, SessionModel, SessionPlan, live_state_for, override_enabled,
-    plan_session, session_langs, set_override,
+    HindiUrduScript, LiveState, SessionModel, SessionPlan, live_state_for, override_applies,
+    override_enabled, plan_session, session_langs, set_override,
 };
 pub use types::*;
 

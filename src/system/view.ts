@@ -284,6 +284,8 @@ export const OVERRIDE_TEXT: Record<OverrideKind, { label: string; risk: string }
 /** Current state of an override: the last logged change, else the verdict's default. */
 export function overrideOn(cap: Capability, kind: OverrideKind): boolean {
   const last = [...cap.overrides].reverse().find((o) => o.kind === kind);
+  // A later check that did not pass the recorder safety test switches processing while recording off again.
+  if (last && kind === "process_while_recording" && !cap.decision.process_while_recording) return false;
   if (last) return last.enabled && last.confirmed;
   if (kind === "process_while_recording") return cap.decision.process_while_recording;
   if (kind === "pause_on_battery") return cap.decision.pause_on_battery;

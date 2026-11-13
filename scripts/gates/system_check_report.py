@@ -82,8 +82,12 @@ def section(label: str, report: dict, lines: list[str], written: str = "") -> di
     over = check["duration_s"] > check["bar_s"]
     lines.append(
         f"check time: {check['duration_s']:.0f} s measured by the check, {wall:.0f} s wall clock from launch to exit"
-        f"; quick-check bar {check['bar_s']:.0f} s ({'OVER the bar' if over else 'within the bar'}"
-        f"{'; the bar is for the real low laptop, so this is PROVISIONAL' if emu else ''})"
+        + (
+            f"; quick-check bar {check['bar_s']:.0f} s ({'OVER the bar' if over else 'within the bar'}"
+            f"{'; the bar is for the real low laptop, so this is PROVISIONAL' if emu else ''})"
+            if check["kind"] == "quick"
+            else "; the quick-check bar does not apply to a full check"
+        )
         if wall is not None
         else f"check time: {check['duration_s']:.0f} s"
     )

@@ -88,6 +88,29 @@ fn tier_g_needs_live_offered_for_at_least_one_language() {
 }
 
 #[test]
+fn processing_while_recording_override_lapses_when_a_later_check_did_not_pass_the_safety_test() {
+    let mut c = cap(emu_low(), false);
+    assert!(
+        c.decision.process_while_recording,
+        "the fixture passed its safety run"
+    );
+    c.overrides.push(OverrideRecord {
+        kind: OverrideKind::ProcessWhileRecording,
+        enabled: true,
+        at: "2026-11-14T03:00:00+05:30".into(),
+        confirmed: true,
+    });
+    assert!(override_applies(&c, OverrideKind::ProcessWhileRecording));
+    // A later check on the same profile: the recorder safety test failed or did not run.
+    c.decision.process_while_recording = false;
+    assert!(
+        override_enabled(&c.overrides, OverrideKind::ProcessWhileRecording),
+        "the log still says the operator turned it on"
+    );
+    assert!(!override_applies(&c, OverrideKind::ProcessWhileRecording));
+}
+
+#[test]
 fn tier_c_plus_strong_igpu_offers_near_live_only_where_validated() {
     // No near-live model is validated yet : speed alone does not offer live text.
     let d = decide_with(&strong_igpu_laptop(), false);

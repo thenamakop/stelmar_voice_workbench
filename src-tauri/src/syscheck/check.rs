@@ -966,34 +966,50 @@ impl Run<'_> {
         covers: &[DeviceConfig],
     ) -> Result<(), CheckError> {
         match run {
-            Ok(r) => match r.finish() {
-                Ok(result) if !safety_counts(result.duration_s) => {
-                    // Too short to say anything about load: nothing is recorded, the profile stays
-                    // partial and processing waits for Stop.
-                    tracing::warn!(
-                        "system check: the recorder safety run lasted only {:.0} s and is not counted",
-                        result.duration_s
-                    );
-                    self.partial = true;
-                    self.skip(
+            Ok(r) => {
+                match r.finish() {
+                    Ok(result) if !safety_counts(result.duration_s) => {
+                        // Too short to say anything about load: nothing is recorded, the profile stays
+                        // partial and processing waits for Stop.
+                        tracing::warn!(
+                            "system check: the recorder safety run lasted only {:.0} s and is not counted",
+                            result.duration_s
+                        );
+                        self.partial = true;
+                        self.skip(
                         "recorder safety test",
                         format!(
                             "not recorded: the test recording ran only {:.0} s under load (it needs {SAFETY_MIN_COUNTED_S:.0} s)",
                             result.duration_s
                         ),
                     );
-                }
-                Ok(result) => {
-                    for c in covers {
-                        self.profile.recorder_safety.push(RecorderSafety {
-                            config: *c,
-                            ..result.clone()
-                        });
+                    }
+                    Ok(result) => {
+                        for c in covers {
+                            self.profile.recorder_safety.push(RecorderSafety {
+                                config: *c,
+                                ..result.clone()
+                            });
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("system check: {e}");
+                        self.partial = true;
+                        self.skip(
+                        "recorder safety test",
+                        format!("not recorded: the test recording could not be stopped cleanly ({e})"),
+                    );
                     }
                 }
-                Err(e) => tracing::warn!("system check: {e}"),
-            },
-            Err(e) => tracing::warn!("system check: the recorder safety run did not start: {e}"),
+            }
+            Err(e) => {
+                tracing::warn!("system check: the recorder safety run did not start: {e}");
+                self.partial = true;
+                self.skip(
+                    "recorder safety test",
+                    format!("not recorded: the test recording did not start ({e})"),
+                );
+            }
         }
         Ok(())
     }
@@ -1313,12 +1329,23 @@ impl Run<'_> {
             // The quick check measures the night model for Hindi only, and only where the rolling speed
             // predicts it fits (a large-v3-sized model is about 2.5 times slower than the rolling one).
             if !self.full() && (lang != Lang::Hi || hi_rtf.is_none_or(|r| r * 2.5 > limit)) {
-                let why = if lang != Lang::Hi {
-                    "left for the full check: the quick check times the night model for Hindi only, the language that decides it"
-                } else {
-                    "not measured: the rolling speed predicts a night model of this size does not fit overnight"
-                };
-                self.skip(&format!("night model speed ({})", lang.name()), why.into());
+                // A language with no night model listed has nothing to measure, now or in the full check.
+                if self
+                    .env
+                    .rankings
+                    .night
+                    .get(&lang)
+                    .is_some_and(|l| !l.is_empty())
+                {
+                    let why = if lang != Lang::Hi {
+                        "left for the full check: the quick check times the night model for Hindi only, the language that decides it"
+                    } else if hi_rtf.is_none() {
+                        "not measured: there is no Hindi rolling speed to predict from"
+                    } else {
+                        "not measured: the rolling speed predicts a night model of this size does not fit overnight"
+                    };
+                    self.skip(&format!("night model speed ({})", lang.name()), why.into());
+                }
                 continue;
             }
             let list = self
