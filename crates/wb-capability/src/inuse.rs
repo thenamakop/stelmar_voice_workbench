@@ -102,6 +102,22 @@ pub fn choose_in_use(
     }
 }
 
+/// A profile that cannot be compared with this computer yet (the fingerprint could not be taken: the engines
+/// have not been probed, or the model list could not be read) is not known to fit it. Where a decision is
+/// made on it (starting live text, changing an override) it carries safe defaults too; the System screen
+/// keeps showing it as it is until the fingerprint is known.
+pub fn unidentified(used: InUse) -> InUse {
+    if !used.changes.is_empty() {
+        return used;
+    }
+    let why = "This computer has not been identified yet (its engines have not been probed). Safe defaults apply: recording and post-processing only, until the check of this computer is known to fit.".to_string();
+    InUse {
+        cap: safe_defaults(&used.cap, &why),
+        file: used.file,
+        changes: vec![why],
+    }
+}
+
 fn safe_note(changes: &[String], partial: bool) -> String {
     let what = changes.first().map_or("something", String::as_str);
     if partial {

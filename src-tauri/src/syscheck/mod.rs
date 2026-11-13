@@ -11,7 +11,7 @@ pub mod excerpt;
 pub mod probe;
 pub mod rankings;
 pub mod safety;
-pub mod store;
+mod store;
 #[cfg(windows)]
 mod win;
 
@@ -593,9 +593,10 @@ mod tests {
             live_allowed(&d, &langs, Some(&same)).is_ok(),
             "fits: English live is cleared"
         );
+        let unknown = live_allowed(&d, &langs, None).unwrap_err();
         assert!(
-            live_allowed(&d, &langs, None).is_ok(),
-            "no fingerprint yet: the profile as it is"
+            unknown.contains("not been identified"),
+            "no fingerprint yet: live text is refused, {unknown}"
         );
         let mut changed = same;
         changed.os = format!("{} (updated)", changed.os);

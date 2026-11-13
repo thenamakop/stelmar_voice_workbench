@@ -87,13 +87,19 @@ fn hybrid_effective<'a>(p: &'a Profile, o: &Options) -> Option<(&'a HybridMeasur
         false,
     )?;
     let cpu_alone = find(p, &h.model, h.lang, Mode::Rolling, DeviceConfig::Cpu, false);
-    // The graphics engine alone on the hybrid test's own excerpt, when the test measured it; else the cell.
     let cpu_alone_throughput = cpu_alone.map_or(0.0, |c| 1.0 / c.rtf);
     let single_cell = f64::max(1.0 / gpu_alone.rtf, cpu_alone_throughput);
-    let single = f64::max(
-        1.0 / h.gpu_alone_rtf.unwrap_or(gpu_alone.rtf),
-        cpu_alone_throughput,
-    );
+    // The graphics engine alone on the hybrid test's own excerpt, when the test measured it. Without it the
+    // cell stands in only if it was timed on the same excerpt; a cell timed on a longer one (the quick check
+    // times Hindi and Urdu on the whole clip) is not comparable, and the hybrid is then not counted.
+    let alone_rtf = match h.gpu_alone_rtf {
+        Some(r) => r,
+        None if same_excerpt(gpu_alone, p) && cpu_alone.is_none_or(|c| same_excerpt(c, p)) => {
+            gpu_alone.rtf
+        }
+        None => return None,
+    };
+    let single = f64::max(1.0 / alone_rtf, cpu_alone_throughput);
     let combined = h.combined_throughput();
     let gain = combined / single;
     let safe = safety_of(p, DeviceConfig::Hybrid { gpu: h.gpu }).is_some_and(|s| s.passed);
@@ -123,6 +129,11 @@ fn hybrid_effective<'a>(p: &'a Profile, o: &Options) -> Option<(&'a HybridMeasur
     } else {
         None
     }
+}
+
+/// The cell was timed on the excerpt length the check used for the hybrid test.
+fn same_excerpt(m: &Measurement, p: &Profile) -> bool {
+    (m.clip_seconds - p.check.excerpt_seconds).abs() < 1.0
 }
 
 fn candidate_configs(p: &Profile, o: &Options) -> Vec<DeviceConfig> {

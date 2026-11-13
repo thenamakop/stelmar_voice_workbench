@@ -124,6 +124,47 @@ fn the_hybrid_gain_is_compared_with_the_graphics_engine_alone_on_the_same_excerp
 }
 
 #[test]
+fn without_the_alone_run_a_cell_on_another_excerpt_is_not_a_baseline() {
+    let mut p = emu_mid_hybrid();
+    let model = p.hybrid.as_ref().unwrap().model.clone();
+    let lang = p.hybrid.as_ref().unwrap().lang;
+    {
+        let h = p.hybrid.as_mut().unwrap();
+        h.gpu_rtf_concurrent = 0.8;
+        h.cpu_rtf_concurrent = 1.0;
+        h.gpu_alone_rtf = None;
+    }
+    let set_cells = |p: &mut Profile, clip: f64| {
+        for m in p
+            .measurements
+            .iter_mut()
+            .filter(|m| m.model == model && m.lang == lang && m.mode == Mode::Rolling)
+        {
+            m.clip_seconds = clip;
+        }
+    };
+    let is_hybrid = |p: &Profile| {
+        matches!(
+            decide_with(p, false).config.as_ref().map(|c| c.config),
+            Some(DeviceConfig::Hybrid { .. })
+        )
+    };
+    // The same excerpt as the hybrid test: the cell is a fair baseline.
+    let excerpt = p.check.excerpt_seconds;
+    set_cells(&mut p, excerpt);
+    p.measurements
+        .iter_mut()
+        .filter(|m| {
+            m.model == model && m.lang == lang && m.config == DeviceConfig::Gpu { index: 0 }
+        })
+        .for_each(|m| m.rtf = 1.0);
+    assert!(is_hybrid(&p), "same footing, 1.0 + 0.8 audio/s ... gain");
+    // A cell on a longer excerpt cannot be compared: the hybrid is not counted.
+    set_cells(&mut p, excerpt * 2.0);
+    assert!(!is_hybrid(&p));
+}
+
+#[test]
 fn processing_while_recording_override_lapses_when_a_later_check_did_not_pass_the_safety_test() {
     let mut c = cap(emu_low(), false);
     assert!(

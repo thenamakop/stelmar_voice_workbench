@@ -12,7 +12,7 @@ pub mod session;
 pub mod types;
 
 pub use fingerprint::{Fingerprint, GpuPrint};
-pub use inuse::{InUse, SavedFile, choose_in_use, route_new_check, safe_defaults};
+pub use inuse::{InUse, SavedFile, choose_in_use, route_new_check, safe_defaults, unidentified};
 pub use rules::{bars, decide, memory_ok, model_fits, ready_after_stop_min};
 pub use session::{
     HindiUrduScript, LiveState, SessionModel, SessionPlan, live_state_for, override_applies,

@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use wb_capability::{
     Capability, CapabilityError, Fingerprint, InUse, SavedFile, choose_in_use, parse_capability,
-    route_new_check,
+    route_new_check, unidentified,
 };
 
 use crate::capability::CAPABILITY_FILE;
@@ -68,9 +68,15 @@ pub fn load_partial(dir: &Path) -> Option<Capability> {
     }
 }
 
-/// The profile in use and why (see `wb_capability::inuse`). `now` is this computer's fingerprint.
+/// The profile in use and why (see `wb_capability::inuse`), for decisions: starting live text, changing an
+/// override. `now` is this computer's fingerprint; when it could not be taken the profile is not known to
+/// fit, and carries safe defaults.
 pub fn in_use(dir: &Path, now: Option<&Fingerprint>) -> Result<Option<InUse>, StoreError> {
-    Ok(choose_in_use(load(dir)?, load_partial(dir), now))
+    let used = choose_in_use(load(dir)?, load_partial(dir), now);
+    Ok(match now {
+        Some(_) => used,
+        None => used.map(unidentified),
+    })
 }
 
 /// Saves a new check's profile where it belongs: a partial or cancelled check goes to the partial file when a

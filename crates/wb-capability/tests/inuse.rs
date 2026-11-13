@@ -120,6 +120,24 @@ fn after_a_fingerprint_change_the_partial_check_of_this_computer_is_used_with_sa
 }
 
 #[test]
+fn a_profile_that_cannot_be_compared_yet_carries_safe_defaults_where_decisions_are_made() {
+    let main = complete(legion_native());
+    let used = wb_capability::unidentified(choose_in_use(Some(main), None, None).unwrap());
+    assert!(!used.changes.is_empty());
+    assert!(!used.cap.decision.process_while_recording);
+    assert!(
+        used.cap
+            .decision
+            .languages
+            .values()
+            .all(|l| !l.live.offered)
+    );
+    // One that already has changes is left as it is (safe defaults are not applied twice).
+    let again = wb_capability::unidentified(used.clone());
+    assert_eq!(again, used);
+}
+
+#[test]
 fn a_fingerprint_that_could_not_be_taken_leaves_the_profile_as_it_is() {
     let main = complete(legion_native());
     let used = choose_in_use(Some(main.clone()), None, None).unwrap();
