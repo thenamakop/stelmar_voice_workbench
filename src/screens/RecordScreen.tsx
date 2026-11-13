@@ -477,7 +477,7 @@ export function RecordScreen({ hasProfile, recorder, capability }: RecordScreenP
               <div
                 style={{ fontSize: 12, lineHeight: px(18), color: "var(--text-muted)", margin: px(6, 0, 10) }}
               >
-                {liveUnavailableReason(hasProfile)}
+                {liveUnavailableReason(hasProfile, capability.view?.capability)}
               </div>
               <KeyValue rows={transcriptionRows(capability.view?.capability).map(([k, v]) => [k, v, { mono: k === "Speed" }])} />
             </SideCard>

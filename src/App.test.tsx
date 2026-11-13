@@ -68,9 +68,10 @@ describe("navigation", () => {
     render(<App />);
     await screen.findByRole("heading", { name: "Sessions" });
     expect(screen.getByText(/Fixture · UHD/)).toBeTruthy();
-    const saved = /Live captions are chosen in the Start Session dialog/;
     fireEvent.click(screen.getByRole("button", { name: "Record" }));
-    expect(screen.getByText(saved)).toBeTruthy();
+    // The Record side card gives the profile's own reason, not the generic sentence.
+    expect(screen.getByText(/Near-live text for English runs slower than real time here/)).toBeTruthy();
+    expect(screen.queryByText(/Live captions are chosen in the Start Session dialog/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "System" }));
     expect(screen.getByText(/Live captions are not offered on this computer/)).toBeTruthy();
   });

@@ -92,7 +92,7 @@ export function App() {
         overflow: "hidden",
       }}
     >
-      <TopBar active={route} onNavigate={setRoute} machineLabel={profileText} machineMono={!!cap} />
+      <TopBar active={route} onNavigate={setRoute} machineLabel={profileText} machineMono={!!cap && !capability.running} />
       <Screen route={route} hasProfile={profileSaved} recorder={recorder} notify={notify} capability={capability} onNavigate={setRoute} />
       <StatusBar
         items={[

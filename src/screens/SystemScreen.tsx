@@ -84,6 +84,11 @@ const TIER_TONE: Record<Tier, "success" | "neutral" | "warning"> = {
 
 const OVERRIDES: OverrideKind[] = ["process_while_recording", "pause_on_battery", "allow_live_anyway"];
 
+/** Mono is for times and durations; words such as "not measured" stay in the body face. */
+function isDuration(value: string): boolean {
+  return /^about \d/.test(value);
+}
+
 function capitalise(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
@@ -209,7 +214,7 @@ export function SystemScreen({ capability, onContinue }: SystemScreenProps) {
                     r.label,
                     r.note ? (
                       <>
-                        <span style={{ fontFamily: r.label === "Night pass" ? undefined : "var(--font-mono)" }}>{r.value}</span>
+                        <span style={{ fontFamily: isDuration(r.value) ? "var(--font-mono)" : undefined }}>{r.value}</span>
                         <div style={{ fontFamily: "var(--font-body)", fontWeight: "var(--fw-regular)", color: "var(--text-muted)" }}>
                           {r.note}
                         </div>
@@ -217,7 +222,7 @@ export function SystemScreen({ capability, onContinue }: SystemScreenProps) {
                     ) : (
                       r.value
                     ),
-                    { mono: r.label !== "Night pass" && !r.note },
+                    { mono: isDuration(r.value) && !r.note },
                   ])}
                 />
               </SideCard>
