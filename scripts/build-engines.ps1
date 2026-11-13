@@ -130,6 +130,17 @@ function Find-WhisperSysBuildDir([string]$Target) {
   @($dirs | Sort-Object LastWriteTime -Descending)[0]
 }
 
+# What the build script printed (CMake's configure lines are in it): the file `output` in the old layout, the
+# file `run\stdout` of the same folder in the new one (checked with a probe crate on Rust 1.100.0 and 1.99.1:
+# same content). Returns $null when neither exists.
+function Get-WhisperSysConfigureLog([string]$Dir) {
+  foreach ($rel in 'output', 'run\stdout') {
+    $p = Join-Path $Dir $rel
+    if (Test-Path -LiteralPath $p -PathType Leaf) { return $p }
+  }
+  $null
+}
+
 # What to look at when the CMake cache is not where the checks expect it (a CI run failed this way on
 # 13 Nov 2026 and the build log was only on the runner): the end of the cargo log, and what every
 # whisper-rs-sys build folder holds. Printed, never thrown: the caller still fails with its own message.
@@ -163,7 +174,7 @@ function Write-EngineBuildDiagnostics([string]$Target, [string]$Log) {
         Write-Host "    CMakeCache.txt anywhere under out\: $($caches.Count)"
         foreach ($c in $caches | Select-Object -First 10) { Write-Host "      $($c.FullName)" }
       }
-      foreach ($n in 'output', 'stderr') {
+      foreach ($n in 'output', 'stderr', 'run\stdout', 'run\stderr') {
         $f = Join-Path $d.FullName $n
         if (Test-Path -LiteralPath $f) {
           Write-Host "    last 30 lines of $n :"
@@ -220,7 +231,12 @@ try {
       throw "$v : no whisper-rs-sys build output with a CMake cache"
     }
     $cache = Join-Path $sysOut.FullName 'out\build\CMakeCache.txt'
-    $configure = Get-Content -LiteralPath (Join-Path $sysOut.FullName 'output')
+    $configureLog = Get-WhisperSysConfigureLog -Dir $sysOut.FullName
+    if (-not $configureLog) {
+      Write-EngineBuildDiagnostics -Target $target -Log $log
+      throw "$v : no build script output (output or run\stdout) in $($sysOut.FullName)"
+    }
+    $configure = Get-Content -LiteralPath $configureLog
 
     $problems = @()
     $flagLines = @()

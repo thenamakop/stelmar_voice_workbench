@@ -82,6 +82,17 @@ Test-Case 'build-engines.ps1 finds the whisper-rs-sys CMake cache in the old and
     $r = Find-WhisperSysBuildDir -Target (Join-Path $tmp 'new')
     if (-not $r -or $r.Name -ne '9f8e7d') { throw "new layout: got '$($r.FullName)'" }
     if (-not (Test-Path -LiteralPath (Join-Path $r.FullName 'out\build\CMakeCache.txt'))) { throw 'the folder returned does not hold out\build\CMakeCache.txt' }
+    # The build script's printed lines: `output` in the old layout, `run\stdout` in the new one.
+    $logFn = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Get-WhisperSysConfigureLog' }, $true)
+    if (-not $logFn) { throw 'Get-WhisperSysConfigureLog is not in build-engines.ps1' }
+    Invoke-Expression $logFn.Extent.Text
+    if (Get-WhisperSysConfigureLog -Dir $old) { throw 'a folder without a build script log has one' }
+    Set-Content -LiteralPath (Join-Path $old 'output') -Value 'Including CPU backend'
+    if ((Get-WhisperSysConfigureLog -Dir $old) -ne (Join-Path $old 'output')) { throw 'old layout: output not found' }
+    if (Get-WhisperSysConfigureLog -Dir $new) { throw 'the new layout has no log yet but one was returned' }
+    New-Item -ItemType Directory -Force -Path (Join-Path $new 'run') | Out-Null
+    Set-Content -LiteralPath (Join-Path $new 'run\stdout') -Value 'Including CPU backend'
+    if ((Get-WhisperSysConfigureLog -Dir $new) -ne (Join-Path $new 'run\stdout')) { throw 'new layout: run\stdout not found' }
     # nothing built
     if (Find-WhisperSysBuildDir -Target (Join-Path $tmp 'none')) { throw 'found something in a folder that does not exist' }
     New-Item -ItemType Directory -Force -Path (Join-Path $tmp 'empty\release\build') | Out-Null
