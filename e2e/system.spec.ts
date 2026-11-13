@@ -158,6 +158,8 @@ test("System screen lists the complete check and a partial one kept apart", asyn
   await expect(page.getByText("Partial check", { exact: true })).toBeVisible();
   await expect(page.getByText("Kept apart; the complete check stays in use")).toBeVisible();
   await expect(page.getByText("A partial check is kept apart")).toBeVisible();
+  await page.getByText("Saved checks", { exact: true }).scrollIntoViewIfNeeded();
+  await page.getByText("Kept apart; the complete check stays in use").scrollIntoViewIfNeeded();
   await ready(page);
   await page.screenshot({ path: `${SHOTS}/system-saved-checks.png` });
 });

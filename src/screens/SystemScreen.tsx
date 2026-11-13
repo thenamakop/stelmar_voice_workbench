@@ -216,9 +216,9 @@ export function SystemScreen({ capability, onContinue }: SystemScreenProps) {
                     r.note ? (
                       <>
                         <span style={{ fontFamily: isDuration(r.value) ? "var(--font-mono)" : undefined }}>{r.value}</span>
-                        <div style={{ fontFamily: "var(--font-body)", fontWeight: "var(--fw-regular)", color: "var(--text-muted)" }}>
+                        <span style={{ display: "block", fontFamily: "var(--font-body)", fontWeight: "var(--fw-regular)", color: "var(--text-muted)" }}>
                           {r.note}
-                        </div>
+                        </span>
                       </>
                     ) : (
                       r.value
@@ -235,9 +235,9 @@ export function SystemScreen({ capability, onContinue }: SystemScreenProps) {
                     r.label,
                     <>
                       <span>{r.value}</span>
-                      <div style={{ fontFamily: "var(--font-body)", fontWeight: "var(--fw-regular)", color: "var(--text-muted)" }}>
+                      <span style={{ display: "block", fontFamily: "var(--font-body)", fontWeight: "var(--fw-regular)", color: "var(--text-muted)" }}>
                         {r.note}
-                      </div>
+                      </span>
                     </>,
                     {},
                   ])}
