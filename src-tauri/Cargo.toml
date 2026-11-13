@@ -32,6 +32,8 @@ serde_json.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+hound.workspace = true
+wb-capability.workspace = true
 wb-machine.workspace = true
 wb-models.workspace = true
 wb-protocol.workspace = true
@@ -43,7 +45,13 @@ tokio = { version = "1", default-features = false, features = ["rt-multi-thread"
 [target.'cfg(windows)'.dependencies]
 # Same versions as Tauri's WebView2 backend (wry), for the ProcessFailed handler.
 webview2-com = "0.38"
-windows = { workspace = true, features = ["std", "Win32_Foundation"] }
+windows = { workspace = true, features = [
+  "std",
+  "Win32_Foundation",
+  "Win32_System_Diagnostics_ToolHelp",
+  "Win32_System_Power",
+  "Win32_System_Registry",
+] }
 
 [lints]
 workspace = true

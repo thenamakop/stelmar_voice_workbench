@@ -14,6 +14,7 @@ mod machine;
 mod recording;
 mod settings;
 mod state;
+mod syscheck;
 #[cfg(windows)]
 mod win;
 
@@ -88,6 +89,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     state::spawn_forwarder(events_rx, state.snapshot.clone(), state.subscribers.clone());
     app.manage(state);
     app.manage(engines::Registry::default());
+    app.manage(syscheck::CheckState::default());
     #[cfg(feature = "gate-hooks")]
     gate::apply_overrides(app.handle());
 
@@ -142,6 +144,11 @@ pub fn run() -> Result<(), RunError> {
             recording::recover_session,
             engines::list_engines,
             engines::recheck_registry,
+            syscheck::get_capability,
+            syscheck::run_system_check,
+            syscheck::cancel_system_check,
+            syscheck::set_override,
+            syscheck::session_plan,
         ])
         .build(tauri::generate_context!())?;
     app.run(|_handle, event| {

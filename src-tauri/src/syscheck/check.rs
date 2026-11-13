@@ -1,0 +1,1044 @@
+//! The system check: probe, try every engine build, benchmark the ranked models on each device
+//! configuration the way they will be used, run the recorder safety test, and hand the measurements to
+//! the rules in `wb-capability` (PLAN section 3).
+//!
+//! Order, so the quick check stays inside its 8 minutes: engines and hardware, a throw-away Vulkan
+//! warm-up per graphics adapter, rolling speed per language (ranked models top-down, stopping at the
+//! first that meets the bar), the hybrid test running at the same time as a 2-minute recorder safety
+//! run, near-live on the CPU, the live stand-in on a discrete GPU, then the night model. A step that
+//! would start after the bar has passed is left for the full check and the profile says `partial`.
+
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant};
+
+use wb_capability::{
+    CheckInfo, CheckKind, DeviceConfig, GpuKind, HybridMeasurement, Lang, Measurement, Mode,
+    Options, Profile, Rankings, RecorderSafety, SCHEMA_VERSION, decide, model_fits,
+};
+use wb_machine::Machine;
+use wb_models::{Cache, Manifest};
+use wb_protocol::{BenchMode, BenchRequest, Device, ModelRef, Settings};
+
+use super::bench::{self, BenchError, Cell};
+use super::excerpt::{self, ExcerptError};
+use super::probe::{self, Roots};
+use super::safety::{SafetyError, SafetyRun};
+use crate::engines::{self, EngineRow, EngineState};
+
+/// The quick check must finish within this on the low-baseline laptop.
+pub const QUICK_BAR_S: f64 = 480.0;
+const SAFETY_SECONDS: f64 = 120.0;
+const VAD_ID: &str = "silero-v6.2.0";
+
+#[derive(Debug, thiserror::Error)]
+pub enum CheckError {
+    #[error("The system check was cancelled.")]
+    Cancelled,
+    #[error("No speech engine was found next to the app.")]
+    NoEngines,
+    #[error("A bench clip is missing: {0}")]
+    Clip(String),
+    #[error("{0}")]
+    Excerpt(#[from] ExcerptError),
+}
+
+/// One cell of the speed table to measure.
+struct Spec<'a> {
+    model: &'a str,
+    lang: Lang,
+    mode: Mode,
+    config: DeviceConfig,
+    clip: &'a str,
+    excerpt_s: f64,
+    standin: bool,
+}
+
+/// Where the check finds things and what it knows about this computer.
+pub struct CheckEnv {
+    pub engines_dir: PathBuf,
+    pub models_dir: PathBuf,
+    pub bench_dir: PathBuf,
+    pub work_dir: PathBuf,
+    pub model_cache: PathBuf,
+    pub recordings_root: PathBuf,
+    pub backup_root: Option<PathBuf>,
+    pub app_version: String,
+    pub machine: Machine,
+    pub manifest: Manifest,
+    pub manifest_hash: String,
+    pub rankings: Rankings,
+    pub options: Options,
+    pub started_at: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct Progress {
+    pub phase: String,
+    pub detail: String,
+    pub elapsed_s: f64,
+    pub cells_done: u32,
+}
+
+pub struct Outcome {
+    pub profile: Profile,
+}
+
+struct Run<'a> {
+    env: &'a CheckEnv,
+    kind: CheckKind,
+    cancel: &'a AtomicBool,
+    progress: &'a dyn Fn(Progress),
+    started: Instant,
+    cells: u32,
+    rows: Vec<EngineRow>,
+    cpu_variant: Option<(String, PathBuf)>,
+    gpu_variant: Option<(String, PathBuf)>,
+    profile: Profile,
+    cache: Cache,
+    excerpts: HashMap<String, PathBuf>,
+    partial: bool,
+}
+
+fn clip_file(lang: &str) -> String {
+    format!("bench-{lang}.wav")
+}
+
+pub fn run(
+    env: &CheckEnv,
+    kind: CheckKind,
+    cancel: &AtomicBool,
+    progress: &dyn Fn(Progress),
+) -> Result<Outcome, CheckError> {
+    let started = Instant::now();
+    std::fs::create_dir_all(&env.work_dir).map_err(|e| CheckError::Clip(e.to_string()))?;
+    let discovered = engines::discover(&env.engines_dir);
+    if discovered.is_empty() {
+        return Err(CheckError::NoEngines);
+    }
+    let mut run = Run {
+        env,
+        kind,
+        cancel,
+        progress,
+        started,
+        cells: 0,
+        rows: Vec::new(),
+        cpu_variant: None,
+        gpu_variant: None,
+        profile: empty_profile(env, kind),
+        cache: Cache::load(&env.model_cache),
+        excerpts: HashMap::new(),
+        partial: false,
+    };
+
+    // 1. Engines and hardware.
+    for (variant, exe) in &discovered {
+        run.tick("Checking the speech engines", &format!("{variant} build"))?;
+        run.rows
+            .push(engines::probe_engine(variant, exe, &env.work_dir));
+    }
+    let usable = |v: &str| {
+        discovered
+            .iter()
+            .find(|(n, _)| n == v)
+            .filter(|(n, _)| {
+                run.rows
+                    .iter()
+                    .any(|r| &r.variant == n && matches!(r.state, EngineState::Ok))
+            })
+            .cloned()
+    };
+    run.cpu_variant = usable("avx2").or_else(|| usable("avx512"));
+    run.gpu_variant = usable("vulkan");
+    run.tick("Reading the hardware", "")?;
+    let roots = Roots {
+        recordings: &env.recordings_root,
+        backup: env.backup_root.as_deref(),
+    };
+    let (hardware, engine_status) = probe::hardware(&env.machine, &run.rows, &roots);
+    run.profile.hardware = hardware;
+    run.profile.engines = engine_status;
+    run.profile.injectors = probe::running_injectors();
+    run.profile.fingerprint = probe::fingerprint(
+        &run.profile.hardware,
+        &env.app_version,
+        &env.manifest_hash,
+        env.machine.emulated.as_deref(),
+    );
+    if run.gpu_variant.is_none() {
+        for g in &mut run.profile.hardware.gpus {
+            g.vulkan_usable = false;
+        }
+    }
+
+    if run.cpu_variant.is_some() || run.gpu_variant.is_some() {
+        run.measure_all()?;
+    }
+
+    run.profile.check.duration_s = started.elapsed().as_secs_f64();
+    run.profile.check.partial = run.partial;
+    Ok(Outcome {
+        profile: run.profile,
+    })
+}
+
+fn empty_profile(env: &CheckEnv, kind: CheckKind) -> Profile {
+    use wb_capability::{Fingerprint, Hardware};
+    Profile {
+        schema_version: SCHEMA_VERSION,
+        app_version: env.app_version.clone(),
+        created_at: env.started_at.clone(),
+        emulated: env.machine.emulated.clone(),
+        fingerprint: Fingerprint {
+            os: String::new(),
+            cpu_brand: String::new(),
+            logical_processors: 0,
+            physical_cores: 0,
+            total_ram_gib: 0,
+            gpus: vec![],
+            app_version: env.app_version.clone(),
+            manifest_hash: env.manifest_hash.clone(),
+            emulated: env.machine.emulated.clone(),
+        },
+        check: CheckInfo {
+            kind,
+            partial: false,
+            started_at: env.started_at.clone(),
+            duration_s: 0.0,
+            bar_s: QUICK_BAR_S,
+            excerpt_seconds: excerpt_seconds(kind),
+        },
+        hardware: Hardware {
+            os: String::new(),
+            cpu_brand: String::new(),
+            logical_processors: 0,
+            physical_cores: 0,
+            cpu_features: vec![],
+            avx2: false,
+            avx512: false,
+            total_ram_bytes: 0,
+            available_ram_bytes: 0,
+            gpus: vec![],
+            disks: vec![],
+            on_mains_power: None,
+            audio_inputs: 0,
+        },
+        engines: vec![],
+        measurements: vec![],
+        hybrid: None,
+        recorder_safety: vec![],
+        injectors: vec![],
+    }
+}
+
+/// Seconds of each bundled clip that are timed: 30 in the quick check, 60 (the whole clip) in the full one.
+pub fn excerpt_seconds(kind: CheckKind) -> f64 {
+    match kind {
+        CheckKind::Quick => 30.0,
+        CheckKind::Full => 60.0,
+    }
+}
+
+impl Run<'_> {
+    fn tick(&mut self, phase: &str, detail: &str) -> Result<(), CheckError> {
+        if self.cancel.load(Ordering::Relaxed) {
+            return Err(CheckError::Cancelled);
+        }
+        (self.progress)(Progress {
+            phase: phase.to_string(),
+            detail: detail.to_string(),
+            elapsed_s: self.started.elapsed().as_secs_f64(),
+            cells_done: self.cells,
+        });
+        Ok(())
+    }
+
+    fn over_budget(&mut self) -> bool {
+        let over =
+            self.kind == CheckKind::Quick && self.started.elapsed().as_secs_f64() >= QUICK_BAR_S;
+        if over {
+            self.partial = true;
+        }
+        over
+    }
+
+    fn full(&self) -> bool {
+        self.kind == CheckKind::Full
+    }
+
+    /// A piece of a bench clip, cut once.
+    fn clip(&mut self, name: &str, start_s: f64, len_s: f64) -> Result<PathBuf, CheckError> {
+        let key = format!("{name}@{start_s}+{len_s}");
+        if let Some(p) = self.excerpts.get(&key) {
+            return Ok(p.clone());
+        }
+        let src = self.env.bench_dir.join(name);
+        if !src.is_file() {
+            return Err(CheckError::Clip(src.display().to_string()));
+        }
+        let dst = self.env.work_dir.join(format!(
+            "excerpt-{}-{}-{}.wav",
+            name.trim_end_matches(".wav"),
+            start_s as u32,
+            len_s as u32
+        ));
+        excerpt::write_excerpt(&src, &dst, start_s, len_s)?;
+        self.excerpts.insert(key, dst.clone());
+        Ok(dst)
+    }
+
+    fn exe_for(&self, config: DeviceConfig) -> Option<&(String, PathBuf)> {
+        match config {
+            DeviceConfig::Cpu => self.cpu_variant.as_ref(),
+            DeviceConfig::Gpu { .. } | DeviceConfig::Hybrid { .. } => self.gpu_variant.as_ref(),
+        }
+    }
+
+    fn model_ref(&mut self, id: &str) -> Option<(ModelRef, u64)> {
+        let entry = self.env.manifest.find(id).ok()?;
+        let path = wb_models::path_for_engine(
+            &self.env.models_dir,
+            &self.env.manifest,
+            id,
+            &mut self.cache,
+        )
+        .ok()?;
+        Some((
+            ModelRef {
+                id: id.to_string(),
+                path: path.to_string_lossy().into_owned(),
+            },
+            entry.bytes,
+        ))
+    }
+
+    fn vad_ref(&mut self) -> Option<ModelRef> {
+        self.model_ref(VAD_ID).map(|(m, _)| m)
+    }
+
+    fn request(
+        &mut self,
+        model: &ModelRef,
+        lang: Lang,
+        clip: &Path,
+        mode: Mode,
+        config: DeviceConfig,
+        threads: u32,
+    ) -> Option<BenchRequest> {
+        let vad = self.vad_ref()?;
+        let settings = Settings {
+            role: match mode {
+                Mode::Rolling => "rolling".into(),
+                Mode::NearLive => "near-live".into(),
+            },
+            ..Settings::default()
+        };
+        Some(BenchRequest {
+            model: model.clone(),
+            vad_model: vad,
+            lang: lang.code().to_string(),
+            clip: clip.to_string_lossy().into_owned(),
+            mode: match mode {
+                Mode::Rolling => BenchMode::Rolling,
+                Mode::NearLive => BenchMode::NearLive,
+            },
+            device: match config.gpu_index() {
+                Some(index) if !matches!(config, DeviceConfig::Cpu) => Device::Gpu { index },
+                _ => Device::Cpu,
+            },
+            threads,
+            runs: if self.full() { 3 } else { 1 },
+            single_run_above_rtf: Some(1.5),
+            settings,
+        })
+    }
+
+    fn threads_for(&self, config: DeviceConfig, mode: Mode) -> u32 {
+        let batch = self.env.machine.batch_threads() as u32;
+        match (config, mode) {
+            (DeviceConfig::Cpu, Mode::Rolling) => batch,
+            (DeviceConfig::Cpu, Mode::NearLive) => self.env.machine.live_threads() as u32,
+            (_, _) => batch.min(2),
+        }
+    }
+
+    /// Measures one cell. `Ok(None)` when the model is missing, does not fit memory, or the engine failed
+    /// (the reason goes to the log); the check carries on with the next candidate.
+    fn measure(&mut self, spec: Spec<'_>) -> Result<Option<Measurement>, CheckError> {
+        let Spec {
+            model: model_id,
+            lang,
+            mode,
+            config,
+            clip: clip_name,
+            excerpt_s,
+            standin: live_standin,
+        } = spec;
+        let Some((exe_variant, exe)) = self.exe_for(config).cloned() else {
+            return Ok(None);
+        };
+        let Some((model, bytes)) = self.model_ref(model_id) else {
+            tracing::info!(model = model_id, "system check: model not usable, skipped");
+            return Ok(None);
+        };
+        if !model_fits(&self.profile.hardware, bytes, &self.env.options) {
+            tracing::info!(
+                model = model_id,
+                "system check: model does not fit memory, skipped"
+            );
+            return Ok(None);
+        }
+        self.tick(
+            "Measuring speed",
+            &format!("{model_id}, {}, {}", lang.name(), config_name(config)),
+        )?;
+        let clip = self.clip(clip_name, 0.0, excerpt_s)?;
+        let threads = self.threads_for(config, mode);
+        let Some(request) = self.request(&model, lang, &clip, mode, config, threads) else {
+            return Ok(None);
+        };
+        let runs = request.runs;
+        let cell = Cell {
+            exe: &exe,
+            variant: &exe_variant,
+            request,
+            work_dir: &self.env.work_dir,
+            timeout: Duration::from_secs((excerpt_s * 12.0 + 120.0) as u64),
+        };
+        let report = match bench::run_bench(&cell, self.cancel) {
+            Ok(r) => r,
+            Err(BenchError::Cancelled) => return Err(CheckError::Cancelled),
+            Err(e) => {
+                tracing::warn!(model = model_id, "system check: {e}");
+                return Ok(None);
+            }
+        };
+        self.cells += 1;
+        let m = Measurement {
+            model: model_id.to_string(),
+            lang,
+            mode,
+            config,
+            engine_build: report.variant.clone(),
+            device_name: report.device_name.clone(),
+            threads: report.threads,
+            method: format!(
+                "bench clip {clip_name}, first {excerpt_s:.0} s, {}, warm-up + {runs} run(s), single run above RTF 1.5, {} threads",
+                match mode {
+                    Mode::Rolling => "rolling settings",
+                    Mode::NearLive => "near-live settings",
+                },
+                report.threads
+            ),
+            clip_seconds: report.clip_seconds,
+            rtf: report.rtf_median,
+            warmup_rtf: Some(report.warmup_rtf),
+            load_s: report.load_s,
+            peak_working_set_bytes: report.peak_working_set_bytes,
+            peak_commit_bytes: report.peak_commit_bytes,
+            gpu_local_bytes: report.gpu_local_bytes,
+            truncated_chunks: report.truncated_chunks,
+            live_standin,
+        };
+        self.profile.measurements.push(m.clone());
+        Ok(Some(m))
+    }
+
+    /// A throw-away run that fills the driver's shader cache, so the first measured cell is not charged
+    /// for compiling. Its speed is never stored. A graphics adapter that fails it is marked unusable.
+    fn warm_up(&mut self, gpu: u32) -> Result<(), CheckError> {
+        let smallest = self
+            .env
+            .rankings
+            .rolling
+            .values()
+            .flatten()
+            .min_by_key(|r| r.bytes)
+            .map(|r| r.model.clone());
+        let Some(id) = smallest else { return Ok(()) };
+        let Some((model, _)) = self.model_ref(&id) else {
+            return Ok(());
+        };
+        let Some((variant, exe)) = self.gpu_variant.clone() else {
+            return Ok(());
+        };
+        self.tick(
+            "Warming up the graphics card",
+            &config_name(DeviceConfig::Gpu { index: gpu }),
+        )?;
+        let clip = self.clip(&clip_file("en"), 0.0, 10.0)?;
+        let Some(mut request) = self.request(
+            &model,
+            Lang::En,
+            &clip,
+            Mode::Rolling,
+            DeviceConfig::Gpu { index: gpu },
+            2,
+        ) else {
+            return Ok(());
+        };
+        request.runs = 1;
+        let cell = Cell {
+            exe: &exe,
+            variant: &variant,
+            request,
+            work_dir: &self.env.work_dir,
+            timeout: Duration::from_secs(180),
+        };
+        match bench::run_bench(&cell, self.cancel) {
+            Ok(_) => {}
+            Err(BenchError::Cancelled) => return Err(CheckError::Cancelled),
+            Err(e) => {
+                tracing::warn!(gpu, "system check: the Vulkan warm-up failed: {e}");
+                if let Some(g) = self
+                    .profile
+                    .hardware
+                    .gpus
+                    .iter_mut()
+                    .find(|g| g.index == gpu)
+                {
+                    g.vulkan_usable = false;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Rolling speed of each language on one configuration: ranked models top-down, stopping at the first
+    /// that meets the bar (the full check measures them all). Returns the languages that met the bar.
+    fn rolling_on(
+        &mut self,
+        config: DeviceConfig,
+        langs: &[Lang],
+    ) -> Result<Vec<Lang>, CheckError> {
+        let bar = wb_capability::bars(&self.profile).rolling_rtf;
+        let mut met = Vec::new();
+        for &lang in langs {
+            let list = self
+                .env
+                .rankings
+                .rolling
+                .get(&lang)
+                .cloned()
+                .unwrap_or_default();
+            for rk in list {
+                let Some(m) = self.measure(Spec {
+                    model: &rk.model,
+                    lang,
+                    mode: Mode::Rolling,
+                    config,
+                    clip: &clip_file(lang.code()),
+                    excerpt_s: excerpt_seconds(self.kind),
+                    standin: false,
+                })?
+                else {
+                    continue;
+                };
+                if m.rtf <= bar {
+                    if !met.contains(&lang) {
+                        met.push(lang);
+                    }
+                    if !self.full() {
+                        break;
+                    }
+                }
+            }
+        }
+        Ok(met)
+    }
+
+    fn measure_all(&mut self) -> Result<(), CheckError> {
+        let langs = Lang::ALL;
+        // Graphics adapters, discrete before integrated; the next one is measured only while the languages
+        // are not all met (the full check measures every adapter).
+        let mut gpus: Vec<(u32, GpuKind)> = self
+            .profile
+            .hardware
+            .gpus
+            .iter()
+            .filter(|g| g.vulkan_usable)
+            .map(|g| (g.index, g.kind))
+            .collect();
+        gpus.sort_by_key(|(i, k)| (matches!(k, GpuKind::Integrated), *i));
+        let mut met_by_gpu: Vec<Lang> = Vec::new();
+        for (index, _) in gpus {
+            if !self.full() && met_by_gpu.len() == langs.len() {
+                break;
+            }
+            self.warm_up(index)?;
+            if !self
+                .profile
+                .hardware
+                .gpus
+                .iter()
+                .any(|g| g.index == index && g.vulkan_usable)
+            {
+                continue;
+            }
+            let met = self.rolling_on(DeviceConfig::Gpu { index }, &langs)?;
+            for l in met {
+                if !met_by_gpu.contains(&l) {
+                    met_by_gpu.push(l);
+                }
+            }
+        }
+        // The CPU: every language when no adapter works, otherwise only those no adapter met (the full
+        // check measures all).
+        if self.cpu_variant.is_some() {
+            let todo: Vec<Lang> = if self.full() {
+                langs.to_vec()
+            } else {
+                langs
+                    .iter()
+                    .copied()
+                    .filter(|l| !met_by_gpu.contains(l))
+                    .collect()
+            };
+            if !todo.is_empty() {
+                self.rolling_on(DeviceConfig::Cpu, &todo)?;
+            }
+        }
+
+        // Hybrid test and recorder safety run, together.
+        if !self.over_budget() {
+            self.hybrid_and_safety()?;
+        }
+        // Near-live on the CPU.
+        if !self.over_budget() {
+            self.near_live()?;
+        }
+        // The live stand-in on a discrete GPU.
+        if !self.over_budget() {
+            self.live_standin()?;
+        }
+        // The night model on the configuration the rules choose now.
+        if !self.over_budget() {
+            self.night()?;
+        }
+        Ok(())
+    }
+
+    fn decided(&self) -> wb_capability::Decision {
+        decide(&self.profile, &self.env.rankings, &self.env.options)
+    }
+
+    /// The configuration a language's rolling model ran on best, for later steps.
+    fn best_config(&self) -> Option<DeviceConfig> {
+        self.decided().config.map(|c| match c.config {
+            DeviceConfig::Hybrid { gpu } => DeviceConfig::Gpu { index: gpu },
+            other => other,
+        })
+    }
+
+    fn hybrid_and_safety(&mut self) -> Result<(), CheckError> {
+        let Some(best) = self.best_config() else {
+            return Ok(());
+        };
+        let gpu_index = match best {
+            DeviceConfig::Gpu { index } => Some(index),
+            DeviceConfig::Cpu => self
+                .profile
+                .hardware
+                .gpus
+                .iter()
+                .find(|g| g.vulkan_usable)
+                .map(|g| g.index),
+            DeviceConfig::Hybrid { .. } => None,
+        };
+        let batch = self.env.machine.batch_threads() as u32;
+        let hybrid_cpu_threads = batch.saturating_sub(2).max(1);
+        // The model and language of the slowest rolling pick are the hardest case for the hybrid test.
+        let decision = self.decided();
+        let Some((lang, pick)) = decision
+            .languages
+            .iter()
+            .filter_map(|(l, d)| d.rolling.as_ref().map(|p| (*l, p.clone())))
+            .max_by(|a, b| a.1.rtf.total_cmp(&b.1.rtf))
+        else {
+            return Ok(());
+        };
+
+        if let (Some(gpu), true) = (gpu_index, self.cpu_variant.is_some()) {
+            self.tick(
+                "Testing both processors at once",
+                "while a test recording runs",
+            )?;
+            let config = DeviceConfig::Hybrid { gpu };
+            let safety = SafetyRun::start(&self.env.work_dir, &self.env.app_version, config);
+            let hybrid = self.hybrid_pair(
+                &pick.model,
+                lang,
+                gpu,
+                hybrid_cpu_threads,
+                safety.as_ref().ok(),
+            )?;
+            if let Some(h) = hybrid {
+                self.profile.hybrid = Some(h);
+            }
+            self.finish_safety(safety, &[config, DeviceConfig::Gpu { index: gpu }])?;
+        } else if gpu_index.is_none() {
+            // No usable graphics adapter: the safety run is for the CPU configuration itself.
+            self.tick(
+                "Testing the recorder under load",
+                "while a test recording runs",
+            )?;
+            let config = DeviceConfig::Cpu;
+            let safety = SafetyRun::start(&self.env.work_dir, &self.env.app_version, config);
+            self.load_cpu_until_done(&pick.model, lang, batch, safety.as_ref().ok())?;
+            self.finish_safety(safety, &[config])?;
+        }
+
+        // The chosen configuration is the CPU alone although a graphics adapter exists: it uses more CPU
+        // threads than the hybrid run did, so it gets a run of its own.
+        let chosen = self.decided().config.map(|c| c.config);
+        if chosen == Some(DeviceConfig::Cpu)
+            && gpu_index.is_some()
+            && !self
+                .profile
+                .recorder_safety
+                .iter()
+                .any(|s| s.config == DeviceConfig::Cpu)
+            && !self.over_budget()
+        {
+            self.tick("Testing the recorder under load", "CPU configuration")?;
+            let safety =
+                SafetyRun::start(&self.env.work_dir, &self.env.app_version, DeviceConfig::Cpu);
+            self.load_cpu_until_done(&pick.model, lang, batch, safety.as_ref().ok())?;
+            self.finish_safety(safety, &[DeviceConfig::Cpu])?;
+        }
+        Ok(())
+    }
+
+    /// Stops a safety run and stores its result for each configuration it covers (a heavier load covers
+    /// the lighter ones). A run that could not start stores nothing: the rules then cannot choose hybrid.
+    fn finish_safety(
+        &mut self,
+        run: Result<SafetyRun, SafetyError>,
+        covers: &[DeviceConfig],
+    ) -> Result<(), CheckError> {
+        match run {
+            Ok(r) => match r.finish() {
+                Ok(result) => {
+                    for c in covers {
+                        self.profile.recorder_safety.push(RecorderSafety {
+                            config: *c,
+                            ..result.clone()
+                        });
+                    }
+                }
+                Err(e) => tracing::warn!("system check: {e}"),
+            },
+            Err(e) => tracing::warn!("system check: the recorder safety run did not start: {e}"),
+        }
+        Ok(())
+    }
+
+    /// Runs the CPU engine on the chosen model until the safety run has lasted its time.
+    fn load_cpu_until_done(
+        &mut self,
+        model_id: &str,
+        lang: Lang,
+        threads: u32,
+        safety: Option<&SafetyRun>,
+    ) -> Result<(), CheckError> {
+        let Some((variant, exe)) = self.cpu_variant.clone() else {
+            return Ok(());
+        };
+        let Some((model, _)) = self.model_ref(model_id) else {
+            return Ok(());
+        };
+        let clip = self.clip(&clip_file(lang.code()), 0.0, 15.0)?;
+        loop {
+            let Some(request) = self.request(
+                &model,
+                lang,
+                &clip,
+                Mode::Rolling,
+                DeviceConfig::Cpu,
+                threads,
+            ) else {
+                return Ok(());
+            };
+            let cell = Cell {
+                exe: &exe,
+                variant: &variant,
+                request,
+                work_dir: &self.env.work_dir,
+                timeout: Duration::from_secs(600),
+            };
+            match bench::run_bench(&cell, self.cancel) {
+                Ok(_) => {}
+                Err(BenchError::Cancelled) => return Err(CheckError::Cancelled),
+                Err(e) => {
+                    tracing::warn!("system check: load run failed: {e}");
+                    return Ok(());
+                }
+            }
+            if safety.is_none_or(|s| s.elapsed().as_secs_f64() >= SAFETY_SECONDS) {
+                return Ok(());
+            }
+        }
+    }
+
+    /// A CPU engine and a GPU engine at the same time on different halves of the clip, repeated until
+    /// the safety run has lasted its time. The GPU's speed is the median of its runs that finished while
+    /// the CPU engine was still going.
+    fn hybrid_pair(
+        &mut self,
+        model_id: &str,
+        lang: Lang,
+        gpu: u32,
+        cpu_threads: u32,
+        safety: Option<&SafetyRun>,
+    ) -> Result<Option<HybridMeasurement>, CheckError> {
+        let (Some((cpu_variant, cpu_exe)), Some((gpu_variant, gpu_exe))) =
+            (self.cpu_variant.clone(), self.gpu_variant.clone())
+        else {
+            return Ok(None);
+        };
+        let Some((model, _)) = self.model_ref(model_id) else {
+            return Ok(None);
+        };
+        let a = self.clip(&clip_file(lang.code()), 0.0, 30.0)?;
+        let b = self.clip(&clip_file(lang.code()), 30.0, 15.0)?;
+        let gpu_threads = (self.env.machine.batch_threads() as u32).min(2);
+        let mut gpu_rtfs: Vec<f64> = Vec::new();
+        let mut cpu_rtfs: Vec<f64> = Vec::new();
+        let started = Instant::now();
+        loop {
+            let (Some(cpu_req), Some(gpu_req)) = (
+                self.request(
+                    &model,
+                    lang,
+                    &b,
+                    Mode::Rolling,
+                    DeviceConfig::Cpu,
+                    cpu_threads,
+                ),
+                self.request(
+                    &model,
+                    lang,
+                    &a,
+                    Mode::Rolling,
+                    DeviceConfig::Gpu { index: gpu },
+                    gpu_threads,
+                ),
+            ) else {
+                return Ok(None);
+            };
+            let work = self.env.work_dir.clone();
+            let cancel = self.cancel;
+            let finished = AtomicBool::new(false);
+            let (cpu_result, gpu_round) = std::thread::scope(|s| {
+                let cpu = s.spawn(|| {
+                    let cell = Cell {
+                        exe: &cpu_exe,
+                        variant: &cpu_variant,
+                        request: cpu_req,
+                        work_dir: &work,
+                        timeout: Duration::from_secs(900),
+                    };
+                    let r = bench::run_bench(&cell, cancel);
+                    finished.store(true, Ordering::Release);
+                    r
+                });
+                // Let the CPU engine load its model before the GPU runs are counted.
+                std::thread::sleep(Duration::from_secs(3));
+                let mut round: Vec<f64> = Vec::new();
+                loop {
+                    let cell = Cell {
+                        exe: &gpu_exe,
+                        variant: &gpu_variant,
+                        request: gpu_req.clone(),
+                        work_dir: &work,
+                        timeout: Duration::from_secs(300),
+                    };
+                    let r = bench::run_bench(&cell, cancel);
+                    let overlapped = !finished.load(Ordering::Acquire);
+                    if let Ok(rep) = r
+                        && (overlapped || round.is_empty())
+                    {
+                        round.push(rep.rtf_median);
+                    }
+                    if !overlapped || cancel.load(Ordering::Relaxed) {
+                        break;
+                    }
+                }
+                (cpu.join(), round)
+            });
+            match cpu_result {
+                Ok(Ok(rep)) => cpu_rtfs.push(rep.rtf_median),
+                Ok(Err(BenchError::Cancelled)) => return Err(CheckError::Cancelled),
+                Ok(Err(e)) => tracing::warn!("system check: hybrid CPU run failed: {e}"),
+                Err(_) => tracing::warn!("system check: hybrid CPU run panicked"),
+            }
+            gpu_rtfs.extend(gpu_round);
+            self.cells += 2;
+            self.tick(
+                "Testing both processors at once",
+                "while a test recording runs",
+            )?;
+            let long_enough = safety.is_none_or(|s| s.elapsed().as_secs_f64() >= SAFETY_SECONDS);
+            if long_enough || started.elapsed().as_secs_f64() > 4.0 * SAFETY_SECONDS {
+                break;
+            }
+        }
+        let median = |v: &mut Vec<f64>| {
+            v.sort_by(f64::total_cmp);
+            v.get(v.len() / 2).copied()
+        };
+        let (Some(g), Some(c)) = (median(&mut gpu_rtfs), median(&mut cpu_rtfs)) else {
+            return Ok(None);
+        };
+        Ok(Some(HybridMeasurement {
+            model: model_id.to_string(),
+            lang,
+            gpu,
+            cpu_threads,
+            gpu_rtf_concurrent: g,
+            cpu_rtf_concurrent: c,
+            method: format!(
+                "CPU engine ({cpu_threads} threads, 15 s of the clip) and GPU engine (30 s) at the same time, rolling settings, with a test recording running; {} GPU run(s), {} CPU run(s)",
+                gpu_rtfs.len(),
+                cpu_rtfs.len()
+            ),
+        }))
+    }
+
+    fn near_live(&mut self) -> Result<(), CheckError> {
+        if self.cpu_variant.is_none() {
+            return Ok(());
+        }
+        let excerpt_s = if self.full() { 30.0 } else { 20.0 };
+        for lang in [Lang::En, Lang::Hi] {
+            let list = self
+                .env
+                .rankings
+                .near_live
+                .get(&lang)
+                .cloned()
+                .unwrap_or_default();
+            if let Some(rk) = list.first() {
+                self.measure(Spec {
+                    model: &rk.model,
+                    lang,
+                    mode: Mode::NearLive,
+                    config: DeviceConfig::Cpu,
+                    clip: &clip_file(lang.code()),
+                    excerpt_s,
+                    standin: false,
+                })?;
+            }
+        }
+        Ok(())
+    }
+
+    fn live_standin(&mut self) -> Result<(), CheckError> {
+        let Some(gpu) = self
+            .profile
+            .hardware
+            .gpus
+            .iter()
+            .find(|g| g.kind == GpuKind::Discrete && g.vulkan_usable)
+            .map(|g| g.index)
+        else {
+            return Ok(());
+        };
+        let bar = wb_capability::bars(&self.profile).live_standin_rtf;
+        for lang in Lang::ALL {
+            let list = self
+                .env
+                .rankings
+                .live
+                .get(&lang)
+                .cloned()
+                .unwrap_or_default();
+            for rk in list {
+                let m = self.measure(Spec {
+                    model: &rk.model,
+                    lang,
+                    mode: Mode::NearLive,
+                    config: DeviceConfig::Gpu { index: gpu },
+                    clip: &clip_file(lang.code()),
+                    excerpt_s: excerpt_seconds(self.kind).min(30.0),
+                    standin: true,
+                })?;
+                if m.is_some_and(|m| m.rtf <= bar) {
+                    break;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn night(&mut self) -> Result<(), CheckError> {
+        let Some(config) = self.best_config() else {
+            return Ok(());
+        };
+        let limit = self.env.options.night_window_hours / self.env.options.day_audio_hours;
+        let hi_rtf = self
+            .decided()
+            .languages
+            .get(&Lang::Hi)
+            .and_then(|l| l.rolling.as_ref().map(|r| r.rtf));
+        for lang in Lang::ALL {
+            // The quick check measures the night model for Hindi only, and only where the rolling speed
+            // predicts it fits (a large-v3-sized model is about 2.5 times slower than the rolling one).
+            if !self.full() && (lang != Lang::Hi || hi_rtf.is_none_or(|r| r * 2.5 > limit)) {
+                continue;
+            }
+            let list = self
+                .env
+                .rankings
+                .night
+                .get(&lang)
+                .cloned()
+                .unwrap_or_default();
+            for rk in list {
+                self.measure(Spec {
+                    model: &rk.model,
+                    lang,
+                    mode: Mode::Rolling,
+                    config,
+                    clip: &clip_file(lang.code()),
+                    excerpt_s: excerpt_seconds(self.kind),
+                    standin: false,
+                })?;
+                if !self.full() {
+                    break;
+                }
+            }
+        }
+        if self.full() {
+            self.hinglish(config)?;
+        }
+        Ok(())
+    }
+
+    /// The Hinglish model on the alternating English/Hindi clip, so rule (d) rests on a measurement.
+    fn hinglish(&mut self, config: DeviceConfig) -> Result<(), CheckError> {
+        if self.env.manifest.find("hinglish-q5_0").is_err() {
+            return Ok(());
+        }
+        self.measure(Spec {
+            model: "hinglish-q5_0",
+            lang: Lang::Hi,
+            mode: Mode::Rolling,
+            config,
+            clip: "bench-codeswitch.wav",
+            excerpt_s: excerpt_seconds(self.kind),
+            standin: false,
+        })?;
+        Ok(())
+    }
+}
+
+fn config_name(config: DeviceConfig) -> String {
+    match config {
+        DeviceConfig::Cpu => "processor".into(),
+        DeviceConfig::Gpu { index } => format!("graphics adapter {index}"),
+        DeviceConfig::Hybrid { gpu } => format!("processor and graphics adapter {gpu}"),
+    }
+}

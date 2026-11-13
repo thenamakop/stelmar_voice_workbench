@@ -26,7 +26,7 @@ use crate::state::{AppState, lock};
 
 /// Engine builds the app knows, in the order the system check prefers to try them.
 pub const VARIANTS: &[&str] = &["avx2", "avx512", "vulkan", "cuda", "openvino"];
-const INFO_TIMEOUT: Duration = Duration::from_secs(15);
+const INFO_TIMEOUT: Duration = Duration::from_secs(20);
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -156,7 +156,7 @@ impl Registry {
 // ---------------------------------------------------------------------------------- locating
 
 /// Folders to look in, nearest first: the app's own folder, then (development) the repository.
-fn exe_ancestors() -> Vec<PathBuf> {
+pub(crate) fn exe_ancestors() -> Vec<PathBuf> {
     std::env::current_exe()
         .ok()
         .map(|p| {
