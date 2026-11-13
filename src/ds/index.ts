@@ -18,6 +18,8 @@ export { Input } from "./Input";
 export type { InputProps } from "./Input";
 export { ProgressBar } from "./ProgressBar";
 export type { ProgressBarProps } from "./ProgressBar";
+export { Radio } from "./Radio";
+export type { RadioProps } from "./Radio";
 export { Select } from "./Select";
 export type { SelectOption, SelectProps } from "./Select";
 export { SessionItem } from "./SessionItem";

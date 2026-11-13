@@ -4,6 +4,6 @@
  */
 export function liveUnavailableReason(hasProfile: boolean): string {
   return hasProfile
-    ? "Live captions are not built yet; the saved profile is not read in this version."
+    ? "Live captions are chosen in the Start Session dialog, and only where the system check cleared this computer."
     : "Not offered until the system check has run.";
 }
