@@ -1,0 +1,17 @@
+﻿capture-stall test on the real cable (12 Nov 2026 decision: device buffer 1,000 ms, then 500, 200 ms, then the default; shared mode)
+source: commit 7b52346
+machine: Legion; started 2026-11-13 00:41:35 (machine clock)
+method: the test (crates/wb-recorder/tests/capture_stall.rs, release build) plays a quiet noise into the cable, opens the cable through capture::open_for_test (the way a session opens it, with the same buffer request and probe), hands the stream to the real recorder, and sleeps inside the data callback once (the stand-in for the capture thread being kept away from the device). It then reads the stop report, session.log and session.json.
+exit code: 0
+
+what each line says: "baseline" is a recording with no stall (callback period measured in the app; the shortest period is two packets handed over back to back); "pause N ms" is a stall of N ms in the data callback (longest gap between callbacks, the granted device buffer, the margin left, the audio recorded against the wall clock, driver xruns); the last pause is longer than the granted buffer on purpose.
+
+baseline: ["requested 1000 ms, granted 1000.0 ms (48000 frames), engine period 10.0 ms"]
+baseline: callback period mean 11.83 ms, shortest 8.767 ms, longest gap 20.3 ms, audio 4990 ms of 5005 ms wall
+pause 300 ms: longest callback gap 300.6 ms, granted 1000 ms, margin 699.4 ms, audio 4290 ms of 4305 ms wall, xruns 0
+pause 700 ms: longest callback gap 700.4 ms, granted 1000 ms, margin 299.6 ms, audio 4690 ms of 4705 ms wall, xruns 0
+pause 1600 ms (granted 1000 ms): longest gap 1600.6 ms, margin -600.6 ms, audio 4890 ms of 5606 ms wall, xruns 1
+
+test a_capture_thread_stall_inside_the_granted_buffer_loses_nothing_and_one_beyond_it_is_logged ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 20.94s
+verdict: PASS (every assertion held: no xrun, no overrun, no dropped sample and no position break for 300 ms and 700 ms; the stall beyond the granted buffer was an xrun, in session.log and session.json, with the missing audio and a negative margin)

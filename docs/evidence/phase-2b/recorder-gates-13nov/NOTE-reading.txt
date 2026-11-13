@@ -1,0 +1,68 @@
+Reading of the recorder gates on the final recorder, night of 13 Nov 2026 (emu-low, started 03:11 IST)
+
+Who wrote this note: the coding agent working on branch phase-2b-recorder-hardening, by hand, on 13 Nov
+2026, from reading the six evidence files next to it. This note is not script output. The six
+*-emu-low.txt files and ../detector-table.txt were written by the gate scripts and are not edited.
+
+Build: stelmar-voice-workbench.exe sha256 fd45eeee...c8f3 (built 13 Nov 00:43 from commit fa36341).
+Rig: VB-CABLE, RIG OK before the sequence (03:11:13), machine restarted at 03:05, LatencyMon closed.
+Order: hashing 03:11, panic 03:22, webview 03:26, kill 03:29, load 03:39, soak 04:10 (ended 06:12).
+
+Verdicts (all PASS, PROVISIONAL: emulated under emu-low)
+
+  gate     audio     fidelity (app vs reference)   xruns   overruns  longest capture gap  margin to 1,000 ms grant  gaps >=50/100/250/500 ms
+  hashing  10.1 min  0 differing frames            0       0         20.2 ms              979.8 ms                  0 / 0 / 0 / 0
+  panic     3.1 min  0 differing frames            0       0         19.6 ms              980.4 ms                  0 / 0 / 0 / 0
+  webview   3.1 min  0 differing frames            0       0         11.9 ms              988.1 ms                  0 / 0 / 0 / 0
+  kill      8.6 min  0 differing frames (6 runs)  6 excused  0      not printed (see below) 6 runs, each granted 1,000 ms
+  load     30.1 min  0 differing frames            0       0         23.3 ms              976.7 ms                  0 / 0 / 0 / 0
+  soak    120.0 min  0 differing frames            0       0         13.0 ms              987.1 ms                  0 / 0 / 0 / 0
+
+  Device buffer in every gate: requested 1,000 ms, granted 1,000.0 ms (48,000 frames), engine period 10.0 ms.
+  Callback period measured in the app: mean 10.15 (hashing), 10.00 (panic), 10.00 (webview), 10.02 (load),
+  10.00 ms (soak). The load gate's shortest gap, 2.578 ms, is two packets handed over back to back.
+  Stress processes in the load gate (read from the running processes): outside the job pid 8560, class
+  Normal, 36 threads all at base priority 8, 30.4 cores busy; inside the job pid 29584, class Normal, 11
+  threads at base priority 8, 2.7 cores busy; every stress process at normal priority, as required.
+  Ring maximum 0.15% (hashing, load), 0.85% (soak), 0.10% (panic, webview). Mirror SHA-256 equal in all six.
+
+Kill gate margin: kill-gate.ps1 prints no capture-margin lines, and a killed run writes no stop report, so
+the evidence has no longest-gap or margin figure for the kill gate. What the files do show: session.json
+of the kill run has six capture_buffer events (each granted 1,000 ms, engine period 10.0 ms) and no
+capture_stall event; audio lost at each kill 0 ms (the five kills recorded 53 to 158 ms more than the wall
+clock says); six driver xruns, one per app start, all excused. Owner's decision of 13 Nov 2026 (GATES.md,
+gate-pack row, no change now): kill-gate.ps1 should print the longest capture-callback gap per app run from
+session.json. A killed run's session.json has only the grant and any stall of 100 ms or more, so "no
+capture_stall" there means under 100 ms, not an exact figure.
+
+Upstream breaks (between the source and the reference capture)
+  hashing: 1 counted of an allowance of 1 (one break, listed at source 3.755 s and 3.800 s; one zero_gap event)
+  panic:   1 reported, 0 counted (inside the first 3 s of playback)
+  load:    3 counted of an allowance of 3 (source 74.8 s, 793.2 s and 1,113.3 s)
+  kill, webview, soak: 0
+  Load and hashing each used their whole allowance. All breaks were shared with the reference capture
+  (none the recorder's own), and in the three gates with a break the player had no late callback near it
+  (longest player gap 21.3 to 25.8 ms against a 100 ms buffer). The capture-callback gaps of the app were all under 25 ms, so none of these breaks is a
+  stall of the app's capture thread: they happen upstream of both recorders, on the virtual cable.
+
+Detector table (../detector-table.txt): 6 runs, 175.1 minutes, 5 shared upstream breaks, 5 matched (all by
+zero_gap), 0 missed, 0 false alarms, 0 lead-in events, 0 repeated_block events. Longest detector time on one
+block 2,093 us (load) against a budget of at least 2 ms and 1/20 of the block (25 ms for 0.5 s); 0 blocks
+over budget, 0 detectors switched off, 0 audio skipped.
+
+R4 / R5 (hashing gate, cold cache after a Restart; machine up 6 min): 11 model files, 9.66 GB, 797 MB/s,
+11.6 s of hashing inside the recording, every file read in Windows background mode with memory priority 1.
+Same physical disk (D:) as the recording. The first file started 0.5 s before the recording. Zero overruns,
+zero dropped samples, 0 differing frames.
+
+Load gate, mirror lag: 3 of 30 one-minute status lines say "behind" with a mirror lag of 3.6 to 3.8 s (the
+warning limit is 30 s). That is the backup copy trailing the recording, not the capture path.
+
+What this does and does not show
+  - The load gate that failed on 12 Nov (20 app xruns, 4.56 s lost) passed on the 1,000 ms buffer with 0
+    xruns, the longest capture-callback gap 23.3 ms and no gap of 50 ms or more. The longest gap was far
+    below even the old 100 ms buffer, so this one run does not show the larger buffer doing anything: it
+    shows the stalls of 12 Nov did not happen on 13 Nov. It is one run after one restart, with LatencyMon
+    closed. The cause of the 12 Nov stalls is still not isolated. The laptop gate pack runs the load gate
+    twice per laptop (cold boot and settled) for this reason.
+  - Every number is the Legion under emu-low with the virtual cable. None of it is a laptop result.
