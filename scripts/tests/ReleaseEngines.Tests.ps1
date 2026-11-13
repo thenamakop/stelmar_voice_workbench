@@ -31,5 +31,29 @@ Test-Case 'CI builds no cuda engine' {
   $ci = Get-Content -Raw (Join-Path $repo '.github\workflows\ci.yml')
   if ($ci -match '(?i)cuda') { throw 'ci.yml mentions cuda' }
 }
+Test-Case 'build-engines.ps1 prints the cargo log tail and the whisper-rs-sys folders when the CMake cache is missing' {
+  # The function is taken from the script's own syntax tree and run on a fake target folder.
+  $path = Join-Path $repo 'scripts\build-engines.ps1'
+  $ast = [System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$null, [ref]$null)
+  $fn = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Write-EngineBuildDiagnostics' }, $true)
+  if (-not $fn) { throw 'Write-EngineBuildDiagnostics is not in build-engines.ps1' }
+  $call = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.CommandAst] -and $n.GetCommandName() -eq 'Write-EngineBuildDiagnostics' }, $true)
+  if (-not $call) { throw 'the missing-cache failure does not call Write-EngineBuildDiagnostics' }
+  $tmp = Join-Path ([IO.Path]::GetTempPath()) ('wb-eng-diag-' + [guid]::NewGuid().ToString('N'))
+  try {
+    $sys = Join-Path $tmp 'avx2\release\build\whisper-rs-sys-abc123'
+    New-Item -ItemType Directory -Force -Path (Join-Path $sys 'out\lib') | Out-Null
+    Set-Content -LiteralPath (Join-Path $sys 'output') -Value @('cargo:warning=configure failed', 'second line')
+    $log = Join-Path $tmp 'avx2.build.log'
+    Set-Content -LiteralPath $log -Value (1..300 | ForEach-Object { "log line $_" })
+    Invoke-Expression $fn.Extent.Text
+    $text = (Write-EngineBuildDiagnostics -Target (Join-Path $tmp 'avx2') -Log $log 6>&1 | ForEach-Object { "$_" }) -join "`n"
+    foreach ($want in 'log line 300', 'whisper-rs-sys-abc123', 'out\ exists: True', 'out\build\ exists: False', 'CMakeCache.txt anywhere under out\: 0', 'configure failed') {
+      if ($text -notlike "*$want*") { throw "the diagnostics lack '$want'" }
+    }
+    if ($text -like '*log line 99*') { throw 'more than the last 200 lines were printed' }
+    if ($text -notlike '*log line 101*') { throw 'the last 200 lines are not all there' }
+  } finally { Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue }
+}
 if ($script:failures) { Write-Host "$($script:failures) case(s) failed"; exit 1 }
 Write-Host 'All cases passed'

@@ -115,6 +115,51 @@ New-Item -ItemType Directory -Force -Path $binDir | Out-Null
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $BuildLock) | Out-Null
 Set-Content -LiteralPath $BuildLock -Value "build=build-engines $($Variants -join ',')`r`nstarted=$((Get-Date).ToString('o'))`r`npid=$PID`r`n" -Encoding ascii
 
+# What to look at when the CMake cache is not where the checks expect it (a CI run failed this way on
+# 13 Nov 2026 and the build log was only on the runner): the end of the cargo log, and what every
+# whisper-rs-sys build folder holds. Printed, never thrown: the caller still fails with its own message.
+function Write-EngineBuildDiagnostics([string]$Target, [string]$Log) {
+  try {
+    Write-Host "---- diagnostics: no CMake cache found under $Target\release\build\whisper-rs-sys-*\out\build"
+    if (Test-Path -LiteralPath $Log) {
+      Write-Host "---- last 200 lines of the cargo build log ($Log)"
+      Get-Content -LiteralPath $Log -Tail 200 | ForEach-Object { Write-Host "  $_" }
+    } else {
+      Write-Host "---- no cargo build log at $Log"
+    }
+    $buildDir = Join-Path $Target 'release\build'
+    if (-not (Test-Path -LiteralPath $buildDir)) { Write-Host "---- $buildDir does not exist"; return }
+    $dirs = @(Get-ChildItem -LiteralPath $buildDir -Directory -Filter 'whisper-rs-sys-*' -ErrorAction SilentlyContinue)
+    Write-Host "---- whisper-rs-sys-* folders under $buildDir : $($dirs.Count)"
+    foreach ($d in $dirs) {
+      Write-Host "  $($d.Name) (last write $($d.LastWriteTime.ToString('s')))"
+      Write-Host ('    holds: ' + ((Get-ChildItem -LiteralPath $d.FullName -Force -ErrorAction SilentlyContinue | ForEach-Object { $_.Name }) -join ', '))
+      $out = Join-Path $d.FullName 'out'
+      Write-Host "    out\ exists: $(Test-Path -LiteralPath $out)"
+      if (Test-Path -LiteralPath $out) {
+        Write-Host ('    out\ holds: ' + ((Get-ChildItem -LiteralPath $out -Force -ErrorAction SilentlyContinue | ForEach-Object { $_.Name }) -join ', '))
+        $ob = Join-Path $out 'build'
+        Write-Host "    out\build\ exists: $(Test-Path -LiteralPath $ob)"
+        if (Test-Path -LiteralPath $ob) {
+          Write-Host ('    out\build\ holds: ' + ((Get-ChildItem -LiteralPath $ob -Force -ErrorAction SilentlyContinue | Select-Object -First 40 | ForEach-Object { $_.Name }) -join ', '))
+        }
+        $caches = @(Get-ChildItem -LiteralPath $out -Recurse -Filter 'CMakeCache.txt' -File -ErrorAction SilentlyContinue)
+        Write-Host "    CMakeCache.txt anywhere under out\: $($caches.Count)"
+        foreach ($c in $caches | Select-Object -First 10) { Write-Host "      $($c.FullName)" }
+      }
+      foreach ($n in 'output', 'stderr') {
+        $f = Join-Path $d.FullName $n
+        if (Test-Path -LiteralPath $f) {
+          Write-Host "    last 30 lines of $n :"
+          Get-Content -LiteralPath $f -Tail 30 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "      $_" }
+        }
+      }
+    }
+  } catch {
+    Write-Host "---- diagnostics failed: $($_.Exception.Message)"
+  }
+}
+
 function Get-CacheValue([string]$Cache, [string]$Name) {
   $m = Select-String -LiteralPath $Cache -Pattern ("^{0}:[A-Z]+=(.*)$" -f [regex]::Escape($Name)) | Select-Object -First 1
   if ($m) { $m.Matches[0].Groups[1].Value.Trim() } else { $null }
@@ -154,7 +199,10 @@ try {
 
     $exe = Join-Path $target 'release\wb-engine.exe'
     $sysOut = @(Get-ChildItem (Join-Path $target 'release\build') -Directory -Filter 'whisper-rs-sys-*' | Where-Object { Test-Path (Join-Path $_.FullName 'out\build\CMakeCache.txt') } | Sort-Object LastWriteTime -Descending)[0]
-    if (-not $sysOut) { throw "$v : no whisper-rs-sys build output with a CMake cache" }
+    if (-not $sysOut) {
+      Write-EngineBuildDiagnostics -Target $target -Log $log
+      throw "$v : no whisper-rs-sys build output with a CMake cache"
+    }
     $cache = Join-Path $sysOut.FullName 'out\build\CMakeCache.txt'
     $configure = Get-Content -LiteralPath (Join-Path $sysOut.FullName 'output')
 
