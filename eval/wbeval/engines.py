@@ -261,12 +261,19 @@ class WbEngine(Engine):
         if self.fixture_dir is not None:
             return {"engine": self.name, "mode": "replay", "fixture": rel(self.fixture_dir)}
         version = subprocess.run([str(self.binary), "--version"], capture_output=True, text=True).stdout.strip()
-        return {"engine": self.name, "mode": "process", "binary": rel(self.binary), "version": version}
+        return {"engine": self.name, "mode": "process", "binary": rel(self.binary), "version": version,
+                "device": os.environ.get("WB_ENGINE_DEVICE") or "cpu"}
 
     def command(self, wav: Path, setup: Setup, langs: list[str], settings: Settings, out: Path) -> list[str]:
         models = ",".join(f"{lang}={setup.model_for(lang)}" for lang in langs)
-        return [str(self.binary), "batch", "--file", str(wav), "--models", models, "--langs", ",".join(langs),
-                "--out", str(out), "--settings", json.dumps(asdict(settings), separators=(",", ":"))]
+        cmd = [str(self.binary), "batch", "--file", str(wav), "--models", models, "--langs", ",".join(langs),
+               "--out", str(out), "--settings", json.dumps(asdict(settings), separators=(",", ":"))]
+        # WB_ENGINE_DEVICE=gpu:N runs the batch on a GPU of the engine build (`wb-engine info` lists the
+        # indexes); unset means the engine's default (the CPU). Used by the Phase 3 informational comparison.
+        device = os.environ.get("WB_ENGINE_DEVICE")
+        if device:
+            cmd += ["--device", device]
+        return cmd
 
     def transcribe(self, wav, setup, langs, lang_mode, settings, utt_id):
         if lang_mode == "fixed":

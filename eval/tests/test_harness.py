@@ -112,6 +112,16 @@ def test_wb_engine_command_matches_phase_2_spec(tmp_path):
     assert "--out" in cmd
 
 
+def test_wb_engine_device_comes_from_the_environment(tmp_path, monkeypatch):
+    eng = WbEngine(binary=Path("wb-engine.exe"))
+    args = (Path("clip.wav"), Setup("r", {"hi": "medium"}), ["hi"], harness.role_settings("rolling"), tmp_path / "o.jsonl")
+    monkeypatch.delenv("WB_ENGINE_DEVICE", raising=False)
+    assert "--device" not in eng.command(*args)
+    monkeypatch.setenv("WB_ENGINE_DEVICE", "gpu:1")
+    cmd = eng.command(*args)
+    assert cmd[cmd.index("--device") + 1] == "gpu:1"
+
+
 def test_wb_engine_without_binary_or_fixture_is_an_error(monkeypatch):
     monkeypatch.delenv("WB_ENGINE", raising=False)
     with pytest.raises(RuntimeError, match="Phase 2"):
