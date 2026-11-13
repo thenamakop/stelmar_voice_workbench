@@ -115,6 +115,21 @@ New-Item -ItemType Directory -Force -Path $binDir | Out-Null
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $BuildLock) | Out-Null
 Set-Content -LiteralPath $BuildLock -Value "build=build-engines $($Variants -join ',')`r`nstarted=$((Get-Date).ToString('o'))`r`npid=$PID`r`n" -Encoding ascii
 
+# The build folder of whisper-rs-sys (the one whose out\build holds the CMake cache), newest first.
+# Cargo's layout of intermediate files changed with the toolchain: before Rust 1.100 it was
+# release\build\whisper-rs-sys-<hash>\out\build; CI found no such folder after the stable toolchain moved to
+# 1.100 on 12 Nov 2026 (release\build\whisper-rs-sys\<hash>\out\build is the layout the new cargo is
+# believed to use). So the cache is searched for instead of assumed: any release\build\...\out\build\CMakeCache.txt
+# under a folder named for whisper-rs-sys. Returns the folder that holds out\ (and the build script's output file).
+function Find-WhisperSysBuildDir([string]$Target) {
+  $buildDir = Join-Path $Target 'release\build'
+  if (-not (Test-Path -LiteralPath $buildDir)) { return $null }
+  $hits = @(Get-ChildItem -LiteralPath $buildDir -Recurse -Filter 'CMakeCache.txt' -File -ErrorAction SilentlyContinue |
+      Where-Object { $_.FullName -match '[\\/]whisper-rs-sys[^\\/]*[\\/](?:[^\\/]+[\\/])?out[\\/]build[\\/]CMakeCache\.txt$' })
+  $dirs = @($hits | ForEach-Object { Get-Item -LiteralPath (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $_.FullName))) })
+  @($dirs | Sort-Object LastWriteTime -Descending)[0]
+}
+
 # What to look at when the CMake cache is not where the checks expect it (a CI run failed this way on
 # 13 Nov 2026 and the build log was only on the runner): the end of the cargo log, and what every
 # whisper-rs-sys build folder holds. Printed, never thrown: the caller still fails with its own message.
@@ -129,8 +144,9 @@ function Write-EngineBuildDiagnostics([string]$Target, [string]$Log) {
     }
     $buildDir = Join-Path $Target 'release\build'
     if (-not (Test-Path -LiteralPath $buildDir)) { Write-Host "---- $buildDir does not exist"; return }
-    $dirs = @(Get-ChildItem -LiteralPath $buildDir -Directory -Filter 'whisper-rs-sys-*' -ErrorAction SilentlyContinue)
-    Write-Host "---- whisper-rs-sys-* folders under $buildDir : $($dirs.Count)"
+    Write-Host ("---- everything directly under ${buildDir}: " + ((Get-ChildItem -LiteralPath $buildDir -Force -ErrorAction SilentlyContinue | Select-Object -First 80 | ForEach-Object { $_.Name }) -join ', '))
+    $dirs = @(Get-ChildItem -LiteralPath $buildDir -Directory -Filter 'whisper-rs-sys*' -ErrorAction SilentlyContinue)
+    Write-Host "---- whisper-rs-sys* folders under $buildDir : $($dirs.Count)"
     foreach ($d in $dirs) {
       Write-Host "  $($d.Name) (last write $($d.LastWriteTime.ToString('s')))"
       Write-Host ('    holds: ' + ((Get-ChildItem -LiteralPath $d.FullName -Force -ErrorAction SilentlyContinue | ForEach-Object { $_.Name }) -join ', '))
@@ -198,7 +214,7 @@ try {
     $seconds = [math]::Round(((Get-Date) - $started).TotalSeconds)
 
     $exe = Join-Path $target 'release\wb-engine.exe'
-    $sysOut = @(Get-ChildItem (Join-Path $target 'release\build') -Directory -Filter 'whisper-rs-sys-*' | Where-Object { Test-Path (Join-Path $_.FullName 'out\build\CMakeCache.txt') } | Sort-Object LastWriteTime -Descending)[0]
+    $sysOut = Find-WhisperSysBuildDir -Target $target
     if (-not $sysOut) {
       Write-EngineBuildDiagnostics -Target $target -Log $log
       throw "$v : no whisper-rs-sys build output with a CMake cache"

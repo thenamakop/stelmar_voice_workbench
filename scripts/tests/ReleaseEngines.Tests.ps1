@@ -55,5 +55,38 @@ Test-Case 'build-engines.ps1 prints the cargo log tail and the whisper-rs-sys fo
     if ($text -notlike '*log line 101*') { throw 'the last 200 lines are not all there' }
   } finally { Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue }
 }
+Test-Case 'build-engines.ps1 finds the whisper-rs-sys CMake cache in the old and the new cargo build layout' {
+  $path = Join-Path $repo 'scripts\build-engines.ps1'
+  $ast = [System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$null, [ref]$null)
+  $fn = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Find-WhisperSysBuildDir' }, $true)
+  if (-not $fn) { throw 'Find-WhisperSysBuildDir is not in build-engines.ps1' }
+  Invoke-Expression $fn.Extent.Text
+  $tmp = Join-Path ([IO.Path]::GetTempPath()) ('wb-eng-find-' + [guid]::NewGuid().ToString('N'))
+  try {
+    # Before Rust 1.100: release\build\whisper-rs-sys-<hash>\out\build\CMakeCache.txt
+    $old = Join-Path $tmp 'old\release\build\whisper-rs-sys-abc123'
+    New-Item -ItemType Directory -Force -Path (Join-Path $old 'out\build') | Out-Null
+    Set-Content -LiteralPath (Join-Path $old 'out\build\CMakeCache.txt') -Value 'x'
+    # a compile-only folder of the same package (no cache) and another package with a cache
+    New-Item -ItemType Directory -Force -Path (Join-Path $tmp 'old\release\build\whisper-rs-sys-def456\out') | Out-Null
+    New-Item -ItemType Directory -Force -Path (Join-Path $tmp 'old\release\build\other-sys-111\out\build') | Out-Null
+    Set-Content -LiteralPath (Join-Path $tmp 'old\release\build\other-sys-111\out\build\CMakeCache.txt') -Value 'x'
+    $r = Find-WhisperSysBuildDir -Target (Join-Path $tmp 'old')
+    if (-not $r -or $r.Name -ne 'whisper-rs-sys-abc123') { throw "old layout: got '$($r.FullName)'" }
+    # The layout of the newer cargo: release\build\whisper-rs-sys\<hash>\out\build\CMakeCache.txt
+    $new = Join-Path $tmp 'new\release\build\whisper-rs-sys\9f8e7d'
+    New-Item -ItemType Directory -Force -Path (Join-Path $new 'out\build\ggml\src\ggml-vulkan') | Out-Null
+    Set-Content -LiteralPath (Join-Path $new 'out\build\CMakeCache.txt') -Value 'x'
+    # a nested project's own cache must not be taken for the top-level one
+    Set-Content -LiteralPath (Join-Path $new 'out\build\ggml\src\ggml-vulkan\CMakeCache.txt') -Value 'x'
+    $r = Find-WhisperSysBuildDir -Target (Join-Path $tmp 'new')
+    if (-not $r -or $r.Name -ne '9f8e7d') { throw "new layout: got '$($r.FullName)'" }
+    if (-not (Test-Path -LiteralPath (Join-Path $r.FullName 'out\build\CMakeCache.txt'))) { throw 'the folder returned does not hold out\build\CMakeCache.txt' }
+    # nothing built
+    if (Find-WhisperSysBuildDir -Target (Join-Path $tmp 'none')) { throw 'found something in a folder that does not exist' }
+    New-Item -ItemType Directory -Force -Path (Join-Path $tmp 'empty\release\build') | Out-Null
+    if (Find-WhisperSysBuildDir -Target (Join-Path $tmp 'empty')) { throw 'found something in an empty build folder' }
+  } finally { Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue }
+}
 if ($script:failures) { Write-Host "$($script:failures) case(s) failed"; exit 1 }
 Write-Host 'All cases passed'
