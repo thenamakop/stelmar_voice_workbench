@@ -19,6 +19,11 @@
     "allow-recovery-list",
     "allow-recover-session",
     "allow-list-engines",
-    "allow-recheck-registry"
+    "allow-recheck-registry",
+    "allow-get-capability",
+    "allow-run-system-check",
+    "allow-cancel-system-check",
+    "allow-set-override",
+    "allow-session-plan"
   ]
 }

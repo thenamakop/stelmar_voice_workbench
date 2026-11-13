@@ -14,6 +14,11 @@ const COMMANDS: &[&str] = &[
     "recover_session",
     "list_engines",
     "recheck_registry",
+    "get_capability",
+    "run_system_check",
+    "cancel_system_check",
+    "set_override",
+    "session_plan",
 ];
 
 fn main() {
