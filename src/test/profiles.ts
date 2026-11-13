@@ -76,3 +76,23 @@ export function planFor(cap: Capability, english: boolean, hindiUrdu: boolean, s
     partial: d.partial,
   };
 }
+
+/** The profile as the app reads it after a fingerprint change (mirror of `wb_capability::safe_defaults`):
+ * live text off for every language with a reason no override can lift, no processing while recording,
+ * overrides not applied, the verdict saying why. Recording and post-processing stay as measured. */
+export function safeDefaults(cap: Capability, why: string): Capability {
+  const c: Capability = structuredClone(cap);
+  c.overrides = [];
+  c.decision.process_while_recording = false;
+  c.decision.provisional = true;
+  for (const l of Object.values(c.decision.languages)) {
+    if (!l) continue;
+    l.live.offered = false;
+    l.live.kind = null;
+    l.live.model = null;
+    l.live.hard_reasons.unshift(why);
+  }
+  c.decision.verdict.unshift(why);
+  return c;
+}
+

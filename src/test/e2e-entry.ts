@@ -4,6 +4,7 @@
 // &state=idle|recording|input_lost|recovery (the recorder's state, src/test/mockBridge.ts);
 // &capability=<fixture name from crates/wb-capability/fixtures, for example tier-c-low> (a saved profile);
 // &fingerprint=changed (the saved profile no longer matches this machine);
+// &partial=<fixture name> (a partial check kept apart from the complete profile);
 // &check=running (a system check is running right now);
 // &engines=none (every speech engine renamed away: list_engines finds none).
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
@@ -18,6 +19,7 @@ mockIPC(
     state: (params.get("state") ?? "idle") as MockState,
     capability: params.get("capability") ?? undefined,
     checkRunning: params.get("check") === "running",
+    partialCapability: params.get("partial") ?? undefined,
     fingerprintChange: params.get("fingerprint") === "changed" ? ["the graphics driver changed"] : undefined,
     engines: params.get("engines") === "none" ? "none" : "present",
   }),

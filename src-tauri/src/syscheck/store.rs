@@ -4,7 +4,10 @@
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use wb_capability::{Capability, CapabilityError, Fingerprint, parse_capability};
+use wb_capability::{
+    Capability, CapabilityError, Fingerprint, InUse, SavedFile, choose_in_use, parse_capability,
+    route_new_check,
+};
 
 use crate::capability::CAPABILITY_FILE;
 
@@ -37,8 +40,65 @@ pub fn load(dir: &Path) -> Result<Option<Capability>, StoreError> {
     Ok(Some(parse_capability(&text)?))
 }
 
+/// A partial or cancelled check, kept apart so that it never replaces a complete profile.
+pub const PARTIAL_FILE: &str = "capability.partial.json";
+
+pub fn partial_path_in(dir: &Path) -> PathBuf {
+    dir.join(PARTIAL_FILE)
+}
+
+/// The separately saved partial check. A file that cannot be read is logged and treated as absent: the
+/// profile in use does not depend on it.
+pub fn load_partial(dir: &Path) -> Option<Capability> {
+    let path = partial_path_in(dir);
+    let text = match std::fs::read_to_string(&path) {
+        Ok(t) => t,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return None,
+        Err(e) => {
+            tracing::warn!("{}: {e}", path.display());
+            return None;
+        }
+    };
+    match parse_capability(&text) {
+        Ok(c) => Some(c),
+        Err(e) => {
+            tracing::warn!("{}: {e}", path.display());
+            None
+        }
+    }
+}
+
+/// The profile in use and why (see `wb_capability::inuse`). `now` is this computer's fingerprint.
+pub fn in_use(dir: &Path, now: Option<&Fingerprint>) -> Result<Option<InUse>, StoreError> {
+    Ok(choose_in_use(load(dir)?, load_partial(dir), now))
+}
+
+/// Saves a new check's profile where it belongs: a partial or cancelled check goes to the partial file when a
+/// complete profile is in use, anything else becomes the profile in use (and the partial file, which belonged to
+/// the profile it replaces, goes).
+pub fn save_routed(dir: &Path, new: &Capability) -> Result<SavedFile, StoreError> {
+    let existing = load(dir).ok().flatten();
+    let target = route_new_check(existing.as_ref(), new);
+    match target {
+        SavedFile::Main => {
+            save(dir, new)?;
+            match std::fs::remove_file(partial_path_in(dir)) {
+                Ok(()) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => tracing::warn!("capability.partial.json was not removed: {e}"),
+            }
+        }
+        SavedFile::Partial => write_file(dir, PARTIAL_FILE, new)?,
+    }
+    Ok(target)
+}
+
 pub fn save(dir: &Path, cap: &Capability) -> Result<(), StoreError> {
-    let path = path_in(dir);
+    write_file(dir, CAPABILITY_FILE, cap)
+}
+
+fn write_file(dir: &Path, name: &str, cap: &Capability) -> Result<(), StoreError> {
+    let path = dir.join(name);
     let io = |p: &Path| {
         let p = p.to_path_buf();
         move |source| StoreError::Io {
@@ -49,19 +109,13 @@ pub fn save(dir: &Path, cap: &Capability) -> Result<(), StoreError> {
     std::fs::create_dir_all(dir).map_err(io(dir))?;
     let text =
         serde_json::to_string_pretty(cap).map_err(|e| StoreError::Serialize(e.to_string()))?;
-    let tmp = dir.join(format!("{CAPABILITY_FILE}.tmp"));
+    let tmp = dir.join(format!("{name}.tmp"));
     {
         let mut f = std::fs::File::create(&tmp).map_err(io(&tmp))?;
         f.write_all(text.as_bytes()).map_err(io(&tmp))?;
         f.sync_all().map_err(io(&tmp))?;
     }
     std::fs::rename(&tmp, &path).map_err(io(&path))
-}
-
-/// What differs between the saved profile's machine and this one, in words; empty when the saved
-/// profile still describes this machine.
-pub fn fingerprint_changes(saved: &Capability, now: &Fingerprint) -> Vec<String> {
-    now.differences(&saved.profile.fingerprint)
 }
 
 #[cfg(test)]
@@ -91,6 +145,54 @@ mod tests {
             load(&d),
             Err(StoreError::Format(CapabilityError::Schema(0)))
         ));
+        std::fs::remove_dir_all(&d).unwrap();
+    }
+
+    fn sample(partial: bool) -> Capability {
+        let text = include_str!("../../../crates/wb-capability/fixtures/tier-c-low.json");
+        let mut c = parse_capability(text).unwrap();
+        c.profile.check.partial = partial;
+        c
+    }
+
+    #[test]
+    fn a_partial_check_is_saved_apart_and_the_complete_profile_stays_in_use() {
+        let d = dir("routed");
+        let complete = sample(false);
+        assert_eq!(save_routed(&d, &complete).unwrap(), SavedFile::Main);
+        let mut partial = sample(true);
+        partial.profile.created_at = "later".into();
+        assert_eq!(save_routed(&d, &partial).unwrap(), SavedFile::Partial);
+        assert_eq!(
+            load(&d).unwrap().unwrap(),
+            complete,
+            "the complete profile is untouched"
+        );
+        assert_eq!(load_partial(&d).unwrap(), partial);
+        let used = in_use(&d, None).unwrap().unwrap();
+        assert_eq!(used.file, SavedFile::Main);
+        // A complete check later replaces the profile and the partial file goes.
+        assert_eq!(save_routed(&d, &complete).unwrap(), SavedFile::Main);
+        assert!(load_partial(&d).is_none());
+        std::fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn with_no_complete_profile_a_partial_check_is_the_profile_in_use() {
+        let d = dir("only-partial");
+        assert_eq!(save_routed(&d, &sample(true)).unwrap(), SavedFile::Main);
+        assert!(load(&d).unwrap().unwrap().profile.check.partial);
+        assert!(load_partial(&d).is_none());
+        std::fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn an_unreadable_partial_file_does_not_stop_the_profile_in_use() {
+        let d = dir("bad-partial");
+        save(&d, &sample(false)).unwrap();
+        std::fs::write(partial_path_in(&d), "not json").unwrap();
+        assert!(load_partial(&d).is_none());
+        assert!(in_use(&d, None).unwrap().is_some());
         std::fs::remove_dir_all(&d).unwrap();
     }
 

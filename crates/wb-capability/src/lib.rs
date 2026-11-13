@@ -6,11 +6,13 @@
 //! reads a file, runs a process or knows a model's speed in advance.
 
 pub mod fingerprint;
+pub mod inuse;
 pub mod rules;
 pub mod session;
 pub mod types;
 
 pub use fingerprint::{Fingerprint, GpuPrint};
+pub use inuse::{InUse, SavedFile, choose_in_use, route_new_check, safe_defaults};
 pub use rules::{bars, decide, memory_ok, model_fits, ready_after_stop_min};
 pub use session::{
     HindiUrduScript, LiveState, SessionModel, SessionPlan, live_state_for, override_applies,

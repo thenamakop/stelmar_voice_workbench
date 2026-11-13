@@ -7,6 +7,7 @@ import type {
   Capability,
   DeviceConfig,
   OverrideKind,
+  SavedCheck,
   SessionPlan,
 } from "../ipc";
 
@@ -280,6 +281,29 @@ export const OVERRIDE_TEXT: Record<OverrideKind, { label: string; risk: string }
     risk: "Live captions are offered although the system check measured this computer as too slow for them. Captions can lag, drop words or load the processor while recording. Recording itself stays protected.",
   },
 };
+
+/** The System screen's list of saved checks: the complete profile in use and a partial check kept apart. */
+export function savedCheckRows(
+  checks: SavedCheck[],
+  when: (iso: string) => string,
+): { label: string; value: string; note: string }[] {
+  const hasComplete = checks.some((c) => c.file === "main" && !c.partial);
+  return checks.map((c) => {
+    const label = c.file === "partial" ? "Partial check" : c.partial ? "Check in use (partial)" : "Complete check";
+    const note = c.in_use
+      ? c.file === "partial"
+        ? "In use, with safe defaults"
+        : "In use"
+      : c.file === "partial" && hasComplete
+        ? "Kept apart; the complete check stays in use"
+        : "Not in use";
+    return {
+      label,
+      value: `${c.kind === "full" ? "Full" : "Quick"} · tier ${c.tier} · ${when(c.started_at)}`,
+      note,
+    };
+  });
+}
 
 /** Current state of an override: the last logged change, else the verdict's default. */
 export function overrideOn(cap: Capability, kind: OverrideKind): boolean {

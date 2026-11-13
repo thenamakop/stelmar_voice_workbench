@@ -416,8 +416,23 @@ export interface Capability {
   overrides: { kind: OverrideKind; enabled: boolean; at: string; confirmed: boolean }[];
 }
 
+/** One saved check and the file it lives in (a partial or cancelled check never replaces a complete profile). */
+export interface SavedCheck {
+  file: "main" | "partial";
+  started_at: string;
+  kind: "quick" | "full";
+  tier: Tier;
+  partial: boolean;
+  duration_s: number;
+  fingerprint_id: string;
+  /** The profile the rest of the app reads. */
+  in_use: boolean;
+}
+
 export interface CapabilityView {
+  /** The profile in use; after a fingerprint change it carries safe defaults (record + post-process only). */
   capability: Capability | null;
+  saved_checks: SavedCheck[];
   error: string | null;
   running: boolean;
   fingerprint_changes: string[];

@@ -22,8 +22,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use serde::Serialize;
 use tauri::{AppHandle, Manager};
 use wb_capability::{
-    Capability, CheckKind, HindiUrduScript, Options, OverrideKind, OverrideRecord, SessionPlan,
-    assemble, plan_session, session_langs,
+    Capability, CheckKind, HindiUrduScript, Options, OverrideKind, OverrideRecord, SavedFile,
+    SessionPlan, Tier, assemble, plan_session, session_langs,
 };
 use wb_models::Manifest;
 
@@ -44,7 +44,11 @@ pub struct CheckState {
 /// What the System screen and the Start Session dialog read.
 #[derive(Debug, Clone, Serialize)]
 pub struct CapabilityView {
+    /// The profile in use. After a fingerprint change it carries safe defaults (record + post-process only).
     pub capability: Option<Capability>,
+    /// The saved checks, each with the file it lives in: the complete profile and a partial check kept apart
+    /// (a partial or cancelled check never replaces a complete profile).
+    pub saved_checks: Vec<SavedCheck>,
     /// Why the saved file could not be used, when it could not.
     pub error: Option<String>,
     pub running: bool,
@@ -53,6 +57,33 @@ pub struct CapabilityView {
     pub fingerprint_id: Option<String>,
     /// A development or gate build.
     pub development: bool,
+}
+
+/// One saved check, as the System screen lists it.
+#[derive(Debug, Clone, Serialize)]
+pub struct SavedCheck {
+    pub file: SavedFile,
+    pub started_at: String,
+    pub kind: CheckKind,
+    pub tier: Tier,
+    pub partial: bool,
+    pub duration_s: f64,
+    pub fingerprint_id: String,
+    /// This is the profile the rest of the app reads.
+    pub in_use: bool,
+}
+
+fn saved_check(c: &Capability, file: SavedFile, in_use: bool) -> SavedCheck {
+    SavedCheck {
+        file,
+        started_at: c.profile.check.started_at.clone(),
+        kind: c.profile.check.kind,
+        tier: c.decision.tier,
+        partial: c.profile.check.partial,
+        duration_s: c.profile.check.duration_s,
+        fingerprint_id: c.profile.fingerprint.id(),
+        in_use,
+    }
 }
 
 fn state(app: &AppHandle) -> tauri::State<'_, AppState> {
@@ -167,7 +198,11 @@ pub fn start_with_mode(
     let mode = match request.mode.as_deref() {
         None | Some("record_post") => "record_post",
         Some("live_post") => {
-            live_allowed(&data_dir(app), &languages)?;
+            live_allowed(
+                &data_dir(app),
+                &languages,
+                current_fingerprint(app).as_ref(),
+            )?;
             "live_post"
         }
         Some(other) => return Err(format!("Unknown recording mode '{other}'.")),
@@ -222,31 +257,54 @@ pub fn last_error(app: &AppHandle) -> Option<String> {
 pub fn view(app: &AppHandle) -> CapabilityView {
     let running = lock(&app.state::<CheckState>().running).is_some();
     let development = cfg!(any(debug_assertions, feature = "gate-hooks"));
-    match store::load(&data_dir(app)) {
-        Ok(Some(cap)) => {
-            let changes = current_fingerprint(app)
-                .map(|now| store::fingerprint_changes(&cap, &now))
-                .unwrap_or_default();
-            CapabilityView {
-                fingerprint_id: Some(cap.profile.fingerprint.id()),
-                capability: Some(cap),
-                error: None,
+    let dir = data_dir(app);
+    let now = current_fingerprint(app);
+    let main = match store::load(&dir) {
+        Ok(m) => m,
+        Err(e) => {
+            return CapabilityView {
+                capability: None,
+                saved_checks: vec![],
+                error: Some(e.to_string()),
                 running,
-                fingerprint_changes: changes,
+                fingerprint_changes: vec![],
+                fingerprint_id: None,
                 development,
-            }
+            };
         }
-        Ok(None) => CapabilityView {
-            capability: None,
+    };
+    let partial = store::load_partial(&dir);
+    let mut saved_checks = Vec::new();
+    let used = wb_capability::choose_in_use(main.clone(), partial.clone(), now.as_ref());
+    let used_file = used.as_ref().map(|u| u.file);
+    if let Some(m) = &main {
+        saved_checks.push(saved_check(
+            m,
+            SavedFile::Main,
+            used_file == Some(SavedFile::Main),
+        ));
+    }
+    if let Some(p) = &partial {
+        saved_checks.push(saved_check(
+            p,
+            SavedFile::Partial,
+            used_file == Some(SavedFile::Partial),
+        ));
+    }
+    match used {
+        Some(u) => CapabilityView {
+            fingerprint_id: Some(u.cap.profile.fingerprint.id()),
+            capability: Some(u.cap),
+            saved_checks,
             error: None,
             running,
-            fingerprint_changes: vec![],
-            fingerprint_id: None,
+            fingerprint_changes: u.changes,
             development,
         },
-        Err(e) => CapabilityView {
+        None => CapabilityView {
             capability: None,
-            error: Some(e.to_string()),
+            saved_checks,
+            error: None,
             running,
             fingerprint_changes: vec![],
             fingerprint_id: None,
@@ -381,15 +439,21 @@ fn run_check(
         state(app).broadcast(serde_json::json!({ "kind": "check_done" }));
         return Ok(());
     }
+    // The operator's overrides were confirmed for one state of the machine: they carry to the new profile only
+    // while the fingerprint is the same.
     let old = store::load(&data_dir(app)).ok().flatten();
-    let overrides = old.map(|c| c.overrides).unwrap_or_default();
+    let overrides = old
+        .filter(|c| c.profile.fingerprint == outcome.profile.fingerprint)
+        .map(|c| c.overrides)
+        .unwrap_or_default();
     let cap = assemble(outcome.profile, &env.rankings, &env.options, overrides);
-    store::save(&data_dir(app), &cap).map_err(|e| e.to_string())?;
+    let file = store::save_routed(&data_dir(app), &cap).map_err(|e| e.to_string())?;
     tracing::info!(
+        file = ?file,
         tier = cap.decision.tier.label(),
         seconds = cap.profile.check.duration_s,
         partial = cap.profile.check.partial,
-        "system check done; capability.json saved"
+        "system check done; profile saved"
     );
     state(app).broadcast(serde_json::json!({ "kind": "check_done" }));
     Ok(())
@@ -406,6 +470,17 @@ pub async fn set_override(
 ) -> Result<CapabilityView, String> {
     blocking("set_override", move || {
         let dir = data_dir(&app);
+        // Overrides belong to the profile in use as it fits this computer: after a fingerprint change none can
+        // be set until a new check has run.
+        let used = store::in_use(&dir, current_fingerprint(&app).as_ref())
+            .map_err(|e| e.to_string())?
+            .ok_or("There is no capability profile yet.")?;
+        if !used.changes.is_empty() {
+            return Err(
+                "This computer has changed since the last check, so no setting can be changed until the check has run again."
+                    .into(),
+            );
+        }
         let mut cap = store::load(&dir)
             .map_err(|e| e.to_string())?
             .ok_or("There is no capability profile yet.")?;
@@ -450,11 +525,13 @@ pub async fn session_plan(
     script: HindiUrduScript,
 ) -> Result<Option<SessionPlan>, String> {
     blocking("session_plan", move || {
-        let Some(cap) = store::load(&data_dir(&app)).map_err(|e| e.to_string())? else {
+        let Some(used) = store::in_use(&data_dir(&app), current_fingerprint(&app).as_ref())
+            .map_err(|e| e.to_string())?
+        else {
             return Ok(None);
         };
         Ok(Some(plan_session(
-            &cap,
+            &used.cap,
             &session_langs(english, hindi_urdu, script),
         )))
     })
@@ -462,10 +539,17 @@ pub async fn session_plan(
 }
 
 /// Refuses live text unless the saved profile clears every language of the session.
-pub fn live_allowed(data_dir: &std::path::Path, languages: &[String]) -> Result<(), String> {
-    let cap = store::load(data_dir)
+/// A profile that no longer fits this computer (its fingerprint changed) clears nothing: it carries safe
+/// defaults, which refuse live text.
+pub fn live_allowed(
+    data_dir: &std::path::Path,
+    languages: &[String],
+    now: Option<&wb_capability::Fingerprint>,
+) -> Result<(), String> {
+    let cap = store::in_use(data_dir, now)
         .map_err(|e| e.to_string())?
-        .ok_or("Live captions are not offered until the system check has run.")?;
+        .ok_or("Live captions are not offered until the system check has run.")?
+        .cap;
     let langs: Vec<wb_capability::Lang> = languages
         .iter()
         .filter_map(|l| wb_capability::Lang::parse(l))
@@ -478,5 +562,66 @@ pub fn live_allowed(data_dir: &std::path::Path, languages: &[String]) -> Result<
             .live
             .reason
             .unwrap_or_else(|| "Live captions are not offered on this machine.".into()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use super::*;
+
+    fn dir(name: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("wb-mod-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    fn tier_g() -> Capability {
+        let text = include_str!("../../../crates/wb-capability/fixtures/tier-g.json");
+        wb_capability::parse_capability(text).unwrap()
+    }
+
+    #[test]
+    fn live_text_is_refused_after_a_fingerprint_change_until_a_new_check_has_run() {
+        let d = dir("live-stale");
+        let cap = tier_g();
+        store::save(&d, &cap).unwrap();
+        let langs = vec!["en".to_string()];
+        let same = cap.profile.fingerprint.clone();
+        assert!(
+            live_allowed(&d, &langs, Some(&same)).is_ok(),
+            "fits: English live is cleared"
+        );
+        assert!(
+            live_allowed(&d, &langs, None).is_ok(),
+            "no fingerprint yet: the profile as it is"
+        );
+        let mut changed = same;
+        changed.os = format!("{} (updated)", changed.os);
+        let refused = live_allowed(&d, &langs, Some(&changed)).unwrap_err();
+        assert!(refused.contains("changed"), "{refused}");
+        // A new complete check saved on the changed computer clears it again.
+        let mut fresh = cap;
+        fresh.profile.fingerprint = changed.clone();
+        store::save_routed(&d, &fresh).unwrap();
+        assert!(live_allowed(&d, &langs, Some(&changed)).is_ok());
+        std::fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn a_stale_profile_gives_the_dialog_no_live_option_but_keeps_post_processing() {
+        let d = dir("plan-stale");
+        let cap = tier_g();
+        store::save(&d, &cap).unwrap();
+        let mut changed = cap.profile.fingerprint.clone();
+        changed.os = format!("{} (updated)", changed.os);
+        let used = store::in_use(&d, Some(&changed)).unwrap().unwrap();
+        assert!(!used.changes.is_empty());
+        let plan = plan_session(&used.cap, &[wb_capability::Lang::En]);
+        assert!(!plan.live.selectable);
+        assert!(!plan.record_only);
+        assert!(!used.cap.decision.process_while_recording);
+        std::fs::remove_dir_all(&d).unwrap();
     }
 }

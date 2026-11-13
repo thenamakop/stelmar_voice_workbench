@@ -10,11 +10,12 @@ import type {
   PartRecord,
   RecorderStatus,
   RecoveredSession,
+  SavedCheck,
   SessionInfo,
   Settings,
   Snapshot,
 } from "../ipc";
-import { planFor, profile } from "./profiles";
+import { planFor, profile, safeDefaults } from "./profiles";
 
 export type MockState = "idle" | "recording" | "input_lost" | "recovery";
 
@@ -30,6 +31,8 @@ export interface MockOptions {
   fingerprintChange?: string[];
   /** The system check is running right now. */
   checkRunning?: boolean;
+  /** A partial check kept apart from the complete profile (a fixture name from src/test/profiles.ts). */
+  partialCapability?: string;
   /** Commands seen, in order (for assertions). */
   calls?: string[];
 }
@@ -186,8 +189,31 @@ export function bridge(opts: MockOptions = {}) {
     : opts.profile === true
       ? profile("tier-c-low")
       : null;
+  const partialBase = opts.partialCapability ? profile(opts.partialCapability) : null;
+  const partialCap: Capability | null = partialBase
+    ? { ...partialBase, check: { ...partialBase.check, partial: true } }
+    : null;
+  const changed = (opts.fingerprintChange ?? []).length > 0;
+  // After a fingerprint change the app reads the profile with safe defaults (wb_capability::safe_defaults).
+  const inUse: Capability | null =
+    cap && changed ? safeDefaults(cap, `This computer has changed since the check (${opts.fingerprintChange?.[0]}). Safe defaults apply: recording and post-processing only, until a new check has run.`) : cap;
+  const summary = (c: Capability, file: "main" | "partial", used: boolean): SavedCheck => ({
+    file,
+    started_at: c.check.started_at,
+    kind: c.check.kind,
+    tier: c.decision.tier,
+    partial: c.check.partial,
+    duration_s: c.check.duration_s,
+    fingerprint_id: "3F2A-91C7",
+    in_use: used,
+  });
+  const savedChecks: SavedCheck[] = [
+    ...(cap ? [summary(cap, "main", true)] : []),
+    ...(partialCap ? [summary(partialCap, "partial", false)] : []),
+  ];
   const view = () => ({
-    capability: cap,
+    capability: inUse,
+    saved_checks: savedChecks,
     error: null,
     running: opts.checkRunning ?? false,
     fingerprint_changes: opts.fingerprintChange ?? [],
@@ -217,7 +243,7 @@ export function bridge(opts: MockOptions = {}) {
       }
       case "session_plan": {
         const a = args as { english: boolean; hindiUrdu: boolean; script: HindiUrduScript };
-        return cap ? planFor(cap, a.english, a.hindiUrdu, a.script) : null;
+        return inUse ? planFor(inUse, a.english, a.hindiUrdu, a.script) : null;
       }
       case "list_inputs":
         return INPUTS;

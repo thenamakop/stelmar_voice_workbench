@@ -8,6 +8,7 @@ import {
   machineLabel,
   overrideOn,
   readyRows,
+  savedCheckRows,
   transcriptionRows,
   liveLanguages,
   joinNames,
@@ -162,5 +163,33 @@ describe("the top bar label", () => {
     expect(machineLabel(cap)).toBe("12th Gen Intel Core i5-1235U · UHD");
     cap.hardware.cpu_brand = "Intel(R) Core(TM) i7-1255U CPU @ 1.70GHz";
     expect(machineLabel(cap)).toMatch(/^Core i7-1255U · /);
+  });
+});
+
+describe("saved checks", () => {
+  const base = { started_at: "2026-11-14T03:00:00+05:30", duration_s: 300, fingerprint_id: "3F2A-91C7" } as const;
+  it("lists the complete check in use and a partial one kept apart", () => {
+    const rows = savedCheckRows(
+      [
+        { ...base, file: "main", kind: "full", tier: "C", partial: false, in_use: true },
+        { ...base, file: "partial", kind: "quick", tier: "C", partial: true, in_use: false },
+      ],
+      (iso) => iso.slice(0, 10),
+    );
+    expect(rows[0]).toEqual({ label: "Complete check", value: "Full · tier C · 2026-11-14", note: "In use" });
+    expect(rows[1]?.label).toBe("Partial check");
+    expect(rows[1]?.note).toBe("Kept apart; the complete check stays in use");
+  });
+
+  it("says when the partial check is the one in use, with safe defaults", () => {
+    const rows = savedCheckRows(
+      [
+        { ...base, file: "main", kind: "full", tier: "G", partial: false, in_use: false },
+        { ...base, file: "partial", kind: "quick", tier: "C", partial: true, in_use: true },
+      ],
+      (iso) => iso,
+    );
+    expect(rows[1]?.note).toBe("In use, with safe defaults");
+    expect(rows[0]?.note).toBe("Not in use");
   });
 });
