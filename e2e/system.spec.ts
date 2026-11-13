@@ -150,3 +150,51 @@ test("Start Session dialog without a saved profile says live needs the system ch
   await expect(dialog.getByText(/Not offered until the system check has run/)).toBeVisible();
   await expect(dialog.getByRole("radio", { name: /Live captions \+ post-process/ })).toBeDisabled();
 });
+
+test("System screen lists the complete check and a partial one kept apart", async ({ page }) => {
+  await openSystem(page, "tier-g", "&partial=tier-c-low");
+  await expect(page.getByText("Saved checks", { exact: true })).toBeVisible();
+  await expect(page.getByText("Complete check", { exact: true })).toBeVisible();
+  await expect(page.getByText("Partial check", { exact: true })).toBeVisible();
+  await expect(page.getByText("Kept apart; the complete check stays in use")).toBeVisible();
+  await expect(page.getByText("A partial check is kept apart")).toBeVisible();
+  await ready(page);
+  await page.screenshot({ path: `${SHOTS}/system-saved-checks.png` });
+});
+
+test("after a fingerprint change the System screen and the dialog say live and processing while recording are off", async ({ page }) => {
+  await openSystem(page, "tier-g", "&fingerprint=changed");
+  await expect(page.getByText(/live captions and processing while recording are off/)).toBeVisible();
+  const dialog = await openDialog(page, "tier-g", "&fingerprint=changed");
+  // English only would be offered on tier G; after the change nothing is.
+  await dialog.getByText("Hindi / Urdu", { exact: true }).click();
+  await expect(dialog.getByText(/This computer has changed since the check/).first()).toBeVisible();
+  await expect(dialog.getByText("Record + post-process", { exact: false }).first()).toBeVisible();
+});
+
+test("the Start Session dialog scrolls inside a 1366x768 window and keeps Start in reach", async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  const dialog = await openDialog(page, "tier-c-low", "&check=running");
+  const box = await dialog.boundingBox();
+  expect(box).not.toBeNull();
+  expect(box!.y).toBeGreaterThanOrEqual(0);
+  expect(box!.y + box!.height).toBeLessThanOrEqual(768);
+  // The footer (Cancel, Start) stays inside the window; the body is what scrolls.
+  const start = dialog.getByRole("button", { name: /Start/ }).last();
+  await expect(start).toBeVisible();
+  const startBox = await start.boundingBox();
+  expect(startBox!.y + startBox!.height).toBeLessThanOrEqual(768);
+  const scrolls = await dialog.evaluate((el) => {
+    const body = Array.from(el.querySelectorAll<HTMLElement>("div")).find((d) => getComputedStyle(d).overflowY === "auto");
+    return body ? body.scrollHeight > body.clientHeight : false;
+  });
+  expect(scrolls).toBe(true);
+  await page.screenshot({ path: `${SHOTS}/start-session-1366x768.png` });
+});
+
+test("the Start Session dialog needs no scrolling at 1536x864 with a saved profile", async ({ page }) => {
+  const dialog = await openDialog(page, "tier-c-low");
+  const box = await dialog.boundingBox();
+  expect(box!.y).toBeGreaterThanOrEqual(0);
+  expect(box!.y + box!.height).toBeLessThanOrEqual(864);
+});
