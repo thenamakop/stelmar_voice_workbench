@@ -24,7 +24,12 @@ try {
   $csv = Join-Path $work 'sampler.csv'
   $started = Get-Date
   $p = Start-WbSampler -OutCsv $csv -Seconds 7
-  Check 'the sampler is pinned outside the job cores (logical processors 0-11) and runs at High priority' (($p.ProcessorAffinity.ToInt64() -eq 0xFFF) -and ($p.PriorityClass -eq 'High'))
+  # The pin is best effort (Sampler.psm1 ignores a refused mask), so a machine with fewer than 12 logical
+  # processors, such as a 4-core CI runner, keeps its own mask: expect 0xFFF clipped to the processors there are.
+  $have = ([int64]1 -shl [Math]::Min([Environment]::ProcessorCount, 62)) - 1
+  $want = (0xFFF -band $have)
+  if ($p.ProcessorAffinity.ToInt64() -ne $want) { Write-Host ('  sampler mask {0:X}, expected {1:X}, processors {2}' -f $p.ProcessorAffinity.ToInt64(), $want, [Environment]::ProcessorCount) }
+  Check 'the sampler is pinned outside the job cores (logical processors 0-11, or all there are if fewer) and runs at High priority' (($p.ProcessorAffinity.ToInt64() -eq $want) -and ($p.PriorityClass -eq 'High'))
   [void]$p.WaitForExit(40000)
   $r = Read-WbSamplerCsv -Path $csv
   Check 'the CSV is read: about 7 rows and hundreds of counters' ($r.Rows.Count -ge 5 -and $r.Names.Count -gt 100)
