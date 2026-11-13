@@ -272,6 +272,21 @@ impl Run<'_> {
         (self.kind == CheckKind::Quick).then(|| QUICK_BAR_S - self.started.elapsed().as_secs_f64())
     }
 
+    /// The time limit of a cell that runs beside the recorder safety run. In the quick check it ends with the
+    /// safety run (plus a minute) and never runs past the budget: a CPU engine that cannot finish one short
+    /// clip in that time adds nothing to a hybrid configuration, and the hybrid test then records nothing
+    /// instead of holding the check for minutes. The full check keeps the long limit.
+    fn beside_safety(&self, long_limit_s: u64) -> Duration {
+        match self.remaining_s() {
+            Some(left) => Duration::from_secs(
+                long_limit_s
+                    .min((SAFETY_SECONDS + 60.0) as u64)
+                    .min(left.max(15.0) as u64),
+            ),
+            None => Duration::from_secs(long_limit_s),
+        }
+    }
+
     /// Whether a step that needs `seconds` at the least still fits the quick-check budget. A step that does
     /// not fit is left for the full check and the profile says `partial`.
     fn fits(&mut self, seconds: f64) -> bool {
@@ -809,6 +824,7 @@ impl Run<'_> {
             return Ok(());
         };
         let clip = self.clip(&clip_file(lang.code()), 0.0, 15.0)?;
+        let timeout = self.beside_safety(600);
         loop {
             let Some(request) = self.request(
                 &model,
@@ -825,7 +841,7 @@ impl Run<'_> {
                 variant: &variant,
                 request,
                 work_dir: &self.env.work_dir,
-                timeout: Duration::from_secs(600),
+                timeout,
             };
             match bench::run_bench(&cell, self.cancel) {
                 Ok(_) => {}
@@ -866,6 +882,7 @@ impl Run<'_> {
         let mut gpu_rtfs: Vec<f64> = Vec::new();
         let mut cpu_rtfs: Vec<f64> = Vec::new();
         let started = Instant::now();
+        let cpu_timeout = self.beside_safety(900);
         loop {
             let (Some(cpu_req), Some(gpu_req)) = (
                 self.request(
@@ -897,7 +914,7 @@ impl Run<'_> {
                         variant: &cpu_variant,
                         request: cpu_req,
                         work_dir: &work,
-                        timeout: Duration::from_secs(900),
+                        timeout: cpu_timeout,
                     };
                     let r = bench::run_bench(&cell, cancel);
                     finished.store(true, Ordering::Release);
