@@ -36,6 +36,9 @@ use crate::state::{AppState, lock};
 #[derive(Default)]
 pub struct CheckState {
     running: Mutex<Option<std::sync::Arc<AtomicBool>>>,
+    /// Why the last check failed (read by the gate hook; the UI gets the `check_failed` event).
+    #[cfg_attr(not(feature = "gate-hooks"), allow(dead_code))]
+    last_error: Mutex<Option<String>>,
 }
 
 /// What the System screen and the Start Session dialog read.
@@ -124,7 +127,19 @@ fn current_fingerprint(app: &AppHandle) -> Option<wb_capability::Fingerprint> {
     Some(fp)
 }
 
-fn view(app: &AppHandle) -> CapabilityView {
+/// True while a check is running (gate hook).
+#[cfg(feature = "gate-hooks")]
+pub fn is_running(app: &AppHandle) -> bool {
+    lock(&app.state::<CheckState>().running).is_some()
+}
+
+/// The message of the last failed check, if it failed (gate hook).
+#[cfg(feature = "gate-hooks")]
+pub fn last_error(app: &AppHandle) -> Option<String> {
+    lock(&app.state::<CheckState>().last_error).clone()
+}
+
+pub fn view(app: &AppHandle) -> CapabilityView {
     let running = lock(&app.state::<CheckState>().running).is_some();
     let development = cfg!(any(debug_assertions, feature = "gate-hooks"));
     match store::load(&data_dir(app)) {
@@ -193,7 +208,7 @@ pub async fn cancel_system_check(app: AppHandle) -> Result<(), String> {
     .await
 }
 
-fn start_check(app: &AppHandle, kind: CheckKind) -> Result<(), String> {
+pub fn start_check(app: &AppHandle, kind: CheckKind) -> Result<(), String> {
     if recording::is_recording(app) {
         return Err("The system check does not run while a session is recording.".into());
     }
@@ -213,6 +228,7 @@ fn start_check(app: &AppHandle, kind: CheckKind) -> Result<(), String> {
         }
         *running = Some(cancel.clone());
     }
+    *lock(&app.state::<CheckState>().last_error) = None;
     let env = check::CheckEnv {
         engines_dir,
         models_dir,
@@ -247,6 +263,7 @@ fn start_check(app: &AppHandle, kind: CheckKind) -> Result<(), String> {
                 ),
             };
             tracing::error!("system check failed: {message}");
+            *lock(&handle.state::<CheckState>().last_error) = Some(message.clone());
             state(&handle)
                 .broadcast(serde_json::json!({ "kind": "check_failed", "message": message }));
         });

@@ -14,6 +14,8 @@
 //! | `WB_GATE_PANIC_AT_S=<n>` | After n seconds, panic once inside the command boundary and once on a plain thread |
 //! | `WB_GATE_RECORDER_PANIC_AT_S=<n>` | After n seconds, panic once inside the recorder thread itself |
 //! | `WB_GATE_PART_SECONDS=<n>` | Part length for this run (kill tests aim kills at part rollovers) |
+//! | `WB_GATE_DATA_DIR=<path>` | App data folder for this run (settings, `capability.json`, engine logs), so a gate run never touches the real one |
+//! | `WB_GATE_CHECK=quick\|full\|view` | Run the system check at launch (`quick` or `full`), or only read the saved profile (`view`); write the result to `WB_GATE_REPORT` and exit |
 
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
@@ -22,8 +24,11 @@ use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager};
 use wb_recorder::util::write_json_atomic;
 
+use crate::engines::Registry;
 use crate::recording::{self, RecoverAction, StartRequest};
 use crate::state::{AppState, lock};
+use crate::syscheck;
+use wb_capability::CheckKind;
 
 /// Part length override for this run (`WB_GATE_PART_SECONDS`), at least 5 seconds.
 pub fn part_seconds() -> Option<u32> {
@@ -36,10 +41,20 @@ fn var(k: &str) -> Option<String> {
     std::env::var(k).ok().filter(|v| !v.trim().is_empty())
 }
 
+/// The app data folder for this run (`WB_GATE_DATA_DIR`), if the gate script set one.
+pub fn data_dir_override() -> Option<PathBuf> {
+    var("WB_GATE_DATA_DIR").map(PathBuf::from)
+}
+
 fn active() -> bool {
-    ["WB_GATE_START", "WB_GATE_RECOVERY", "WB_GATE_STOP_FILE"]
-        .iter()
-        .any(|k| var(k).is_some())
+    [
+        "WB_GATE_START",
+        "WB_GATE_RECOVERY",
+        "WB_GATE_STOP_FILE",
+        "WB_GATE_CHECK",
+    ]
+    .iter()
+    .any(|k| var(k).is_some())
 }
 
 /// Applies the run's folders before the start-up recovery scan reads them.
@@ -78,10 +93,10 @@ pub fn start(app: &AppHandle) {
 }
 
 fn write_report(value: &serde_json::Value) {
-    if let Some(path) = var("WB_GATE_REPORT") {
-        if let Err(e) = write_json_atomic(&PathBuf::from(&path), value) {
-            tracing::error!("gate report {path}: {e}");
-        }
+    if let Some(path) = var("WB_GATE_REPORT")
+        && let Err(e) = write_json_atomic(&PathBuf::from(&path), value)
+    {
+        tracing::error!("gate report {path}: {e}");
     }
 }
 
@@ -104,6 +119,9 @@ fn run(app: &AppHandle) -> Result<(), String> {
         }
         std::thread::sleep(Duration::from_millis(100));
     }
+    if let Some(mode) = var("WB_GATE_CHECK") {
+        return run_check(app, &mode);
+    }
     let mut recovery_report = serde_json::Value::Null;
     if let Some(action) = var("WB_GATE_RECOVERY") {
         let mut found = lock(&st.recovered).clone();
@@ -123,22 +141,22 @@ fn run(app: &AppHandle) -> Result<(), String> {
             recording::recover_blocking(app, &r.dir, act)?;
         }
     }
-    if let Some(title) = var("WB_GATE_START") {
-        if lock(&st.session).is_none() {
-            let device = match var("WB_GATE_DEVICE") {
-                Some(part) => Some(device_id(&part)?),
-                None => None,
-            };
-            let info = recording::start_blocking(
-                app,
-                StartRequest {
-                    title,
-                    device_id: device,
-                    ..StartRequest::default()
-                },
-            )?;
-            tracing::warn!(dir = info.dir, "gate: session started");
-        }
+    if let Some(title) = var("WB_GATE_START")
+        && lock(&st.session).is_none()
+    {
+        let device = match var("WB_GATE_DEVICE") {
+            Some(part) => Some(device_id(&part)?),
+            None => None,
+        };
+        let info = recording::start_blocking(
+            app,
+            StartRequest {
+                title,
+                device_id: device,
+                ..StartRequest::default()
+            },
+        )?;
+        tracing::warn!(dir = info.dir, "gate: session started");
     }
     let stop_file = var("WB_GATE_STOP_FILE").map(PathBuf::from);
     let status_file = var("WB_GATE_STATUS_FILE").map(PathBuf::from);
@@ -172,26 +190,26 @@ fn run(app: &AppHandle) -> Result<(), String> {
                 }),
             );
         }
-        if let (Some(at), false) = (panic_at, panicked) {
-            if started.elapsed() >= at {
-                panicked = true;
-                panic_report = inject_panics();
-            }
+        if let (Some(at), false) = (panic_at, panicked)
+            && started.elapsed() >= at
+        {
+            panicked = true;
+            panic_report = inject_panics();
         }
-        if let (Some(at), false) = (recorder_panic_at, recorder_panicked) {
-            if started.elapsed() >= at {
-                recorder_panicked = true;
-                let sent = lock(&st.session)
-                    .as_ref()
-                    .map(|s| {
-                        s.inject_recorder_panic(wb_recorder::recorder::PanicPoint::BeforeWrite)
-                            .is_ok()
-                    })
-                    .unwrap_or(false);
-                let when = wb_recorder::util::rfc3339(wb_recorder::util::now_ist());
-                tracing::warn!(at = when, sent, "gate: recorder panic injected");
-                recorder_panic_report = serde_json::json!({ "at": when, "sent": sent });
-            }
+        if let (Some(at), false) = (recorder_panic_at, recorder_panicked)
+            && started.elapsed() >= at
+        {
+            recorder_panicked = true;
+            let sent = lock(&st.session)
+                .as_ref()
+                .map(|s| {
+                    s.inject_recorder_panic(wb_recorder::recorder::PanicPoint::BeforeWrite)
+                        .is_ok()
+                })
+                .unwrap_or(false);
+            let when = wb_recorder::util::rfc3339(wb_recorder::util::now_ist());
+            tracing::warn!(at = when, sent, "gate: recorder panic injected");
+            recorder_panic_report = serde_json::json!({ "at": when, "sent": sent });
         }
         if stop_file.as_ref().is_some_and(|p| p.exists()) {
             let stopped = if lock(&st.session).is_some() {
@@ -213,6 +231,61 @@ fn run(app: &AppHandle) -> Result<(), String> {
         }
         std::thread::sleep(Duration::from_millis(200));
     }
+}
+
+/// Runs the system check (or only reads the saved profile) and exits with a report. The run uses the
+/// app's own code path (`syscheck::start_check`), so what it measures is what the System screen runs.
+fn run_check(app: &AppHandle, mode: &str) -> Result<(), String> {
+    let started = Instant::now();
+    let started_at = wb_recorder::util::rfc3339(wb_recorder::util::now_ist());
+    if mode == "view" {
+        // The registry must have finished its engine scan, or the fingerprint cannot be compared.
+        let wait = Instant::now();
+        while !app.state::<Registry>().snapshot().engines_done {
+            if wait.elapsed() > Duration::from_secs(180) {
+                return Err("the engine scan did not finish".into());
+            }
+            std::thread::sleep(Duration::from_millis(250));
+        }
+        write_report(&serde_json::json!({
+            "mode": mode,
+            "started_at": started_at,
+            "view": syscheck::view(app),
+        }));
+        app.exit(0);
+        return Ok(());
+    }
+    let kind = match mode {
+        "quick" => CheckKind::Quick,
+        "full" => CheckKind::Full,
+        other => {
+            return Err(format!(
+                "WB_GATE_CHECK must be quick, full or view, not {other:?}"
+            ));
+        }
+    };
+    syscheck::start_check(app, kind)?;
+    // A full check can take about 40 minutes under emulation; the gate script has its own time limit.
+    while syscheck::is_running(app) {
+        std::thread::sleep(Duration::from_millis(500));
+    }
+    let seconds = started.elapsed().as_secs_f64();
+    let failure = syscheck::last_error(app);
+    let view = syscheck::view(app);
+    write_report(&serde_json::json!({
+        "mode": mode,
+        "started_at": started_at,
+        "wall_seconds": seconds,
+        "error": failure,
+        "view": view,
+    }));
+    tracing::warn!(
+        seconds,
+        ok = failure.is_none(),
+        "gate: system check finished; exiting"
+    );
+    app.exit(if failure.is_none() { 0 } else { 4 });
+    Ok(())
 }
 
 /// One panic through the command boundary (as a buggy command would) and one on a plain thread.

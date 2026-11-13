@@ -84,6 +84,8 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         "machine view (from the affinity mask and the job limit, not from the host)"
     );
     let data_dir = app.path().app_data_dir()?;
+    #[cfg(feature = "gate-hooks")]
+    let data_dir = gate::data_dir_override().unwrap_or(data_dir);
     let settings = settings::load(&data_dir, app.path().document_dir().ok());
     let (state, events_rx) = AppState::new(data_dir, settings);
     state::spawn_forwarder(events_rx, state.snapshot.clone(), state.subscribers.clone());
