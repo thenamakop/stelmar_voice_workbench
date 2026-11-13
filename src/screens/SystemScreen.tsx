@@ -1,34 +1,150 @@
-import { Badge, Button, Switch } from "../ds";
+import { useState } from "react";
+import type { ReactNode } from "react";
+import { Badge, Button, Dialog, ProgressBar, Switch } from "../ds";
 import { px } from "../ds/units";
-import { MainWithSide, Note, PageHead, Section, SideCard, Table } from "../shell/layout";
+import type { OverrideKind, Tier } from "../ipc";
+import { MainWithSide, Note, PageHead, Section, SideCard, Table, KeyValue } from "../shell/layout";
+import type { CapabilityState } from "../system/useCapability";
+import {
+  OVERRIDE_TEXT,
+  checkTime,
+  hardwareRows,
+  overrideOn,
+  readyRows,
+  speedRows,
+} from "../system/view";
 import { EnginesSection, ModelsSection, useRegistry } from "./RegistrySections";
 import { liveUnavailableReason } from "./liveReason";
 
-// System screen placeholder per design/mockups/system-check.html. The system check itself arrives
-// in Phase 3; until then the Run System Check button stays disabled.
+// System screen per design/mockups/system-check.html: the saved capability profile, the numbers behind
+// it, and the three overrides. The check itself runs in the app (src-tauri/src/syscheck).
 export interface SystemScreenProps {
-  hasProfile: boolean;
+  capability: CapabilityState;
+  /** Leaves the screen for Record (the mockup's Continue button). */
+  onContinue?: () => void;
 }
 
-const HARDWARE = ["Processor", "Memory", "Graphics", "Storage and power", "Audio input"];
+/** Overline in IST: "13 NOV 2026 · 16:42 IST". */
+function istStamp(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(d);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  return `${get("day")} ${get("month").toUpperCase()} ${get("year")} · ${get("hour")}:${get("minute")} IST`;
+}
 
-export function SystemScreen({ hasProfile }: SystemScreenProps) {
+function savedTime(iso: string): string {
+  const s = istStamp(iso);
+  return s.slice(s.indexOf("·") + 2);
+}
+
+const TITLE: Record<Tier, string> = {
+  G: "Record Now, Live Captions Available",
+  "C+": "Record Now, Near-Live Text Available",
+  C: "Record Now, Transcribe in the Background",
+  R: "This Computer Records Only",
+};
+
+const TIER_TONE: Record<Tier, "success" | "neutral" | "warning"> = {
+  G: "success",
+  "C+": "success",
+  C: "neutral",
+  R: "warning",
+};
+
+const OVERRIDES: OverrideKind[] = ["process_while_recording", "pause_on_battery", "allow_live_anyway"];
+
+function Notice({ tone, title, children }: { tone: "warning" | "info"; title: string; children?: ReactNode }) {
+  const fg = tone === "warning" ? "var(--status-warning-fg)" : "var(--status-info-fg)";
+  const bg = tone === "warning" ? "var(--status-warning-bg)" : "var(--status-info-bg)";
+  return (
+    <div
+      role="status"
+      style={{
+        background: bg,
+        color: fg,
+        borderRadius: "var(--radius-sm)",
+        padding: px(10, 14),
+        marginBottom: 12,
+        fontSize: 13,
+        lineHeight: px(20),
+      }}
+    >
+      <b>{title}</b>
+      {children && <div style={{ marginTop: 2 }}>{children}</div>}
+    </div>
+  );
+}
+
+export function SystemScreen({ capability, onContinue }: SystemScreenProps) {
   const registry = useRegistry();
+  const { view, running, progress } = capability;
+  const cap = view?.capability ?? null;
+  const [pending, setPending] = useState<{ kind: OverrideKind; enabled: boolean } | null>(null);
+
+  const decision = cap?.decision ?? null;
+  const tier = decision?.tier ?? null;
+  const blocked = running;
+
+  const toggle = (kind: OverrideKind, enabled: boolean) => {
+    // Turning a safeguard off, or live captions on past the verdict, needs a confirmation that is logged.
+    const risky = kind === "allow_live_anyway" ? enabled : !enabled;
+    if (risky) setPending({ kind, enabled });
+    else void capability.setOverride(kind, enabled, true);
+  };
+
+  const live = decision ? Object.values(decision.languages).some((l) => l?.live.offered) : false;
+  const liveNote = !cap
+    ? liveUnavailableReason(false)
+    : live
+      ? "Live captions are cleared for the languages marked in the speed test."
+      : "Live captions are not offered on this computer. The overrides below can allow them anyway, at the operator's risk.";
+
   return (
     <>
       <PageHead
-        overline={hasProfile ? "System check" : "First launch · System check"}
-        title={hasProfile ? "This Computer's System Check" : "Check This Computer Before the First Recording"}
+        overline={cap ? "System check" : "First launch · System check"}
+        title={cap && tier ? TITLE[tier] : "Check This Computer Before the First Recording"}
         meta={
-          <>
-            <span>{hasProfile ? "A saved capability profile was found" : "Not run yet"}</span>
-            <Badge>No tier</Badge>
-          </>
+          cap ? (
+            <>
+              <span style={{ fontFamily: "var(--font-mono)" }}>{istStamp(cap.created_at)}</span>
+              <span>
+                {cap.check.kind === "full" ? "Full" : "Quick"} check took{" "}
+                <span style={{ fontFamily: "var(--font-mono)" }}>{checkTime(cap.check.duration_s)}</span>
+              </span>
+              {tier && <Badge tone={TIER_TONE[tier]}>Tier {tier}</Badge>}
+              {cap.emulated && <Badge tone="warning">Emulated · {cap.emulated}</Badge>}
+              {cap.check.partial && <Badge tone="warning">Partial</Badge>}
+            </>
+          ) : (
+            <>
+              <span>{running ? "Running" : "Not run yet"}</span>
+              <Badge>No tier</Badge>
+            </>
+          )
         }
         controls={
-          <Button iconLeft="refresh-cw" disabled>
-            Run System Check
-          </Button>
+          running ? (
+            <Button variant="secondary" onClick={() => void capability.cancel()}>
+              Cancel
+            </Button>
+          ) : (
+            <>
+              <Button variant="secondary" iconLeft="refresh-cw" onClick={() => void capability.run(!!cap)}>
+                {cap ? "Run Full Check" : "Run Quick Check"}
+              </Button>
+              {cap && onContinue && <Button onClick={onContinue}>Continue</Button>}
+            </>
+          )
         }
       />
       <MainWithSide
@@ -45,52 +161,177 @@ export function SystemScreen({ hasProfile }: SystemScreenProps) {
                   margin: px(0, 0, 6),
                 }}
               >
-                Not checked yet
+                {decision ? (decision.tier === "R" ? "Record only" : decision.tier === "G" ? "Record + post-process, live available" : "Record + post-process") : "Not checked yet"}
               </div>
-              <Note>
-                The system check measures this computer and decides how each session is recorded and
-                transcribed here. Live text stays off until the check clears it.
-              </Note>
+              {decision ? (
+                decision.verdict.map((line, i) => (
+                  <Note key={i} style={{ marginTop: i === 0 ? 0 : 6 }}>
+                    {line}
+                  </Note>
+                ))
+              ) : (
+                <Note>
+                  The system check measures this computer and decides how each session is recorded and
+                  transcribed here. Live text stays off until the check clears it.
+                </Note>
+              )}
+              {decision?.provisional && (
+                <Note style={{ marginTop: 6, fontSize: 12, color: "var(--text-muted)" }}>
+                  Model choices are provisional until the models have been checked for accuracy.
+                </Note>
+              )}
             </SideCard>
+            {cap && (
+              <SideCard title="Ready after a 90-minute talk">
+                <KeyValue
+                  rows={readyRows(cap).map((r): [string, string, { mono?: boolean }] => [
+                    r.label,
+                    r.value,
+                    { mono: r.label !== "Night pass" },
+                  ])}
+                />
+              </SideCard>
+            )}
             <SideCard title="Overrides" stack>
-              <Switch label="Process while recording" checked disabled />
-              <Switch label="Pause on battery power" checked disabled />
-              <Switch label="Allow live captions anyway" disabled />
-              <Note style={{ fontSize: 12, lineHeight: px(18), color: "var(--text-muted)" }}>
-                {liveUnavailableReason(hasProfile)}
-              </Note>
+              {OVERRIDES.map((kind) => (
+                <Switch
+                  key={kind}
+                  label={OVERRIDE_TEXT[kind].label}
+                  checked={cap ? overrideOn(cap, kind) : kind !== "allow_live_anyway"}
+                  disabled={!cap || blocked}
+                  onChange={(on) => toggle(kind, on)}
+                />
+              ))}
+              <Note style={{ fontSize: 12, lineHeight: px(18), color: "var(--text-muted)" }}>{liveNote}</Note>
             </SideCard>
           </>
         }
       >
+        {running && progress && (
+          <div style={{ marginBottom: 14 }}>
+            <Notice tone="info" title={`${progress.phase}${progress.detail ? ` · ${progress.detail}` : ""}`}>
+              {Math.round(progress.elapsed_s)} s so far · {progress.cells_done} measurements done. Recording is not
+              affected; do not start a recording until the check ends.
+            </Notice>
+            <ProgressBar value={Math.min(0.95, progress.elapsed_s / (cap?.check.bar_s || 480))} label="System check" />
+          </div>
+        )}
+        {view && view.fingerprint_changes.length > 0 && !running && (
+          <Notice tone="warning" title="This computer or the app has changed since the last check">
+            {view.fingerprint_changes.join(" · ")}. Run the check again to be sure the choices below still hold.
+            <div style={{ marginTop: 8 }}>
+              <Button size="sm" onClick={() => void capability.run(false)}>
+                Re-run Quick Check
+              </Button>
+            </div>
+          </Notice>
+        )}
+        {cap && cap.injectors.length > 0 && (
+          <Notice tone="warning" title="A screen-overlay tool is running">
+            {cap.injectors.join(" · ")}. These tools can crash the display and disturb timing. Close them before
+            recording or running a full check.
+          </Notice>
+        )}
+        {view?.error && (
+          <Notice tone="warning" title="The saved profile could not be used">
+            {view.error}. Run the check again.
+          </Notice>
+        )}
         <Section title="Hardware" first>
-          <Table
-            headers={["Part", "Found", "Result"]}
-            rows={HARDWARE.map((part) => [
-              { content: part, strong: true },
-              { content: "Not checked yet" },
-              { content: <Badge>Pending</Badge> },
-            ])}
-          />
+          {cap ? (
+            <Table
+              headers={["Part", "Found", "Result"]}
+              rows={hardwareRows(cap).map((r) => [
+                { content: r.part, strong: true },
+                { content: r.found },
+                { content: <Badge tone={r.result.tone}>{r.result.label}</Badge> },
+              ])}
+            />
+          ) : (
+            <Table
+              headers={["Part", "Found", "Result"]}
+              rows={["Processor", "Memory", "Graphics", "Storage and power", "Audio input"].map((part) => [
+                { content: part, strong: true },
+                { content: "Not checked yet" },
+                { content: <Badge>Pending</Badge> },
+              ])}
+            />
+          )}
         </Section>
         <Section title="Speed test">
           <Table
             headers={["Model", "Role", "Devices", "Speed", "Memory", "Result"]}
-            rows={[
-              [
-                { content: "No models measured" },
-                { content: "" },
-                { content: "" },
-                { content: "" },
-                { content: "" },
-                { content: <Badge>Pending</Badge> },
-              ],
-            ]}
+            rows={
+              cap && cap.measurements.length > 0
+                ? speedRows(cap).map((r) => [
+                    { content: r.model, mono: true },
+                    { content: r.role },
+                    { content: r.devices, mono: true },
+                    { content: r.speed, mono: true },
+                    { content: r.memory, mono: true },
+                    { content: r.result ? <Badge tone={r.result.tone}>{r.result.label}</Badge> : "" },
+                  ])
+                : [
+                    [
+                      { content: "No models measured" },
+                      { content: "" },
+                      { content: "" },
+                      { content: "" },
+                      { content: "" },
+                      { content: <Badge>Pending</Badge> },
+                    ],
+                  ]
+            }
           />
+          {decision && decision.bars && (
+            <Note style={{ marginTop: 6, fontSize: 12, color: "var(--text-muted)" }}>
+              Speed is processing time per second of audio (lower is faster). Bars: recording passes up to{" "}
+              {decision.bars.rolling_rtf.toFixed(2)}×, near-live up to {decision.bars.near_live_rtf.toFixed(2)}×, live
+              captions up to {decision.bars.live_standin_rtf.toFixed(2)}×
+              {cap?.emulated ? " (emulated bars: 25% headroom)" : ""}.
+            </Note>
+          )}
         </Section>
         <EnginesSection registry={registry} />
         <ModelsSection registry={registry} />
       </MainWithSide>
+      <Dialog
+        open={pending !== null}
+        onClose={() => setPending(null)}
+        eyebrow="Override"
+        title={pending ? OVERRIDE_TEXT[pending.kind].label : ""}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setPending(null)}>
+              Keep the current setting
+            </Button>
+            <Button
+              onClick={() => {
+                if (pending) void capability.setOverride(pending.kind, pending.enabled, true);
+                setPending(null);
+              }}
+            >
+              {pending?.enabled ? "Turn on" : "Turn off"}
+            </Button>
+          </>
+        }
+      >
+        <Note>{pending ? OVERRIDE_TEXT[pending.kind].risk : ""}</Note>
+        <Note style={{ marginTop: 8, fontSize: 12, color: "var(--text-muted)" }}>
+          The change is saved in the profile with the time, and shown on this screen.
+        </Note>
+      </Dialog>
     </>
   );
+}
+
+/** Items for the status bar when the System screen is open: when the profile was saved and its id. */
+export function systemStatus(capability: CapabilityState): { items: string[]; trailing: string } {
+  const cap = capability.view?.capability;
+  return {
+    items: cap
+      ? [`capability.json saved ${savedTime(cap.created_at)}`, "Re-runs when hardware or models change"]
+      : ["capability.json not saved yet"],
+    trailing: capability.view?.fingerprint_id ? `Fingerprint ${capability.view.fingerprint_id}` : "",
+  };
 }

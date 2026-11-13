@@ -3,10 +3,8 @@ import type { ReactNode } from "react";
 import {
   Badge,
   Button,
-  Dialog,
   Icon,
   IconButton,
-  Input,
   ProgressBar,
   Select,
   Switch,
@@ -15,11 +13,13 @@ import {
 } from "../ds";
 import type { BadgeTone } from "../ds";
 import { px } from "../ds/units";
-import type { InputDevice, MirrorStatus, RecorderStatus, Snapshot } from "../ipc";
-import { clock, format, istDateTime, languages, meterPercent, minutes, partFile } from "../recording/format";
+import type { MirrorStatus, RecorderStatus, Snapshot } from "../ipc";
+import { clock, istDateTime, languages, meterPercent, minutes, partFile } from "../recording/format";
 import type { Level, Recorder } from "../recording/useRecorder";
 import { KeyValue, MainWithSide, Note, PageHead, SideCard } from "../shell/layout";
+import type { CapabilityState } from "../system/useCapability";
 import { liveUnavailableReason } from "./liveReason";
+import { StartSessionDialog } from "./StartSessionDialog";
 import { NoEngineBanner, useRegistry } from "./RegistrySections";
 
 // Record screen per design/mockups/record-only.html. Phase 1: input, meter, recording state,
@@ -324,81 +324,13 @@ function stateBadge(r: RecorderStatus | null): ReactNode {
   }
 }
 
-/** Phase 1 start dialog: title, hall and input. Languages and mode arrive with the full Start
- * Session dialog (Phase 3); until then every session is English + Hindi, Record + post-process. */
-function StartDialog({
-  open,
-  onClose,
-  inputs,
-  deviceId,
-  onDevice,
-  busy,
-  onStart,
-}: {
-  open: boolean;
-  onClose: () => void;
-  inputs: InputDevice[];
-  deviceId: string;
-  onDevice: (id: string) => void;
-  busy: boolean;
-  onStart: (title: string, hall: string) => void;
-}) {
-  const [title, setTitle] = useState("Unscheduled Session");
-  const [hall, setHall] = useState("");
-  return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      eyebrow="New recording"
-      title="Start Session"
-      footer={
-        <>
-          <Button variant="secondary" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            iconLeft="circle"
-            disabled={busy || !title.trim() || !deviceId}
-            onClick={() => onStart(title, hall)}
-          >
-            Start Recording
-          </Button>
-        </>
-      }
-    >
-      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        <Input label="Session title" value={title} onChange={(e) => setTitle(e.target.value)} required />
-        <Input
-          label="Hall"
-          placeholder="Seminar Hall B"
-          value={hall}
-          onChange={(e) => setHall(e.target.value)}
-        />
-        <Select
-          label="Audio input"
-          value={deviceId}
-          onChange={(e) => onDevice(e.target.value)}
-          options={inputs.map((d) => ({
-            value: d.id,
-            label: `${d.name} · ${format(d.sample_rate, d.channels)}`,
-          }))}
-          placeholder="No input found"
-        />
-        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          <Badge tone="info">Record + post-process</Badge>
-          <Badge>EN · HI</Badge>
-        </div>
-      </div>
-    </Dialog>
-  );
-}
-
 export interface RecordScreenProps {
   hasProfile: boolean;
   recorder: Recorder;
+  capability: CapabilityState;
 }
 
-export function RecordScreen({ hasProfile, recorder }: RecordScreenProps) {
+export function RecordScreen({ hasProfile, recorder, capability }: RecordScreenProps) {
   const [tab, setTab] = useState("transcript");
   const [startOpen, setStartOpen] = useState(false);
   const { snapshot, level, inputs, settings, busy } = recorder;
@@ -676,16 +608,23 @@ export function RecordScreen({ hasProfile, recorder }: RecordScreenProps) {
           )}
         </div>
       </MainWithSide>
-      <StartDialog
+      <StartSessionDialog
         open={startOpen}
         onClose={() => setStartOpen(false)}
         inputs={inputs}
         deviceId={deviceId}
         onDevice={setDeviceId}
         busy={busy}
-        onStart={(title, hall) => {
+        profileKey={capability.view?.capability?.created_at ?? "none"}
+        onStart={(choice) => {
           void recorder
-            .start({ title: title.trim(), hall: hall.trim() || null, device_id: deviceId || null })
+            .start({
+              title: choice.title,
+              hall: choice.hall || null,
+              device_id: deviceId || null,
+              expected_languages: choice.expected_languages,
+              mode: choice.mode,
+            })
             .then((ok) => {
               if (ok) setStartOpen(false);
             });

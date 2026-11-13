@@ -2,7 +2,10 @@
 // app command with fixture data, so screens render as they would on a machine. Fixture numbers
 // are placeholders, like the mockups'.
 import type {
+  Capability,
+  HindiUrduScript,
   InputDevice,
+  OverrideKind,
   MirrorStatus,
   PartRecord,
   RecorderStatus,
@@ -11,6 +14,7 @@ import type {
   Settings,
   Snapshot,
 } from "../ipc";
+import { planFor, profile } from "./profiles";
 
 export type MockState = "idle" | "recording" | "input_lost" | "recovery";
 
@@ -20,6 +24,10 @@ export interface MockOptions {
   state?: MockState;
   /** "none": every speech engine renamed away (list_engines finds no engine). Default: engines present. */
   engines?: "present" | "none";
+  /** A saved capability profile from crates/wb-capability/fixtures (src/test/profiles.ts); none by default. */
+  capability?: string;
+  /** The saved profile no longer matches this machine (fingerprint-change banner). */
+  fingerprintChange?: string[];
   /** Commands seen, in order (for assertions). */
   calls?: string[];
 }
@@ -170,6 +178,20 @@ function emit(channel: ChannelLike, messages: unknown[], first = 0) {
 export function bridge(opts: MockOptions = {}) {
   const state = opts.state ?? "idle";
   let recording = state === "recording" || state === "input_lost";
+  // A bare `profile: true` stands for "a profile exists": the low-baseline one.
+  const cap: Capability | null = opts.capability
+    ? profile(opts.capability)
+    : opts.profile === true
+      ? profile("tier-c-low")
+      : null;
+  const view = () => ({
+    capability: cap,
+    error: null,
+    running: false,
+    fingerprint_changes: opts.fingerprintChange ?? [],
+    fingerprint_id: cap ? "3F2A-91C7" : null,
+    development: true,
+  });
   return (cmd: string, payload?: unknown): unknown => {
     const args = payload as Record<string, unknown> | undefined;
     opts.calls?.push(cmd);
@@ -180,7 +202,21 @@ export function bridge(opts: MockOptions = {}) {
         return undefined;
       case "has_capability_profile":
         if (opts.profile instanceof Error) throw opts.profile;
-        return opts.profile ?? false;
+        return cap !== null || (opts.profile ?? false);
+      case "get_capability":
+        return view();
+      case "run_system_check":
+      case "cancel_system_check":
+        return undefined;
+      case "set_override": {
+        const a = args as { kind: OverrideKind; enabled: boolean; confirmed: boolean };
+        if (cap) cap.overrides.push({ kind: a.kind, enabled: a.enabled, confirmed: a.confirmed, at: "2026-11-13T11:00:00Z" });
+        return view();
+      }
+      case "session_plan": {
+        const a = args as { english: boolean; hindiUrdu: boolean; script: HindiUrduScript };
+        return cap ? planFor(cap, a.english, a.hindiUrdu, a.script) : null;
+      }
       case "list_inputs":
         return INPUTS;
       case "get_settings":
