@@ -318,7 +318,7 @@ function Set-WbGateContext {
     [string]$Note = ''
   )
   $script:Current = [pscustomobject]@{
-    Name = $Name; Started = $Started; LockPath = $script:LockPath; OverlayAtEnd = $null
+    Name = $Name; Started = $Started; LockPath = $script:LockPath; OverlayAtEnd = $null; BuildsAtEnd = $null
     TrackBWait = $TrackBWait; FreeRamStart = $FreeRamStart; FreeRamEnd = $FreeRamEnd; Error = $null; Note = $Note
   }
 }

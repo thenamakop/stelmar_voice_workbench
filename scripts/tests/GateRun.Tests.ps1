@@ -280,6 +280,15 @@ Check 'the evidence header says no engine build was running at the start and at 
 
 Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
 
+# A re-evaluated run (-FromRun) builds its context with Set-WbGateContext, not Invoke-WbGate. The
+# header reads BuildsAtEnd from it; under strict mode a missing property was an error that ended
+# the re-evaluation (13 Nov 2026).
+Set-WbGateContext -Name 'phase1-load-emu-low (re-evaluated from saved data)' -Started ([datetime]'2026-11-13 03:40') -FreeRamStart 20 -FreeRamEnd 19
+$threw = $false; $hdrFrom = ''
+try { Set-StrictMode -Version 2; $hdrFrom = (Get-WbGateHeader -Machine 'test' -Profile 'emu-low') -join "`n" } catch { $threw = $true; Write-Host "  $($_.Exception.Message)" } finally { Set-StrictMode -Off }
+Check 'the header of a re-evaluated run builds under strict mode (no BuildsAtEnd property error)' (-not $threw -and $hdrFrom -match 're-evaluated' -and $hdrFrom -match 'engine builds: checked by the original run')
+Check 'a re-evaluated run does not claim that no build was running at its end' ($hdrFrom -notmatch 'engine builds at the end')
+
 # ---- Split-WbBreakSources: which breaks the reference capture shows too ----
 $appB = [pscustomobject]@{ unmatched_ranges = @([pscustomobject]@{ source_ms = 47049.0; ms = 51 }, [pscustomobject]@{ source_ms = 90000.0; ms = 20 }); discontinuities = @([pscustomobject]@{ source_ms = 47100.0 }, [pscustomobject]@{ source_ms = 130750.0 }) }
 $refB = [pscustomobject]@{ unmatched_ranges = @([pscustomobject]@{ source_ms = 90030.0; ms = 20 }); discontinuities = @() }
