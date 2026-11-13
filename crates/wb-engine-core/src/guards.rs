@@ -64,7 +64,10 @@ pub const COMPRESSION_ABOVE: f32 = 2.64;
 /// that is not a loop and the model is confident of it, so no other guard sees it (one 14 s Hinglish
 /// chunk came out as 43 characters). The values come from `scripts/gates/coverage_calibration.py`
 /// (`docs/evidence/phase-2/coverage-calibration.txt`, 11 Nov 2026: 0.9 x the lowest reference rate of the language); a language with no entry is not checked.
-pub const COVERAGE_FLOOR: &[(&str, f32)] = &[("en", 5.79), ("hi", 5.03), ("ur", 7.70)];
+/// The Urdu floor was 7.70 until 13 Nov 2026: 14 of 92 judged Kathbath Urdu references were under it
+/// (`docs/evidence/phase-3/kathbath-coverage.txt`), so it was recalibrated with Kathbath included: 0.9 x the
+/// lowest reference rate over FLEURS and Kathbath, 0.9 x 5.68 = 5.11. English and Hindi floors did not change.
+pub const COVERAGE_FLOOR: &[(&str, f32)] = &[("en", 5.79), ("hi", 5.03), ("ur", 5.11)];
 
 /// Chunks with less speech than this are not judged: their rate varies too much.
 pub const COVERAGE_MIN_SPEECH_S: f64 = 3.0;
@@ -336,6 +339,11 @@ mod tests {
         // The same short decode in a chunk with under 3 s of speech is not judged.
         assert!(!low_coverage("abc", "hi", 2.0));
         assert_eq!(coverage_floor("hi"), Some(5.03));
+        // Urdu (13 Nov 2026): Kathbath read speech runs as low as 5.68 per second, so 6 per second is normal there
+        // and 3.3 per second is not.
+        assert_eq!(coverage_floor("ur"), Some(5.11));
+        assert!(!low_coverage(&"a".repeat(90), "ur", 13.8)); // 6.5 per second
+        assert!(low_coverage(&"a".repeat(46), "ur", 13.8)); // 3.3 per second
     }
 
     #[test]

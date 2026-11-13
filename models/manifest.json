@@ -87,6 +87,14 @@
         "night"
       ],
       "validated_roles": [],
+      "provisional_rank": [
+        {
+          "role": "night",
+          "lang": "hi",
+          "rank": 1,
+          "quality_unverified": false
+        }
+      ],
       "licence": "MIT",
       "source": {
         "repo": "ggerganov/whisper.cpp",
@@ -102,13 +110,53 @@
       "base": "large-v3-turbo",
       "quant": "q5_0",
       "languages": [
-        "en"
+        "en",
+        "hi",
+        "ur"
       ],
       "candidate_roles": [
         "rolling",
         "live"
       ],
       "validated_roles": [],
+      "provisional_rank": [
+        {
+          "role": "rolling",
+          "lang": "en",
+          "rank": 1,
+          "quality_unverified": false
+        },
+        {
+          "role": "rolling",
+          "lang": "hi",
+          "rank": 1,
+          "quality_unverified": false
+        },
+        {
+          "role": "rolling",
+          "lang": "ur",
+          "rank": 1,
+          "quality_unverified": false
+        },
+        {
+          "role": "live",
+          "lang": "en",
+          "rank": 1,
+          "quality_unverified": false
+        },
+        {
+          "role": "live",
+          "lang": "hi",
+          "rank": 1,
+          "quality_unverified": false
+        },
+        {
+          "role": "live",
+          "lang": "ur",
+          "rank": 1,
+          "quality_unverified": false
+        }
+      ],
       "licence": "MIT",
       "source": {
         "repo": "ggerganov/whisper.cpp",
@@ -132,6 +180,26 @@
         "baseline"
       ],
       "validated_roles": [],
+      "provisional_rank": [
+        {
+          "role": "rolling",
+          "lang": "en",
+          "rank": 2,
+          "quality_unverified": false
+        },
+        {
+          "role": "rolling",
+          "lang": "hi",
+          "rank": 2,
+          "quality_unverified": false
+        },
+        {
+          "role": "rolling",
+          "lang": "ur",
+          "rank": 2,
+          "quality_unverified": false
+        }
+      ],
       "licence": "MIT",
       "source": {
         "repo": "ggerganov/whisper.cpp",
@@ -243,6 +311,20 @@
         "baseline"
       ],
       "validated_roles": [],
+      "provisional_rank": [
+        {
+          "role": "rolling",
+          "lang": "en",
+          "rank": 3,
+          "quality_unverified": false
+        },
+        {
+          "role": "near-live",
+          "lang": "en",
+          "rank": 1,
+          "quality_unverified": false
+        }
+      ],
       "licence": "MIT",
       "source": {
         "repo": "ggerganov/whisper.cpp",

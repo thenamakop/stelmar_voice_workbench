@@ -85,6 +85,20 @@ pub struct Conversion {
     pub deterministic: Option<bool>,
 }
 
+/// A model's place in the ranking of one role and language.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RankPlace {
+    /// `rolling`, `night`, `near_live` or `live`.
+    pub role: String,
+    /// `en`, `hi` or `ur`.
+    pub lang: String,
+    /// 1 is tried first.
+    pub rank: u32,
+    /// No local, independent WER backs this place.
+    #[serde(default)]
+    pub quality_unverified: bool,
+}
+
 /// One model in the manifest.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Entry {
@@ -107,6 +121,10 @@ pub struct Entry {
     /// Roles the model passed in evaluation; the system check uses a model only for these.
     #[serde(default)]
     pub validated_roles: Vec<String>,
+    /// Places this model holds in the system check's ranking, per role and language (1 = first tried).
+    /// Provisional until Phase 5 validates models; the check measures them top-down.
+    #[serde(default)]
+    pub provisional_rank: Vec<RankPlace>,
     #[serde(default)]
     pub licence: String,
     #[serde(default)]
@@ -394,6 +412,7 @@ mod tests {
             languages: vec![],
             candidate_roles: vec![],
             validated_roles: vec![],
+            provisional_rank: vec![],
             licence: "MIT".into(),
             source: Source::default(),
             conversion: None,

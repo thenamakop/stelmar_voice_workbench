@@ -3,7 +3,7 @@
     eval/.venv/Scripts/python scripts/models/write_manifest.py [--check]
 
 Keeps, per model: id, file (relative to models/), sha256, bytes, kind, base, quant, languages,
-candidate_roles, validated_roles, licence, source {repo, revision} and, for converted or quantised
+candidate_roles, validated_roles, provisional_rank (Phase 3, provisional until Phase 5), licence, source {repo, revision} and, for converted or quantised
 files, conversion {script, settings, input_sha256, whisper_cpp_commit, deterministic}. Drops notes that
 could hold local paths, candidates that were dropped, and every other field. `--check` only verifies that
 the committed file matches what would be written. Development time only; the app never runs this.
@@ -24,7 +24,7 @@ from wbeval.common import MODELS_DIR, REPO  # noqa: E402
 
 OUT = MODELS_DIR / "manifest.json"
 KEEP = ("id", "file", "sha256", "bytes", "kind", "base", "quant", "languages", "candidate_roles",
-        "validated_roles", "licence")
+        "validated_roles", "provisional_rank", "licence")
 
 
 def parse_source(text: str | dict) -> dict:

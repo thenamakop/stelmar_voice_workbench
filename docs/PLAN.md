@@ -134,7 +134,7 @@ Each room records at most about 3 hours a day on the STELMAR programme, so even 
 
 ## 5. Models and languages
 
-English and Hindi are the primary languages, and STELMAR speakers will switch between them: whole passages in one language, a sentence or two in the other, or English terms inside Hindi sentences. Urdu is supported for speakers who use it.
+English and Hindi are the primary languages, and STELMAR speakers will switch between them: whole passages in one language, a sentence or two in the other, or English terms inside Hindi sentences. Urdu is supported for speakers who use it. *(13 Nov 2026: Hindi and Urdu are treated as one spoken language with an organiser-chosen output script, Devanagari by default; see `docs/GATES.md`, Open items, row dated 13 Nov 2026.)*
 
 **Code-switching**
 1. **Sentence-level switches.** In sessions with more than one expected language, audio is cut at pauses into sentence-sized chunks (about 3 to 15 seconds). Whisper's language detection runs on each chunk, restricted to the session's languages, and the chunk is decoded in the detected language with that language's model. A chunk shorter than 2 seconds takes its neighbours' language unless detection is at least 0.8 sure.
