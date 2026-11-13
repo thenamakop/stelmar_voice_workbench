@@ -2,12 +2,7 @@
 // dialog and the top bar. The profile is read from the app (capability.json); the check runs in the app
 // process and reports progress as events.
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  cancelSystemCheck,
-  getCapability,
-  runSystemCheck,
-  setOverride as setOverrideCmd,
-} from "../ipc";
+import { cancelSystemCheck, getCapability, runSystemCheck, setOverride as setOverrideCmd } from "../ipc";
 import type { AppEvent, CapabilityView, CheckProgress, OverrideKind } from "../ipc";
 import type { Notify } from "../recording/useRecorder";
 
@@ -43,7 +38,11 @@ export function useCapability(
       setView(v);
       setRunning(v.running);
     } catch (err) {
-      notifyRef.current({ tone: "danger", title: "Could not read the system check profile", message: message(err) });
+      notifyRef.current({
+        tone: "danger",
+        title: "Could not read the system check profile",
+        message: message(err),
+      });
     }
   }, []);
 
@@ -56,7 +55,12 @@ export function useCapability(
         setRunning(v.running);
       })
       .catch((err: unknown) => {
-        if (!off) notifyRef.current({ tone: "danger", title: "Could not read the system check profile", message: message(err) });
+        if (!off)
+          notifyRef.current({
+            tone: "danger",
+            title: "Could not read the system check profile",
+            message: message(err),
+          });
       });
     return () => {
       off = true;
@@ -104,7 +108,11 @@ export function useCapability(
     try {
       await cancelSystemCheck();
     } catch (err) {
-      notifyRef.current({ tone: "danger", title: "Could not cancel the system check", message: message(err) });
+      notifyRef.current({
+        tone: "danger",
+        title: "Could not cancel the system check",
+        message: message(err),
+      });
     }
   }, []);
 

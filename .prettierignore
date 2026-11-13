@@ -11,6 +11,8 @@ CLAUDE.md
 CONTRIBUTING.md
 scripts/*.ps1
 # Generated or third-party
+# Written by `cargo test -p wb-capability` (WB_UPDATE_FIXTURES=1) and compared as text.
+crates/wb-capability/fixtures/
 node_modules/
 dist/
 dist-e2e/

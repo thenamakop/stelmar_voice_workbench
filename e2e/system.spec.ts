@@ -61,7 +61,9 @@ for (const [name, heading] of Object.entries(SYSTEM_HEADING)) {
   });
 }
 
-test("System screen shows the fingerprint banner, and the Emulated badge only on an emulated profile", async ({ page }) => {
+test("System screen shows the fingerprint banner, and the Emulated badge only on an emulated profile", async ({
+  page,
+}) => {
   await openSystem(page, "tier-c-low", "&fingerprint=changed");
   await expect(page.getByText(/has changed since the last check/)).toBeVisible();
   await expect(page.getByText("Emulated · emu-low")).toBeVisible();
@@ -85,7 +87,9 @@ test("a safeguard override asks first", async ({ page }) => {
 });
 
 for (const name of ["tier-c-low", "tier-c-cpu-only", "slow-igpu", "tier-r", "tier-c-mid-hybrid"]) {
-  test(`Start Session dialog on ${name}: Record + post-process by default, live off with its reason`, async ({ page }) => {
+  test(`Start Session dialog on ${name}: Record + post-process by default, live off with its reason`, async ({
+    page,
+  }) => {
     const dialog = await openDialog(page, name);
     await expect(dialog.getByRole("radio", { name: /Record \+ post-process/ })).toBeChecked();
     await expect(dialog.getByRole("radio", { name: /Live captions \+ post-process/ })).toBeDisabled();
@@ -97,7 +101,9 @@ for (const name of ["tier-c-low", "tier-c-cpu-only", "slow-igpu", "tier-r", "tie
   });
 }
 
-test("Start Session dialog on the tier G profile: live for English only, starts in Record + post-process", async ({ page }) => {
+test("Start Session dialog on the tier G profile: live for English only, starts in Record + post-process", async ({
+  page,
+}) => {
   const dialog = await openDialog(page, "tier-g");
   const live = dialog.getByRole("radio", { name: /Live captions \+ post-process/ });
   await expect(dialog.getByRole("radio", { name: /Record \+ post-process/ })).toBeChecked();
@@ -112,7 +118,9 @@ test("Start Session dialog on the tier G profile: live for English only, starts 
   await expect(dialog.getByRole("radio", { name: /Record \+ post-process/ })).toBeChecked();
 });
 
-test("Start Session dialog while a system check runs: Start stays enabled and the note says it stops the check", async ({ page }) => {
+test("Start Session dialog while a system check runs: Start stays enabled and the note says it stops the check", async ({
+  page,
+}) => {
   const dialog = await openDialog(page, "tier-c-low", "&check=running");
   await expect(dialog.getByText(/Starting the recording stops the check/)).toBeVisible();
   await dialog.getByLabel(/Session title/).fill("Keynote");
@@ -121,7 +129,9 @@ test("Start Session dialog while a system check runs: Start stays enabled and th
   await page.screenshot({ path: `${SHOTS}/start-session-check-running.png` });
 });
 
-test("Record screen side card shows the profile's devices, speed and threads (screenshot)", async ({ page }) => {
+test("Record screen side card shows the profile's devices, speed and threads (screenshot)", async ({
+  page,
+}) => {
   await page.goto("/e2e/index.html?capability=tier-g");
   await page.getByRole("button", { name: "Record", exact: true }).click();
   const card = page.locator("aside").filter({ hasText: "Transcription" });
@@ -131,9 +141,14 @@ test("Record screen side card shows the profile's devices, speed and threads (sc
   await page.screenshot({ path: `${SHOTS}/record-tier-g.png` });
 });
 
-test("Start Session dialog: the script choice appears with Hindi / Urdu and Urdu is right to left", async ({ page }) => {
+test("Start Session dialog: the script choice appears with Hindi / Urdu and Urdu is right to left", async ({
+  page,
+}) => {
   const dialog = await openDialog(page, "tier-c-low");
-  await dialog.getByText(/Nastaliq/).first().click();
+  await dialog
+    .getByText(/Nastaliq/)
+    .first()
+    .click();
   await expect(dialog.locator('[lang="ur"][dir="rtl"]')).toBeVisible();
   await dialog.getByText("Hindi / Urdu", { exact: true }).click();
   await expect(dialog.getByRole("radio", { name: /Devanagari/ })).toHaveCount(0);
@@ -164,7 +179,9 @@ test("System screen lists the complete check and a partial one kept apart", asyn
   await page.screenshot({ path: `${SHOTS}/system-saved-checks.png` });
 });
 
-test("after a fingerprint change the System screen and the dialog say live and processing while recording are off", async ({ page }) => {
+test("after a fingerprint change the System screen and the dialog say live and processing while recording are off", async ({
+  page,
+}) => {
   await openSystem(page, "tier-g", "&fingerprint=changed");
   await expect(page.getByText(/live captions and processing while recording are off/)).toBeVisible();
   const dialog = await openDialog(page, "tier-g", "&fingerprint=changed");
@@ -174,7 +191,9 @@ test("after a fingerprint change the System screen and the dialog say live and p
   await expect(dialog.getByText("Record + post-process", { exact: false }).first()).toBeVisible();
 });
 
-test("the Start Session dialog scrolls inside a 1366x768 window and keeps Start in reach", async ({ page }) => {
+test("the Start Session dialog scrolls inside a 1366x768 window and keeps Start in reach", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1366, height: 768 });
   const dialog = await openDialog(page, "tier-c-low", "&check=running");
   const box = await dialog.boundingBox();
@@ -187,7 +206,9 @@ test("the Start Session dialog scrolls inside a 1366x768 window and keeps Start 
   const startBox = await start.boundingBox();
   expect(startBox!.y + startBox!.height).toBeLessThanOrEqual(768);
   const scrolls = await dialog.evaluate((el) => {
-    const body = Array.from(el.querySelectorAll<HTMLElement>("div")).find((d) => getComputedStyle(d).overflowY === "auto");
+    const body = Array.from(el.querySelectorAll<HTMLElement>("div")).find(
+      (d) => getComputedStyle(d).overflowY === "auto",
+    );
     return body ? body.scrollHeight > body.clientHeight : false;
   });
   expect(scrolls).toBe(true);

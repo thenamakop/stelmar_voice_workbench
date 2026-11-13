@@ -35,8 +35,16 @@ function overrideOn(cap: Capability, kind: OverrideKind): boolean {
 }
 
 /** What `session_plan` answers for a profile (the Rust function is crates/wb-capability session.rs). */
-export function planFor(cap: Capability, english: boolean, hindiUrdu: boolean, script: HindiUrduScript): SessionPlan | null {
-  const langs: CapLang[] = [...(english ? (["en"] as const) : []), ...(hindiUrdu ? ([script === "devanagari" ? "hi" : "ur"] as const) : [])];
+export function planFor(
+  cap: Capability,
+  english: boolean,
+  hindiUrdu: boolean,
+  script: HindiUrduScript,
+): SessionPlan | null {
+  const langs: CapLang[] = [
+    ...(english ? (["en"] as const) : []),
+    ...(hindiUrdu ? ([script === "devanagari" ? "hi" : "ur"] as const) : []),
+  ];
   const d = cap.decision;
   const models = langs.flatMap((lang) => {
     const rp = d.languages[lang]?.rolling;
@@ -49,7 +57,11 @@ export function planFor(cap: Capability, english: boolean, hindiUrdu: boolean, s
   if (langs.length === 0) {
     live = { selectable: false, reason: "Tick at least one language.", via_override: false };
   } else if (!d.config) {
-    live = { selectable: false, reason: d.record_only_reason ?? "This machine records only.", via_override: false };
+    live = {
+      selectable: false,
+      reason: d.record_only_reason ?? "This machine records only.",
+      via_override: false,
+    };
   } else {
     const blocked = langs
       .map((l) => ({ l, ld: d.languages[l]?.live }))
@@ -58,7 +70,10 @@ export function planFor(cap: Capability, english: boolean, hindiUrdu: boolean, s
     live = blocked
       ? {
           selectable: false,
-          reason: blocked.ld?.hard_reasons[0] ?? blocked.ld?.soft_reasons[0] ?? "Live captions are not offered on this machine.",
+          reason:
+            blocked.ld?.hard_reasons[0] ??
+            blocked.ld?.soft_reasons[0] ??
+            "Live captions are not offered on this machine.",
           via_override: false,
         }
       : { selectable: true, reason: null, via_override: soft };
@@ -95,4 +110,3 @@ export function safeDefaults(cap: Capability, why: string): Capability {
   c.decision.verdict.unshift(why);
   return c;
 }
-

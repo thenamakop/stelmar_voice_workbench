@@ -90,7 +90,15 @@ function ModeCard({
         disabled={disabled}
         onChange={onPick}
         label={
-          <span style={{ display: "inline-flex", gap: 8, alignItems: "center", fontSize: 15, fontWeight: "var(--fw-semibold)" }}>
+          <span
+            style={{
+              display: "inline-flex",
+              gap: 8,
+              alignItems: "center",
+              fontSize: 15,
+              fontWeight: "var(--fw-semibold)",
+            }}
+          >
             {label}
             {badge}
           </span>
@@ -150,8 +158,10 @@ export function StartSessionDialog({
 
   const langs = [...(english ? ["en"] : []), ...(hindiUrdu ? [script === "devanagari" ? "hi" : "ur"] : [])];
   const liveReason =
-    plan?.live.reason ?? (plan === null ? "Not offered until the system check has run." : "Live captions are not offered.");
-  const canStart = !busy && !!title.trim() && !!deviceId && anyLanguage && !(mode === "live_post" && !plan?.live.selectable);
+    plan?.live.reason ??
+    (plan === null ? "Not offered until the system check has run." : "Live captions are not offered.");
+  const canStart =
+    !busy && !!title.trim() && !!deviceId && anyLanguage && !(mode === "live_post" && !plan?.live.selectable);
 
   return (
     <Dialog
@@ -168,7 +178,15 @@ export function StartSessionDialog({
           <Button
             iconLeft="circle"
             disabled={!canStart}
-            onClick={() => onStart({ title: title.trim(), hall: hall.trim(), expected_languages: langs, mode, hindi_urdu_script: hindiUrdu ? script : undefined })}
+            onClick={() =>
+              onStart({
+                title: title.trim(),
+                hall: hall.trim(),
+                expected_languages: langs,
+                mode,
+                hindi_urdu_script: hindiUrdu ? script : undefined,
+              })
+            }
           >
             Start Recording
           </Button>
@@ -178,7 +196,12 @@ export function StartSessionDialog({
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 12 }}>
           <Input label="Session title" value={title} onChange={(e) => setTitle(e.target.value)} required />
-          <Input label="Hall" placeholder="Seminar Hall B" value={hall} onChange={(e) => setHall(e.target.value)} />
+          <Input
+            label="Hall"
+            placeholder="Seminar Hall B"
+            value={hall}
+            onChange={(e) => setHall(e.target.value)}
+          />
         </div>
         <Select
           label="Audio input"
@@ -220,7 +243,10 @@ export function StartSessionDialog({
                   onChange={() => setScript("nastaliq")}
                   label={
                     <span>
-                      Nastaliq <span lang="ur" dir="rtl">(اردو)</span>
+                      Nastaliq{" "}
+                      <span lang="ur" dir="rtl">
+                        (اردو)
+                      </span>
                     </span>
                   }
                 />
@@ -264,24 +290,45 @@ export function StartSessionDialog({
         </div>
         {checkRunning && (
           <Note style={{ fontSize: 12, color: "var(--status-warning-fg)" }}>
-            The system check is running. Starting the recording stops the check and saves what it has measured so far.
+            The system check is running. Starting the recording stops the check and saves what it has measured
+            so far.
           </Note>
         )}
         <div>
           <Label>Post-processing</Label>
-          <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: px(6, 14), fontSize: 13, lineHeight: px(20), textAlign: "right" }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "auto 1fr",
+              gap: px(6, 14),
+              fontSize: 13,
+              lineHeight: px(20),
+              textAlign: "right",
+            }}
+          >
             <span style={{ color: "var(--text-muted)", textAlign: "left" }}>Devices</span>
-            <b style={{ fontWeight: "var(--fw-medium)" }}>{plan ? plan.devices : "Decided by the system check"}</b>
+            <b style={{ fontWeight: "var(--fw-medium)" }}>
+              {plan ? plan.devices : "Decided by the system check"}
+            </b>
             <span style={{ color: "var(--text-muted)", textAlign: "left" }}>Models</span>
-            <b style={{ fontWeight: "var(--fw-medium)", fontFamily: "var(--font-mono)", fontSize: "var(--fs-caption)" }}>
+            <b
+              style={{
+                fontWeight: "var(--fw-medium)",
+                fontFamily: "var(--font-mono)",
+                fontSize: "var(--fs-caption)",
+              }}
+            >
               {plan && plan.models.length > 0
-                ? plan.models.map((m) => `${m.model} (${m.lang})${m.quality_unverified ? "*" : ""}`).join(" · ")
+                ? plan.models
+                    .map((m) => `${m.model} (${m.lang})${m.quality_unverified ? "*" : ""}`)
+                    .join(" · ")
                 : "—"}
             </b>
           </div>
           {plan?.models.some((m) => m.quality_unverified) && (
             <Note style={{ marginTop: 6, fontSize: 12, color: "var(--text-muted)" }}>
-              * Accuracy of this model for this language has not been measured on this project's test sets yet.
+              * Accuracy of this model for this language has not been measured on this project's test sets
+              yet.
             </Note>
           )}
           {plan?.partial && (

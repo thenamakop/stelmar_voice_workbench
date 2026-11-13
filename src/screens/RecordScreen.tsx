@@ -1,16 +1,6 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
-import {
-  Badge,
-  Button,
-  Icon,
-  IconButton,
-  ProgressBar,
-  Select,
-  Switch,
-  Tabs,
-  Tag,
-} from "../ds";
+import { Badge, Button, Icon, IconButton, ProgressBar, Select, Switch, Tabs, Tag } from "../ds";
 import type { BadgeTone } from "../ds";
 import { px } from "../ds/units";
 import type { MirrorStatus, RecorderStatus, Snapshot } from "../ipc";
@@ -479,7 +469,13 @@ export function RecordScreen({ hasProfile, recorder, capability }: RecordScreenP
               >
                 {liveUnavailableReason(hasProfile, capability.view?.capability)}
               </div>
-              <KeyValue rows={transcriptionRows(capability.view?.capability).map(([k, v]) => [k, v, { mono: k === "Speed" }])} />
+              <KeyValue
+                rows={transcriptionRows(capability.view?.capability).map(([k, v]) => [
+                  k,
+                  v,
+                  { mono: k === "Speed" },
+                ])}
+              />
             </SideCard>
             <SideCard title="Backup">
               <KeyValue

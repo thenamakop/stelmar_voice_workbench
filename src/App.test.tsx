@@ -189,7 +189,9 @@ describe("the System screen with a saved profile", () => {
     render(<App />);
     await screen.findByRole("heading", { name: "Sessions" });
     fireEvent.click(screen.getByRole("button", { name: "System" }));
-    expect(await screen.findByRole("heading", { name: "Record Now, Transcribe in the Background" })).toBeTruthy();
+    expect(
+      await screen.findByRole("heading", { name: "Record Now, Transcribe in the Background" }),
+    ).toBeTruthy();
     expect(screen.getByText("Tier C")).toBeTruthy();
     expect(screen.getByText("Processor")).toBeTruthy();
     expect(screen.getAllByText("Chosen").length).toBeGreaterThan(0);
@@ -210,7 +212,11 @@ describe("the System screen with a saved profile", () => {
     expect(calls).not.toContain("set_override");
     fireEvent.click(within(dialog).getByRole("button", { name: "Turn Off" }));
     await waitFor(() => expect(calls).toContain("set_override"));
-    await waitFor(() => expect((screen.getByRole("switch", { name: "Pause on battery power" }) as HTMLInputElement).checked).toBe(false));
+    await waitFor(() =>
+      expect(
+        (screen.getByRole("switch", { name: "Pause on battery power" }) as HTMLInputElement).checked,
+      ).toBe(false),
+    );
   });
 
   it("shows the banner when the profile no longer matches the machine", async () => {
@@ -245,24 +251,37 @@ describe("the Start Session dialog", () => {
 
   it("defaults to Record + post-process, English + Hindi and Devanagari, and says why live is off", async () => {
     const dialog = await openDialog("tier-c-low");
-    expect((within(dialog).getByRole("radio", { name: /Record \+ post-process/ }) as HTMLInputElement).checked).toBe(true);
-    const live = within(dialog).getByRole("radio", { name: /Live captions \+ post-process/ }) as HTMLInputElement;
+    expect(
+      (within(dialog).getByRole("radio", { name: /Record \+ post-process/ }) as HTMLInputElement).checked,
+    ).toBe(true);
+    const live = within(dialog).getByRole("radio", {
+      name: /Live captions \+ post-process/,
+    }) as HTMLInputElement;
     expect(live.disabled).toBe(true);
-    expect((within(dialog).getByRole("checkbox", { name: "English" }) as HTMLInputElement).checked).toBe(true);
-    expect((within(dialog).getByRole("checkbox", { name: "Hindi / Urdu" }) as HTMLInputElement).checked).toBe(true);
-    expect((within(dialog).getByRole("radio", { name: /Devanagari/ }) as HTMLInputElement).checked).toBe(true);
+    expect((within(dialog).getByRole("checkbox", { name: "English" }) as HTMLInputElement).checked).toBe(
+      true,
+    );
+    expect((within(dialog).getByRole("checkbox", { name: "Hindi / Urdu" }) as HTMLInputElement).checked).toBe(
+      true,
+    );
+    expect((within(dialog).getByRole("radio", { name: /Devanagari/ }) as HTMLInputElement).checked).toBe(
+      true,
+    );
     await waitFor(() => expect(within(dialog).getByText(/runs slower than real time/)).toBeTruthy());
   });
 
   it("offers live only on a machine the check cleared, and on the graphics card only for English", async () => {
     const dialog = await openDialog("tier-g");
-    const live = () => within(dialog).getByRole("radio", { name: /Live captions \+ post-process/ }) as HTMLInputElement;
+    const live = () =>
+      within(dialog).getByRole("radio", { name: /Live captions \+ post-process/ }) as HTMLInputElement;
     // English + Hindi / Urdu (the default): no live model has been checked for Hindi or Urdu yet.
     await waitFor(() => expect(live().disabled).toBe(true));
     expect(within(dialog).getByText(/checked for accuracy/)).toBeTruthy();
     fireEvent.click(within(dialog).getByRole("checkbox", { name: "Hindi / Urdu" }));
     await waitFor(() => expect(live().disabled).toBe(false));
-    expect((within(dialog).getByRole("radio", { name: /Record \+ post-process/ }) as HTMLInputElement).checked).toBe(true);
+    expect(
+      (within(dialog).getByRole("radio", { name: /Record \+ post-process/ }) as HTMLInputElement).checked,
+    ).toBe(true);
   });
 
   it("sends the chosen languages and the script, in Record + post-process mode", async () => {

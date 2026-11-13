@@ -76,8 +76,7 @@ utterance ids and the SHA-256 of each file is in `resources/bench/clips.json`, a
 rebuilds them. `bench-codeswitch.wav` alternates English and Hindi utterances and stands in for real
 code-switched speech.
 
-*Note of 14 Nov 2026 (owner's decision on the review of the Phase 3 pull request):* the four `resources/bench/*.wav`
+_Note of 14 Nov 2026 (owner's decision on the review of the Phase 3 pull request):_ the four `resources/bench/*.wav`
 files are public FLEURS audio, published under CC BY 4.0 and credited above. They are not private audio, so
 committing them is allowed under the rule in `AGENTS.md` that bans private audio and model binaries from the
 repository. Recordings of real sessions, the Phase 5 local sets and anything under `eval/data/` stay out of Git.
-

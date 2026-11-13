@@ -92,8 +92,20 @@ export function App() {
         overflow: "hidden",
       }}
     >
-      <TopBar active={route} onNavigate={setRoute} machineLabel={profileText} machineMono={!!cap && !capability.running} />
-      <Screen route={route} hasProfile={profileSaved} recorder={recorder} notify={notify} capability={capability} onNavigate={setRoute} />
+      <TopBar
+        active={route}
+        onNavigate={setRoute}
+        machineLabel={profileText}
+        machineMono={!!cap && !capability.running}
+      />
+      <Screen
+        route={route}
+        hasProfile={profileSaved}
+        recorder={recorder}
+        notify={notify}
+        capability={capability}
+        onNavigate={setRoute}
+      />
       <StatusBar
         items={[
           <span key="v" style={{ fontFamily: "var(--font-mono)" }}>
@@ -104,7 +116,9 @@ export function App() {
             ? `Queue: no jobs · disk ${gigabytes(recorder.snapshot.recorder.disk_free_bytes)} free`
             : "Queue: no jobs",
         ]}
-        trailing={sys && sys.trailing ? sys.trailing : recordingSession ? recordingSession.dir : "No session open"}
+        trailing={
+          sys && sys.trailing ? sys.trailing : recordingSession ? recordingSession.dir : "No session open"
+        }
         trailingMono={!!(sys && sys.trailing) || !!recordingSession}
       />
       {recovering && !recordingSession && (

@@ -196,7 +196,12 @@ export function bridge(opts: MockOptions = {}) {
   const changed = (opts.fingerprintChange ?? []).length > 0;
   // After a fingerprint change the app reads the profile with safe defaults (wb_capability::safe_defaults).
   const inUse: Capability | null =
-    cap && changed ? safeDefaults(cap, `This computer has changed since the check (${opts.fingerprintChange?.[0]}). Safe defaults apply: recording and post-processing only, until a new check has run.`) : cap;
+    cap && changed
+      ? safeDefaults(
+          cap,
+          `This computer has changed since the check (${opts.fingerprintChange?.[0]}). Safe defaults apply: recording and post-processing only, until a new check has run.`,
+        )
+      : cap;
   const summary = (c: Capability, file: "main" | "partial", used: boolean): SavedCheck => ({
     file,
     started_at: c.check.started_at,
@@ -238,7 +243,13 @@ export function bridge(opts: MockOptions = {}) {
         return undefined;
       case "set_override": {
         const a = args as { kind: OverrideKind; enabled: boolean; confirmed: boolean };
-        if (cap) cap.overrides.push({ kind: a.kind, enabled: a.enabled, confirmed: a.confirmed, at: "2026-11-13T11:00:00Z" });
+        if (cap)
+          cap.overrides.push({
+            kind: a.kind,
+            enabled: a.enabled,
+            confirmed: a.confirmed,
+            at: "2026-11-13T11:00:00Z",
+          });
         return view();
       }
       case "session_plan": {

@@ -94,7 +94,15 @@ function capitalise(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-function Notice({ tone, title, children }: { tone: "warning" | "info"; title: string; children?: ReactNode }) {
+function Notice({
+  tone,
+  title,
+  children,
+}: {
+  tone: "warning" | "info";
+  title: string;
+  children?: ReactNode;
+}) {
   const fg = tone === "warning" ? "var(--status-warning-fg)" : "var(--status-info-fg)";
   const bg = tone === "warning" ? "var(--status-warning-bg)" : "var(--status-info-bg)";
   return (
@@ -193,7 +201,13 @@ export function SystemScreen({ capability, onContinue }: SystemScreenProps) {
                   margin: px(0, 0, 6),
                 }}
               >
-                {decision ? (decision.tier === "R" ? "Record only" : decision.tier === "G" ? recordModeLine(cap) : "Record + post-process") : "Not checked yet"}
+                {decision
+                  ? decision.tier === "R"
+                    ? "Record only"
+                    : decision.tier === "G"
+                      ? recordModeLine(cap)
+                      : "Record + post-process"
+                  : "Not checked yet"}
               </div>
               {cap && decision ? (
                 verdictLines(cap).map((line, i) => (
@@ -215,8 +229,17 @@ export function SystemScreen({ capability, onContinue }: SystemScreenProps) {
                     r.label,
                     r.note ? (
                       <>
-                        <span style={{ fontFamily: isDuration(r.value) ? "var(--font-mono)" : undefined }}>{r.value}</span>
-                        <span style={{ display: "block", fontFamily: "var(--font-body)", fontWeight: "var(--fw-regular)", color: "var(--text-muted)" }}>
+                        <span style={{ fontFamily: isDuration(r.value) ? "var(--font-mono)" : undefined }}>
+                          {r.value}
+                        </span>
+                        <span
+                          style={{
+                            display: "block",
+                            fontFamily: "var(--font-body)",
+                            fontWeight: "var(--fw-regular)",
+                            color: "var(--text-muted)",
+                          }}
+                        >
                           {r.note}
                         </span>
                       </>
@@ -231,16 +254,25 @@ export function SystemScreen({ capability, onContinue }: SystemScreenProps) {
             {view && view.saved_checks.length > 0 && (
               <SideCard title="Saved checks">
                 <KeyValue
-                  rows={savedCheckRows(view.saved_checks, savedTime).map((r): [string, ReactNode, { mono?: boolean }] => [
-                    r.label,
-                    <>
-                      <span>{r.value}</span>
-                      <span style={{ display: "block", fontFamily: "var(--font-body)", fontWeight: "var(--fw-regular)", color: "var(--text-muted)" }}>
-                        {r.note}
-                      </span>
-                    </>,
-                    {},
-                  ])}
+                  rows={savedCheckRows(view.saved_checks, savedTime).map(
+                    (r): [string, ReactNode, { mono?: boolean }] => [
+                      r.label,
+                      <>
+                        <span>{r.value}</span>
+                        <span
+                          style={{
+                            display: "block",
+                            fontFamily: "var(--font-body)",
+                            fontWeight: "var(--fw-regular)",
+                            color: "var(--text-muted)",
+                          }}
+                        >
+                          {r.note}
+                        </span>
+                      </>,
+                      {},
+                    ],
+                  )}
                 />
               </SideCard>
             )}
@@ -262,17 +294,20 @@ export function SystemScreen({ capability, onContinue }: SystemScreenProps) {
         {running && progress && (
           <div style={{ marginBottom: 14 }}>
             <Notice tone="info" title={`${progress.phase}${progress.detail ? ` · ${progress.detail}` : ""}`}>
-              {Math.round(progress.elapsed_s)} s so far · {progress.cells_done} measurements done. Starting a recording
-              stops the check and saves what it has measured so far.
+              {Math.round(progress.elapsed_s)} s so far · {progress.cells_done} measurements done. Starting a
+              recording stops the check and saves what it has measured so far.
             </Notice>
-            <ProgressBar value={Math.min(0.95, progress.elapsed_s / (cap?.check.bar_s || 480))} label="System check" />
+            <ProgressBar
+              value={Math.min(0.95, progress.elapsed_s / (cap?.check.bar_s || 480))}
+              label="System check"
+            />
           </div>
         )}
         {view && view.fingerprint_changes.length > 0 && !running && (
           <Notice tone="warning" title="This computer or the app has changed since the last check">
-            {capitalise(view.fingerprint_changes.join(" · "))}. Until the check has run again, this computer records and
-            post-processes only: live captions and processing while recording are off. A check that ends partial keeps
-            these limits; a complete check lifts them.
+            {capitalise(view.fingerprint_changes.join(" · "))}. Until the check has run again, this computer
+            records and post-processes only: live captions and processing while recording are off. A check
+            that ends partial keeps these limits; a complete check lifts them.
             <div style={{ marginTop: 8 }}>
               <Button size="sm" onClick={() => void capability.run(false)}>
                 Re-run Quick Check
@@ -289,8 +324,8 @@ export function SystemScreen({ capability, onContinue }: SystemScreenProps) {
         )}
         {cap && cap.injectors.length > 0 && (
           <Notice tone="warning" title="A screen-overlay tool is running">
-            {cap.injectors.join(" · ")}. These tools can crash the display and disturb timing. Close them before
-            recording or running a full check.
+            {cap.injectors.join(" · ")}. These tools can crash the display and disturb timing. Close them
+            before recording or running a full check.
           </Notice>
         )}
         {view?.error && (
@@ -347,8 +382,9 @@ export function SystemScreen({ capability, onContinue }: SystemScreenProps) {
           {decision && decision.bars && (
             <Note style={{ marginTop: 6, fontSize: 12, color: "var(--text-muted)" }}>
               Speed is processing time per second of audio (lower is faster). Bars: recording passes up to{" "}
-              {decision.bars.rolling_rtf.toFixed(2)}×, near-live up to {decision.bars.near_live_rtf.toFixed(2)}×, live
-              captions up to {decision.bars.live_standin_rtf.toFixed(2)}×
+              {decision.bars.rolling_rtf.toFixed(2)}×, near-live up to{" "}
+              {decision.bars.near_live_rtf.toFixed(2)}×, live captions up to{" "}
+              {decision.bars.live_standin_rtf.toFixed(2)}×
               {cap?.emulated ? " (emulated bars: 25% headroom)" : ""}.
             </Note>
           )}

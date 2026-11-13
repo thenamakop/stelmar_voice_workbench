@@ -52,7 +52,11 @@ function gpuOf(cap: Capability, index: number): CapGpu | undefined {
 
 /** "cpu 3", "uhd graphics", "cpu 1 + uhd graphics": the device configuration of a row. */
 export function configLabel(cap: Capability, m: Pick<CapMeasurement, "config" | "threads">): string {
-  const gpu = (i: number) => (gpuOf(cap, i)?.name ?? `gpu ${i}`).replace(/\(R\)|\(TM\)/g, "").trim().toLowerCase();
+  const gpu = (i: number) =>
+    (gpuOf(cap, i)?.name ?? `gpu ${i}`)
+      .replace(/\(R\)|\(TM\)/g, "")
+      .trim()
+      .toLowerCase();
   switch (m.config.kind) {
     case "cpu":
       return `cpu ${m.threads}`;
@@ -86,10 +90,15 @@ export function speedRows(cap: Capability): SpeedRow[] {
   return cap.measurements.map((m) => {
     const lang = d.languages[m.lang];
     const onChosen =
-      chosen && (sameConfig(chosen, m.config) || (chosen.kind === "hybrid" && m.config.kind === "gpu" && m.config.index === chosen.gpu));
+      chosen &&
+      (sameConfig(chosen, m.config) ||
+        (chosen.kind === "hybrid" && m.config.kind === "gpu" && m.config.index === chosen.gpu));
     let result: SpeedRow["result"] = null;
     if (m.live_standin) {
-      result = m.rtf <= bars.live_standin_rtf ? { label: "Fits live", tone: "success" } : { label: "Too slow", tone: "warning" };
+      result =
+        m.rtf <= bars.live_standin_rtf
+          ? { label: "Fits live", tone: "success" }
+          : { label: "Too slow", tone: "warning" };
     } else if (m.mode === "near_live") {
       result =
         m.rtf >= 1
@@ -144,8 +153,11 @@ export function hardwareRows(cap: Capability): HardwareRow[] {
   const cpuOk = hw.avx2;
   const gpus = hw.gpus.filter((g) => g.vulkan_usable);
   const hybrid = d.config?.config.kind === "hybrid";
-  const power = hw.on_mains_power === null ? "power source unknown" : hw.on_mains_power ? "mains power" : "battery power";
-  const disks = hw.disks.map((x) => `${x.path.slice(0, 2)} ${Math.round(x.free_bytes / 1e9)} GB free`).join(" · ");
+  const power =
+    hw.on_mains_power === null ? "power source unknown" : hw.on_mains_power ? "mains power" : "battery power";
+  const disks = hw.disks
+    .map((x) => `${x.path.slice(0, 2)} ${Math.round(x.free_bytes / 1e9)} GB free`)
+    .join(" · ");
   const memOk = hw.total_ram_bytes >= 8 * 2 ** 30;
   return [
     {
@@ -165,7 +177,10 @@ export function hardwareRows(cap: Capability): HardwareRow[] {
         gpus.length === 0
           ? "No graphics adapter the speech engine can use"
           : gpus
-              .map((g) => `${g.name} (Vulkan)${g.kind === "integrated" ? " · shared memory" : ` · ${gib(g.dedicated_bytes)}`}`)
+              .map(
+                (g) =>
+                  `${g.name} (Vulkan)${g.kind === "integrated" ? " · shared memory" : ` · ${gib(g.dedicated_bytes)}`}`,
+              )
               .join(" · ") + (hybrid ? " · faster together with the CPU" : ""),
       result:
         gpus.length === 0
@@ -181,7 +196,10 @@ export function hardwareRows(cap: Capability): HardwareRow[] {
     },
     {
       part: "Audio input",
-      found: hw.audio_inputs === 0 ? "No audio input found" : `${hw.audio_inputs} input${hw.audio_inputs === 1 ? "" : "s"}`,
+      found:
+        hw.audio_inputs === 0
+          ? "No audio input found"
+          : `${hw.audio_inputs} input${hw.audio_inputs === 1 ? "" : "s"}`,
       result: hw.audio_inputs === 0 ? { label: "None", tone: "warning" } : { label: "OK", tone: "success" },
     },
   ];
@@ -235,7 +253,9 @@ const LIVE_NAME = { en: "English", hi: "Hindi", ur: "Urdu" } as const;
 /** The languages the profile clears live text for, in words: "English", "English and Hindi", ... */
 export function liveLanguages(cap: Capability | null | undefined): string[] {
   if (!cap) return [];
-  return (["en", "hi", "ur"] as const).filter((l) => cap.decision.languages[l]?.live.offered).map((l) => LIVE_NAME[l]);
+  return (["en", "hi", "ur"] as const)
+    .filter((l) => cap.decision.languages[l]?.live.offered)
+    .map((l) => LIVE_NAME[l]);
 }
 
 /** "English", "English and Hindi", "English, Hindi and Urdu". */
@@ -258,7 +278,9 @@ export function readyRows(cap: Capability): ReadyRow[] {
     }
   }
   const nightLangs = (["en", "hi", "ur"] as const).filter((l) => !!cap.decision.languages[l]?.night);
-  const measured = (["en", "hi", "ur"] as const).every((l) => cap.decision.languages[l]?.night_note !== "The night model is measured by the full check.");
+  const measured = (["en", "hi", "ur"] as const).every(
+    (l) => cap.decision.languages[l]?.night_note !== "The night model is measured by the full check.",
+  );
   rows.push({
     label: "Night pass",
     value: nightLangs.length > 0 ? "Done by 08:00" : measured ? "None needed" : "Measured by the full check",
@@ -289,7 +311,8 @@ export function savedCheckRows(
 ): { label: string; value: string; note: string }[] {
   const hasComplete = checks.some((c) => c.file === "main" && !c.partial);
   return checks.map((c) => {
-    const label = c.file === "partial" ? "Partial check" : c.partial ? "Check in use (partial)" : "Complete check";
+    const label =
+      c.file === "partial" ? "Partial check" : c.partial ? "Check in use (partial)" : "Complete check";
     const note = c.in_use
       ? c.file === "partial"
         ? "In use, with safe defaults"

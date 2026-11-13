@@ -36,7 +36,9 @@ describe("the speed test table", () => {
     const rows = speedRows(cap);
     expect(rows.length).toBe(cap.measurements.length);
     expect(rows.some((r) => r.result?.label === "Chosen")).toBe(true);
-    expect(rows.filter((r) => r.role.startsWith("Near-live")).every((r) => r.result?.tone === "warning")).toBe(true);
+    expect(
+      rows.filter((r) => r.role.startsWith("Near-live")).every((r) => r.result?.tone === "warning"),
+    ).toBe(true);
   });
 
   it("names the device configuration of each row", () => {
@@ -64,7 +66,9 @@ describe("hardware and ready time", () => {
 
   it("says a lagging language lags", () => {
     const rows = readyRows(profile("tier-c-cpu-only"));
-    expect(rows.find((r) => r.label === "Hindi")?.note).toMatch(/take hours on this computer; the recording is not affected/);
+    expect(rows.find((r) => r.label === "Hindi")?.note).toMatch(
+      /take hours on this computer; the recording is not affected/,
+    );
     expect(rows.find((r) => r.label === "Hindi")?.value).toMatch(/^about /);
     expect(rows.find((r) => r.label === "English")?.value).not.toMatch(/lags/);
   });
@@ -97,15 +101,30 @@ describe("overrides", () => {
     const cap = profile("tier-c-low");
     expect(overrideOn(cap, "allow_live_anyway")).toBe(false);
     expect(overrideOn(cap, "process_while_recording")).toBe(true);
-    cap.overrides.push({ kind: "process_while_recording", enabled: false, confirmed: true, at: "2026-11-13T10:00:00Z" });
+    cap.overrides.push({
+      kind: "process_while_recording",
+      enabled: false,
+      confirmed: true,
+      at: "2026-11-13T10:00:00Z",
+    });
     expect(overrideOn(cap, "process_while_recording")).toBe(false);
-    cap.overrides.push({ kind: "allow_live_anyway", enabled: true, confirmed: false, at: "2026-11-13T10:01:00Z" });
+    cap.overrides.push({
+      kind: "allow_live_anyway",
+      enabled: true,
+      confirmed: false,
+      at: "2026-11-13T10:01:00Z",
+    });
     expect(overrideOn(cap, "allow_live_anyway")).toBe(false);
   });
 
   it("keeps processing while recording off when the saved safety test did not pass, whatever was logged", () => {
     const cap = profile("tier-c-low");
-    cap.overrides.push({ kind: "process_while_recording", enabled: true, confirmed: true, at: "2026-11-13T10:00:00Z" });
+    cap.overrides.push({
+      kind: "process_while_recording",
+      enabled: true,
+      confirmed: true,
+      at: "2026-11-13T10:00:00Z",
+    });
     expect(overrideOn(cap, "process_while_recording")).toBe(true);
     cap.decision.process_while_recording = false;
     expect(overrideOn(cap, "process_while_recording")).toBe(false);
@@ -167,7 +186,11 @@ describe("the top bar label", () => {
 });
 
 describe("saved checks", () => {
-  const base = { started_at: "2026-11-14T03:00:00+05:30", duration_s: 300, fingerprint_id: "3F2A-91C7" } as const;
+  const base = {
+    started_at: "2026-11-14T03:00:00+05:30",
+    duration_s: 300,
+    fingerprint_id: "3F2A-91C7",
+  } as const;
   it("lists the complete check in use and a partial one kept apart", () => {
     const rows = savedCheckRows(
       [

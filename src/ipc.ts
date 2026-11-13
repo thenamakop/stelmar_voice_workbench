@@ -392,7 +392,13 @@ export interface Capability {
     excerpt_seconds: number;
   };
   hardware: CapHardware;
-  engines: { variant: string; usable: boolean; reason: string | null; info_ms: number | null; devices: string[] }[];
+  engines: {
+    variant: string;
+    usable: boolean;
+    reason: string | null;
+    info_ms: number | null;
+    devices: string[];
+  }[];
   measurements: CapMeasurement[];
   hybrid: {
     model: string;
