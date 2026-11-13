@@ -1,52 +1,19 @@
-﻿date: 2026-11-14 03:22 (IST on the Legion)
+﻿date: 2026-11-14 04:20 (IST on the Legion)
 command: powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\gates\system-check-gate.ps1
  -Runs quick-emu-low,quick-emu-mid,quick-native,start-during-check-emu-low,view-same-emu-low,view-changed-emu-low
 machine: Legion (the RTX 4070 Laptop GPU and the Intel UHD, emulation per run below); the gate build target\gate\stelmar-voice-workbench.exe runs the app's own system check through the WB_GATE_CHECK hook
-source: 501bba6
-build: stelmar-voice-workbench.exe sha256 5eda7f2943f7001d83fbc5656e5e4d45f17230b60b79210f4d42d5f08656d029
+source: 6253468
+build: stelmar-voice-workbench.exe sha256 1c3889f8d6a346b2da3d27bae0985c9329ab86d17dead8a303b210e85eab0583
 
 == quick-emu-low ==
-report written: 2026-11-14 03:12
+report written: 2026-11-14 04:09
 emulation: emu-low; kind quick; excerpt 30 s; partial True
-check time: 371 s measured by the check, 371 s wall clock from launch to exit; quick-check bar 480 s (within the bar; the bar is for the real low laptop, so this is PROVISIONAL)
-quick-check target 360 s: NOT met (371 s)
+check time: 410 s measured by the check, 410 s wall clock from launch to exit; quick-check bar 480 s (within the bar; the bar is for the real low laptop, so this is PROVISIONAL)
+quick-check target 360 s: NOT met (410 s)
 tier C; provisional True; partial True; saved profile fingerprint 3F67-6C9C
-skipped: hybrid test: not measured: large-v3-turbo-q5_0 Hindi (Devanagari): the processor engine (1 threads) did not finish a warm-up and one timed decode of 10 s of audio in 120 s beside the recorder test (RTF above about 6.0); the graphics adapter runs at 0.79, so the processor could add 13% at the most (the rule needs 10%)
-skipped: CPU speed of the ranked models: left for the full check: the quick check aims to end by 360 s and 371 s had passed
+skipped: hybrid test: predicted, not measured: large-v3-turbo-q5_0 Hindi (Devanagari): the processor engine (1 threads) did not finish a warm-up and one timed decode of 10 s of audio in 120 s beside the recorder test (RTF above about 6.0); the graphics adapter runs at 0.69, so the processor could add 12% at the most (the rule needs 15%); the hybrid configuration is not chosen
 skipped: near-live speed on the processor (English): not measured: no validated near-live model
-skipped: night model speed: left for the full check: the quick check aims to end by 360 s and 371 s had passed
-chosen configuration: Intel(R) UHD Graphics (Vulkan) (gpu:0); CPU threads 2; recorder safety passed True
-  why: The graphics card measured fastest for the rolling models.
-  verdict: Record + post-process. Live text is off by default and not offered on this machine.
-  verdict: Transcribing runs on Intel(R) UHD Graphics (Vulkan).
-  verdict: English: large-v3-turbo-q5_0, about 5 minutes after Stop.
-  verdict: Hindi (Devanagari): large-v3-turbo-q5_0. It is within the 25% safety margin of real time (0.79×, needs 0.75); about 8 minutes after Stop.
-  verdict: Urdu (Nastaliq): large-v3-turbo-q5_0, about 7 minutes after Stop.
-  verdict: The code-switching (Hinglish) model is too slow to run on every chunk here.
-  verdict: Some measurements are still to come: this verdict is partial.
-  verdict: The model choice is provisional until the models have been checked for accuracy.
-  en: rolling large-v3-turbo-q5_0 RTF 0.475 (bar 0.75) meets True; k_max 1; lags False; ready after stop 4.7 min
-  en: live offered False; hard reasons 1; soft reasons 0
-  hi: rolling large-v3-turbo-q5_0 RTF 0.791 (bar 0.75) meets False; k_max 0; lags False; ready after stop 7.9 min
-  hi: live offered False; hard reasons 1; soft reasons 0
-  ur: rolling large-v3-turbo-q5_0 RTF 0.686 (bar 0.75) meets True; k_max 1; lags False; ready after stop 6.9 min
-  ur: live offered False; hard reasons 1; soft reasons 0
-hybrid test: none recorded (not measured: large-v3-turbo-q5_0 Hindi (Devanagari): the processor engine (1 threads) did not finish a warm-up and one timed decode of 10 s of audio in 120 s beside the recorder test (RTF above about 6.0); the graphics adapter runs at 0.79, so the processor could add 13% at the most (the rule needs 10%)); the verdict chose hybrid False: CONSISTENT
-recorder safety hybrid:0: 162 s, overruns 0, driver xruns 0, passed True
-recorder safety gpu:0: 162 s, overruns 0, driver xruns 0, passed True
-measurements (model / language / mode / device / threads: RTF, peak commit, truncated, method):
-  large-v3-turbo-q5_0    en rolling   gpu:0      2 thr  RTF 0.475  commit 1.48 GiB  truncated 0  bench clip bench-en.wav, first 30 s, rolling settings, warm-up + 1 run(s), single run above RTF 2, 2 threads
-  large-v3-turbo-q5_0    hi rolling   gpu:0      2 thr  RTF 0.791  commit 1.49 GiB  truncated 0  bench clip bench-hi.wav, first 30 s, rolling settings, warm-up + 1 run(s), single run above RTF 2, 2 threads
-  medium                 hi rolling   gpu:0      2 thr  RTF 1.222  commit 2.75 GiB  truncated 0  bench clip bench-hi.wav, first 30 s, rolling settings, warm-up + 1 run(s), single run above RTF 2, 2 threads
-  large-v3-turbo-q5_0    ur rolling   gpu:0      2 thr  RTF 0.686  commit 1.48 GiB  truncated 0  bench clip bench-ur.wav, first 30 s, rolling settings, warm-up + 1 run(s), single run above RTF 2, 2 threads
-
-== quick-emu-mid ==
-report written: 2026-11-14 03:18
-emulation: emu-mid; kind quick; excerpt 30 s; partial False
-check time: 342 s measured by the check, 343 s wall clock from launch to exit; quick-check bar 480 s (within the bar; the bar is for the real low laptop, so this is PROVISIONAL)
-quick-check target 360 s: met (342 s)
-tier C; provisional True; partial False; saved profile fingerprint DEEA-8F0E
-skipped: near-live speed on the processor (English): not measured: no validated near-live model
+skipped: night model speed: left for the full check: the quick check aims to end by 360 s and 410 s had passed
 chosen configuration: Intel(R) UHD Graphics (Vulkan) (gpu:0); CPU threads 2; recorder safety passed True
   why: The graphics card measured fastest for the rolling models.
   verdict: Record + post-process. Live text is off by default and not offered on this machine.
@@ -55,28 +22,60 @@ chosen configuration: Intel(R) UHD Graphics (Vulkan) (gpu:0); CPU threads 2; rec
   verdict: Hindi (Devanagari): large-v3-turbo-q5_0, about 7 minutes after Stop.
   verdict: Urdu (Nastaliq): large-v3-turbo-q5_0, about 6 minutes after Stop.
   verdict: The code-switching (Hinglish) model is too slow to run on every chunk here.
+  verdict: Some measurements are still to come: this verdict is partial.
   verdict: The model choice is provisional until the models have been checked for accuracy.
-  en: rolling large-v3-turbo-q5_0 RTF 0.467 (bar 0.75) meets True; k_max 1; lags False; ready after stop 4.7 min
+  en: rolling large-v3-turbo-q5_0 RTF 0.473 (bar 0.75) meets True; k_max 1; lags False; ready after stop 4.7 min
   en: live offered False; hard reasons 1; soft reasons 0
-  hi: rolling large-v3-turbo-q5_0 RTF 0.713 (bar 0.75) meets True; k_max 1; lags False; ready after stop 7.1 min
+  hi: rolling large-v3-turbo-q5_0 RTF 0.690 (bar 0.75) meets True; k_max 1; lags False; ready after stop 6.9 min
   hi: live offered False; hard reasons 1; soft reasons 0
-  ur: rolling large-v3-turbo-q5_0 RTF 0.624 (bar 0.75) meets True; k_max 1; lags False; ready after stop 6.2 min
+  ur: rolling large-v3-turbo-q5_0 RTF 0.644 (bar 0.75) meets True; k_max 1; lags False; ready after stop 6.4 min
   ur: live offered False; hard reasons 1; soft reasons 0
-hybrid test: large-v3-turbo-q5_0 hi, GPU RTF 0.928 with CPU RTF 2.681 at the same time; combined 1.450 audio/s against best single 1.402: +3.4%; recorder safe True
-  rule (at least +10% and recorder-safe) says hybrid False; the verdict chose hybrid False: CONSISTENT
-recorder safety hybrid:0: 120 s, overruns 0, driver xruns 0, passed True
-recorder safety gpu:0: 120 s, overruns 0, driver xruns 0, passed True
+hybrid test: none recorded (predicted, not measured: large-v3-turbo-q5_0 Hindi (Devanagari): the processor engine (1 threads) did not finish a warm-up and one timed decode of 10 s of audio in 120 s beside the recorder test (RTF above about 6.0); the graphics adapter runs at 0.69, so the processor could add 12% at the most (the rule needs 15%); the hybrid configuration is not chosen); the verdict chose hybrid False: CONSISTENT
+recorder safety hybrid:0: 209 s, overruns 0, driver xruns 0, passed True
+recorder safety gpu:0: 209 s, overruns 0, driver xruns 0, passed True
 measurements (model / language / mode / device / threads: RTF, peak commit, truncated, method):
-  large-v3-turbo-q5_0    en rolling   gpu:0      2 thr  RTF 0.467  commit 1.48 GiB  truncated 0  bench clip bench-en.wav, first 30 s, rolling settings, warm-up + 1 run(s), single run above RTF 2, 2 threads
-  large-v3-turbo-q5_0    hi rolling   gpu:0      2 thr  RTF 0.713  commit 1.49 GiB  truncated 0  bench clip bench-hi.wav, first 30 s, rolling settings, warm-up + 1 run(s), single run above RTF 2, 2 threads
-  large-v3-turbo-q5_0    ur rolling   gpu:0      2 thr  RTF 0.624  commit 1.48 GiB  truncated 0  bench clip bench-ur.wav, first 30 s, rolling settings, warm-up + 1 run(s), single run above RTF 2, 2 threads
-  large-v3-q5_0          hi rolling   gpu:0      2 thr  RTF 1.673  commit 2.72 GiB  truncated 0  bench clip bench-hi.wav, first 30 s, rolling settings, warm-up + 1 run(s), single run above RTF 2, 2 threads
+  large-v3-turbo-q5_0    en rolling   gpu:0      2 thr  RTF 0.473  commit 1.48 GiB  truncated 0  bench clip bench-en.wav, first 30 s, rolling settings, warm-up + 1 run(s), single run above RTF 2, 2 threads
+  large-v3-turbo-q5_0    hi rolling   gpu:0      2 thr  RTF 0.690  commit 1.49 GiB  truncated 0  bench clip bench-hi.wav, first 60 s, rolling settings, warm-up + 1 run(s), single run above RTF 2, 2 threads
+  large-v3-turbo-q5_0    ur rolling   gpu:0      2 thr  RTF 0.644  commit 1.49 GiB  truncated 0  bench clip bench-ur.wav, first 60 s, rolling settings, warm-up + 1 run(s), single run above RTF 2, 2 threads
+
+== quick-emu-mid ==
+report written: 2026-11-14 04:15
+emulation: emu-mid; kind quick; excerpt 30 s; partial True
+check time: 354 s measured by the check, 354 s wall clock from launch to exit; quick-check bar 480 s (within the bar; the bar is for the real low laptop, so this is PROVISIONAL)
+quick-check target 360 s: met (354 s)
+tier C; provisional True; partial True; saved profile fingerprint DEEA-8F0E
+skipped: near-live speed on the processor (English): not measured: no validated near-live model
+skipped: night model speed: left for the full check: the quick check aims to end by 360 s and 354 s had passed
+chosen configuration: Intel(R) UHD Graphics (Vulkan) (gpu:0); CPU threads 2; recorder safety passed True
+  why: The graphics card measured fastest for the rolling models.
+  verdict: Record + post-process. Live text is off by default and not offered on this machine.
+  verdict: Transcribing runs on Intel(R) UHD Graphics (Vulkan).
+  verdict: English: large-v3-turbo-q5_0, about 5 minutes after Stop.
+  verdict: Hindi (Devanagari): large-v3-turbo-q5_0, about 6 minutes after Stop.
+  verdict: Urdu (Nastaliq): large-v3-turbo-q5_0, about 6 minutes after Stop.
+  verdict: The code-switching (Hinglish) model is too slow to run on every chunk here.
+  verdict: Some measurements are still to come: this verdict is partial.
+  verdict: The model choice is provisional until the models have been checked for accuracy.
+  en: rolling large-v3-turbo-q5_0 RTF 0.462 (bar 0.75) meets True; k_max 1; lags False; ready after stop 4.6 min
+  en: live offered False; hard reasons 1; soft reasons 0
+  hi: rolling large-v3-turbo-q5_0 RTF 0.623 (bar 0.75) meets True; k_max 1; lags False; ready after stop 6.2 min
+  hi: live offered False; hard reasons 1; soft reasons 0
+  ur: rolling large-v3-turbo-q5_0 RTF 0.618 (bar 0.75) meets True; k_max 1; lags False; ready after stop 6.2 min
+  ur: live offered False; hard reasons 1; soft reasons 0
+hybrid test: large-v3-turbo-q5_0 hi, GPU RTF 0.932 with CPU RTF 2.664 at the same time; combined 1.448 audio/s against best single 1.334: +8.6%; recorder safe True
+  rule (at least +15% and recorder-safe) says hybrid False; the verdict chose hybrid False: CONSISTENT
+recorder safety hybrid:0: 168 s, overruns 0, driver xruns 0, passed True
+recorder safety gpu:0: 168 s, overruns 0, driver xruns 0, passed True
+measurements (model / language / mode / device / threads: RTF, peak commit, truncated, method):
+  large-v3-turbo-q5_0    en rolling   gpu:0      2 thr  RTF 0.462  commit 1.48 GiB  truncated 0  bench clip bench-en.wav, first 30 s, rolling settings, warm-up + 1 run(s), single run above RTF 2, 2 threads
+  large-v3-turbo-q5_0    hi rolling   gpu:0      2 thr  RTF 0.623  commit 1.49 GiB  truncated 0  bench clip bench-hi.wav, first 60 s, rolling settings, warm-up + 1 run(s), single run above RTF 2, 2 threads
+  large-v3-turbo-q5_0    ur rolling   gpu:0      2 thr  RTF 0.618  commit 1.49 GiB  truncated 0  bench clip bench-ur.wav, first 60 s, rolling settings, warm-up + 1 run(s), single run above RTF 2, 2 threads
 
 == quick-native ==
-report written: 2026-11-14 03:21
+report written: 2026-11-14 04:18
 emulation: none (native); kind quick; excerpt 30 s; partial False
-check time: 172 s measured by the check, 172 s wall clock from launch to exit; quick-check bar 480 s (within the bar)
-quick-check target 360 s: met (172 s)
+check time: 199 s measured by the check, 199 s wall clock from launch to exit; quick-check bar 480 s (within the bar)
+quick-check target 360 s: met (199 s)
 tier G; provisional True; partial False; saved profile fingerprint F541-748F
 skipped: near-live speed on the processor (English): not measured: no validated near-live model
 chosen configuration: NVIDIA GeForce RTX 4070 Laptop GPU (Vulkan) (gpu:1); CPU threads 2; recorder safety passed True
@@ -88,24 +87,24 @@ chosen configuration: NVIDIA GeForce RTX 4070 Laptop GPU (Vulkan) (gpu:1); CPU t
   verdict: Urdu (Nastaliq): large-v3-turbo-q5_0, about 1 minutes after Stop.
   verdict: The code-switching (Hinglish) model is fast enough to run on every chunk.
   verdict: The model choice is provisional until the models have been checked for accuracy.
-  en: rolling large-v3-turbo-q5_0 RTF 0.031 (bar 1.00) meets True; k_max 32; lags False; ready after stop 0.3 min
+  en: rolling large-v3-turbo-q5_0 RTF 0.034 (bar 1.00) meets True; k_max 29; lags False; ready after stop 0.3 min
   en: live offered True; hard reasons 0; soft reasons 0
-  hi: rolling large-v3-turbo-q5_0 RTF 0.098 (bar 1.00) meets True; k_max 10; lags False; ready after stop 1.0 min
+  hi: rolling large-v3-turbo-q5_0 RTF 0.086 (bar 1.00) meets True; k_max 11; lags False; ready after stop 0.9 min
   hi: live offered False; hard reasons 0; soft reasons 1
-  ur: rolling large-v3-turbo-q5_0 RTF 0.066 (bar 1.00) meets True; k_max 15; lags False; ready after stop 0.7 min
+  ur: rolling large-v3-turbo-q5_0 RTF 0.064 (bar 1.00) meets True; k_max 15; lags False; ready after stop 0.6 min
   ur: live offered False; hard reasons 0; soft reasons 1
-hybrid test: large-v3-turbo-q5_0 hi, GPU RTF 0.227 with CPU RTF 1.928 at the same time; combined 4.928 audio/s against best single 10.252: -51.9%; recorder safe True
-  rule (at least +10% and recorder-safe) says hybrid False; the verdict chose hybrid False: CONSISTENT
-recorder safety hybrid:1: 128 s, overruns 0, driver xruns 0, passed True
-recorder safety gpu:1: 128 s, overruns 0, driver xruns 0, passed True
+hybrid test: large-v3-turbo-q5_0 hi, GPU RTF 0.239 with CPU RTF 1.981 at the same time; combined 4.688 audio/s against best single 11.292: -58.5%; recorder safe True
+  rule (at least +15% and recorder-safe) says hybrid False; the verdict chose hybrid False: CONSISTENT
+recorder safety hybrid:1: 146 s, overruns 0, driver xruns 0, passed True
+recorder safety gpu:1: 146 s, overruns 0, driver xruns 0, passed True
 measurements (model / language / mode / device / threads: RTF, peak commit, truncated, method):
-  large-v3-turbo-q5_0    en rolling   gpu:1      2 thr  RTF 0.031  commit 1.51 GiB  truncated 0  bench clip bench-en.wav, first 30 s, rolling settings, warm-up + 1 run(s), single run above RTF 2, 2 threads
-  large-v3-turbo-q5_0    hi rolling   gpu:1      2 thr  RTF 0.098  commit 1.71 GiB  truncated 0  bench clip bench-hi.wav, first 30 s, rolling settings, warm-up + 1 run(s), single run above RTF 2, 2 threads
-  large-v3-turbo-q5_0    ur rolling   gpu:1      2 thr  RTF 0.066  commit 1.58 GiB  truncated 0  bench clip bench-ur.wav, first 30 s, rolling settings, warm-up + 1 run(s), single run above RTF 2, 2 threads
-  large-v3-turbo-q5_0    en near_live gpu:1      2 thr  RTF 0.022  commit 1.43 GiB  truncated 0  bench clip bench-en.wav, first 30 s, near-live settings, warm-up + 1 run(s), single run above RTF 2, 2 threads
-  large-v3-turbo-q5_0    hi near_live gpu:1      2 thr  RTF 0.051  commit 1.44 GiB  truncated 0  bench clip bench-hi.wav, first 30 s, near-live settings, warm-up + 1 run(s), single run above RTF 2, 2 threads
-  large-v3-turbo-q5_0    ur near_live gpu:1      2 thr  RTF 0.039  commit 1.44 GiB  truncated 0  bench clip bench-ur.wav, first 30 s, near-live settings, warm-up + 1 run(s), single run above RTF 2, 2 threads
-  large-v3-q5_0          hi rolling   gpu:1      2 thr  RTF 0.202  commit 2.83 GiB  truncated 0  bench clip bench-hi.wav, first 30 s, rolling settings, warm-up + 1 run(s), single run above RTF 2, 2 threads
+  large-v3-turbo-q5_0    en rolling   gpu:1      2 thr  RTF 0.034  commit 1.51 GiB  truncated 0  bench clip bench-en.wav, first 30 s, rolling settings, warm-up + 1 run(s), single run above RTF 2, 2 threads
+  large-v3-turbo-q5_0    hi rolling   gpu:1      2 thr  RTF 0.086  commit 1.75 GiB  truncated 0  bench clip bench-hi.wav, first 60 s, rolling settings, warm-up + 1 run(s), single run above RTF 2, 2 threads
+  large-v3-turbo-q5_0    ur rolling   gpu:1      2 thr  RTF 0.064  commit 1.61 GiB  truncated 0  bench clip bench-ur.wav, first 60 s, rolling settings, warm-up + 1 run(s), single run above RTF 2, 2 threads
+  large-v3-turbo-q5_0    en near_live gpu:1      2 thr  RTF 0.021  commit 1.43 GiB  truncated 0  bench clip bench-en.wav, first 30 s, near-live settings, warm-up + 1 run(s), single run above RTF 2, 2 threads
+  large-v3-turbo-q5_0    hi near_live gpu:1      2 thr  RTF 0.045  commit 1.44 GiB  truncated 0  bench clip bench-hi.wav, first 30 s, near-live settings, warm-up + 1 run(s), single run above RTF 2, 2 threads
+  large-v3-turbo-q5_0    ur near_live gpu:1      2 thr  RTF 0.041  commit 1.44 GiB  truncated 0  bench clip bench-ur.wav, first 30 s, near-live settings, warm-up + 1 run(s), single run above RTF 2, 2 threads
+  large-v3-q5_0          hi rolling   gpu:1      2 thr  RTF 0.210  commit 2.84 GiB  truncated 0  bench clip bench-hi.wav, first 30 s, rolling settings, warm-up + 1 run(s), single run above RTF 2, 2 threads
 
 == full-emu-low ==
 report written: 2026-11-14 01:55
@@ -129,7 +128,7 @@ chosen configuration: Intel(R) UHD Graphics (Vulkan) (gpu:0); CPU threads 2; rec
   ur: rolling large-v3-turbo-q5_0 RTF 0.653 (bar 0.75) meets True; k_max 1; lags False; ready after stop 6.5 min
   ur: live offered False; hard reasons 1; soft reasons 0
 hybrid test: large-v3-turbo-q5_0 hi, GPU RTF 0.845 with CPU RTF 14.197 at the same time; combined 1.254 audio/s against best single 1.436: -12.6%; recorder safe True
-  rule (at least +10% and recorder-safe) says hybrid False; the verdict chose hybrid False: CONSISTENT
+  rule (at least +15% and recorder-safe) says hybrid False; the verdict chose hybrid False: CONSISTENT
 recorder safety hybrid:0: 310 s, overruns 0, driver xruns 0, passed True
 recorder safety gpu:0: 310 s, overruns 0, driver xruns 0, passed True
 measurements (model / language / mode / device / threads: RTF, peak commit, truncated, method):
@@ -151,20 +150,20 @@ measurements (model / language / mode / device / threads: RTF, peak commit, trun
   hinglish-q5_0          hi rolling   gpu:0      2 thr  RTF 1.254  commit 2.71 GiB  truncated 0  bench clip bench-codeswitch.wav, first 60 s, rolling settings, warm-up + 3 run(s), single run above RTF 2, 2 threads
 
 == quick check (short excerpts) against full check (whole bench clips), emu-low ==
-excerpt 30 s (quick) against 60 s (full); flag above 10%
-  large-v3-turbo-q5_0    en gpu:0     quick 0.475  full 0.389  +21.9%  FLAG DECIDING
-  large-v3-turbo-q5_0    hi gpu:0     quick 0.791  full 0.696  +13.6%  FLAG DECIDING
-  medium                 hi gpu:0     quick 1.222  full 0.887  +37.7%  FLAG
-  large-v3-turbo-q5_0    ur gpu:0     quick 0.686  full 0.653  +5.1%
-cells compared 4; flagged 3; flagged and deciding 2
-deciding cell, en turbo on the graphics adapter: quick 0.475 (30 s excerpt), full 0.389 (60 s clip): +21.9%; against the emulated bar 0.75: quick meets, full meets
-deciding cell, hi turbo on the graphics adapter: quick 0.791 (30 s excerpt), full 0.696 (60 s clip): +13.6%; against the emulated bar 0.75: quick misses, full meets
+quick-check excerpt 30 s, except the deciding cells (first-choice rolling model of Hindi and Urdu on a graphics adapter), which the quick check times on the whole clip; full check 60 s; flag above 10%
+  large-v3-turbo-q5_0    en gpu:0     quick 0.473 (30 s)  full 0.389  +21.5%  FLAG DECIDING
+  large-v3-turbo-q5_0    hi gpu:0     quick 0.690 (60 s)  full 0.696  -0.9%
+  large-v3-turbo-q5_0    ur gpu:0     quick 0.644 (60 s)  full 0.653  -1.3%
+cells compared 3; flagged 1; flagged and deciding 1
+deciding cell, en turbo on the graphics adapter: quick 0.473 (30 s excerpt), full 0.389 (60 s clip): +21.5%; against the emulated bar 0.75: quick meets, full meets
+deciding cell, hi turbo on the graphics adapter: quick 0.690 (60 s excerpt), full 0.696 (60 s clip): -0.9%; against the emulated bar 0.75: quick meets, full meets
+deciding cell, ur turbo on the graphics adapter: quick 0.644 (60 s excerpt), full 0.653 (60 s clip): -1.3%; against the emulated bar 0.75: quick meets, full meets
 quick versus full verdict: tier C against C; same tier
 
-reports written: start-during-check-emu-low 2026-11-14 03:22, view-same-emu-low 2026-11-14 03:22, view-changed-emu-low 2026-11-14 03:22
+reports written: start-during-check-emu-low 2026-11-14 04:20, view-same-emu-low 2026-11-14 04:20, view-changed-emu-low 2026-11-14 04:20
 
 == Start pressed during a quick check (emu-low): the check is cancelled, the recording starts ==
-Start pressed 61 s into the check (check running at that moment: True); the recording was started after 564 ms (bar 3000 ms): PASS; error: None
+Start pressed 61 s into the check (check running at that moment: True); the recording was started after 661 ms (bar 3000 ms): PASS; error: None
 check still running right after Start: False (the command waits up to 5 s for the cancelled check to end)
 recording stopped by the hook after the check ended: yes; recorder summary keys: ['mirror', 'recorder']
 saved profile: partial True (expected True); measurements 1; check ran 60 s; tier C: PASS
