@@ -12,6 +12,7 @@ import {
   overrideOn,
   readyRows,
   speedRows,
+  verdictLines,
 } from "../system/view";
 import { EnginesSection, ModelsSection, useRegistry } from "./RegistrySections";
 import { liveUnavailableReason } from "./liveReason";
@@ -163,8 +164,8 @@ export function SystemScreen({ capability, onContinue }: SystemScreenProps) {
               >
                 {decision ? (decision.tier === "R" ? "Record only" : decision.tier === "G" ? "Record + post-process, live available" : "Record + post-process") : "Not checked yet"}
               </div>
-              {decision ? (
-                decision.verdict.map((line, i) => (
+              {cap && decision ? (
+                verdictLines(cap).map((line, i) => (
                   <Note key={i} style={{ marginTop: i === 0 ? 0 : 6 }}>
                     {line}
                   </Note>
@@ -173,11 +174,6 @@ export function SystemScreen({ capability, onContinue }: SystemScreenProps) {
                 <Note>
                   The system check measures this computer and decides how each session is recorded and
                   transcribed here. Live text stays off until the check clears it.
-                </Note>
-              )}
-              {decision?.provisional && (
-                <Note style={{ marginTop: 6, fontSize: 12, color: "var(--text-muted)" }}>
-                  Model choices are provisional until the models have been checked for accuracy.
                 </Note>
               )}
             </SideCard>
@@ -243,7 +239,7 @@ export function SystemScreen({ capability, onContinue }: SystemScreenProps) {
               headers={["Part", "Found", "Result"]}
               rows={hardwareRows(cap).map((r) => [
                 { content: r.part, strong: true },
-                { content: r.found },
+                { content: r.found, mono: r.mono },
                 { content: <Badge tone={r.result.tone}>{r.result.label}</Badge> },
               ])}
             />

@@ -141,7 +141,7 @@ export function StartSessionDialog({
       onClose={onClose}
       eyebrow={hall.trim() ? `Start recording · ${hall.trim()}` : "Start recording"}
       title="Start Session"
-      width={560}
+      width={680}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
@@ -219,7 +219,7 @@ export function StartSessionDialog({
         </div>
         <div>
           <Label>Mode</Label>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <ModeCard
               value="record_post"
               label="Record + post-process"
@@ -246,10 +246,10 @@ export function StartSessionDialog({
         </div>
         <div>
           <Label>Post-processing</Label>
-          <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: px(6, 14), fontSize: 13, lineHeight: px(20) }}>
-            <span style={{ color: "var(--text-muted)" }}>Devices</span>
+          <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: px(6, 14), fontSize: 13, lineHeight: px(20), textAlign: "right" }}>
+            <span style={{ color: "var(--text-muted)", textAlign: "left" }}>Devices</span>
             <b style={{ fontWeight: "var(--fw-semibold)" }}>{plan ? plan.devices : "Decided by the system check"}</b>
-            <span style={{ color: "var(--text-muted)" }}>Models</span>
+            <span style={{ color: "var(--text-muted)", textAlign: "left" }}>Models</span>
             <b style={{ fontWeight: "var(--fw-semibold)", fontFamily: "var(--font-mono)" }}>
               {plan && plan.models.length > 0
                 ? plan.models.map((m) => `${m.model} (${m.lang})${m.quality_unverified ? "*" : ""}`).join(" · ")

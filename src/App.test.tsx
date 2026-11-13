@@ -67,7 +67,7 @@ describe("navigation", () => {
     mockProfile(true);
     render(<App />);
     await screen.findByRole("heading", { name: "Sessions" });
-    expect(screen.getByText(/Tier C/)).toBeTruthy();
+    expect(screen.getByText(/Fixture · UHD/)).toBeTruthy();
     const saved = /Live captions are chosen in the Start Session dialog/;
     fireEvent.click(screen.getByRole("button", { name: "Record" }));
     expect(screen.getByText(saved)).toBeTruthy();

@@ -114,9 +114,26 @@ export function speedRows(cap: Capability): SpeedRow[] {
   });
 }
 
+/** "Core i5-1235U · Iris Xe": the processor and the first graphics adapter, for the top bar. */
+export function machineLabel(cap: Capability): string {
+  const clean = (t: string) =>
+    t
+      .replace(/\((R|TM)\)/g, "")
+      .replace(/^Intel\s+/i, "")
+      .replace(/^NVIDIA\s+(GeForce\s+)?/i, "")
+      .replace(/\s+(CPU|Processor)\b.*$/i, "")
+      .replace(/\s+Graphics$/i, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  const gpu = cap.hardware.gpus.find((g) => g.vulkan_usable);
+  const cpu = clean(cap.hardware.cpu_brand);
+  return gpu ? `${cpu} · ${clean(gpu.name)}` : cpu;
+}
+
 export interface HardwareRow {
   part: string;
   found: string;
+  mono?: boolean;
   result: { label: string; tone: "success" | "warning" | "neutral" };
 }
 
@@ -138,6 +155,7 @@ export function hardwareRows(cap: Capability): HardwareRow[] {
     {
       part: "Memory",
       found: `${gib(hw.total_ram_bytes)} · ${gib(hw.available_ram_bytes)} free`,
+      mono: true,
       result: memOk ? { label: "OK", tone: "success" } : { label: "Too little", tone: "warning" },
     },
     {
@@ -172,6 +190,12 @@ export interface ReadyRow {
   label: string;
   value: string;
   bold?: boolean;
+}
+
+/** The Verdict card's paragraphs: the rules' summary lines without the per-language lines, which the
+ * "Ready after a 90-minute talk" card and the speed table already show. */
+export function verdictLines(cap: Capability): string[] {
+  return cap.decision.verdict.filter((line) => !/^(English|Hindi|Urdu)\b/.test(line));
 }
 
 /** The "Ready after a 90-minute talk" card: English, Hindi, Urdu and the night pass. */

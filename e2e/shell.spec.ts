@@ -20,13 +20,13 @@ async function fontsReady(page: Page) {
   });
 }
 
-test("first launch opens System with Run System Check disabled", async ({ page }) => {
+test("first launch opens System with Run Quick Check available", async ({ page }) => {
   const remote = watchRequests(page);
   await page.goto("/e2e/index.html");
   await expect(
     page.getByRole("heading", { name: "Check This Computer Before the First Recording" }),
   ).toBeVisible();
-  await expect(page.getByRole("button", { name: "Run System Check" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Run Quick Check" })).toBeEnabled();
   await expect(page.getByRole("button", { name: "System", exact: true })).toHaveAttribute(
     "aria-current",
     "page",
@@ -170,7 +170,7 @@ test("every screen opens from the nav", async ({ page }) => {
     ["Record", "No Session Open"],
     ["Queue", "Queue"],
     ["Review", "Transcripts"],
-    ["System", "This Computer's System Check"],
+    ["System", "Record Now, Transcribe in the Background"],
     ["Settings", "Settings"],
   ];
   for (const [nav, heading] of screens) {

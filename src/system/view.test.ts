@@ -5,11 +5,13 @@ import {
   checkTime,
   gib,
   hardwareRows,
+  machineLabel,
   overrideOn,
   readyRows,
   recordPostText,
   speedRows,
   times,
+  verdictLines,
 } from "./view";
 
 describe("formatting", () => {
@@ -101,5 +103,25 @@ describe("the Start Session plan", () => {
   it("follows the script choice from Hindi to Urdu", () => {
     const p = planFor(profile("tier-c-low"), false, true, "nastaliq");
     expect(p?.models.map((m) => m.lang)).toEqual(["ur"]);
+  });
+});
+
+describe("the verdict card", () => {
+  it("leaves the per-language lines to the ready-time card", () => {
+    const cap = profile("tier-c-low");
+    expect(cap.decision.verdict.some((l) => /^English/.test(l))).toBe(true);
+    const lines = verdictLines(cap);
+    expect(lines.some((l) => /^(English|Hindi|Urdu)/.test(l))).toBe(false);
+    expect(lines[0]).toMatch(/Record \+ post-process/);
+  });
+});
+
+describe("the top bar label", () => {
+  it("names the processor and the graphics adapter without the trademark marks", () => {
+    const cap = profile("tier-c-low");
+    cap.hardware.cpu_brand = "12th Gen Intel(R) Core(TM) i5-1235U";
+    expect(machineLabel(cap)).toBe("12th Gen Intel Core i5-1235U · UHD");
+    cap.hardware.cpu_brand = "Intel(R) Core(TM) i7-1255U CPU @ 1.70GHz";
+    expect(machineLabel(cap)).toMatch(/^Core i7-1255U · /);
   });
 });

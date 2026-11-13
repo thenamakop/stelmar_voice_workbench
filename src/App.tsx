@@ -14,6 +14,7 @@ import { SessionsScreen } from "./screens/SessionsScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { SystemScreen, systemStatus } from "./screens/SystemScreen";
 import { useCapability } from "./system/useCapability";
+import { machineLabel } from "./system/view";
 import type { CapabilityState } from "./system/useCapability";
 import { Note } from "./shell/layout";
 import { StatusBar } from "./shell/StatusBar";
@@ -75,7 +76,7 @@ export function App() {
     : capability.running
       ? "System check running"
       : cap
-        ? `${cap.hardware.cpu_brand.replace(/\(R\)|\(TM\)| CPU.*$/g, "").trim()}${cap.decision.tier ? ` · Tier ${cap.decision.tier}` : ""}`
+        ? machineLabel(cap)
         : profileSaved
           ? "System check saved"
           : "System check not run";
