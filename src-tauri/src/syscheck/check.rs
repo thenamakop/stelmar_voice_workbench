@@ -364,12 +364,12 @@ impl Run<'_> {
         let g = self.rolling_rtf(model, lang, DeviceConfig::Gpu { index: gpu })?;
         let c = self.rolling_rtf(model, lang, DeviceConfig::Cpu)?;
         let most = g / c;
-        (most < self.env.options.hybrid_min_gain).then(|| {
+        extra_too_small(most, self.env.options.hybrid_min_gain).then(|| {
             format!(
                 "predicted from the measured cells: {model} {} runs at RTF {c:.2} on the processor and {g:.2} on the graphics adapter, so both together could be {:.0}% faster than the adapter alone at the most (the rule needs {:.0}%); the hybrid configuration is not chosen",
                 lang.name(),
                 most * 100.0,
-                self.env.options.hybrid_min_gain * 100.0
+                (self.env.options.hybrid_min_gain - 1.0) * 100.0
             )
         })
     }
@@ -1168,9 +1168,9 @@ impl Run<'_> {
                     lang.name(),
                     secs / HYBRID_CPU_CLIP_S,
                     most * 100.0,
-                    self.env.options.hybrid_min_gain * 100.0
+                    (self.env.options.hybrid_min_gain - 1.0) * 100.0
                 );
-                return Ok(if most < self.env.options.hybrid_min_gain {
+                return Ok(if extra_too_small(most, self.env.options.hybrid_min_gain) {
                     HybridOutcome::Predicted(format!(
                         "predicted, not measured: {reason}; the hybrid configuration is not chosen"
                     ))
@@ -1340,6 +1340,13 @@ impl Run<'_> {
     }
 }
 
+/// Whether a CPU that adds `extra` (a fraction of the graphics adapter's speed) at the most cannot reach the
+/// rule's gain. `min_gain` is a ratio: `Options::hybrid_min_gain` of 1.10 means 10% faster than the best single
+/// device.
+fn extra_too_small(extra: f64, min_gain: f64) -> bool {
+    1.0 + extra < min_gain
+}
+
 /// What the hybrid test came to.
 enum HybridOutcome {
     Measured(HybridMeasurement),
@@ -1353,5 +1360,23 @@ fn config_name(config: DeviceConfig) -> String {
         DeviceConfig::Cpu => "processor".into(),
         DeviceConfig::Gpu { index } => format!("graphics adapter {index}"),
         DeviceConfig::Hybrid { gpu } => format!("processor and graphics adapter {gpu}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::extra_too_small;
+
+    #[test]
+    fn the_hybrid_gain_is_a_ratio_not_a_fraction() {
+        // 1.10 means ten percent faster than the best single device.
+        assert!(extra_too_small(0.07, 1.10), "7% extra cannot reach 10%");
+        assert!(!extra_too_small(0.10, 1.10), "exactly 10% can");
+        assert!(!extra_too_small(0.45, 1.10), "a fast processor can add 45%");
+        // The speeds the 13 Nov emu-low run saw: the adapter at 0.82, the processor beside the recorder test
+        // slower than 12: it adds under 7%.
+        assert!(extra_too_small(0.82 / 12.0, 1.10));
+        // emu-mid: the adapter at 0.82 and a processor at 2.4 add 34% in isolation: not ruled out.
+        assert!(!extra_too_small(0.82 / 2.4, 1.10));
     }
 }
