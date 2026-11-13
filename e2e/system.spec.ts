@@ -26,8 +26,8 @@ async function openSystem(page: Page, capability: string, extra = "") {
   await page.getByRole("button", { name: "System", exact: true }).click();
 }
 
-async function openDialog(page: Page, capability: string) {
-  await page.goto(`/e2e/index.html?capability=${capability}`);
+async function openDialog(page: Page, capability: string, extra = "") {
+  await page.goto(`/e2e/index.html?capability=${capability}${extra}`);
   await page.getByRole("button", { name: "Record", exact: true }).click();
   const start = page.getByRole("button", { name: "Start Session" });
   await expect(start).toBeEnabled();
@@ -38,7 +38,7 @@ async function openDialog(page: Page, capability: string) {
 }
 
 const SYSTEM_HEADING: Record<string, string> = {
-  "tier-g": "Record Now, Live Captions Available",
+  "tier-g": "Record Now, Live Captions for English",
   "tier-c-low": "Record Now, Transcribe in the Background",
   "tier-c-mid-hybrid": "Record Now, Transcribe in the Background",
   "tier-c-plus": "Record Now, Near-Live Text Available",
@@ -110,6 +110,25 @@ test("Start Session dialog on the tier G profile: live for English only, starts 
   await dialog.getByText("Hindi / Urdu", { exact: true }).click();
   await expect(live).toBeEnabled();
   await expect(dialog.getByRole("radio", { name: /Record \+ post-process/ })).toBeChecked();
+});
+
+test("Start Session dialog while a system check runs: Start stays enabled and the note says it stops the check", async ({ page }) => {
+  const dialog = await openDialog(page, "tier-c-low", "&check=running");
+  await expect(dialog.getByText(/Starting the recording stops the check/)).toBeVisible();
+  await dialog.getByLabel(/Session title/).fill("Keynote");
+  await expect(dialog.getByRole("button", { name: "Start Recording" })).toBeEnabled();
+  await ready(page);
+  await page.screenshot({ path: `${SHOTS}/start-session-check-running.png` });
+});
+
+test("Record screen side card shows the profile's devices, speed and threads (screenshot)", async ({ page }) => {
+  await page.goto("/e2e/index.html?capability=tier-g");
+  await page.getByRole("button", { name: "Record", exact: true }).click();
+  const card = page.locator("aside").filter({ hasText: "Transcription" });
+  await expect(card.getByText("RTX 4070")).toBeVisible();
+  await expect(card.getByText("Speed", { exact: true })).toBeVisible();
+  await ready(page);
+  await page.screenshot({ path: `${SHOTS}/record-tier-g.png` });
 });
 
 test("Start Session dialog: the script choice appears with Hindi / Urdu and Urdu is right to left", async ({ page }) => {

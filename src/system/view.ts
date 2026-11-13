@@ -214,17 +214,33 @@ export function transcriptionRows(cap: Capability | null | undefined): [string, 
       ["Threads", "Not measured"],
     ];
   }
+  // A no-break space keeps "UR" and its speed on one line in the narrow side card.
   const speeds = (["en", "hi", "ur"] as const)
     .map((l) => {
       const r = cap.decision.languages[l]?.rolling;
-      return r ? `${l.toUpperCase()} ${r.rtf.toFixed(2)}` : null;
+      return r ? `${l.toUpperCase()}\u00a0${times(r.rtf)}` : null;
     })
     .filter((s): s is string => s !== null);
   return [
-    ["Devices", config.label],
-    ["Speed (RTF)", speeds.length > 0 ? speeds.join(" · ") : "Not measured"],
+    // The backend in brackets is for the System screen; the side card keeps the adapter's name short.
+    ["Devices", config.label.replace(/\s*\((Vulkan|CUDA|OpenVINO)\)$/, "")],
+    ["Speed", speeds.length > 0 ? speeds.join(" · ") : "Not measured"],
     ["Threads", `${config.cpu_threads} CPU`],
   ];
+}
+
+const LIVE_NAME = { en: "English", hi: "Hindi", ur: "Urdu" } as const;
+
+/** The languages the profile clears live text for, in words: "English", "English and Hindi", ... */
+export function liveLanguages(cap: Capability | null | undefined): string[] {
+  if (!cap) return [];
+  return (["en", "hi", "ur"] as const).filter((l) => cap.decision.languages[l]?.live.offered).map((l) => LIVE_NAME[l]);
+}
+
+/** "English", "English and Hindi", "English, Hindi and Urdu". */
+export function joinNames(names: string[]): string {
+  if (names.length <= 1) return names[0] ?? "";
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
 
 /** The "Ready after a 90-minute talk" card: English, Hindi, Urdu and the night pass. */

@@ -567,7 +567,7 @@
     "provisional": true,
     "partial": false,
     "verdict": [
-      "Record + post-process by default; live captions can be chosen for each recording.",
+      "Record + post-process by default; live captions can be chosen for English only.",
       "Transcribing runs on NVIDIA GeForce RTX 4070 Laptop GPU (Vulkan).",
       "English: medium, about 0 minutes after Stop.",
       "Hindi (Devanagari): large-v3-turbo-q5_0 (quality unverified), about 1 minutes after Stop.",

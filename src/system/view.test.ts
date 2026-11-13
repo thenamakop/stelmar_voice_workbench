@@ -9,6 +9,8 @@ import {
   overrideOn,
   readyRows,
   transcriptionRows,
+  liveLanguages,
+  joinNames,
   recordPostText,
   speedRows,
   times,
@@ -70,9 +72,18 @@ describe("hardware and ready time", () => {
 describe("the Record screen's Transcription card", () => {
   it("shows the devices, speed and threads of the saved profile", () => {
     const rows = transcriptionRows(profile("tier-c-low"));
-    expect(rows[0]).toEqual(["Devices", "Intel(R) UHD Graphics (Vulkan)"]);
-    expect(rows[1]?.[1]).toMatch(/^EN 0\.35 · HI 0\.73/);
+    expect(rows[0]).toEqual(["Devices", "Intel(R) UHD Graphics"]);
+    expect(rows[1]?.[0]).toBe("Speed");
+    expect(rows[1]?.[1]).toMatch(/^EN\u00a00\.35× · HI\u00a00\.73×/);
     expect(rows[2]).toEqual(["Threads", "2 CPU"]);
+  });
+
+  it("names the languages live captions are cleared for", () => {
+    expect(liveLanguages(profile("tier-g"))).toEqual(["English"]);
+    expect(liveLanguages(profile("tier-c-low"))).toEqual([]);
+    expect(joinNames(["English"])).toBe("English");
+    expect(joinNames(["English", "Hindi"])).toBe("English and Hindi");
+    expect(joinNames(["English", "Hindi", "Urdu"])).toBe("English, Hindi and Urdu");
   });
 
   it("says not measured without a profile", () => {

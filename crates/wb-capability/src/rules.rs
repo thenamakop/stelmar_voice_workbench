@@ -715,7 +715,21 @@ fn verdict_lines(
 ) -> Vec<String> {
     let mut v = Vec::new();
     v.push(match tier {
-        Tier::G => "Record + post-process by default; live captions can be chosen for each recording.".to_string(),
+        Tier::G => {
+            let offered: Vec<&str> = [(Lang::En, "English"), (Lang::Hi, "Hindi"), (Lang::Ur, "Urdu")]
+                .iter()
+                .filter(|(l, _)| languages.get(l).is_some_and(|d| d.live.offered))
+                .map(|(_, n)| *n)
+                .collect();
+            match offered.len() {
+                3 => "Record + post-process by default; live captions can be chosen for each recording.".to_string(),
+                0 => "Record + post-process by default; live captions are not offered for any language yet.".to_string(),
+                _ => format!(
+                    "Record + post-process by default; live captions can be chosen for {} only.",
+                    offered.join(" and ")
+                ),
+            }
+        }
         Tier::CPlus => "Record + post-process by default; near-live text can be chosen for the languages listed below.".to_string(),
         _ => "Record + post-process. Live text is off by default and not offered on this machine.".to_string(),
     });

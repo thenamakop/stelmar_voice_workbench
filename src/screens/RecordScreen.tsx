@@ -479,7 +479,7 @@ export function RecordScreen({ hasProfile, recorder, capability }: RecordScreenP
               >
                 {liveUnavailableReason(hasProfile)}
               </div>
-              <KeyValue rows={transcriptionRows(capability.view?.capability).map(([k, v]) => [k, v, { mono: true }])} />
+              <KeyValue rows={transcriptionRows(capability.view?.capability).map(([k, v]) => [k, v, { mono: k === "Speed" }])} />
             </SideCard>
             <SideCard title="Backup">
               <KeyValue

@@ -2,13 +2,15 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 import { Badge, Button, Dialog, ProgressBar, Switch } from "../ds";
 import { px } from "../ds/units";
-import type { OverrideKind, Tier } from "../ipc";
+import type { Capability, OverrideKind, Tier } from "../ipc";
 import { MainWithSide, Note, PageHead, Section, SideCard, Table, KeyValue } from "../shell/layout";
 import type { CapabilityState } from "../system/useCapability";
 import {
   OVERRIDE_TEXT,
   checkTime,
   hardwareRows,
+  joinNames,
+  liveLanguages,
   overrideOn,
   readyRows,
   speedRows,
@@ -45,6 +47,25 @@ function istStamp(iso: string): string {
 function savedTime(iso: string): string {
   const s = istStamp(iso);
   return s.slice(s.indexOf("·") + 2);
+}
+
+/** The Verdict card's first line on a graphics-card machine: which languages live captions are cleared for. */
+function recordModeLine(cap: Capability | null): string {
+  const names = liveLanguages(cap);
+  if (names.length === 3) return "Record + post-process, live available";
+  if (names.length > 0) return `Record + post-process; live for ${joinNames(names)} only`;
+  return "Record + post-process";
+}
+
+/** The headline: a graphics-card machine says which languages live captions are cleared for. */
+function titleFor(cap: Capability, tier: Tier): string {
+  if (tier === "G") {
+    const names = liveLanguages(cap);
+    if (names.length === 3) return TITLE.G;
+    if (names.length > 0) return `Record Now, Live Captions for ${joinNames(names)}`;
+    return TITLE.C;
+  }
+  return TITLE[tier];
 }
 
 const TITLE: Record<Tier, string> = {
@@ -117,7 +138,7 @@ export function SystemScreen({ capability, onContinue }: SystemScreenProps) {
     <>
       <PageHead
         overline={cap ? "System check" : "First launch · System check"}
-        title={cap && tier ? TITLE[tier] : "Check This Computer Before the First Recording"}
+        title={cap && tier ? titleFor(cap, tier) : "Check This Computer Before the First Recording"}
         meta={
           cap ? (
             <>
@@ -166,7 +187,7 @@ export function SystemScreen({ capability, onContinue }: SystemScreenProps) {
                   margin: px(0, 0, 6),
                 }}
               >
-                {decision ? (decision.tier === "R" ? "Record only" : decision.tier === "G" ? "Record + post-process, live available" : "Record + post-process") : "Not checked yet"}
+                {decision ? (decision.tier === "R" ? "Record only" : decision.tier === "G" ? recordModeLine(cap) : "Record + post-process") : "Not checked yet"}
               </div>
               {cap && decision ? (
                 verdictLines(cap).map((line, i) => (
@@ -219,8 +240,8 @@ export function SystemScreen({ capability, onContinue }: SystemScreenProps) {
         {running && progress && (
           <div style={{ marginBottom: 14 }}>
             <Notice tone="info" title={`${progress.phase}${progress.detail ? ` · ${progress.detail}` : ""}`}>
-              {Math.round(progress.elapsed_s)} s so far · {progress.cells_done} measurements done. Recording is not
-              affected; do not start a recording until the check ends.
+              {Math.round(progress.elapsed_s)} s so far · {progress.cells_done} measurements done. Starting a recording
+              stops the check and saves what it has measured so far.
             </Notice>
             <ProgressBar value={Math.min(0.95, progress.elapsed_s / (cap?.check.bar_s || 480))} label="System check" />
           </div>
