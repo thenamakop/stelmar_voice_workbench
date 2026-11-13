@@ -31,9 +31,18 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
 
+      - name: Read the pinned Rust version (rust-toolchain.toml)
+        id: rust
+        shell: pwsh
+        run: |
+          $m = Select-String -Path rust-toolchain.toml -Pattern '^channel\s*=\s*"([^"]+)"'
+          if (-not $m) { throw 'rust-toolchain.toml has no channel' }
+          "version=$($m.Matches[0].Groups[1].Value)" >> $env:GITHUB_OUTPUT
+
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: ${{ steps.rust.outputs.version }}
           components: clippy, rustfmt
 
       - name: Cache Cargo

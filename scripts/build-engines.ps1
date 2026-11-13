@@ -22,7 +22,7 @@
 [CmdletBinding()]
 param(
   # cuda is NOT built by default (owner's decision, 11 Nov 2026: Vulkan only is shipped; see docs/GATES.md).
-  # It stays buildable for development with -Variants cuda. The release bundle (src-tauri	auri.engines.conf.json),
+  # It stays buildable for development with -Variants cuda. The release bundle (src-tauri/tauri.engines.conf.json),
   # the gate pack and CI do not include it.
   [ValidateSet('avx2', 'avx512', 'vulkan', 'cuda')] [string[]]$Variants = @('avx2', 'avx512', 'vulkan'),
   # CUDA architectures (CMake syntax). 86-real is Ampere (RTX 30), 89 is Ada (RTX 40, the Legion) with

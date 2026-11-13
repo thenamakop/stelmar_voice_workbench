@@ -29,7 +29,7 @@ The Git steps create the repository on branch `master` if it doesn't exist, enab
 | Tool | Needed from | Why |
 | --- | --- | --- |
 | Git | Phase 0 | Version control |
-| Rust (rustup, stable) | Phase 0 | Tauri app and engines |
+| Rust (rustup; the version pinned in `rust-toolchain.toml`) | Phase 0 | Tauri app and engines |
 | Node.js LTS and pnpm | Phase 0 | React front end and Tauri CLI |
 | Visual Studio Build Tools, C++ workload | Phase 0 | MSVC compiler and Windows SDK for Rust and whisper.cpp |
 | WebView2 runtime | Phase 0 | Tauri's web view (built into Windows 11) |
