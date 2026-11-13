@@ -24,8 +24,8 @@ This note is a reading of them, not evidence. The owner decides what changes.
   12.62), so the clip is not unusually fast speech; it is unusually little silence. A 30 s cut also has fewer VAD chunks
   to average over (3 segments against 5) and pays the same per-chunk costs.
 * The same start-of-clip effect exists for Urdu (first 30 s about 11.8 characters per second, the whole clip 10.5, 88th
-  percentile) and not for English (10.0 against 10.1). The quick check's Urdu figure (0.668 on 30 s) is probably a
-  little pessimistic for the same reason. I have not timed it.
+  percentile) and not for English (10.0 against 10.1). The quick check's Urdu figure (0.676 on 30 s) against the full check's 0.653 on 60 s (+3.6%, under the 10% flag) shows
+  the Urdu effect is small on this clip; the Hindi, English and Hindi-medium cells differ by 20 to 35% (see the GATES row of 14 Nov 2026).
 
 ## What I propose (nothing is changed until the owner answers)
 
