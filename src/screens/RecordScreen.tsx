@@ -615,6 +615,7 @@ export function RecordScreen({ hasProfile, recorder, capability }: RecordScreenP
         deviceId={deviceId}
         onDevice={setDeviceId}
         busy={busy}
+        checkRunning={capability.running}
         profileKey={capability.view?.capability?.created_at ?? "none"}
         onStart={(choice) => {
           void recorder

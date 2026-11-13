@@ -289,6 +289,20 @@ fn gpu0(index: u32) -> DeviceConfig {
     DeviceConfig::Gpu { index }
 }
 
+/// A complete check also ran the recorder safety test for the configurations it chose between.
+fn with_safety(mut p: Profile, configs: &[DeviceConfig]) -> Profile {
+    for c in configs {
+        p.recorder_safety.push(RecorderSafety {
+            config: *c,
+            duration_s: 120.0,
+            overruns: 0,
+            driver_xruns: 0,
+            passed: true,
+        });
+    }
+    p
+}
+
 /// emu-low (speed table A): 4 efficiency cores, the Intel UHD only, an 11 GiB job reported as 16 GB.
 pub fn emu_low() -> Profile {
     let mut p = profile(Some("emu-low"), hardware(4, 4, 16.0, 11.0, vec![igpu(0)]));
@@ -314,7 +328,7 @@ pub fn emu_low() -> Profile {
         near_live("small", Lang::En, 1.641, 0),
         near_live("small", Lang::Hi, 2.350, 1),
     ];
-    p
+    with_safety(p, &[g, DeviceConfig::Cpu])
 }
 
 /// emu-mid (speed table B) with a hybrid cell and a passing recorder safety run.
@@ -384,7 +398,7 @@ pub fn legion_native() -> Profile {
         standin("large-v3-turbo-q5_0", Lang::Hi, 1, 0.12),
         standin("large-v3-q5_0", Lang::Ur, 1, 0.14),
     ];
-    p
+    with_safety(p, &[g, c])
 }
 
 /// A laptop with a strong integrated GPU and a quick CPU, near-live small models quick and clean.
@@ -398,7 +412,7 @@ pub fn strong_igpu_laptop() -> Profile {
         near_live("small", Lang::En, 0.18, 0),
         near_live("small", Lang::Hi, 0.30, 0),
     ];
-    p
+    with_safety(p, &[g])
 }
 
 /// The machine with no usable GPU at all, emulated like emu-low: CPU only.
@@ -417,7 +431,7 @@ pub fn cpu_only_weak() -> Profile {
         near_live("small", Lang::En, 1.641, 0),
         near_live("small", Lang::Hi, 2.350, 1),
     ];
-    p
+    with_safety(p, &[c])
 }
 
 /// An integrated GPU slower than the CPU, and a hybrid cell that measured slower than the CPU alone
@@ -450,7 +464,7 @@ pub fn slow_igpu() -> Profile {
         driver_xruns: 0,
         passed: true,
     }];
-    p
+    with_safety(p, &[c, g])
 }
 
 /// An old PC without AVX2: record only.

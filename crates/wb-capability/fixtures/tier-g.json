@@ -430,7 +430,27 @@
     }
   ],
   "hybrid": null,
-  "recorder_safety": [],
+  "recorder_safety": [
+    {
+      "config": {
+        "kind": "gpu",
+        "index": 1
+      },
+      "duration_s": 120.0,
+      "overruns": 0,
+      "driver_xruns": 0,
+      "passed": true
+    },
+    {
+      "config": {
+        "kind": "cpu"
+      },
+      "duration_s": 120.0,
+      "overruns": 0,
+      "driver_xruns": 0,
+      "passed": true
+    }
+  ],
   "injectors": [],
   "decision": {
     "tier": "G",
@@ -452,7 +472,7 @@
       "label": "NVIDIA GeForce RTX 4070 Laptop GPU (Vulkan)",
       "why": "The graphics card measured fastest for the rolling models.",
       "cpu_threads": 2,
-      "recorder_safety_passed": null
+      "recorder_safety_passed": true
     },
     "languages": {
       "en": {

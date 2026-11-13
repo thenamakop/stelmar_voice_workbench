@@ -199,7 +199,18 @@
     }
   ],
   "hybrid": null,
-  "recorder_safety": [],
+  "recorder_safety": [
+    {
+      "config": {
+        "kind": "gpu",
+        "index": 0
+      },
+      "duration_s": 120.0,
+      "overruns": 0,
+      "driver_xruns": 0,
+      "passed": true
+    }
+  ],
   "injectors": [],
   "decision": {
     "tier": "C+",
@@ -221,7 +232,7 @@
       "label": "Intel(R) UHD Graphics (Vulkan)",
       "why": "The graphics card measured fastest for the rolling models.",
       "cpu_threads": 2,
-      "recorder_safety_passed": null
+      "recorder_safety_passed": true
     },
     "languages": {
       "en": {
@@ -283,10 +294,10 @@
           "kind": null,
           "model": null,
           "rtf": null,
-          "soft_reasons": [
+          "soft_reasons": [],
+          "hard_reasons": [
             "Urdu live text is never offered on a machine without a working graphics card (no small Urdu model is good enough)."
-          ],
-          "hard_reasons": []
+          ]
         }
       }
     },

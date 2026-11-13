@@ -173,10 +173,10 @@
           "kind": null,
           "model": null,
           "rtf": null,
-          "soft_reasons": [
+          "soft_reasons": [],
+          "hard_reasons": [
             "The near-live speed for English has not been measured yet."
-          ],
-          "hard_reasons": []
+          ]
         }
       },
       "hi": {
@@ -196,10 +196,10 @@
           "kind": null,
           "model": null,
           "rtf": null,
-          "soft_reasons": [
+          "soft_reasons": [],
+          "hard_reasons": [
             "The near-live speed for Hindi (Devanagari) has not been measured yet."
-          ],
-          "hard_reasons": []
+          ]
         }
       },
       "ur": {
@@ -219,10 +219,10 @@
           "kind": null,
           "model": null,
           "rtf": null,
-          "soft_reasons": [
+          "soft_reasons": [],
+          "hard_reasons": [
             "Urdu live text is never offered on a machine without a working graphics card (no small Urdu model is good enough)."
-          ],
-          "hard_reasons": []
+          ]
         }
       }
     },
@@ -233,7 +233,7 @@
     },
     "dual_decode_en_hi": false,
     "provisional": true,
-    "partial": false,
+    "partial": true,
     "verdict": [
       "Record + post-process. Live text is off by default and not offered on this machine.",
       "Transcribing runs on CPU (Fixture CPU).",
@@ -241,9 +241,11 @@
       "Hindi (Devanagari): large-v3-turbo-q5_0 (quality unverified), about 7 minutes after Stop.",
       "Urdu (Nastaliq): medium, about 8 minutes after Stop.",
       "The code-switching (Hinglish) model is too slow to run on every chunk here.",
-      "The model choice is provisional until the models have been checked for accuracy."
+      "Some measurements are still to come: this verdict is partial.",
+      "The model choice is provisional until the models have been checked for accuracy.",
+      "The recorder safety test has not run for this setup, so transcription waits until the recording stops."
     ],
-    "process_while_recording": true,
+    "process_while_recording": false,
     "pause_on_battery": true
   },
   "overrides": []

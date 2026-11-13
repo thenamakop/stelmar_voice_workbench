@@ -127,8 +127,8 @@ fn current_fingerprint(app: &AppHandle) -> Option<wb_capability::Fingerprint> {
     Some(fp)
 }
 
-/// True while a check is running (gate hook).
-#[cfg(feature = "gate-hooks")]
+/// True while a check is running. A recording never starts during one: the check opens the input and runs
+/// engines of its own.
 pub fn is_running(app: &AppHandle) -> bool {
     lock(&app.state::<CheckState>().running).is_some()
 }
@@ -313,7 +313,12 @@ pub async fn set_override(
         let mut cap = store::load(&dir)
             .map_err(|e| e.to_string())?
             .ok_or("There is no capability profile yet.")?;
-        let beyond_verdict = enabled;
+        // Going beyond the verdict: allowing live text the check did not clear, or switching a safeguard
+        // (processing while recording, pausing on battery) off.
+        let beyond_verdict = match kind {
+            OverrideKind::AllowLiveAnyway => enabled,
+            _ => !enabled,
+        };
         if beyond_verdict && !confirmed {
             return Err("Confirm the warning before turning this on.".into());
         }

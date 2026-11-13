@@ -73,7 +73,7 @@ fn tier_c_plus_strong_igpu_offers_near_live_only_where_validated() {
     assert!(d.languages[&Lang::Hi].live.offered);
     let ur = &d.languages[&Lang::Ur].live;
     assert!(!ur.offered);
-    assert!(ur.soft_reasons[0].contains("Urdu"));
+    assert!(ur.hard_reasons[0].contains("Urdu"));
 }
 
 #[test]
@@ -585,4 +585,26 @@ fn committed_fixtures_equal_the_decisions() {
             );
         }
     }
+}
+
+#[test]
+fn processing_while_recording_needs_a_passed_safety_run_for_the_chosen_setup() {
+    // A complete check: allowed.
+    let d = decide_with(&emu_low(), false);
+    assert!(d.process_while_recording);
+    assert!(!d.partial);
+
+    // No safety run at all (skipped over budget, no input device): transcription waits for Stop and the
+    // profile is partial.
+    let mut p = emu_low();
+    p.recorder_safety.clear();
+    let d = decide_with(&p, false);
+    assert!(!d.process_while_recording);
+    assert!(d.partial);
+    assert!(
+        d.verdict
+            .iter()
+            .any(|l| l.contains("safety test has not run"))
+    );
+    assert_eq!(d.config.as_ref().unwrap().recorder_safety_passed, None);
 }

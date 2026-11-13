@@ -406,10 +406,10 @@
           "kind": null,
           "model": null,
           "rtf": null,
-          "soft_reasons": [
+          "soft_reasons": [],
+          "hard_reasons": [
             "Urdu live text is never offered on a machine without a working graphics card (no small Urdu model is good enough)."
-          ],
-          "hard_reasons": []
+          ]
         }
       }
     },

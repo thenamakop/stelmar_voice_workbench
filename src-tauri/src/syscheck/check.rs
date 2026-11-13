@@ -29,6 +29,9 @@ use crate::engines::{self, EngineRow, EngineState};
 
 /// The quick check must finish within this on the low-baseline laptop.
 pub const QUICK_BAR_S: f64 = 480.0;
+
+/// The least time the hybrid and recorder safety step needs (the safety run lasts 120 s).
+const HYBRID_SAFETY_MIN_S: f64 = 150.0;
 const SAFETY_SECONDS: f64 = 120.0;
 const VAD_ID: &str = "silero-v6.2.0";
 
@@ -264,6 +267,23 @@ impl Run<'_> {
         over
     }
 
+    /// Seconds of the quick-check budget left (None for the full check, which has no budget).
+    fn remaining_s(&self) -> Option<f64> {
+        (self.kind == CheckKind::Quick).then(|| QUICK_BAR_S - self.started.elapsed().as_secs_f64())
+    }
+
+    /// Whether a step that needs `seconds` at the least still fits the quick-check budget. A step that does
+    /// not fit is left for the full check and the profile says `partial`.
+    fn fits(&mut self, seconds: f64) -> bool {
+        match self.remaining_s() {
+            Some(left) if left < seconds => {
+                self.partial = true;
+                false
+            }
+            _ => true,
+        }
+    }
+
     fn full(&self) -> bool {
         self.kind == CheckKind::Full
     }
@@ -400,12 +420,22 @@ impl Run<'_> {
             return Ok(None);
         };
         let runs = request.runs;
+        // A quick-check cell never runs past the budget: its time limit is what is left (at least 15 s), and a
+        // cell that cannot even start is left for the full check.
+        let mut limit_s = excerpt_s * 12.0 + 120.0;
+        if let Some(left) = self.remaining_s() {
+            if left < 15.0 {
+                self.partial = true;
+                return Ok(None);
+            }
+            limit_s = limit_s.min(left);
+        }
         let cell = Cell {
             exe: &exe,
             variant: &exe_variant,
             request,
             work_dir: &self.env.work_dir,
-            timeout: Duration::from_secs((excerpt_s * 12.0 + 120.0) as u64),
+            timeout: Duration::from_secs(limit_s as u64),
         };
         let report = match bench::run_bench(&cell, self.cancel) {
             Ok(r) => r,
@@ -508,10 +538,14 @@ impl Run<'_> {
 
     /// Rolling speed of each language on one configuration: ranked models top-down, stopping at the first
     /// that meets the bar (the full check measures them all). Returns the languages that met the bar.
+    ///
+    /// `first_only` (the quick check's CPU cells when a graphics adapter exists): only the top-ranked model is
+    /// measured. Everything the quick check leaves out is measured by the full check.
     fn rolling_on(
         &mut self,
         config: DeviceConfig,
         langs: &[Lang],
+        first_only: bool,
     ) -> Result<Vec<Lang>, CheckError> {
         let bar = wb_capability::bars(&self.profile).rolling_rtf;
         let mut met = Vec::new();
@@ -523,7 +557,10 @@ impl Run<'_> {
                 .get(&lang)
                 .cloned()
                 .unwrap_or_default();
-            for rk in list {
+            for (i, rk) in list.into_iter().enumerate() {
+                if (first_only && i > 0) || self.over_budget() {
+                    break;
+                }
                 let Some(m) = self.measure(Spec {
                     model: &rk.model,
                     lang,
@@ -577,15 +614,28 @@ impl Run<'_> {
             {
                 continue;
             }
-            let met = self.rolling_on(DeviceConfig::Gpu { index }, &langs)?;
+            let met = self.rolling_on(DeviceConfig::Gpu { index }, &langs, false)?;
             for l in met {
                 if !met_by_gpu.contains(&l) {
                     met_by_gpu.push(l);
                 }
             }
         }
+        // The recorder safety test (and the hybrid test with it) comes right after the graphics cells: it is
+        // mandatory, so the quick check does it before the optional CPU cells can use up the budget. With no
+        // working adapter it runs after the CPU cells, because the CPU configuration is what it tests.
+        let had_gpu = self
+            .profile
+            .measurements
+            .iter()
+            .any(|m| matches!(m.config, DeviceConfig::Gpu { .. }));
+        let mut safety_done = false;
+        if had_gpu && self.fits(HYBRID_SAFETY_MIN_S) {
+            self.hybrid_and_safety(false)?;
+            safety_done = true;
+        }
         // The CPU: every language when no adapter works, otherwise only those no adapter met (the full
-        // check measures all).
+        // check measures all). With an adapter the quick check measures only the top-ranked model on the CPU.
         if self.cpu_variant.is_some() {
             let todo: Vec<Lang> = if self.full() {
                 langs.to_vec()
@@ -597,13 +647,18 @@ impl Run<'_> {
                     .collect()
             };
             if !todo.is_empty() {
-                self.rolling_on(DeviceConfig::Cpu, &todo)?;
+                self.rolling_on(DeviceConfig::Cpu, &todo, had_gpu && !self.full())?;
             }
         }
 
-        // Hybrid test and recorder safety run, together.
-        if !self.over_budget() {
-            self.hybrid_and_safety()?;
+        // Hybrid test and recorder safety run, together (here only when there was no adapter; with one it
+        // ran above, and what is left is the safety run of the CPU configuration when that was chosen).
+        if safety_done {
+            if self.fits(HYBRID_SAFETY_MIN_S) {
+                self.hybrid_and_safety(true)?;
+            }
+        } else if self.fits(HYBRID_SAFETY_MIN_S) {
+            self.hybrid_and_safety(false)?;
         }
         // Near-live on the CPU.
         if !self.over_budget() {
@@ -632,7 +687,9 @@ impl Run<'_> {
         })
     }
 
-    fn hybrid_and_safety(&mut self) -> Result<(), CheckError> {
+    /// `cpu_tail_only`: the hybrid and graphics safety runs were done earlier; only the safety run for the CPU
+    /// configuration is left, when the rules chose it.
+    fn hybrid_and_safety(&mut self, cpu_tail_only: bool) -> Result<(), CheckError> {
         let Some(best) = self.best_config() else {
             return Ok(());
         };
@@ -660,7 +717,9 @@ impl Run<'_> {
             return Ok(());
         };
 
-        if let (Some(gpu), true) = (gpu_index, self.cpu_variant.is_some()) {
+        if cpu_tail_only {
+            // Nothing before the tail.
+        } else if let (Some(gpu), true) = (gpu_index, self.cpu_variant.is_some()) {
             self.tick(
                 "Testing both processors at once",
                 "while a test recording runs",

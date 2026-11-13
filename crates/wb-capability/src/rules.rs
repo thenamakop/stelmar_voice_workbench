@@ -331,10 +331,16 @@ fn live_decision(
             };
         }
         if !*passes {
-            soft.push(format!(
+            let text = format!(
                 "The live test of {} on the graphics card ran at {:.2}x real time; live captions need {:.2} or better.",
                 m.model, m.rtf, b.live_standin_rtf
-            ));
+            );
+            // Slower than real time can never keep up: the override cannot lift that.
+            if m.rtf >= 1.0 {
+                hard.push(text);
+            } else {
+                soft.push(text);
+            }
         } else {
             soft.push(format!(
                 "The rolling model for {} does not keep up here, so live captions would fall behind.",
@@ -346,7 +352,8 @@ fn live_decision(
     // Tier C+: near-live text from a small model on the CPU.
     let ranked = r.near_live.get(&lang).map(Vec::as_slice).unwrap_or(&[]);
     if ranked.is_empty() {
-        soft.push(if lang == Lang::Ur {
+        // Neither can be lifted by the override: there is no model to run.
+        hard.push(if lang == Lang::Ur {
             "Urdu live text is never offered on a machine without a working graphics card (no small Urdu model is good enough).".to_string()
         } else {
             format!("No near-live model is listed for {}.", lang.name())
@@ -356,7 +363,7 @@ fn live_decision(
             find(p, &rk.model, lang, Mode::NearLive, DeviceConfig::Cpu, false).map(|m| (rk, m))
         });
         match measured {
-            None => soft.push(format!(
+            None => hard.push(format!(
                 "The near-live speed for {} has not been measured yet.",
                 lang.name()
             )),
@@ -384,7 +391,8 @@ fn live_decision(
                     ));
                 }
                 if !memory_ok(p, m, o) {
-                    soft.push(
+                    // A memory shortfall is the recorder's safety margin: never overridable.
+                    hard.push(
                         "Not enough memory would stay free with the near-live model loaded."
                             .to_string(),
                     );
@@ -621,8 +629,20 @@ pub fn decide(p: &Profile, r: &Rankings, o: &Options) -> Decision {
         recorder_safety_passed: safety,
     };
 
-    let partial = p.check.partial || Lang::ALL.iter().take(2).any(|l| !picks.contains_key(l));
-    let verdict = verdict_lines(&tier, &cfg, &languages, &hing, partial, provisional, &b);
+    // Processing while the recording runs needs a recorder safety run that passed for this very
+    // configuration (PLAN section 3). Without one the transcripts wait until Stop and the verdict says so.
+    let safety_passed = safety == Some(true);
+    let partial = p.check.partial
+        || Lang::ALL.iter().take(2).any(|l| !picks.contains_key(l))
+        || safety.is_none();
+    let mut verdict = verdict_lines(&tier, &cfg, &languages, &hing, partial, provisional, &b);
+    if !safety_passed {
+        verdict.push(if safety.is_none() {
+            "The recorder safety test has not run for this setup, so transcription waits until the recording stops.".to_string()
+        } else {
+            "The recorder safety test did not pass for this setup, so transcription waits until the recording stops.".to_string()
+        });
+    }
 
     Decision {
         tier,
@@ -636,7 +656,7 @@ pub fn decide(p: &Profile, r: &Rankings, o: &Options) -> Decision {
         provisional,
         partial,
         verdict,
-        process_while_recording: true,
+        process_while_recording: safety_passed,
         pause_on_battery: true,
     }
 }

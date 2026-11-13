@@ -184,6 +184,12 @@ pub fn start_blocking(app: &AppHandle, req: StartRequest) -> Result<SessionInfo,
     if current.is_some() {
         return Err("A session is already recording. Stop it before starting another.".into());
     }
+    if crate::syscheck::is_running(app) {
+        return Err(
+            "The system check is running. Start the recording when it has finished, or cancel it on the System screen."
+                .into(),
+        );
+    }
     let title = req.title.trim();
     if title.is_empty() {
         return Err("The session needs a title".into());
