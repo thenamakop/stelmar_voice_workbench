@@ -60,7 +60,8 @@ describe("hardware and ready time", () => {
 
   it("says a lagging language lags", () => {
     const rows = readyRows(profile("tier-c-cpu-only"));
-    expect(rows.find((r) => r.label === "Hindi")?.value).toMatch(/take hours on this computer; the recording is not affected/);
+    expect(rows.find((r) => r.label === "Hindi")?.note).toMatch(/take hours on this computer; the recording is not affected/);
+    expect(rows.find((r) => r.label === "Hindi")?.value).toMatch(/^about /);
     expect(rows.find((r) => r.label === "English")?.value).not.toMatch(/lags/);
   });
 });
@@ -112,7 +113,7 @@ describe("the verdict card", () => {
     expect(cap.decision.verdict.some((l) => /^English/.test(l))).toBe(true);
     const lines = verdictLines(cap);
     expect(lines.some((l) => /^(English|Hindi|Urdu)/.test(l))).toBe(false);
-    expect(lines[0]).toMatch(/Record \+ post-process/);
+    expect(lines[0]).toMatch(/^Live text is off by default/);
   });
 });
 

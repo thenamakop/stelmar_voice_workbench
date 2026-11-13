@@ -5,7 +5,7 @@ import { px } from "../ds/units";
 import { sessionPlan } from "../ipc";
 import type { HindiUrduScript, InputDevice, SessionPlan } from "../ipc";
 import { format } from "../recording/format";
-import { Note, Overline } from "../shell/layout";
+import { Note } from "../shell/layout";
 import { LANG_NAME, recordPostText } from "../system/view";
 
 // Start Session dialog per design/mockups/start-session.html. Mode, devices, models and the ready time
@@ -36,8 +36,22 @@ export interface StartSessionDialogProps {
 const MODE_GROUP = "start-mode";
 const SCRIPT_GROUP = "start-script";
 
+// The mockup's dialog labels are plain overlines without the orange dot.
 function Label({ children }: { children: ReactNode }) {
-  return <Overline style={{ marginBottom: 6 }}>{children}</Overline>;
+  return (
+    <div
+      style={{
+        fontSize: "var(--fs-overline)",
+        fontWeight: "var(--fw-semibold)",
+        letterSpacing: "0.08em",
+        textTransform: "uppercase",
+        color: "var(--ink-600)",
+        marginBottom: 6,
+      }}
+    >
+      {children}
+    </div>
+  );
 }
 
 function ModeCard({
@@ -60,8 +74,8 @@ function ModeCard({
   return (
     <div
       style={{
-        border: `${selected ? 2 : 1}px solid ${selected ? "var(--ink-900)" : "var(--border-hairline)"}`,
-        borderRadius: "var(--radius-sm)",
+        border: `${px(selected ? 2 : 1)} solid ${selected ? "var(--ink-900)" : "var(--ink-300)"}`,
+        borderRadius: "var(--radius-md)",
         padding: px(selected ? 9 : 10, selected ? 13 : 14),
         background: disabled ? "var(--paper-50)" : "var(--paper-0)",
       }}
@@ -73,7 +87,7 @@ function ModeCard({
         disabled={disabled}
         onChange={onPick}
         label={
-          <span style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
+          <span style={{ display: "inline-flex", gap: 8, alignItems: "center", fontSize: 15, fontWeight: "var(--fw-semibold)" }}>
             {label}
             {badge}
           </span>
@@ -248,9 +262,9 @@ export function StartSessionDialog({
           <Label>Post-processing</Label>
           <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: px(6, 14), fontSize: 13, lineHeight: px(20), textAlign: "right" }}>
             <span style={{ color: "var(--text-muted)", textAlign: "left" }}>Devices</span>
-            <b style={{ fontWeight: "var(--fw-semibold)" }}>{plan ? plan.devices : "Decided by the system check"}</b>
+            <b style={{ fontWeight: "var(--fw-medium)" }}>{plan ? plan.devices : "Decided by the system check"}</b>
             <span style={{ color: "var(--text-muted)", textAlign: "left" }}>Models</span>
-            <b style={{ fontWeight: "var(--fw-semibold)", fontFamily: "var(--font-mono)" }}>
+            <b style={{ fontWeight: "var(--fw-medium)", fontFamily: "var(--font-mono)", fontSize: "var(--fs-caption)" }}>
               {plan && plan.models.length > 0
                 ? plan.models.map((m) => `${m.model} (${m.lang})${m.quality_unverified ? "*" : ""}`).join(" · ")
                 : "—"}

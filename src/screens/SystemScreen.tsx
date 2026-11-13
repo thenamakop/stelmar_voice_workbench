@@ -63,6 +63,10 @@ const TIER_TONE: Record<Tier, "success" | "neutral" | "warning"> = {
 
 const OVERRIDES: OverrideKind[] = ["process_while_recording", "pause_on_battery", "allow_live_anyway"];
 
+function capitalise(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 function Notice({ tone, title, children }: { tone: "warning" | "info"; title: string; children?: ReactNode }) {
   const fg = tone === "warning" ? "var(--status-warning-fg)" : "var(--status-info-fg)";
   const bg = tone === "warning" ? "var(--status-warning-bg)" : "var(--status-info-bg)";
@@ -180,10 +184,19 @@ export function SystemScreen({ capability, onContinue }: SystemScreenProps) {
             {cap && (
               <SideCard title="Ready after a 90-minute talk">
                 <KeyValue
-                  rows={readyRows(cap).map((r): [string, string, { mono?: boolean }] => [
+                  rows={readyRows(cap).map((r): [string, ReactNode, { mono?: boolean }] => [
                     r.label,
-                    r.value,
-                    { mono: r.label !== "Night pass" },
+                    r.note ? (
+                      <>
+                        <span style={{ fontFamily: r.label === "Night pass" ? undefined : "var(--font-mono)" }}>{r.value}</span>
+                        <div style={{ fontFamily: "var(--font-body)", fontWeight: "var(--fw-regular)", color: "var(--text-muted)" }}>
+                          {r.note}
+                        </div>
+                      </>
+                    ) : (
+                      r.value
+                    ),
+                    { mono: r.label !== "Night pass" && !r.note },
                   ])}
                 />
               </SideCard>
@@ -214,7 +227,7 @@ export function SystemScreen({ capability, onContinue }: SystemScreenProps) {
         )}
         {view && view.fingerprint_changes.length > 0 && !running && (
           <Notice tone="warning" title="This computer or the app has changed since the last check">
-            {view.fingerprint_changes.join(" · ")}. Run the check again to be sure the choices below still hold.
+            {capitalise(view.fingerprint_changes.join(" · "))}. Run the check again to be sure the choices below still hold.
             <div style={{ marginTop: 8 }}>
               <Button size="sm" onClick={() => void capability.run(false)}>
                 Re-run Quick Check
@@ -299,7 +312,7 @@ export function SystemScreen({ capability, onContinue }: SystemScreenProps) {
         footer={
           <>
             <Button variant="secondary" onClick={() => setPending(null)}>
-              Keep the current setting
+              Keep the Current Setting
             </Button>
             <Button
               onClick={() => {
@@ -307,7 +320,7 @@ export function SystemScreen({ capability, onContinue }: SystemScreenProps) {
                 setPending(null);
               }}
             >
-              {pending?.enabled ? "Turn on" : "Turn off"}
+              {pending?.enabled ? "Turn On" : "Turn Off"}
             </Button>
           </>
         }

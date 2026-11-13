@@ -80,7 +80,7 @@ test("a safeguard override asks first", async ({ page }) => {
   await expect(dialog.getByText(/runs on its battery/)).toBeVisible();
   await ready(page);
   await page.screenshot({ path: `${SHOTS}/system-override-dialog.png` });
-  await dialog.getByRole("button", { name: "Keep the current setting" }).click();
+  await dialog.getByRole("button", { name: "Keep the Current Setting" }).click();
   await expect(dialog).toHaveCount(0);
 });
 

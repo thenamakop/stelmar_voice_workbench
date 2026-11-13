@@ -189,13 +189,19 @@ export function hardwareRows(cap: Capability): HardwareRow[] {
 export interface ReadyRow {
   label: string;
   value: string;
+  /** A sentence under the value, set in the body font (the value itself is a time or a duration). */
+  note?: string;
   bold?: boolean;
 }
 
 /** The Verdict card's paragraphs: the rules' summary lines without the per-language lines, which the
  * "Ready after a 90-minute talk" card and the speed table already show. */
 export function verdictLines(cap: Capability): string[] {
-  return cap.decision.verdict.filter((line) => !/^(English|Hindi|Urdu)\b/.test(line));
+  // The card's heading already names the mode, so a first sentence that only repeats it is dropped.
+  return cap.decision.verdict
+    .filter((line) => !/^(English|Hindi|Urdu)\b/.test(line))
+    .map((line) => line.replace(/^Record only\.\s*/, "").replace(/^Record \+ post-process\.\s+/, ""))
+    .filter((line) => line.length > 0);
 }
 
 /** The "Ready after a 90-minute talk" card: English, Hindi, Urdu and the night pass. */
@@ -206,7 +212,7 @@ export function readyRows(cap: Capability): ReadyRow[] {
     if (!r) {
       rows.push({ label: LANG_NAME[lang], value: "not measured" });
     } else if (r.lags) {
-      rows.push({ label: LANG_NAME[lang], value: `${aboutMinutes(r.ready_after_stop_min)}; ${LAG_TEXT}` });
+      rows.push({ label: LANG_NAME[lang], value: aboutMinutes(r.ready_after_stop_min), note: LAG_TEXT });
     } else {
       rows.push({ label: LANG_NAME[lang], value: aboutMinutes(r.ready_after_stop_min) });
     }
@@ -215,12 +221,8 @@ export function readyRows(cap: Capability): ReadyRow[] {
   const measured = (["en", "hi", "ur"] as const).every((l) => cap.decision.languages[l]?.night_note !== "The night model is measured by the full check.");
   rows.push({
     label: "Night pass",
-    value:
-      nightLangs.length > 0
-        ? `Done by 08:00 (${nightLangs.map((l) => LANG_NAME[l]).join(", ")})`
-        : measured
-          ? "None needed"
-          : "Measured by the full check",
+    value: nightLangs.length > 0 ? "Done by 08:00" : measured ? "None needed" : "Measured by the full check",
+    note: nightLangs.length > 0 ? nightLangs.map((l) => LANG_NAME[l]).join(", ") : undefined,
   });
   return rows;
 }

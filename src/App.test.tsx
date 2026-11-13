@@ -190,7 +190,7 @@ describe("the System screen with a saved profile", () => {
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText(/runs on its battery/)).toBeTruthy();
     expect(calls).not.toContain("set_override");
-    fireEvent.click(within(dialog).getByRole("button", { name: "Turn off" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Turn Off" }));
     await waitFor(() => expect(calls).toContain("set_override"));
     await waitFor(() => expect((screen.getByRole("switch", { name: "Pause on battery power" }) as HTMLInputElement).checked).toBe(false));
   });
