@@ -8,6 +8,7 @@ import {
   machineLabel,
   overrideOn,
   readyRows,
+  transcriptionRows,
   recordPostText,
   speedRows,
   times,
@@ -66,6 +67,19 @@ describe("hardware and ready time", () => {
   });
 });
 
+describe("the Record screen's Transcription card", () => {
+  it("shows the devices, speed and threads of the saved profile", () => {
+    const rows = transcriptionRows(profile("tier-c-low"));
+    expect(rows[0]).toEqual(["Devices", "Intel(R) UHD Graphics (Vulkan)"]);
+    expect(rows[1]?.[1]).toMatch(/^EN 0\.35 · HI 0\.73/);
+    expect(rows[2]).toEqual(["Threads", "2 CPU"]);
+  });
+
+  it("says not measured without a profile", () => {
+    expect(transcriptionRows(null).every(([, v]) => v === "Not measured")).toBe(true);
+  });
+});
+
 describe("overrides", () => {
   it("start from the verdict and follow the last logged change", () => {
     const cap = profile("tier-c-low");
@@ -80,8 +94,13 @@ describe("overrides", () => {
 
 describe("the Start Session plan", () => {
   it("offers live only where every ticked language is cleared", () => {
+    // Live on the graphics card is English only until Phase 5 checks a Hindi and an Urdu live model.
     const g = profile("tier-g");
-    expect(planFor(g, true, true, "devanagari")?.live.selectable).toBe(true);
+    expect(planFor(g, true, false, "devanagari")?.live.selectable).toBe(true);
+    const mixed = planFor(g, true, true, "devanagari");
+    expect(mixed?.live.selectable).toBe(false);
+    expect(mixed?.live.reason).toMatch(/checked for accuracy/);
+    expect(planFor(g, false, true, "nastaliq")?.live.selectable).toBe(false);
     const low = profile("tier-c-low");
     const p = planFor(low, true, true, "devanagari");
     expect(p?.live.selectable).toBe(false);

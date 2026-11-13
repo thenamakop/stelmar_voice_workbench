@@ -272,16 +272,29 @@ pub fn rankings(near_live_validated: bool) -> Rankings {
         Lang::Hi,
         vec![ranked("small", small, true, near_live_validated)],
     );
+    // The same flag stands for "Phase 5 checked these models for accuracy" (`validated_roles`).
     r.live.insert(
         Lang::En,
-        vec![ranked("large-v3-turbo-q5_0", turbo, true, false)],
+        vec![ranked(
+            "large-v3-turbo-q5_0",
+            turbo,
+            true,
+            near_live_validated,
+        )],
     );
     r.live.insert(
         Lang::Hi,
-        vec![ranked("large-v3-turbo-q5_0", turbo, true, false)],
+        vec![ranked(
+            "large-v3-turbo-q5_0",
+            turbo,
+            true,
+            near_live_validated,
+        )],
     );
-    r.live
-        .insert(Lang::Ur, vec![ranked("large-v3-q5_0", large, true, false)]);
+    r.live.insert(
+        Lang::Ur,
+        vec![ranked("large-v3-q5_0", large, true, near_live_validated)],
+    );
     r
 }
 
@@ -354,6 +367,9 @@ pub fn emu_mid_hybrid() -> Profile {
         cpu_threads: 8,
         gpu_rtf_concurrent: 0.70,
         cpu_rtf_concurrent: 2.30,
+        cpu_peak_commit_bytes: gib(1.38),
+        gpu_peak_commit_bytes: gib(1.49),
+        gpu_local_bytes: Some(gib(0.88)),
         method: "fixture".into(),
     });
     p.recorder_safety = vec![
@@ -455,6 +471,9 @@ pub fn slow_igpu() -> Profile {
         cpu_threads: 4,
         gpu_rtf_concurrent: 2.0,
         cpu_rtf_concurrent: 1.4,
+        cpu_peak_commit_bytes: gib(1.4),
+        gpu_peak_commit_bytes: gib(1.5),
+        gpu_local_bytes: Some(gib(0.9)),
         method: "fixture".into(),
     });
     p.recorder_safety = vec![RecorderSafety {

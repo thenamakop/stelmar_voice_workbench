@@ -204,6 +204,29 @@ export function verdictLines(cap: Capability): string[] {
     .filter((line) => line.length > 0);
 }
 
+/** The Record screen's Transcription card: devices, speed and threads from the saved profile. */
+export function transcriptionRows(cap: Capability | null | undefined): [string, string][] {
+  const config = cap?.decision.config;
+  if (!cap || !config) {
+    return [
+      ["Devices", "Not measured"],
+      ["Speed", "Not measured"],
+      ["Threads", "Not measured"],
+    ];
+  }
+  const speeds = (["en", "hi", "ur"] as const)
+    .map((l) => {
+      const r = cap.decision.languages[l]?.rolling;
+      return r ? `${l.toUpperCase()} ${r.rtf.toFixed(2)}` : null;
+    })
+    .filter((s): s is string => s !== null);
+  return [
+    ["Devices", config.label],
+    ["Speed (RTF)", speeds.length > 0 ? speeds.join(" · ") : "Not measured"],
+    ["Threads", `${config.cpu_threads} CPU`],
+  ];
+}
+
 /** The "Ready after a 90-minute talk" card: English, Hindi, Urdu and the night pass. */
 export function readyRows(cap: Capability): ReadyRow[] {
   const rows: ReadyRow[] = [];

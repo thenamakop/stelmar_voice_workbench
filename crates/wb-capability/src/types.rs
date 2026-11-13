@@ -177,6 +177,15 @@ pub struct HybridMeasurement {
     pub cpu_threads: u32,
     pub gpu_rtf_concurrent: f64,
     pub cpu_rtf_concurrent: f64,
+    /// Peak commit of the CPU engine and of the GPU engine while they ran together (0 = not recorded: the
+    /// rules then use the peaks of the single-device cells of the same model).
+    #[serde(default)]
+    pub cpu_peak_commit_bytes: u64,
+    #[serde(default)]
+    pub gpu_peak_commit_bytes: u64,
+    /// The graphics adapter's memory in use during the test.
+    #[serde(default)]
+    pub gpu_local_bytes: Option<u64>,
     pub method: String,
 }
 

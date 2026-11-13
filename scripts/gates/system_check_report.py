@@ -20,6 +20,7 @@ import sys
 from pathlib import Path
 
 RUNS = ["quick-emu-low", "quick-emu-mid", "quick-native", "full-emu-low"]
+START_BAR_MS = 3000.0  # Start during a check gives a recording within this (the recorder itself starts in well under a second)
 FLAG = 0.10
 HYBRID_GAIN = 0.10
 
@@ -163,6 +164,33 @@ def compare(quick: dict | None, full: dict | None, lines: list[str]):
     lines.append(f"quick versus full verdict: tier {qd['tier']} against {fd['tier']}; " + ("same tier" if qd["tier"] == fd["tier"] else "TIERS DIFFER"))
 
 
+def start_during_check(report: dict | None, lines: list[str]):
+    lines.append("")
+    lines.append("== Start pressed during a quick check (emu-low): the check is cancelled, the recording starts ==")
+    if report is None:
+        lines.append("not run")
+        return
+    s = report.get("start_during_check") or {}
+    if not s:
+        lines.append("FAIL: Start was never pressed (the check ended first)")
+        return
+    ms = s.get("start_took_ms")
+    lines.append(
+        f"Start pressed {s.get('pressed_after_s', 0):.0f} s into the check (check running at that moment: {s.get('check_was_running')}); the recording was started after {ms:.0f} ms (bar {START_BAR_MS:.0f} ms): "
+        f"{'PASS' if s.get('error') is None and ms <= START_BAR_MS else 'FAIL'}; error: {s.get('error')}"
+    )
+    lines.append(f"check still running right after Start: {s.get('check_running_after_start')} (the command waits up to 5 s for the cancelled check to end)")
+    stopped = report.get("stopped") or {}
+    lines.append(f"recording stopped by the hook after the check ended: {'yes' if stopped else 'NO'}; recorder summary keys: {sorted(stopped)[:6]}")
+    cap = (report.get("view") or {}).get("capability")
+    if cap:
+        lines.append(
+            f"saved profile: partial {cap['check']['partial']} (expected True); measurements {len(cap['measurements'])}; check ran {cap['check']['duration_s']:.0f} s; tier {cap['decision']['tier']}: {'PASS' if cap['check']['partial'] and cap['measurements'] else 'FAIL'}"
+        )
+    else:
+        lines.append("saved profile: none (cancelled before the first measurement; the previous profile stays): acceptable only if no cell had finished")
+
+
 def fingerprint(same: dict | None, changed: dict | None, lines: list[str]):
     lines.append("")
     lines.append("== fingerprint-change hook (WB_TEST_FINGERPRINT_CHANGE), emu-low ==")
@@ -185,6 +213,7 @@ def main() -> int:
         rep = load(work / name / "report.json")
         caps[name] = section(name, rep, lines)
     compare(caps["quick-emu-low"], caps["full-emu-low"], lines)
+    start_during_check(load(work / "start-during-check-emu-low" / "report.json"), lines)
     fingerprint(load(work / "view-same-emu-low" / "report.json"), load(work / "view-changed-emu-low" / "report.json"), lines)
     out.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"wrote {out}")

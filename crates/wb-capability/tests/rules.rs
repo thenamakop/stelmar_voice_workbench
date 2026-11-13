@@ -26,8 +26,29 @@ fn tier_g_legion_uses_the_rtx_and_offers_live() {
     // English: medium is ranked first and meets the bar by a mile; Hindi: turbo first.
     assert_eq!(rolling_of(&d, Lang::En).model, "medium");
     assert_eq!(rolling_of(&d, Lang::Hi).model, "large-v3-turbo-q5_0");
-    for lang in Lang::ALL {
+    // Live on the graphics card: English only until Phase 5 has checked a Hindi and an Urdu live model.
+    let en = &d.languages[&Lang::En].live;
+    assert!(en.offered, "{:?}", en.soft_reasons);
+    assert_eq!(en.kind.as_deref(), Some("streaming"));
+    for lang in [Lang::Hi, Lang::Ur] {
         let live = &d.languages[&lang].live;
+        assert!(!live.offered, "{lang:?}");
+        assert!(
+            live.hard_reasons.is_empty(),
+            "{lang:?}: the override may lift this"
+        );
+        assert!(
+            live.soft_reasons
+                .iter()
+                .any(|r| r.contains("checked for accuracy")),
+            "{lang:?}: {:?}",
+            live.soft_reasons
+        );
+    }
+    // With models checked for accuracy (Phase 5) all three are offered.
+    let v = decide_with(&legion_native(), true);
+    for lang in Lang::ALL {
+        let live = &v.languages[&lang].live;
         assert!(live.offered, "{lang:?}: {:?}", live.soft_reasons);
         assert_eq!(live.kind.as_deref(), Some("streaming"));
     }
@@ -436,10 +457,22 @@ fn start_session_defaults_to_record_and_postprocess_and_explains_live() {
     assert_eq!(plan.models.len(), 2);
     assert!(plan.ready_after_stop_min.unwrap() > 7.3 && plan.ready_after_stop_min.unwrap() < 7.4);
 
-    // Tier G: selectable for every ticked language, Urdu script included.
+    // Tier G: selectable for English only; any Hindi or Urdu language makes it unavailable, with the reason.
     let g = cap(legion_native(), false);
-    assert!(plan_session(&g, &[Lang::En, Lang::Hi]).live.selectable);
-    assert!(plan_session(&g, &[Lang::En, Lang::Ur]).live.selectable);
+    assert!(plan_session(&g, &[Lang::En]).live.selectable);
+    assert!(!plan_session(&g, &[Lang::En, Lang::Hi]).live.selectable);
+    assert!(!plan_session(&g, &[Lang::En, Lang::Ur]).live.selectable);
+    assert!(
+        plan_session(&g, &[Lang::Hi])
+            .live
+            .reason
+            .as_deref()
+            .unwrap()
+            .contains("checked for accuracy")
+    );
+    let gv = cap(legion_native(), true);
+    assert!(plan_session(&gv, &[Lang::En, Lang::Hi]).live.selectable);
+    assert!(plan_session(&gv, &[Lang::En, Lang::Ur]).live.selectable);
     assert_eq!(
         plan_session(&g, &[Lang::En, Lang::Hi]).default_mode,
         "record_postprocess"
@@ -607,4 +640,28 @@ fn processing_while_recording_needs_a_passed_safety_run_for_the_chosen_setup() {
             .any(|l| l.contains("safety test has not run"))
     );
     assert_eq!(d.config.as_ref().unwrap().recorder_safety_passed, None);
+}
+
+#[test]
+fn hybrid_is_refused_when_two_engines_do_not_fit_in_memory() {
+    // Both engines' peaks (1.38 + 1.49 GiB), the integrated GPU's memory (0.88 GiB) and the 3 GB reserve fit
+    // in 11 GiB: hybrid chosen.
+    let d = decide_with(&emu_mid_hybrid(), false);
+    assert!(matches!(
+        d.config.as_ref().unwrap().config,
+        DeviceConfig::Hybrid { .. }
+    ));
+
+    // With 6 GiB free one engine fits (1.49 + 0.88 + 3) but two do not (1.38 + 1.49 + 0.88 + 3): the GPU alone.
+    let mut p = emu_mid_hybrid();
+    p.hardware.available_ram_bytes = 6 * 1_073_741_824;
+    let d = decide_with(&p, false);
+    assert!(
+        !matches!(
+            d.config.as_ref().unwrap().config,
+            DeviceConfig::Hybrid { .. }
+        ),
+        "{:?}",
+        d.config
+    );
 }

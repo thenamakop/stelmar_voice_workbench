@@ -97,12 +97,19 @@ for (const name of ["tier-c-low", "tier-c-cpu-only", "slow-igpu", "tier-r", "tie
   });
 }
 
-test("Start Session dialog on the tier G profile offers live but starts in Record + post-process", async ({ page }) => {
+test("Start Session dialog on the tier G profile: live for English only, starts in Record + post-process", async ({ page }) => {
   const dialog = await openDialog(page, "tier-g");
-  await expect(dialog.getByRole("radio", { name: /Live captions \+ post-process/ })).toBeEnabled();
+  const live = dialog.getByRole("radio", { name: /Live captions \+ post-process/ });
   await expect(dialog.getByRole("radio", { name: /Record \+ post-process/ })).toBeChecked();
+  // English + Hindi / Urdu (the default): no live model has been checked for Hindi or Urdu yet, so live is off with its reason.
+  await expect(live).toBeDisabled();
+  await expect(dialog.getByText(/checked for accuracy/)).toBeVisible();
   await ready(page);
   await page.screenshot({ path: `${SHOTS}/start-session-tier-g.png` });
+  // English only: the graphics card's live model has been measured for English.
+  await dialog.getByText("Hindi / Urdu", { exact: true }).click();
+  await expect(live).toBeEnabled();
+  await expect(dialog.getByRole("radio", { name: /Record \+ post-process/ })).toBeChecked();
 });
 
 test("Start Session dialog: the script choice appears with Hindi / Urdu and Urdu is right to left", async ({ page }) => {

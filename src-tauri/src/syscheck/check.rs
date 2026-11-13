@@ -86,6 +86,8 @@ pub struct Progress {
 
 pub struct Outcome {
     pub profile: Profile,
+    /// The check was cut short: `profile` holds the cells measured before that and is partial.
+    pub cancelled: bool,
 }
 
 struct Run<'a> {
@@ -102,6 +104,13 @@ struct Run<'a> {
     cache: Cache,
     excerpts: HashMap<String, PathBuf>,
     partial: bool,
+}
+
+/// Stops a safety run that is cut short and deletes its test recording; its result is not used.
+fn discard_safety(run: Result<SafetyRun, SafetyError>) {
+    if let Ok(r) = run {
+        let _ = r.finish();
+    }
 }
 
 fn clip_file(lang: &str) -> String {
@@ -176,14 +185,24 @@ pub fn run(
         }
     }
 
+    // A cancelled check (the operator pressed Start, or Cancel) keeps the cells measured so far as a partial
+    // profile; the caller saves it only when it holds a measurement.
+    let mut cancelled = false;
     if run.cpu_variant.is_some() || run.gpu_variant.is_some() {
-        run.measure_all()?;
+        match run.measure_all() {
+            Err(CheckError::Cancelled) => {
+                cancelled = true;
+                run.partial = true;
+            }
+            other => other?,
+        }
     }
 
     run.profile.check.duration_s = started.elapsed().as_secs_f64();
     run.profile.check.partial = run.partial;
     Ok(Outcome {
         profile: run.profile,
+        cancelled,
     })
 }
 
@@ -747,7 +766,14 @@ impl Run<'_> {
                 gpu,
                 hybrid_cpu_threads,
                 safety.as_ref().ok(),
-            )?;
+            );
+            let hybrid = match hybrid {
+                Err(CheckError::Cancelled) => {
+                    discard_safety(safety);
+                    return Err(CheckError::Cancelled);
+                }
+                other => other?,
+            };
             if let Some(h) = hybrid {
                 self.profile.hybrid = Some(h);
             }
@@ -760,7 +786,12 @@ impl Run<'_> {
             )?;
             let config = DeviceConfig::Cpu;
             let safety = SafetyRun::start(&self.env.work_dir, &self.env.app_version, config);
-            self.load_cpu_until_done(&pick.model, lang, batch, safety.as_ref().ok())?;
+            if let Err(CheckError::Cancelled) =
+                self.load_cpu_until_done(&pick.model, lang, batch, safety.as_ref().ok())
+            {
+                discard_safety(safety);
+                return Err(CheckError::Cancelled);
+            }
             self.finish_safety(safety, &[config])?;
         }
 
@@ -779,7 +810,12 @@ impl Run<'_> {
             self.tick("Testing the recorder under load", "CPU configuration")?;
             let safety =
                 SafetyRun::start(&self.env.work_dir, &self.env.app_version, DeviceConfig::Cpu);
-            self.load_cpu_until_done(&pick.model, lang, batch, safety.as_ref().ok())?;
+            if let Err(CheckError::Cancelled) =
+                self.load_cpu_until_done(&pick.model, lang, batch, safety.as_ref().ok())
+            {
+                discard_safety(safety);
+                return Err(CheckError::Cancelled);
+            }
             self.finish_safety(safety, &[DeviceConfig::Cpu])?;
         }
         Ok(())
@@ -881,6 +917,8 @@ impl Run<'_> {
         let gpu_threads = (self.env.machine.batch_threads() as u32).min(2);
         let mut gpu_rtfs: Vec<f64> = Vec::new();
         let mut cpu_rtfs: Vec<f64> = Vec::new();
+        let mut cpu_peak: u64 = 0;
+        let mut gpu_peak: (u64, Option<u64>) = (0, None);
         let started = Instant::now();
         let cpu_timeout = self.beside_safety(900);
         loop {
@@ -907,7 +945,7 @@ impl Run<'_> {
             let work = self.env.work_dir.clone();
             let cancel = self.cancel;
             let finished = AtomicBool::new(false);
-            let (cpu_result, gpu_round) = std::thread::scope(|s| {
+            let (cpu_result, gpu_round, gpu_round_peak) = std::thread::scope(|s| {
                 let cpu = s.spawn(|| {
                     let cell = Cell {
                         exe: &cpu_exe,
@@ -923,6 +961,7 @@ impl Run<'_> {
                 // Let the CPU engine load its model before the GPU runs are counted.
                 std::thread::sleep(Duration::from_secs(3));
                 let mut round: Vec<f64> = Vec::new();
+                let mut gpu_peak: (u64, Option<u64>) = (0, None);
                 loop {
                     let cell = Cell {
                         exe: &gpu_exe,
@@ -937,20 +976,29 @@ impl Run<'_> {
                         && (overlapped || round.is_empty())
                     {
                         round.push(rep.rtf_median);
+                        if rep.peak_commit_bytes > gpu_peak.0 {
+                            gpu_peak = (rep.peak_commit_bytes, rep.gpu_local_bytes);
+                        }
                     }
                     if !overlapped || cancel.load(Ordering::Relaxed) {
                         break;
                     }
                 }
-                (cpu.join(), round)
+                (cpu.join(), round, gpu_peak)
             });
             match cpu_result {
-                Ok(Ok(rep)) => cpu_rtfs.push(rep.rtf_median),
+                Ok(Ok(rep)) => {
+                    cpu_rtfs.push(rep.rtf_median);
+                    cpu_peak = cpu_peak.max(rep.peak_commit_bytes);
+                }
                 Ok(Err(BenchError::Cancelled)) => return Err(CheckError::Cancelled),
                 Ok(Err(e)) => tracing::warn!("system check: hybrid CPU run failed: {e}"),
                 Err(_) => tracing::warn!("system check: hybrid CPU run panicked"),
             }
             gpu_rtfs.extend(gpu_round);
+            if gpu_round_peak.0 > gpu_peak.0 {
+                gpu_peak = gpu_round_peak;
+            }
             self.cells += 2;
             self.tick(
                 "Testing both processors at once",
@@ -975,6 +1023,9 @@ impl Run<'_> {
             cpu_threads,
             gpu_rtf_concurrent: g,
             cpu_rtf_concurrent: c,
+            cpu_peak_commit_bytes: cpu_peak,
+            gpu_peak_commit_bytes: gpu_peak.0,
+            gpu_local_bytes: gpu_peak.1,
             method: format!(
                 "CPU engine ({cpu_threads} threads, 15 s of the clip) and GPU engine (30 s) at the same time, rolling settings, with a test recording running; {} GPU run(s), {} CPU run(s)",
                 gpu_rtfs.len(),

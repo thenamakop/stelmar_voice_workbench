@@ -91,7 +91,26 @@ fn hybrid_effective<'a>(p: &'a Profile, o: &Options) -> Option<(&'a HybridMeasur
     let combined = h.combined_throughput();
     let gain = combined / single;
     let safe = safety_of(p, DeviceConfig::Hybrid { gpu: h.gpu }).is_some_and(|s| s.passed);
-    if gain >= o.hybrid_min_gain && safe {
+    // Two engines hold the model at once: both measured peaks, plus the integrated graphics memory, plus
+    // the reserve must fit in the free RAM (AGENTS.md memory rule).
+    let (gpu_peak, cpu_peak) = if h.gpu_peak_commit_bytes > 0 && h.cpu_peak_commit_bytes > 0 {
+        (h.gpu_peak_commit_bytes, h.cpu_peak_commit_bytes)
+    } else {
+        (
+            gpu_alone.peak_commit_bytes,
+            cpu_alone.map_or(gpu_alone.peak_commit_bytes, |c| c.peak_commit_bytes),
+        )
+    };
+    let igpu_local = match gpu_of(p, h.gpu) {
+        Some(g) if g.kind == GpuKind::Integrated => h
+            .gpu_local_bytes
+            .or(gpu_alone.gpu_local_bytes)
+            .unwrap_or(g.local_bytes),
+        _ => 0,
+    };
+    let need = gpu_peak.saturating_add(cpu_peak).saturating_add(igpu_local);
+    let fits = p.hardware.available_ram_bytes.saturating_sub(need) >= o.min_free_ram_bytes;
+    if gain >= o.hybrid_min_gain && safe && fits {
         Some((h, gain, 1.0 / combined))
     } else {
         None
@@ -320,7 +339,13 @@ fn live_decision(
 
     // Tier G: streaming-style live text on a working discrete GPU.
     if let Some((m, passes)) = standins.iter().find(|(m, _)| m.lang == lang) {
-        if *passes && rolling.is_some_and(|rp| rp.meets_bar) {
+        // English is cleared on the measured turbo result (FLEURS 4.38 WER, owner's decision of 13 Nov 2026).
+        // Hindi and Urdu live text on the graphics card needs a model checked for accuracy, as on the CPU.
+        let validated = lang == Lang::En
+            || r.live
+                .get(&lang)
+                .is_some_and(|l| l.iter().any(|x| x.model == m.model && x.validated));
+        if *passes && validated && rolling.is_some_and(|rp| rp.meets_bar) {
             return LiveDecision {
                 offered: true,
                 kind: Some("streaming".into()),
@@ -341,6 +366,20 @@ fn live_decision(
             } else {
                 soft.push(text);
             }
+        } else if !validated {
+            // The speed is fine; only the accuracy check is missing, so the CPU near-live path (whose
+            // measurements do not matter on this machine) is not consulted. The override may lift it.
+            return LiveDecision {
+                offered: false,
+                kind: None,
+                model: None,
+                rtf: Some(m.rtf),
+                soft_reasons: vec![format!(
+                    "No live model has been checked for accuracy in {} yet; on the graphics card only English is offered for now.",
+                    lang.name()
+                )],
+                hard_reasons: vec![],
+            };
         } else {
             soft.push(format!(
                 "The rolling model for {} does not keep up here, so live captions would fall behind.",

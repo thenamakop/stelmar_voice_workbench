@@ -33,10 +33,6 @@ pub struct StartRequest {
     /// Input device id from `list_inputs`; the last used (or the system default) when absent.
     #[serde(default)]
     pub device_id: Option<String>,
-    /// `record_post` (the default everywhere) or `live_post`. Live is accepted only where the saved
-    /// capability profile clears every language of the session (AGENTS.md non-negotiable 7).
-    #[serde(default)]
-    pub mode: Option<String>,
 }
 
 fn state(app: &AppHandle) -> tauri::State<'_, AppState> {
@@ -184,12 +180,6 @@ pub fn start_blocking(app: &AppHandle, req: StartRequest) -> Result<SessionInfo,
     if current.is_some() {
         return Err("A session is already recording. Stop it before starting another.".into());
     }
-    if crate::syscheck::is_running(app) {
-        return Err(
-            "The system check is running. Start the recording when it has finished, or cancel it on the System screen."
-                .into(),
-        );
-    }
     let title = req.title.trim();
     if title.is_empty() {
         return Err("The session needs a title".into());
@@ -200,14 +190,6 @@ pub fn start_blocking(app: &AppHandle, req: StartRequest) -> Result<SessionInfo,
     spec.scheduled = req.scheduled;
     if let Some(langs) = req.expected_languages.filter(|l| !l.is_empty()) {
         spec.expected_languages = langs;
-    }
-    match req.mode.as_deref() {
-        None | Some("record_post") => {}
-        Some("live_post") => {
-            crate::syscheck::live_allowed(&st.data_dir, &spec.expected_languages)?;
-            spec.mode = "live_post".into();
-        }
-        Some(other) => return Err(format!("Unknown recording mode '{other}'.")),
     }
     let device = pick_device(&st, req.device_id, None)?;
     let opts = options(&st, device);

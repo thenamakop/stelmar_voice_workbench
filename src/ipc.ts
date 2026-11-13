@@ -183,7 +183,7 @@ export interface RecoveryList {
 export const listInputs = () => invoke<InputDevice[]>("list_inputs");
 export const getSettings = () => invoke<Settings>("get_settings");
 export const saveSettings = (settings: Settings) => invoke<Settings>("save_settings", { settings });
-export const startSession = (request: StartRequest) => invoke<SessionInfo>("start_session", { request });
+export const startSession = (request: StartRequest) => invoke<SessionInfo>("start_recording", { request });
 export const pauseRecording = () => invoke<void>("pause");
 export const resumeRecording = () => invoke<void>("resume");
 export const stopSession = () => invoke<SessionStopped>("stop_session");

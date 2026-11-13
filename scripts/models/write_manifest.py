@@ -51,7 +51,11 @@ def build() -> dict:
     return {"version": 2,
             "_note": "Metadata only: ids, files, sizes, SHA-256, licences, sources and how a file was made. "
                      "The model files are never committed and never downloaded by the app; it refuses a file "
-                     "whose SHA-256 differs from this list. Written by scripts/models/write_manifest.py.",
+                     "whose SHA-256 differs from this list. Written by scripts/models/write_manifest.py. "
+                     "provisional_rank is the order the system check tries models in, provisional until Phase 5. "
+                     "English: large-v3-turbo-q5_0 is listed first and medium second although the gap is within "
+                     "noise (FLEURS English 4.38 against 4.90 WER on 20 clips); turbo goes first because its file is "
+                     "smaller at equal speed (owner's decision, 13 Nov 2026), so quality_unverified stays false.",
             "models": sorted((entry_for(m) for m in local["models"]), key=lambda e: e["id"])}
 
 

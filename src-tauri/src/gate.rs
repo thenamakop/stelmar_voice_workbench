@@ -15,6 +15,7 @@
 //! | `WB_GATE_RECORDER_PANIC_AT_S=<n>` | After n seconds, panic once inside the recorder thread itself |
 //! | `WB_GATE_PART_SECONDS=<n>` | Part length for this run (kill tests aim kills at part rollovers) |
 //! | `WB_GATE_DATA_DIR=<path>` | App data folder for this run (settings, `capability.json`, engine logs), so a gate run never touches the real one |
+//! | `WB_GATE_START_DURING_CHECK=<n>` | With `WB_GATE_CHECK=quick\|full`: n seconds into the check, press Start (the command layer cancels the check and the recording starts); the report holds the time Start took and the partial profile |
 //! | `WB_GATE_CHECK=quick\|full\|view` | Run the system check at launch (`quick` or `full`), or only read the saved profile (`view`); write the result to `WB_GATE_REPORT` and exit |
 
 use std::path::PathBuf;
@@ -265,9 +266,50 @@ fn run_check(app: &AppHandle, mode: &str) -> Result<(), String> {
         }
     };
     syscheck::start_check(app, kind)?;
+    let press_start_at = var("WB_GATE_START_DURING_CHECK")
+        .and_then(|s| s.parse::<f64>().ok())
+        .map(Duration::from_secs_f64);
+    let mut start_report = serde_json::Value::Null;
+    let mut stopped = serde_json::Value::Null;
     // A full check can take about 40 minutes under emulation; the gate script has its own time limit.
     while syscheck::is_running(app) {
-        std::thread::sleep(Duration::from_millis(500));
+        if let (Some(at), true) = (press_start_at, start_report.is_null())
+            && started.elapsed() >= at
+        {
+            // The operator presses Start while the check runs: the same function the Start command calls.
+            let check_was_running = syscheck::is_running(app);
+            let pressed = Instant::now();
+            let result = syscheck::start_with_mode(
+                app,
+                syscheck::SessionRequest {
+                    base: StartRequest {
+                        title: "gate: start during check".into(),
+                        ..StartRequest::default()
+                    },
+                    mode: None,
+                },
+            );
+            let took_ms = pressed.elapsed().as_secs_f64() * 1000.0;
+            tracing::warn!(
+                took_ms,
+                ok = result.is_ok(),
+                "gate: Start pressed during the check"
+            );
+            start_report = serde_json::json!({
+                "pressed_after_s": started.elapsed().as_secs_f64(),
+                "check_was_running": check_was_running,
+                "start_took_ms": took_ms,
+                "error": result.as_ref().err(),
+                "dir": result.as_ref().ok().map(|i| i.dir.clone()),
+                "check_running_after_start": syscheck::is_running(app),
+            });
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    if !start_report.is_null() && lock(&app.state::<AppState>().session).is_some() {
+        // Let the recording run a few seconds, then stop it.
+        std::thread::sleep(Duration::from_secs(5));
+        stopped = serde_json::to_value(recording::stop_blocking(app)?).unwrap_or_default();
     }
     let seconds = started.elapsed().as_secs_f64();
     let failure = syscheck::last_error(app);
@@ -276,6 +318,8 @@ fn run_check(app: &AppHandle, mode: &str) -> Result<(), String> {
         "mode": mode,
         "started_at": started_at,
         "wall_seconds": seconds,
+        "start_during_check": start_report,
+        "stopped": stopped,
         "error": failure,
         "view": view,
     }));

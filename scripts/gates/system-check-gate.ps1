@@ -33,7 +33,7 @@
 [CmdletBinding()]
 param(
   # With -File a comma list arrives as one string: it is split below.
-  [string[]]$Runs = @('quick-emu-low', 'quick-emu-mid', 'quick-native', 'full-emu-low', 'view-same-emu-low', 'view-changed-emu-low'),
+  [string[]]$Runs = @('quick-emu-low', 'quick-emu-mid', 'quick-native', 'full-emu-low', 'start-during-check-emu-low', 'view-same-emu-low', 'view-changed-emu-low'),
   [string]$Machine = 'Legion',
   [string]$WorkRoot = 'D:\STELMAR-Gate\system-check',
   [string]$OutDir,
@@ -50,7 +50,7 @@ $repo = (Resolve-Path (Join-Path $here '..\..')).Path
 if (-not $OutDir) { $OutDir = Join-Path $repo 'docs\evidence\phase-3' }
 if (-not $Exe) { $Exe = Join-Path $repo 'target\gate\stelmar-voice-workbench.exe' }
 if (-not $Emulate) { $Emulate = Join-Path $repo 'target\release\wb-emulate.exe' }
-$allRuns = @('quick-emu-low', 'quick-emu-mid', 'quick-native', 'full-emu-low', 'view-same-emu-low', 'view-changed-emu-low')
+$allRuns = @('quick-emu-low', 'quick-emu-mid', 'quick-native', 'full-emu-low', 'start-during-check-emu-low', 'view-same-emu-low', 'view-changed-emu-low')
 $Runs = @($Runs | ForEach-Object { $_ -split ',' } | Where-Object { $_ })
 foreach ($r in $Runs) { if ($allRuns -notcontains $r) { throw "unknown run '$r'; choose from: $($allRuns -join ', ')" } }
 Import-Module (Join-Path $repo 'scripts\lib\PsEnv.psm1') -Force
@@ -70,6 +70,9 @@ function Invoke-OneRun([string]$Name) {
   $mode = $parts[0]
   $rest = $parts[1]
   $changed = $false
+  # Start pressed during a quick check: the check is cancelled, the recording starts, the profile is partial.
+  $pressStart = $false
+  if ($Name -eq 'start-during-check-emu-low') { $mode = 'quick'; $rest = 'emu-low'; $pressStart = $true }
   if ($mode -eq 'view') {
     $changed = $rest.StartsWith('changed-')
     $rest = $rest -replace '^(same|changed)-', ''
@@ -89,6 +92,7 @@ function Invoke-OneRun([string]$Name) {
   $env:WB_GATE_REPORT = $report
   $env:WB_GATE_ROOT = Join-Path $run 'rec'
   $env:WB_BENCH_DIR = Join-Path $repo 'resources\bench'
+  if ($pressStart) { $env:WB_GATE_START_DURING_CHECK = '60' }
   if ($changed) { $env:WB_TEST_FINGERPRINT_CHANGE = 'gate' } else { Remove-Item Env:\WB_TEST_FINGERPRINT_CHANGE -ErrorAction SilentlyContinue }
   try {
     Invoke-WbGate -Name "system-check $Name" -Body {
@@ -108,7 +112,7 @@ function Invoke-OneRun([string]$Name) {
       Write-Host ("{0}: exit {1} after {2:N1} min" -f $Name, $p.ExitCode, ((Get-Date) - $started).TotalMinutes)
     } | Out-Null
   } finally {
-    foreach ($v in 'WB_GATE_CHECK', 'WB_GATE_DATA_DIR', 'WB_GATE_REPORT', 'WB_GATE_ROOT', 'WB_BENCH_DIR', 'WB_TEST_FINGERPRINT_CHANGE') {
+    foreach ($v in 'WB_GATE_START_DURING_CHECK', 'WB_GATE_CHECK', 'WB_GATE_DATA_DIR', 'WB_GATE_REPORT', 'WB_GATE_ROOT', 'WB_BENCH_DIR', 'WB_TEST_FINGERPRINT_CHANGE') {
       Remove-Item "Env:\$v" -ErrorAction SilentlyContinue
     }
   }

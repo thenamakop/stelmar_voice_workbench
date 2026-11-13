@@ -28,6 +28,8 @@ export interface MockOptions {
   capability?: string;
   /** The saved profile no longer matches this machine (fingerprint-change banner). */
   fingerprintChange?: string[];
+  /** The system check is running right now. */
+  checkRunning?: boolean;
   /** Commands seen, in order (for assertions). */
   calls?: string[];
 }
@@ -187,7 +189,7 @@ export function bridge(opts: MockOptions = {}) {
   const view = () => ({
     capability: cap,
     error: null,
-    running: false,
+    running: opts.checkRunning ?? false,
     fingerprint_changes: opts.fingerprintChange ?? [],
     fingerprint_id: cap ? "3F2A-91C7" : null,
     development: true,
@@ -245,7 +247,7 @@ export function bridge(opts: MockOptions = {}) {
         }
         return null;
       }
-      case "start_session": {
+      case "start_recording": {
         recording = true;
         const req = (args as { request: { title: string; hall?: string | null } }).request;
         return { ...SESSION, title: req.title, hall: req.hall ?? null, scheduled: null };

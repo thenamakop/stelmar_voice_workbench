@@ -91,6 +91,23 @@ describe("navigation", () => {
 });
 
 describe("recording", () => {
+  it("lets the operator start a recording while the system check runs, and says the check will stop", async () => {
+    const calls: string[] = [];
+    mockIPC(bridge({ capability: "tier-c-low", state: "idle", calls, checkRunning: true }));
+    render(<App />);
+    await screen.findByRole("heading", { name: "Sessions" });
+    fireEvent.click(screen.getByRole("button", { name: "Record" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Start Session" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText(/Session title/), { target: { value: "Keynote" } });
+    expect(within(dialog).getByText(/Starting the recording stops the check/)).toBeTruthy();
+    const go = within(dialog).getByRole("button", { name: "Start Recording" }) as HTMLButtonElement;
+    await waitFor(() => expect(go.disabled).toBe(false));
+    fireEvent.click(go);
+    expect(await screen.findByRole("heading", { name: "Keynote" })).toBeTruthy();
+    expect(calls).toContain("start_recording");
+  });
+
   it("starts a session from the Record screen and shows the recording state", async () => {
     const calls: string[] = [];
     mockProfile(true, "idle", calls);
@@ -104,7 +121,7 @@ describe("recording", () => {
     fireEvent.change(within(dialog).getByLabelText(/Session title/), { target: { value: "Keynote" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Start Recording" }));
     expect(await screen.findByRole("heading", { name: "Keynote" })).toBeTruthy();
-    expect(calls).toContain("start_session");
+    expect(calls).toContain("start_recording");
     expect(screen.getByRole("button", { name: "Stop Session" })).toBeTruthy();
     expect(screen.getByText("Rec")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Stop Session" }));
@@ -236,11 +253,14 @@ describe("the Start Session dialog", () => {
     await waitFor(() => expect(within(dialog).getByText(/runs slower than real time/)).toBeTruthy());
   });
 
-  it("offers live only on a machine the check cleared", async () => {
+  it("offers live only on a machine the check cleared, and on the graphics card only for English", async () => {
     const dialog = await openDialog("tier-g");
-    await waitFor(() =>
-      expect((within(dialog).getByRole("radio", { name: /Live captions \+ post-process/ }) as HTMLInputElement).disabled).toBe(false),
-    );
+    const live = () => within(dialog).getByRole("radio", { name: /Live captions \+ post-process/ }) as HTMLInputElement;
+    // English + Hindi / Urdu (the default): no live model has been checked for Hindi or Urdu yet.
+    await waitFor(() => expect(live().disabled).toBe(true));
+    expect(within(dialog).getByText(/checked for accuracy/)).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: "Hindi / Urdu" }));
+    await waitFor(() => expect(live().disabled).toBe(false));
     expect((within(dialog).getByRole("radio", { name: /Record \+ post-process/ }) as HTMLInputElement).checked).toBe(true);
   });
 
@@ -257,6 +277,6 @@ describe("the Start Session dialog", () => {
     fireEvent.click(within(dialog).getByRole("checkbox", { name: "English" }));
     fireEvent.click(within(dialog).getByRole("radio", { name: /Nastaliq/ }));
     fireEvent.click(within(dialog).getByRole("button", { name: "Start Recording" }));
-    await waitFor(() => expect(calls).toContain("start_session"));
+    await waitFor(() => expect(calls).toContain("start_recording"));
   });
 });

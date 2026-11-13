@@ -4,7 +4,7 @@ const COMMANDS: &[&str] = &[
     "list_inputs",
     "get_settings",
     "save_settings",
-    "start_session",
+    "start_recording",
     "pause",
     "resume",
     "stop_session",

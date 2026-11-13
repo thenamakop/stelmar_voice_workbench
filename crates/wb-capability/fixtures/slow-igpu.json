@@ -226,6 +226,9 @@
     "cpu_threads": 4,
     "gpu_rtf_concurrent": 2.0,
     "cpu_rtf_concurrent": 1.4,
+    "cpu_peak_commit_bytes": 1503238553,
+    "gpu_peak_commit_bytes": 1610612736,
+    "gpu_local_bytes": 966367641,
     "method": "fixture"
   },
   "recorder_safety": [

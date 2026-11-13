@@ -127,6 +127,80 @@ fn current_fingerprint(app: &AppHandle) -> Option<wb_capability::Fingerprint> {
     Some(fp)
 }
 
+/// What the Start Session dialog sends: the recorder's own request plus the recording mode. `recording.rs`
+/// stays exactly as the Phase 1 recorder gates verified it, so the mode is handled here, in the command
+/// layer that calls the recorder.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct SessionRequest {
+    #[serde(flatten)]
+    pub base: recording::StartRequest,
+    /// `record_post` (the default everywhere) or `live_post`; live only where the saved profile clears every
+    /// language of the session (AGENTS.md non-negotiable 7).
+    #[serde(default)]
+    pub mode: Option<String>,
+}
+
+#[tauri::command]
+pub async fn start_recording(
+    app: AppHandle,
+    request: SessionRequest,
+) -> Result<crate::state::SessionInfo, String> {
+    blocking("start_recording", move || start_with_mode(&app, request)).await
+}
+
+/// Starts a recording. The recording comes first (AGENTS.md non-negotiable 2): a system check that is
+/// running is cancelled at once (its profile is saved as partial, with the cells done so far) and the
+/// recorder starts without waiting for anything else.
+pub fn start_with_mode(
+    app: &AppHandle,
+    request: SessionRequest,
+) -> Result<crate::state::SessionInfo, String> {
+    let languages = request
+        .base
+        .expected_languages
+        .clone()
+        .filter(|l| !l.is_empty())
+        .unwrap_or_else(|| vec!["en".into(), "hi".into()]);
+    let mode = match request.mode.as_deref() {
+        None | Some("record_post") => "record_post",
+        Some("live_post") => {
+            live_allowed(&data_dir(app), &languages)?;
+            "live_post"
+        }
+        Some(other) => return Err(format!("Unknown recording mode '{other}'.")),
+    };
+    cancel_check_for_recording(app);
+    let info = recording::start_blocking(app, request.base)?;
+    // The chosen mode goes next to the session's own files. The recorder does not carry it yet.
+    let options = serde_json::json!({ "mode": mode, "expected_languages": languages });
+    if let Err(e) = wb_recorder::util::write_json_atomic(
+        &PathBuf::from(&info.dir).join("start-options.json"),
+        &options,
+    ) {
+        tracing::warn!("start-options.json was not written: {e}");
+    }
+    Ok(info)
+}
+
+/// Cancels a running system check and waits a few seconds for it to end. The recording starts either way.
+fn cancel_check_for_recording(app: &AppHandle) {
+    let flag = lock(&app.state::<CheckState>().running).clone();
+    let Some(flag) = flag else {
+        return;
+    };
+    tracing::warn!("a recording is starting: cancelling the system check");
+    flag.store(true, Ordering::Relaxed);
+    let waited = std::time::Instant::now();
+    while is_running(app) && waited.elapsed() < std::time::Duration::from_secs(5) {
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+    if is_running(app) {
+        tracing::warn!(
+            "the system check was still stopping after 5 s; the recording starts anyway"
+        );
+    }
+}
+
 /// True while a check is running. A recording never starts during one: the check opens the input and runs
 /// engines of its own.
 pub fn is_running(app: &AppHandle) -> bool {
@@ -284,7 +358,23 @@ fn run_check(
     let emit = |p: check::Progress| {
         state(app).broadcast(serde_json::json!({ "kind": "check_progress", "progress": p }));
     };
-    let outcome = check::run(env, kind, cancel, &emit).map_err(|e| e.to_string())?;
+    let outcome = match check::run(env, kind, cancel, &emit) {
+        Ok(o) => o,
+        // Cancelled before the first step finished: nothing was measured and the saved profile stays.
+        Err(check::CheckError::Cancelled) => {
+            tracing::info!("system check cancelled before it measured anything");
+            state(app).broadcast(serde_json::json!({ "kind": "check_done" }));
+            return Ok(());
+        }
+        Err(e) => return Err(e.to_string()),
+    };
+    if outcome.cancelled && outcome.profile.measurements.is_empty() {
+        tracing::info!(
+            "system check cancelled before it measured anything; the saved profile stays"
+        );
+        state(app).broadcast(serde_json::json!({ "kind": "check_done" }));
+        return Ok(());
+    }
     let old = store::load(&data_dir(app)).ok().flatten();
     let overrides = old.map(|c| c.overrides).unwrap_or_default();
     let cap = assemble(outcome.profile, &env.rankings, &env.options, overrides);

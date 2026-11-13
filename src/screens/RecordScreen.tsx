@@ -19,6 +19,7 @@ import type { Level, Recorder } from "../recording/useRecorder";
 import { KeyValue, MainWithSide, Note, PageHead, SideCard } from "../shell/layout";
 import type { CapabilityState } from "../system/useCapability";
 import { liveUnavailableReason } from "./liveReason";
+import { transcriptionRows } from "../system/view";
 import { StartSessionDialog } from "./StartSessionDialog";
 import { NoEngineBanner, useRegistry } from "./RegistrySections";
 
@@ -478,13 +479,7 @@ export function RecordScreen({ hasProfile, recorder, capability }: RecordScreenP
               >
                 {liveUnavailableReason(hasProfile)}
               </div>
-              <KeyValue
-                rows={[
-                  ["Devices", "Not measured"],
-                  ["Speed", "Not measured"],
-                  ["Threads", "Not measured"],
-                ]}
-              />
+              <KeyValue rows={transcriptionRows(capability.view?.capability).map(([k, v]) => [k, v, { mono: true }])} />
             </SideCard>
             <SideCard title="Backup">
               <KeyValue

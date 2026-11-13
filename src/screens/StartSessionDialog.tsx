@@ -150,7 +150,7 @@ export function StartSessionDialog({
   const langs = [...(english ? ["en"] : []), ...(hindiUrdu ? [script === "devanagari" ? "hi" : "ur"] : [])];
   const liveReason =
     plan?.live.reason ?? (plan === null ? "Not offered until the system check has run." : "Live captions are not offered.");
-  const canStart = !busy && !checkRunning && !!title.trim() && !!deviceId && anyLanguage && !(mode === "live_post" && !plan?.live.selectable);
+  const canStart = !busy && !!title.trim() && !!deviceId && anyLanguage && !(mode === "live_post" && !plan?.live.selectable);
 
   return (
     <Dialog
@@ -263,7 +263,7 @@ export function StartSessionDialog({
         </div>
         {checkRunning && (
           <Note style={{ fontSize: 12, color: "var(--status-warning-fg)" }}>
-            The system check is running. Start the recording when it has finished.
+            The system check is running. Starting the recording stops the check and saves what it has measured so far.
           </Note>
         )}
         <div>

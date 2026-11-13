@@ -11,6 +11,9 @@ mod engines;
 #[cfg(feature = "gate-hooks")]
 mod gate;
 mod machine;
+// `start_session` here is replaced by `syscheck::start_recording` (the command layer that cancels a running
+// system check first); this file stays byte-identical to the Phase 1 gate build, so its old command is unused.
+#[allow(dead_code)]
 mod recording;
 mod settings;
 mod state;
@@ -136,7 +139,7 @@ pub fn run() -> Result<(), RunError> {
             recording::list_inputs,
             recording::get_settings,
             recording::save_settings,
-            recording::start_session,
+            syscheck::start_recording,
             recording::pause,
             recording::resume,
             recording::stop_session,

@@ -10,7 +10,7 @@
     "allow-list-inputs",
     "allow-get-settings",
     "allow-save-settings",
-    "allow-start-session",
+    "allow-start-recording",
     "allow-pause",
     "allow-resume",
     "allow-stop-session",

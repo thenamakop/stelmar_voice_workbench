@@ -519,11 +519,13 @@
         },
         "night_note": null,
         "live": {
-          "offered": true,
-          "kind": "streaming",
-          "model": "large-v3-turbo-q5_0",
+          "offered": false,
+          "kind": null,
+          "model": null,
           "rtf": 0.12,
-          "soft_reasons": [],
+          "soft_reasons": [
+            "No live model has been checked for accuracy in Hindi (Devanagari) yet; on the graphics card only English is offered for now."
+          ],
           "hard_reasons": []
         }
       },
@@ -545,11 +547,13 @@
         },
         "night_note": null,
         "live": {
-          "offered": true,
-          "kind": "streaming",
-          "model": "large-v3-q5_0",
+          "offered": false,
+          "kind": null,
+          "model": null,
           "rtf": 0.14,
-          "soft_reasons": [],
+          "soft_reasons": [
+            "No live model has been checked for accuracy in Urdu (Nastaliq) yet; on the graphics card only English is offered for now."
+          ],
           "hard_reasons": []
         }
       }
