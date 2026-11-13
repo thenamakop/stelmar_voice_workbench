@@ -284,7 +284,8 @@ pub struct Options {
     pub day_audio_hours: f64,
     /// Free RAM that must remain after a model's measured peak.
     pub min_free_ram_bytes: u64,
-    /// A hybrid configuration is chosen only if it measured at least this much faster.
+    /// A hybrid configuration is chosen only if it measured at least this much faster (a ratio: 1.15 is 15%;
+    /// owner's decision of 14 Nov 2026, after the gain on emu-mid measured +11.7% in one run and +3.4% in the next).
     pub hybrid_min_gain: f64,
 }
 
@@ -294,7 +295,7 @@ impl Default for Options {
             night_window_hours: 12.0,
             day_audio_hours: 3.0,
             min_free_ram_bytes: 3 * GIB,
-            hybrid_min_gain: 1.10,
+            hybrid_min_gain: 1.15,
         }
     }
 }

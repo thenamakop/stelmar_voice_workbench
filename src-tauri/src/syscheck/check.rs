@@ -272,10 +272,30 @@ fn empty_profile(env: &CheckEnv, kind: CheckKind) -> Profile {
 }
 
 /// Seconds of each bundled clip that are timed: 30 in the quick check, 60 (the whole clip) in the full one.
+/// The quick check times its deciding cells on the whole clip, see `cell_excerpt_seconds`.
 pub fn excerpt_seconds(kind: CheckKind) -> f64 {
     match kind {
         CheckKind::Quick => 30.0,
         CheckKind::Full => 60.0,
+    }
+}
+
+/// Seconds of the whole bundled clip (the clips are 60 s long).
+const WHOLE_CLIP_S: f64 = 60.0;
+
+/// The excerpt of one rolling cell. The quick check times the deciding cells, the first-choice rolling model of
+/// Hindi and Urdu on a graphics adapter, on the whole 60 s clip (owner's decision of 14 Nov 2026: the first 30 s
+/// of those clips overstate the speed by 14 to 38% and decide the verdict); every other quick-check cell keeps
+/// its 30 s excerpt, and the full check times everything on the whole clip.
+fn cell_excerpt_seconds(kind: CheckKind, lang: Lang, config: DeviceConfig, rank: usize) -> f64 {
+    let deciding = kind == CheckKind::Quick
+        && rank == 0
+        && matches!(lang, Lang::Hi | Lang::Ur)
+        && matches!(config, DeviceConfig::Gpu { .. });
+    if deciding {
+        WHOLE_CLIP_S
+    } else {
+        excerpt_seconds(kind)
     }
 }
 
@@ -698,7 +718,7 @@ impl Run<'_> {
                     mode: Mode::Rolling,
                     config,
                     clip: &clip_file(lang.code()),
-                    excerpt_s: excerpt_seconds(self.kind),
+                    excerpt_s: cell_excerpt_seconds(self.kind, lang, config, i),
                     standin: false,
                 })?
                 else {
@@ -1395,7 +1415,7 @@ impl Run<'_> {
 }
 
 /// Whether a CPU that adds `extra` (a fraction of the graphics adapter's speed) at the most cannot reach the
-/// rule's gain. `min_gain` is a ratio: `Options::hybrid_min_gain` of 1.10 means 10% faster than the best single
+/// rule's gain. `min_gain` is a ratio: `Options::hybrid_min_gain` of 1.15 means 15% faster than the best single
 /// device.
 fn extra_too_small(extra: f64, min_gain: f64) -> bool {
     1.0 + extra < min_gain
@@ -1434,24 +1454,64 @@ mod tests {
 
     #[test]
     fn the_hybrid_gain_is_a_ratio_not_a_fraction() {
-        // 1.10 means ten percent faster than the best single device.
-        assert!(extra_too_small(0.07, 1.10), "7% extra cannot reach 10%");
-        assert!(!extra_too_small(0.10, 1.10), "exactly 10% can");
-        assert!(!extra_too_small(0.45, 1.10), "a fast processor can add 45%");
+        // 1.15 means fifteen percent faster than the best single device.
+        assert!(extra_too_small(0.07, 1.15), "7% extra cannot reach 15%");
+        assert!(
+            extra_too_small(0.12, 1.15),
+            "12% extra is under the 15% rule"
+        );
+        assert!(!extra_too_small(0.15, 1.15), "exactly 15% can");
+        assert!(!extra_too_small(0.45, 1.15), "a fast processor can add 45%");
         // emu-mid: the adapter at 0.82 and a processor at 2.4 add 34% in isolation: not ruled out.
-        assert!(!extra_too_small(0.82 / 2.4, 1.10));
+        assert!(!extra_too_small(0.82 / 2.4, 1.15));
     }
 
     #[test]
     fn a_processor_round_that_timed_out_is_bounded_by_both_decodes() {
         // The 13 Nov emu-low run: the adapter at 0.83, a 10 s clip, 120 s. The bench decodes the clip twice,
-        // so the processor could still add 14%: that does not rule the hybrid out, it only is not measured.
+        // so the processor could add 14% at the most: under the 15% rule, so the hybrid is ruled out by prediction.
         let most = hybrid_bound(0.83, 10.0, 120.0);
         assert!((most - 0.1383).abs() < 0.001, "{most}");
-        assert!(!extra_too_small(most, 1.10));
+        assert!(extra_too_small(most, 1.15));
+        // A slightly faster processor round would not be ruled out.
+        assert!(!extra_too_small(hybrid_bound(0.83, 10.0, 100.0), 1.15));
         // A slower adapter makes the bound looser, a faster one tighter.
         assert!(hybrid_bound(0.4, 10.0, 120.0) < hybrid_bound(0.83, 10.0, 120.0));
-        assert!(extra_too_small(hybrid_bound(0.4, 10.0, 120.0), 1.10));
+        assert!(extra_too_small(hybrid_bound(0.4, 10.0, 120.0), 1.15));
+    }
+
+    #[test]
+    fn the_quick_check_times_its_deciding_cells_on_the_whole_clip() {
+        use super::{CheckKind, cell_excerpt_seconds};
+        use wb_capability::{DeviceConfig, Lang};
+        let gpu = DeviceConfig::Gpu { index: 0 };
+        // Hindi and Urdu, first choice, on a graphics adapter: the whole 60 s clip.
+        assert_eq!(
+            cell_excerpt_seconds(CheckKind::Quick, Lang::Hi, gpu, 0),
+            60.0
+        );
+        assert_eq!(
+            cell_excerpt_seconds(CheckKind::Quick, Lang::Ur, gpu, 0),
+            60.0
+        );
+        // Everything else in the quick check keeps 30 s: English, a second choice, the processor.
+        assert_eq!(
+            cell_excerpt_seconds(CheckKind::Quick, Lang::En, gpu, 0),
+            30.0
+        );
+        assert_eq!(
+            cell_excerpt_seconds(CheckKind::Quick, Lang::Hi, gpu, 1),
+            30.0
+        );
+        assert_eq!(
+            cell_excerpt_seconds(CheckKind::Quick, Lang::Hi, DeviceConfig::Cpu, 0),
+            30.0
+        );
+        // The full check times every cell on the whole clip.
+        assert_eq!(
+            cell_excerpt_seconds(CheckKind::Full, Lang::En, gpu, 2),
+            60.0
+        );
     }
 
     #[test]

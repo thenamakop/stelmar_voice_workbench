@@ -331,6 +331,31 @@ fn hybrid_is_chosen_only_if_measured_faster_and_safe() {
     assert!((hi.rtf - 1.0 / 1.863).abs() < 0.01, "{}", hi.rtf);
     assert!(d.config.as_ref().unwrap().why.contains("faster"));
 
+    // A gain of 12% (above the old 10% rule, below the 15% rule): GPU alone; a gain of 20%: hybrid.
+    for (target, hybrid) in [(1.12, false), (1.20, true)] {
+        let mut p = emu_mid_hybrid();
+        let gpu_alone = p
+            .measurements
+            .iter()
+            .find(|m| {
+                m.lang == p.hybrid.as_ref().unwrap().lang
+                    && m.config == DeviceConfig::Gpu { index: 0 }
+                    && m.mode == Mode::Rolling
+                    && m.model == p.hybrid.as_ref().unwrap().model
+            })
+            .unwrap()
+            .rtf;
+        let h = p.hybrid.as_mut().unwrap();
+        let single = 1.0 / gpu_alone;
+        h.cpu_rtf_concurrent = 1.0 / (target * single - 1.0 / h.gpu_rtf_concurrent);
+        let d = decide_with(&p, false);
+        let chosen = matches!(
+            d.config.as_ref().unwrap().config,
+            DeviceConfig::Hybrid { .. }
+        );
+        assert_eq!(chosen, hybrid, "gain {target}");
+    }
+
     // Gain under 10%: GPU alone.
     let mut p = emu_mid_hybrid();
     p.hybrid.as_mut().unwrap().cpu_rtf_concurrent = 20.0;

@@ -8,7 +8,7 @@ Missing runs are listed as "not run", never guessed.
 
 Per check run: tier, device configuration, time against the quick-check bar, verdict lines, the chosen rolling model per
 language with its RTF against the bar, hybrid and recorder-safety consistency, then the measurement table. Then the
-quick-versus-full comparison on the same cells (30 s excerpts against 60 s clips; a difference over 10 % is flagged, and
+quick-versus-full comparison on the same cells (30 s excerpts, and 60 s for the deciding cells, against 60 s clips; a difference over 10 % is flagged, and
 a flag on a cell that decides a model choice, the Hindi turbo cell above all, is marked DECIDING). The evidence holds
 numbers and model names only: no audio, no transcript text.
 """
@@ -23,7 +23,7 @@ RUNS = ["quick-emu-low", "quick-emu-mid", "quick-native", "full-emu-low"]
 TARGET_S = 360.0  # the quick check aims to end by this (the hard bar is 480 s)
 START_BAR_MS = 3000.0  # Start during a check gives a recording within this (the recorder itself starts in well under a second)
 FLAG = 0.10
-HYBRID_GAIN = 0.10
+HYBRID_GAIN = 0.15
 
 
 def stamp(path: Path) -> str:
@@ -114,7 +114,7 @@ def section(label: str, report: dict, lines: list[str], written: str = "") -> di
             )
         lv = ld["live"]
         lines.append(f"  {lang}: live offered {lv['offered']}; hard reasons {len(lv['hard_reasons'])}; soft reasons {len(lv['soft_reasons'])}")
-    # Hybrid consistency: hybrid chosen only if at least 10 % faster than the best single device and recorder-safe.
+    # Hybrid consistency: hybrid chosen only if at least 15 % faster than the best single device and recorder-safe.
     hyb = cap.get("hybrid")
     chosen_hybrid = bool(dec.get("config") and dec["config"]["config"].get("kind") == "hybrid")
     if hyb:
@@ -126,7 +126,7 @@ def section(label: str, report: dict, lines: list[str], written: str = "") -> di
         lines.append(
             f"hybrid test: {hyb['model']} {hyb['lang']}, GPU RTF {hyb['gpu_rtf_concurrent']:.3f} with CPU RTF {hyb['cpu_rtf_concurrent']:.3f} at the same time; combined {comb:.3f} audio/s against best single {base:.3f}: {gain * 100:+.1f}%; recorder safe {safe}"
         )
-        lines.append(f"  rule (at least +10% and recorder-safe) says hybrid {want}; the verdict chose hybrid {chosen_hybrid}: {'CONSISTENT' if want == chosen_hybrid else 'INCONSISTENT'}")
+        lines.append(f"  rule (at least +15% and recorder-safe) says hybrid {want}; the verdict chose hybrid {chosen_hybrid}: {'CONSISTENT' if want == chosen_hybrid else 'INCONSISTENT'}")
     else:
         why = next((s["reason"] for s in cap.get("skipped") or [] if s["step"] == "hybrid test"), None)
         lines.append(
@@ -142,6 +142,14 @@ def section(label: str, report: dict, lines: list[str], written: str = "") -> di
             f"  {m['model']:<22} {m['lang']} {m['mode']:<9} {cfg_key(m['config']):<9} {m['threads']:>2} thr  RTF {m['rtf']:.3f}  commit {m['peak_commit_bytes'] / 2**30:.2f} GiB  truncated {m['truncated_chunks']}  {m['method']}"
         )
     return cap
+
+
+def excerpt_of(m: dict) -> float | None:
+    """The seconds of the bench clip a cell was timed on, read from its method text ("first 30 s")."""
+    import re
+
+    hit = re.search(r"first (\d+) s", m.get("method", ""))
+    return float(hit.group(1)) if hit else None
 
 
 def compare(quick: dict | None, full: dict | None, lines: list[str]):
@@ -164,7 +172,10 @@ def compare(quick: dict | None, full: dict | None, lines: list[str]):
     flagged = 0
     deciding_flagged = 0
     compared = 0
-    lines.append(f"excerpt {quick['check']['excerpt_seconds']:.0f} s (quick) against {full['check']['excerpt_seconds']:.0f} s (full); flag above {FLAG * 100:.0f}%")
+    lines.append(
+        f"quick-check excerpt {quick['check']['excerpt_seconds']:.0f} s, except the deciding cells (first-choice rolling model of Hindi and Urdu on a graphics adapter), "
+        f"which the quick check times on the whole clip; full check {full['check']['excerpt_seconds']:.0f} s; flag above {FLAG * 100:.0f}%"
+    )
     for m in full["measurements"]:
         q = qmap.get(cell_key(m))
         if not q or m["mode"] != "rolling":
@@ -180,15 +191,20 @@ def compare(quick: dict | None, full: dict | None, lines: list[str]):
             if dec:
                 deciding_flagged += 1
                 mark += " DECIDING"
-        lines.append(f"  {m['model']:<22} {m['lang']} {cfg_key(m['config']):<9} quick {q['rtf']:.3f}  full {m['rtf']:.3f}  {diff * 100:+.1f}%{mark}")
+        qe = excerpt_of(q)
+        lines.append(
+            f"  {m['model']:<22} {m['lang']} {cfg_key(m['config']):<9} quick {q['rtf']:.3f} ({qe:.0f} s)  full {m['rtf']:.3f}  {diff * 100:+.1f}%{mark}"
+            if qe
+            else f"  {m['model']:<22} {m['lang']} {cfg_key(m['config']):<9} quick {q['rtf']:.3f}  full {m['rtf']:.3f}  {diff * 100:+.1f}%{mark}"
+        )
     lines.append(f"cells compared {compared}; flagged {flagged}; flagged and deciding {deciding_flagged}")
-    for lang in ("en", "hi"):
+    for lang in ("en", "hi", "ur"):
         for m in full["measurements"]:
             if m["lang"] == lang and m["mode"] == "rolling" and "turbo" in m["model"] and m["config"].get("kind") == "gpu":
                 q = qmap.get(cell_key(m))
                 if q:
                     lines.append(
-                        f"deciding cell, {lang} turbo on the graphics adapter: quick {q['rtf']:.3f} (30 s excerpt), full {m['rtf']:.3f} (60 s clip): {(q['rtf'] / m['rtf'] - 1.0) * 100:+.1f}%; against the emulated bar 0.75: quick {'meets' if q['rtf'] <= 0.75 else 'misses'}, full {'meets' if m['rtf'] <= 0.75 else 'misses'}"
+                        f"deciding cell, {lang} turbo on the graphics adapter: quick {q['rtf']:.3f} ({(excerpt_of(q) or 0):.0f} s excerpt), full {m['rtf']:.3f} (60 s clip): {(q['rtf'] / m['rtf'] - 1.0) * 100:+.1f}%; against the emulated bar 0.75: quick {'meets' if q['rtf'] <= 0.75 else 'misses'}, full {'meets' if m['rtf'] <= 0.75 else 'misses'}"
                     )
     q_hi_turbo = [c for c in quick["measurements"] if c["lang"] == "hi" and "turbo" in c["model"] and c["mode"] == "rolling"]
     if not q_hi_turbo:
