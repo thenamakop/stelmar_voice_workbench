@@ -1,0 +1,171 @@
+﻿source: commit fa36341 with uncommitted or untracked changes (the build hashes below identify the code)
+build: stelmar-voice-workbench.exe sha256 fd45eeeed2e31de3169c0aa10b2248d7e2daa9ea1ea1e0c668f6e72dd6dcc8f3 (built 2026-11-13 00:43)
+build: wb-testbench.exe sha256 47e8ba61955c2096e36086afdedd748f2de13b2d54f7f887296d5d6967b711e4 (built 2026-11-13 00:43)
+build: wb-emulate.exe sha256 db54485692bd6faee263d9e4cda4ff422452ac6cfd7c5a932e6713dbe72da46e (built 2026-11-12 16:31)
+gate: phase1-hashing-emu-low
+started: 2026-11-13 03:11:15 +05:30
+machine: Legion
+emulation profile: emu-low
+overlay tools closed: yes (RTSS.exe, MSIAfterburner.exe and LatMon.exe not running when the gate started)
+overlay tools at the end: none running
+engine builds: none running when the gate started (D:\Projects\stelmar-build.lock absent; no cargo.exe, rustc.exe, cl.exe, link.exe, cmake.exe, ninja.exe, nvcc.exe, glslc.exe, MSBuild.exe, cicc.exe, ptxas.exe, fatbinary.exe, nvlink.exe process)
+engine builds at the end: none running
+Track B paused: D:\Projects\stelmar-gate.lock held for the whole run (removed in a finally block)
+Track B busy lock: D:\Projects\stelmar-eval-busy.lock absent at start
+free RAM: 19.8 GB at start (needs 14 GB), 20 GB at end
+app build: target\gate\stelmar-voice-workbench.exe (cargo profile gate, features gate-hooks + custom-protocol)
+verdict: PASS (PROVISIONAL: emulated)
+machine state at start: up 6 min (last full start of the kernel 2026-11-13 03:05:44)
+power plan: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)
+mains power: plugged in (battery 100%)
+  minimum processor state % on mains: 0x00000005
+  maximum processor state % on mains: 0x00000064
+
+checks:
+  [x] reference capture ran cleanly (its own ring overruns 0)
+  [x] fidelity: the app's recording equals the reference capture sample for sample, one fixed offset per run (differing frames 0, reference audio without an app recording 0 frames)
+  [x] recorded duration within 1 s of the source
+  [x] no other program played into the cable
+  [x] zero ring-buffer overruns
+  [x] driver xruns: none, or one within 2 s of the stream start with zero loss around it (xruns 0, excused 0)
+  [x] zero samples dropped by the writer
+  [x] capture thread at MMCSS priority (mmcss)
+  [x] no recorder restarts
+  [x] no detector was switched off by a panic (0 switched off)
+  [x] the models folder and the recording folder are on the same drive and physical disk (otherwise hashing cannot compete with the recorder for the disk)
+  [x] at least 1 GB of model files was hashed while the recording ran (9.66 GB at 797 MB/s while the recorder wrote)
+  [x] model files were hashed while the recording ran: 11 files, 9.66 GB, 11.6 s of hashing inside the recording (at least 10 s)
+  [x] every hashed file was read in Windows background mode (model_hash lines say background=true, memory priority 1)
+  [x] every part decodes in Media Foundation
+  [x] mirror SHA-256 equals the originals
+  [x] player had no underruns (source played cleanly)
+  [x] no job process on the NVIDIA GPU
+
+recording rule (9 Nov 2026): fidelity decides PASS or FAIL; upstream breaks are reported; a run with limits exceeded is INVALID (docs/PLAN.md section 12)
+fidelity: app compared with the reference capture over 28,944,480 frames (603.0 s) in 1 run(s) of the app; differing frames 0; reference audio the app has no recording of 0 frame(s); audio only the app has 0 frame(s); restart gaps 0 frame(s)
+  run 1: app frames 0 to 29066880, one fixed offset 116160 frames (found by a stretch of the reference); compared 28944480, differing 0, largest difference 0
+upstream breaks (between the source and the reference capture; reported, not gated): 1 in 10.1 minutes of audio, 1 counted toward the limit of 1 (breaks in the first 3 s of playback are not counted)
+  at source 3.755 s, 03:11:58.760 IST: repeat 10.2 ms, skipped 0.0 ms, unmatched 45.3 ms; nearest reference xrun #1 at 03:11:54.989 (3,772 ms before); late player callbacks within 500 ms: 0
+player callbacks: longest gap 24.8 ms against a 100 ms output buffer; late callbacks (a gap longer than the buffer) 0
+validity: valid (limits: a late player callback within 500 ms of a break, more than 250 ms unmatched in a break, more than max(1, floor(minutes / 10)) counted breaks, a missing, misaligned or incomplete reference, or an upstream break without late-callback data)
+
+measurements:
+  source: 10.0 min of known noise, 48 kHz stereo, played by wb-testbench into 'CABLE Input (VB-Audio Virtual Cable)' from outside the job
+  rig: the player endpoint 'CABLE Input (VB-Audio Virtual Cable)' and the capture endpoint 'CABLE Output (VB-Audio Virtual Cable)' both belong to VB-CABLE instance ROOT\MEDIA\0001 (paired by device instance, not by name); the app and the reference capture record 'CABLE Output (VB-Audio Virtual Cable)'
+  rig self-test before the gate: a known 6 s signal played into 'CABLE Input (VB-Audio Virtual Cable)' was found on 'CABLE Output (VB-Audio Virtual Cable)' 0.07 s after the capture started; lowest block correlation 1.000; level RMS 4,727 (-16.8 dBFS); the check took 9.2 s
+  rig note: 6 stale VB-CABLE endpoint entries (not present or disabled) are ignored: they are not usable devices
+  rig note: VB-CABLE driver devices that are not working (no endpoints, ignored): ROOT\MEDIA\0002 [Error], ROOT\MEDIA\0003 [Error]
+  recorded content: 600.010 s against source 600.000 s (difference 10.2 ms); discontinuities 1; silent gaps 0.0 ms; unmatched 45.3 ms; lowest block correlation 1.0000
+  parts: 2; audio 605.6 s; overrun samples 0; driver xruns 0; samples dropped by the writer 0; recorder restarts 0
+  detector coverage: the time budget skipped 0 ms of 605,560 ms of audio (0.00%)
+  detectors (R1: they run after the WAV write, each in catch_unwind, with a budget of 1/20 of the block's audio time, at least 2 ms): longest time on one block 293 us; blocks over budget 0; audio the detectors skipped 0 ms; detectors switched off 0
+  capture device buffer (12 Nov decision: ask for 1,000 ms, then 500 ms, 200 ms, then the device default; shared mode kept): requested 1000 ms, granted 1000.0 ms (48000 frames), engine period 10.0 ms
+  capture margin: longest gap between capture callbacks 20.2 ms against a granted device buffer of 1,000 ms, so 979.8 ms of room were left (a negative number means audio was lost)
+  capture callback gaps (histogram): at least 50 ms 0; at least 100 ms 0; at least 250 ms 0; at least 500 ms 0
+  capture callback period measured in the app: mean 10.15 ms over every gap under 50 ms (the shortest, 8.232 ms, is two packets handed over back to back after a late wake-up); the larger buffer sits behind the callback and does not change this period
+
+cold-cache model hashing while recording (R5):
+  hash cache cleared before the app started: verified-models.json removed; present now: no
+  Fast Startup (HiberbootEnabled): 1; boot time is the later of Windows's LastBootUpTime and the last kernel start event 12; use Restart, not Shut down, for a cold start
+  models folder on drive D (physical disk 1), recording folder on drive D (physical disk 1): same disk yes; hashed 9.66 GB at 797 MB/s over 11 files
+  started after a reboot: yes (the machine booted at 2026-11-13 03:05; it had been up 6.0 min when the gate launched the app; 'yes' means at most 30 min)
+  limit: the operating system file cache cannot be emptied without administrator rights; a reboot is how this gate gets a cold cache.
+  recording interval, from session.json: 1794519712562 to 1794520318132 (epoch ms); model files hashed: 11; bytes 9655861724; hashing inside the recording 11.6 s
+  file | bytes | start (ms after the recording began) | took ms | MB/s | result | background | memory priority
+  ggml-hinglish-f16.bin | 3095033483 | -539 | 4552 | 680 | ok | True | 1
+  ggml-hinglish-q5_0.bin | 1081140203 | 4,015 | 1225 | 883 | ok | True | 1
+  ggml-large-v3-q5_0.bin | 1081140203 | 5,243 | 1173 | 922 | ok | True | 1
+  ggml-large-v3-turbo-q5_0.bin | 574041195 | 6,419 | 694 | 827 | ok | True | 1
+  ggml-medium.bin | 1533763059 | 7,124 | 1756 | 873 | ok | True | 1
+  ggml-medium-q5_0.bin | 539212467 | 8,882 | 608 | 887 | ok | True | 1
+  ggml-medium-q8_0.bin | 823369779 | 9,492 | 949 | 868 | ok | True | 1
+  ggml-silero-v6.2.0.bin | 885098 | 10,444 | 13 | 68 | ok | True | 1
+  ggml-small.bin | 487601967 | 10,478 | 593 | 822 | ok | True | 1
+  ggml-small-q5_0.bin | 175209663 | 11,073 | 208 | 842 | ok | True | 1
+  ggml-small-q8_0.bin | 264464607 | 11,283 | 337 | 785 | ok | True | 1
+  priorities: recorder thread mmcss, capture thread mmcss; ring buffer 20 s, highest fill 0.15%
+  recorder thread CPU: 4.36 s over 607 s = 0.718% of one core
+  app process CPU (main process; WebView2 processes not counted): 25.7 s = 1.06% of the job's 4 logical processors (4.23% of one core)
+  exit codes (information, not gated): the app 0 (read inside the job), wb-emulate 0 (the app's code, since the 10 Nov fix)
+  mirror: 6 files compared, all equal: True (mirror on the same machine, separate drive pending: C: instead of an external SSD)
+  player: 28800000 frames of 28800000, underrun callbacks 0, render thread priority mmcss, output buffer fixed 4800 frames (100 ms)
+  rig placement (player and reference capture pinned to performance cores outside the job, HIGH priority class; masks read back from the running processes):
+    job (the app inside the emulation job): pid 20704, mask 0xf0000 (logical processors 16-19); CPU set none (all processors the affinity mask allows)
+    player: pid 22464, mask 0xc000 (logical processors 14-15), priority class High; CPU set none (all processors the affinity mask allows); the player itself reports 0xc000 at stream start
+    reference capture: pid 21532, mask 0x3000 (logical processors 12-13), priority class High; CPU set none (all processors the affinity mask allows); the reference capture itself reports 0x3000 at stream start
+    overlap: none (checked on the planned masks before anything started, and on the masks read back from the running processes)
+  player late callbacks: 0 (a gap between render callbacks longer than the 100 ms output buffer); longest gap between callbacks 24.8 ms; gaps of 20 ms or more: 442, 30 ms or more: 0, 50 ms or more: 0
+    shared break at source 3.755 s: no late player callback within 500 ms of it; the longest callback gap in the whole run was 24.8 ms, so the player never ran its output buffer dry
+    shared break at source 3.800 s: no late player callback within 500 ms of it; the longest callback gap in the whole run was 24.8 ms, so the player never ran its output buffer dry
+  cable interference: none seen by the 1-second session poll (sounds shorter than a second can be missed; the analysis above is the check)
+  cable session: System Sounds (Windows) (pid 0) on 'CABLE Input (VB-Audio Virtual Cable)': playing in 0 of 556 polls, first seen 03:12:11, last 03:21:54; Windows System Sounds entry, silent
+  cable session: System Sounds (Windows) (pid 0) on 'CABLE In 16ch (VB-Audio Virtual Cable)': playing in 0 of 556 polls, first seen 03:12:11, last 03:21:54; Windows System Sounds entry, silent
+  cable session: wb-testbench (pid 22464, D:\Projects\stelmar_voice_workbench\target\release\wb-testbench.exe) on 'CABLE Input (VB-Audio Virtual Cable)': playing in 556 of 556 polls, first seen 03:12:11, last 03:21:54; the gate player
+  default playback device: not the cable (checked at start)
+  signal starts at source frame 0 (0.0 ms of the source's start never reached the captures: playback start-up); leading audio before the signal: 0 ms
+  unmatched stretch: source 3.75 s (about 03:11:58 IST), 45 ms; also in the reference capture: True
+  reference xruns (WASAPI discontinuity flag, as cpal reports it; logged by the reference capture): 1
+    #1 at 03:11:54.989 IST: 0 callbacks and 0 frames in; reference recording 0.000 s; before the signal starts
+    shared break at source 3.755 s, 03:11:58.760 IST (to the second: 03:11:58): no reference xrun within 2 s (nearest: #1 at 03:11:54.989, 3.8 s before)
+    shared break at source 3.800 s, 03:11:58.805 IST (to the second: 03:11:58): no reference xrun within 2 s (nearest: #1 at 03:11:54.989, 3.8 s before)
+  reference capture (separate cpal + hound recorder outside the job; shares the audio engine, cable driver and cpal with the app): 1 breaks, unmatched 45.3333333333333 ms, its overruns 0, xruns 1
+  breaks in the app recording: recorder's own 0; shared with the reference (upstream; see the upstream breaks section) 1; start-up repeats within the old allowance 0 
+  capture position breaks counted in the app's callback (device time not following on): 0
+live detector check (not gated in Phase 2; any miss or false alarm stops the run sequence for a decision before the speed tables):
+  rule: a shared upstream break is matched when a repeated_block or zero_gap event of the app's session.json lies within +-50 ms of the break's span in the app's audio time (the span runs from the break's source position, mapped through the app analysis, to the end of its unmatched stretch); an event with no shared break is a false alarm
+  shared upstream breaks found by the harness: 1; matched 1; missed 0; before the app began recording 0; events with no shared break (false alarms) 0; lead-in events (before the first source sample that reached the recording) 0
+    break at source 3.755 s, app audio 6,288.3 to 6,333.6 ms: MATCHED by zero_gap at 6,289.0 ms (start_frame=301860 len_frames=490 len_ms=10.2 rate=48000)
+  app counters after the PositionCheck fix: position breaks 0 (device time left the predicted line for 3 callbacks in a row), timestamp outliers 0 (came back; no audio affected), old pairwise flags 0 (what the rule before the fix counted: each outlier twice); repeated_block events 0; zero_gap events 1
+  GPU check: 10 job processes, 0 processes in nvidia-smi, overlap 0
+
+progress:
+  03:11:53 recording in D:\STELMAR-Gate\hashing-emu-low-20261113-031147\rec\2026-11-13\gate-hashing-20261113-031147
+  03:11:54 rig pinned: job 0xf0000, player 0xc000, reference capture 0x3000, no overlap
+  03:12:10 job processes: 10; nvidia-smi processes: 0; job processes on the NVIDIA GPU: 0
+  03:13:11 audio 1.3 min, part 1, overrun samples 0, xruns 0, ring max 0.10%, recorder cpu 515 ms, in_sync lag 1010 ms
+  03:14:12 audio 2.3 min, part 1, overrun samples 0, xruns 0, ring max 0.15%, recorder cpu 937 ms, in_sync lag 1010 ms
+  03:15:12 audio 3.3 min, part 1, overrun samples 0, xruns 0, ring max 0.15%, recorder cpu 1265 ms, in_sync lag 1010 ms
+  03:16:13 audio 4.3 min, part 1, overrun samples 0, xruns 0, ring max 0.15%, recorder cpu 1765 ms, in_sync lag 1010 ms
+  03:17:14 audio 5.4 min, part 1, overrun samples 0, xruns 0, ring max 0.15%, recorder cpu 2250 ms, in_sync lag 1000 ms
+  03:18:15 audio 6.4 min, part 1, overrun samples 0, xruns 0, ring max 0.15%, recorder cpu 2687 ms, in_sync lag 1010 ms
+  03:19:16 audio 7.4 min, part 1, overrun samples 0, xruns 0, ring max 0.15%, recorder cpu 3093 ms, in_sync lag 1000 ms
+  03:20:16 audio 8.4 min, part 1, overrun samples 0, xruns 0, ring max 0.15%, recorder cpu 3437 ms, in_sync lag 1010 ms
+  03:21:17 audio 9.4 min, part 1, overrun samples 0, xruns 0, ring max 0.15%, recorder cpu 4031 ms, in_sync lag 1000 ms
+
+emulation log:
+  profile=emu-low
+  cores: class 0: 16 cores / 16 threads; class 1: 8 cores / 16 threads
+  affinity_mask=0xf0000 logical_processors=4 chosen=[16, 17, 18, 19] efficiency_classes=[0, 0, 0, 0]
+  job_memory_limit_bytes=11811160064
+  vulkan[0] Intel(R) RaptorLake-S Mobile Graphics Controller vendor=0x8086 integrated=true luid=4b44010000000000 driver=Intel Corporation 101.7092
+  vulkan[1] NVIDIA GeForce RTX 4070 Laptop GPU vendor=0x10de integrated=false luid=1f6a010000000000 driver=NVIDIA 621.14
+  vulkan[2] Intel(R) RaptorLake-S Mobile Graphics Controller vendor=0x8086 integrated=true luid=336b020000000000 driver=Intel Corporation 101.7092
+  note: 2 Intel integrated Vulkan devices listed (different LUIDs or unknown: check the drivers); exposing only index 0
+  env WB_EMULATE=emu-low
+  env WB_EMULATE_REPORTED_RAM_BYTES=17179869184
+  env WB_EMULATE_JOB_MEMORY_BYTES=11811160064
+  env WB_EMULATE_LOGICAL_PROCESSORS=4
+  env CUDA_VISIBLE_DEVICES=-1
+  env GGML_VK_VISIBLE_DEVICES=0
+  command: powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:\Projects\stelmar_voice_workbench\scripts\gates\recorder-gate-inner.ps1 -Exe D:\Projects\stelmar_voice_workbench\target\gate\stelmar-voice-workbench.exe -ResultFile D:\STELMAR-Gate\hashing-emu-low-20261113-031147\inner.json
+
+discontinuities:
+  {"at_ms":6333.625,"source_ms":3800.0,"part":1,"source_jump_frames":-490,"source_jump_ms":-10.208333333333334}
+
+decode (Media Foundation source reader, the decoder Windows players use):
+  audio/part-0001.wav: header 600000 ms, decoded 600000 ms, playable True
+  audio/part-0002.wav: header 5560 ms, decoded 5560 ms, playable True
+
+app log for this run (warnings, errors, session lines):
+  2026-11-12T21:41:51.990589Z  INFO main app started version="0.1.0" pid=20704 gate_hooks=true
+  2026-11-12T21:41:51.995129Z  WARN main gate hooks active (development build, gate-hooks feature)
+  2026-11-12T21:41:51.995721Z  INFO main display guard installed window="main"
+  2026-11-12T21:41:52.555650Z  INFO        wb-gate session recording dir="D:\\STELMAR-Gate\\hashing-emu-low-20261113-031147\\rec\\2026-11-13\\gate-hashing-20261113-031147" device="CABLE Output (VB-Audio Virtual Cable)" rate=48000 channels=2 resumed=false
+  2026-11-12T21:41:52.555700Z  WARN        wb-gate gate: session started dir="D:\\STELMAR-Gate\\hashing-emu-low-20261113-031147\\rec\\2026-11-13\\gate-hashing-20261113-031147"
+  2026-11-12T21:41:58.874420Z  WARN      wb-events The audio input delivered a short stretch of digital silence in the middle of the sound (the driver or the audio engine, not the recorder). It is recorded as received and marked in session.json. source="recorder"
+  2026-11-12T21:51:52.683916Z  INFO      wb-events part closed part=1 start_ms=0 duration_ms=600000
+  2026-11-12T21:51:58.132215Z  INFO      wb-events part closed part=2 start_ms=600000 duration_ms=5560
+  2026-11-12T21:51:58.412463Z  INFO        wb-gate session stopped dir=D:\STELMAR-Gate\hashing-emu-low-20261113-031147\rec\2026-11-13\gate-hashing-20261113-031147 parts=2 audio_ms=605560 overrun_samples=0 xruns=0 mirror_all_match=true
+  2026-11-12T21:51:58.414089Z  WARN        wb-gate gate: stop file seen; session stopped; exiting
+
+audio and reports: D:\STELMAR-Gate\hashing-emu-low-20261113-031147 (not in the repository)

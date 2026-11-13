@@ -22,5 +22,15 @@ test-results/
 playwright-report/
 pnpm-lock.yaml
 
+# Git-ignored evaluation output and tools (eval/.gitignore is nested, so prettier does not read it)
+eval/results/
+eval/logs/
+eval/data/
+eval/local/
+eval/.venv/
+eval/.tools/
+eval/.pytest_cache/
+eval/**/__pycache__/
+
 # Vendored sources keep their bytes (third_party/README.md)
 third_party/

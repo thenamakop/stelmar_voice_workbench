@@ -1,0 +1,51 @@
+Superseded: the recorder-gate night run of 12 Nov 2026 (17:01 to 17:14 IST, emu-low)
+
+Label: rig mismatch after reboot: no gate ran. The six gate files next to this note (hashing, panic,
+webview, kill, load, soak) are evidence of the rig mismatch only. They are not gate results, and
+nothing in them counts towards R1, R4 or R5.
+
+Who wrote this note: the coding agent working on branch phase-2b-recorder-hardening, by hand, from
+reading the run folders and the machine afterwards. This note is not script output. The six files were
+written by the gate scripts; they were only moved here, not edited.
+
+What happened
+- After the Restart, every gate ended with "FAIL: no verdict data (Play, Analysis, RefAnalysis)" and the
+  analysers said "the test signal was not found in the recording" for the app and for the reference
+  capture. The kill gate also found no signal.
+- The recorder itself was fine (panic gate: 20 s recorded, 0 dropped samples, 0 xruns, longest detector
+  time 222 us per block), but it was recording digital silence, so nothing about the recorder can be
+  judged from these runs.
+
+Cause (checked afterwards, nothing was changed to get these facts)
+- The gates found the cable's playback endpoint by the name text "CABLE Input". After the restart that
+  endpoint is no longer called that. Windows now lists the cable's active playback endpoints as
+  "Speakers (3- VB-Audio Virtual Cable)" and "CABLE In 16 Ch (3- VB-Audio Virtual Cable)".
+  "CABLE Input (VB-Audio Virtual Cable)" exists only as a stale entry (not present) of an earlier
+  driver install, ROOT\MEDIA\0001.
+- wb-testbench play --device "CABLE Input" stops at once with: no output device whose name contains
+  "CABLE Input". The gates started the player hidden and did not keep its error text, so the run went
+  on for its full length with nothing playing. The panic run's reference capture (reference\audio\
+  part-0001.wav, 431,040 samples read) had peak 0 (digital silence).
+- The capture side was found by the name "CABLE Output": the app and the reference capture both
+  recorded "CABLE Output (3- VB-Audio Virtual Cable)" and agree with each other.
+- Windows holds three VB-CABLE driver instances: ROOT\MEDIA\0001 [Error], ROOT\MEDIA\0002 [OK],
+  ROOT\MEDIA\0003 [Error]. Only ROOT\MEDIA\0002 has active endpoints, so the player and the captures
+  were not on two working cables: the player never found a cable endpoint to play into.
+  (The wording "player and captures on different VB-CABLE instances" is therefore not what happened;
+  the "3-" and "2-" in the endpoint names are Windows numbering the endpoints of the three installs.)
+- The default playback device for all three roles was "Speakers (3- VB-Audio Virtual Cable)", the
+  cable's own playback endpoint. The gates' check for that looked for "CABLE Input" in the name and so
+  passed. Any sound the computer made would have gone into the cable.
+
+What was changed afterwards (commit on this branch): the gates pair the cable's endpoints by cable
+instance (never by name), refuse when more than one cable instance has active endpoints, refuse when
+the cable is a default playback device (by the cable's real endpoint names), keep the player's and the
+capture's error text, and play a known signal through the pair and require it to arrive before any gate
+starts. See scripts/lib/CableRig.psm1, scripts/gates/rig-selftest.ps1 and scripts/tests/CableRig.Tests.ps1.
+
+The run folders are kept (nothing was deleted), in D:\STELMAR-Gate:
+hashing-emu-low-20261112-170157, panic-emu-low-20261112-170227, webview-emu-low-20261112-170254,
+kill-emu-low-20261112-170350, load-emu-low-20261112-171252, soak-emu-low-20261112-171322.
+
+R5 note: the model files were read by these runs, so the hashing gate needs a fresh Restart before its
+real run.

@@ -1,0 +1,26 @@
+﻿source: scripts/gates/xrun-correlate.ps1 (written by the script; nothing in this file is typed by hand)
+machine: Legion
+run folder: D:\STELMAR-Gate\load-emu-low-20261112-232302 (not in the repository)
+sampler: 1626 rows, 23:23:04 to 23:53:33, once a second (typeperf, pinned to logical processors 0-11); 641 counters; the job's logical processors: 16, 17, 18, 19
+driver xruns in the app's session.log: 1
+limits: a sample is a one-second average, so a stall of 30 to 500 ms is averaged into one or two samples; per-process figures are percent of ONE core and not tied to a core; the evidence shows what is busy around an xrun, not which thread ran.
+
+seconds near an xrun (from 2 s before the stall to 1 s after the xrun): 3; other seconds: 1623
+
+== per xrun ==
+xrun #1 at 23:45:02.541 (audio 1,315.8 s); the capture thread was away about 330 ms; sampler rows in the window: 3
+    job cores (worst second in the window): cpu16: busy 100%, DPC 0.0%, int 0.0%, perf 93%, 1,600 MHz | cpu17: busy 100%, DPC 0.0%, int 0.0%, perf 93%, 1,600 MHz | cpu18: busy 100%, DPC 0.0%, int 0.0%, perf 93%, 1,600 MHz | cpu19: busy 100%, DPC 1.4%, int 0.0%, perf 93%, 1,600 MHz
+    machine: DPC max 0.2%, interrupt max 0.2%, busy max 100%, processor queue max 40; disk write latency max 1.4 ms, read 0.7 ms; free memory min 19,579 MB; pages/s max 479; context switches/s max 16,778; network max 42 KB/s
+    busiest processes in the window (percent of one core, worst second): LatMon (pid 22,832) 101%; System (pid 4) 77%; MsMpEng (pid 6,392) 18%; svchost#54 (pid 8,688) 16%; WakaTime (pid 20,396) 4%
+
+== all the other seconds of the run, for comparison (worst second over all of them) ==
+    job cores: cpu16: busy 100%, DPC 1.5%, int 5.9%, perf n/a%, 1,600 MHz | cpu17: busy 100%, DPC 2.7%, int 4.4%, perf n/a%, 1,600 MHz | cpu18: busy 100%, DPC 1.5%, int 4.4%, perf n/a%, 1,600 MHz | cpu19: busy 100%, DPC 2.9%, int 3.0%, perf n/a%, 1,600 MHz
+    machine: DPC max 1.1%, interrupt max 3.1%, busy max 100%, processor queue max 76; disk write latency max 218.6 ms, read 504.1 ms; free memory min 19,362 MB; pages/s max 84,351; context switches/s max 80,020; network max 389 KB/s
+    busiest processes over those seconds: System (pid 4) 123%; LatMon (pid 22,832) 113%; MsMpEng (pid 6,392) 111%; PerformanceMonitor#1 (pid 8,884) 101%; claude#5 (pid 23,172) 90%; CompatTelRunner (pid 684) 89%; svchost#41 (pid 6,004) 48%; svchost#28 (pid 4,576) 47%
+
+== processes that were busy near an xrun and (nearly) idle otherwise ==
+    none: every process that was busy near an xrun was about as busy at other times
+
+== System log during the sampler (Kernel-Processor-Power event 37 = speed limited by firmware) ==
+System events between 23:22:59 and 23:53:38: none (No events were found that match the specified selection criteria.)
+event 37 (speed limited by firmware) during the sampler: 0

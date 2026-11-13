@@ -93,5 +93,21 @@ Check 'an event inside a shared break span is matched whatever the lead-in rule 
 $m = Get-WbDetectorMatches -Breaks @() -Analysis $kill -Events @((Ev 'zero_gap' 10.0))
 Check 'a run that began part way into the source (content start 0) has no lead-in' (@($m.LeadIn).Count -eq 0 -and @($m.FalseAlarms).Count -eq 1)
 
+# Save-WbDetectorCheck: the saved file carries the counts and the recorder's detector counters.
+$tmp = Join-Path ([IO.Path]::GetTempPath()) ("wb-det-" + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+try {
+  $chk = Get-WbDetectorMatches -Breaks @((Brk 18.667 81.333)) -Analysis $panic -Events @((Ev 'zero_gap' 2346.583))
+  $recObj = [pscustomobject]@{ repeated_blocks = 0; zero_gaps = 1; detector_max_block_us = 812; detector_over_budget_blocks = 0; detector_skipped_ms = 0; detectors_disabled = @() }
+  Save-WbDetectorCheck -RunDir $tmp -Gate 'panic' -Profile 'emu-low' -Check $chk -Rec $recObj -AudioMs 186000 -Verdict 'PASS'
+  $saved = Get-Content -LiteralPath (Join-Path $tmp 'detector-check.json') -Raw | ConvertFrom-Json
+  Check 'the saved detector check has the counts and the detector counters' ($saved.gate -eq 'panic' -and $saved.breaks -eq 1 -and $saved.matched -eq 1 -and $saved.false_alarms -eq 0 -and $saved.audio_minutes -eq 3.1 -and $saved.verdict -eq 'PASS' -and $saved.audio_ms -eq 186000 -and $saved.counters.detector_max_block_us -eq 812 -and $saved.counters.detectors_disabled -eq 0)
+  Save-WbDetectorCheck -RunDir $tmp -Gate 'kill' -Profile 'emu-low' -Check $chk -Rec ([pscustomobject]@{ repeated_blocks = 0; zero_gaps = 1 }) -AudioMs 60000
+  $old = Get-Content -LiteralPath (Join-Path $tmp 'detector-check.json') -Raw | ConvertFrom-Json
+  Check 'a report from before Phase 2b (no detector counters) saves with nulls, not an error' ($old.gate -eq 'kill' -and $null -eq $old.counters.detector_max_block_us)
+} finally {
+  Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
+}
+
 if ($fails) { Write-Host "$fails failed"; exit 1 }
 Write-Host 'Detector tests passed'

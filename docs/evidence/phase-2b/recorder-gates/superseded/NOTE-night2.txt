@@ -1,0 +1,52 @@
+Superseded: the hashing gate of the second night run, 12 Nov 2026 (started 18:09 IST, emu-low)
+
+Label: harness crash in the cable poll at 18:10:47; the gate never reached its verdict. Stopped by hand
+at 19:13. Not a gate result: nothing in it counts towards R1, R4 or R5.
+
+Who wrote this note: the coding agent working on branch phase-2b-recorder-hardening, by hand, from
+reading the run folder and the machine afterwards. This note is not script output. The file
+hashing-emu-low.night2-crash.txt next to it was written by the gate script (its crash handler) and was
+only moved here, not edited.
+
+What happened
+- The gate started at 18:09:49 and the app began recording at 18:10:28. At 18:10:47 the gate's
+  once-a-second look at the cable (wb-testbench sessions) threw "Cannot convert the System.Object[] value
+  to type System.Int32" in Get-WbCableIntruders (scripts/lib/CableRig.psm1 line 414). In Windows
+  PowerShell 5.1 a JSON array comes out of ConvertFrom-Json as one object, so it broke as soon as the
+  cable's endpoint listed two sessions: the gate player and Windows's silent "System Sounds" entry
+  (pid 0). Reproduced afterwards with a two-session JSON; it needs no other program.
+- The gate's catch wrote the crash evidence and exited, but did not stop what it had started. The app
+  (inside its job), the player and the reference capture kept running. The 10-minute player ended at
+  18:20:30; the app and the reference capture ran on until they were stopped by hand (STOP-REF, then
+  STOP, at 19:13:46 and 19:13:56). The sequence runner waited the whole time, because the orphans held
+  its output pipe open.
+- The recorder itself did what it should: 3,808.7 s recorded in 7 parts, 0 overruns, 0 xruns, 0 dropped
+  samples, 0 recorder restarts, detector time at most 1,274 us on one block, 0 detectors disabled, and
+  the app equals the reference capture sample for sample (compare.json: 182,209,440 frames compared, 0
+  differing).
+
+Information from the stopped run (analysis redone on 12 Nov after 19:17 with the current analysers; the
+analysis files in the run folder date from that, not from the gate; the run is not R5 evidence)
+- session.log has three zero_gap events: audio 3,171 ms (365 frames, 7.6 ms), 3,679 ms (73 frames,
+  1.5 ms) and 24,071 ms (468 frames, 9.8 ms).
+- The analysers find the same three breaks in the signal BOTH in the app recording and in the independent
+  reference capture, with the same lengths to the frame (365, 73 and 468 frames) and the same source
+  positions (600 ms, 1,008 ms, 21,407 ms). They happened before the signal reached either capture: the
+  detector found 3 of 3, with no false alarm. The app is not their cause.
+- Which program, if any, had a session on the cable then is not known: the gate looked only once a
+  second, started looking at about 18:10:46, crashed at 18:10:47, and logged no session names. Two of the
+  three breaks (18:10:31) came before the first look, and the third (18:10:52) after the crash.
+  Today (after the stop) the cable shows only the silent System Sounds entry, no Nahimic process runs and
+  the NahimicService is Stopped/Disabled. So no intruder can be named from the data of this run.
+- The player reported 0 late callbacks and 0 underruns (longest callback interval 22.31 ms against a
+  100 ms buffer); the reference capture logged one xrun at its own start.
+
+What was changed afterwards (scripts and tests only; crates/ and src-tauri/ are unchanged against
+fffdc33): the session JSON is parsed one entry per session; the poll logs every session it finds by
+program name, pid and path, and never throws; another program playing into the cable fails the gate
+instead of crashing it; recorder-gate.ps1 and kill-gate.ps1 stop the app, the player and the reference
+capture in a finally block; run-phase1-gates.ps1 starts each gate with its output in a file; and the rig
+check refuses while an audio-enhancement program (Nahimic and the like) is running.
+
+The run folder is kept (nothing was deleted): D:\STELMAR-Gate\hashing-emu-low-20261112-181023.
+R5 note: this run read the model files, so the real hashing run needs a fresh Restart.

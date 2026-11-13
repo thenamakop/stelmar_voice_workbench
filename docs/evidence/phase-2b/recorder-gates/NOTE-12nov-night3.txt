@@ -1,0 +1,24 @@
+The recorder gates of the third night run, 12 Nov 2026 (restart 19:38, started 20:16, emu-low, build fffdc33)
+
+Who wrote this note: the coding agent working on branch phase-2b-recorder-hardening, by hand, on 13 Nov
+2026. This note is not script output. The six *-emu-low.txt files in this folder were written by the gate
+scripts and are not edited.
+
+What these files are: hashing (R5), panic, webview, kill and soak PASS (PROVISIONAL). LOAD FAILED: the app
+logged 20 driver xruns between 20:17 and 20:40 and recorded 1,795.44 s against 1,800 s (4.56 s lost); the
+independent reference capture had no break, so the loss was in the app's capture path inside the job. The
+load FAIL stays as the gate result of that build and is kept here as the record of the problem. It is not
+replaced by the later pass.
+
+What replaced it: the owner decided on 12 Nov 2026 (option B) on a 1,000 ms capture device buffer. The
+final-recorder run, with that buffer, is in ../recorder-gates-13nov/ (13 Nov 2026, all six gates PASS,
+PROVISIONAL). That run does not explain the 12 Nov stalls: none came near the old 100 ms buffer in it, and the
+cause of the 12 Nov stalls is not isolated (docs/GATES.md, phase-2b rows).
+
+Known confounder: LatencyMon (LatMon.exe, about one core) ran during this night run, as the owner instructed,
+to capture DPC data, so the FAIL is not a LatencyMon-free measurement. ../load-diagnostic/ is a 30-minute
+load run made afterwards for diagnosis: DIAGNOSTIC, NOT A VERDICT (it also ran with LatencyMon and was not on
+an idle machine).
+
+Wording: in these files the load evidence calls app-only breaks "shared break"; the script now labels them
+"app-only break". The files are kept as written.

@@ -67,6 +67,83 @@ pub fn lower_current_thread() {
     }
 }
 
+/// What a thread's background mode looks like from inside (for the log and for tests).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BackgroundState {
+    /// Memory priority of the calling thread: 5 is normal, 1 is what background mode sets.
+    /// `None` where it cannot be read.
+    pub memory_priority: Option<u32>,
+}
+
+impl BackgroundState {
+    /// True when the thread is in background mode (memory priority 1).
+    pub fn is_background(&self) -> bool {
+        self.memory_priority == Some(1)
+    }
+}
+
+/// The calling thread's background state now.
+pub fn background_state() -> BackgroundState {
+    #[cfg(windows)]
+    {
+        BackgroundState {
+            memory_priority: crate::win::current_memory_priority(),
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        BackgroundState {
+            memory_priority: None,
+        }
+    }
+}
+
+/// Keeps the calling thread in Windows background mode (CPU, I/O and memory priority all low)
+/// until dropped. For work that must never compete with the recorder, such as hashing the model
+/// files at start-up. Create it on the thread that does the work and drop it on the same thread.
+pub struct BackgroundGuard {
+    /// True when this guard started the mode (and so ends it).
+    active: bool,
+    /// Why the mode could not be entered, when it could not.
+    pub failure: Option<String>,
+}
+
+impl BackgroundGuard {
+    /// Enters background mode. When the thread is in it already, the guard does not end it.
+    /// A failure is kept in `failure`; the thread then runs at its normal priority.
+    pub fn enter() -> Self {
+        #[cfg(windows)]
+        {
+            match crate::win::begin_background_mode() {
+                Ok(()) => Self {
+                    active: true,
+                    failure: None,
+                },
+                Err(e) => Self {
+                    active: false,
+                    failure: Some(e.to_string()),
+                },
+            }
+        }
+        #[cfg(not(windows))]
+        {
+            Self {
+                active: false,
+                failure: Some("not Windows".into()),
+            }
+        }
+    }
+}
+
+impl Drop for BackgroundGuard {
+    fn drop(&mut self) {
+        #[cfg(windows)]
+        if self.active {
+            let _ = crate::win::end_background_mode();
+        }
+    }
+}
+
 /// Keeps the machine awake while the calling thread holds it; released on drop.
 pub struct AwakeGuard {
     pub active: bool,
@@ -191,6 +268,58 @@ fn is_local_prefix(path: &Path) -> bool {
 mod tests {
     use super::*;
 
+    /// Runs `f` on a thread of its own, so a priority mode never leaks into the test runner's
+    /// threads.
+    fn on_new_thread<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> T {
+        match std::thread::spawn(f).join() {
+            Ok(v) => v,
+            Err(p) => std::panic::resume_unwind(p),
+        }
+    }
+
+    #[test]
+    fn background_mode_is_set_while_the_guard_lives_and_ended_after() {
+        let (before, inside, after) = on_new_thread(|| {
+            let before = background_state();
+            let guard = BackgroundGuard::enter();
+            assert_eq!(guard.failure, None);
+            let inside = background_state();
+            drop(guard);
+            (before, inside, background_state())
+        });
+        assert!(!before.is_background(), "{before:?}");
+        assert!(inside.is_background(), "{inside:?}");
+        assert!(!after.is_background(), "{after:?}");
+        assert_eq!(before.memory_priority, after.memory_priority);
+    }
+
+    #[test]
+    fn entering_background_mode_twice_is_safe_and_the_inner_guard_does_not_end_it() {
+        on_new_thread(|| {
+            let outer = BackgroundGuard::enter();
+            assert_eq!(outer.failure, None);
+            let inner = BackgroundGuard::enter();
+            assert!(inner.failure.is_some(), "the second enter is refused");
+            drop(inner);
+            assert!(
+                background_state().is_background(),
+                "still background after the inner guard"
+            );
+            drop(outer);
+            assert!(!background_state().is_background());
+        });
+    }
+
+    #[test]
+    fn background_mode_belongs_to_the_thread_that_entered_it() {
+        let _guard_thread = std::thread::spawn(|| {
+            let _g = BackgroundGuard::enter();
+            std::thread::sleep(std::time::Duration::from_millis(200));
+        });
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        on_new_thread(|| assert!(!background_state().is_background()));
+    }
+
     #[test]
     fn network_paths_are_not_local() {
         assert!(!is_local_path(Path::new(r"\\srv\share\x")));
@@ -242,5 +371,38 @@ pub fn qpc_hz() -> u64 {
     #[cfg(not(windows))]
     {
         0
+    }
+}
+
+/// The endpoint buffer the audio engine grants a shared-mode capture client for a request of
+/// `requested_ms`, read through a short-lived probe client on the same endpoint (cpal does not
+/// expose it). `None` off Windows, or when the endpoint cannot be probed.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CaptureBufferGrant {
+    pub granted_ms: f64,
+    pub granted_frames: u32,
+    pub rate: u32,
+    /// The engine's default period: how often the capture callback is due.
+    pub engine_period_ms: f64,
+}
+
+/// See [`CaptureBufferGrant`]. `endpoint_id` is cpal's `DeviceId::id()` (the Windows endpoint id).
+pub fn probe_capture_buffer(endpoint_id: &str, requested_ms: u32) -> Option<CaptureBufferGrant> {
+    #[cfg(windows)]
+    {
+        let g =
+            crate::win::probe_shared_capture_buffer(endpoint_id, i64::from(requested_ms) * 10_000)?;
+        let rate = g.rate.max(1);
+        Some(CaptureBufferGrant {
+            granted_ms: f64::from(g.frames) * 1000.0 / f64::from(rate),
+            granted_frames: g.frames,
+            rate: g.rate,
+            engine_period_ms: g.period_ms,
+        })
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (endpoint_id, requested_ms);
+        None
     }
 }

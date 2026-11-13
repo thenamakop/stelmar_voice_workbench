@@ -7,6 +7,15 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[features]
+# Test hooks that must not exist in the shipped build: a pause in the data callback, and the
+# device opener the capture-stall test uses.
+test-hooks = []
+
+[[test]]
+name = "capture_stall"
+required-features = ["test-hooks"]
+
 [dependencies]
 cpal.workspace = true
 hound.workspace = true
@@ -22,6 +31,10 @@ tracing.workspace = true
 windows = { workspace = true, features = [
   "std",
   "Win32_Foundation",
+  "Win32_Media_Audio",
+  "Win32_System_Com",
+  "Win32_System_Com_StructuredStorage",
+  "Win32_System_Variant",
   "Win32_Storage_FileSystem",
   "Win32_System_Performance",
   "Win32_System_Power",

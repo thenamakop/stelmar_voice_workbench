@@ -26,7 +26,7 @@ use ringbuf::traits::{Consumer, Observer};
 use serde::Serialize;
 
 use crate::Error;
-use crate::capture::{PositionKind, RING_SECONDS, StreamHandle};
+use crate::capture::{CallbackGapStats, PositionKind, RING_SECONDS, StreamHandle};
 use crate::dropout::{DropoutDetector, ZeroGap};
 use crate::events::{Event, Notice, NoticeLevel, RecState, RecorderStatus};
 use crate::level::LevelMeter;
@@ -75,6 +75,58 @@ pub enum RecorderMsg {
     /// Test and gate-hook use only: panic inside the recorder thread, to prove it recovers.
     #[doc(hidden)]
     InjectPanic(PanicPoint),
+    /// Test use only: make a detector panic once or run slowly, to prove the recording is
+    /// unaffected.
+    #[doc(hidden)]
+    InjectDetectorFault(DetectorFault),
+}
+
+/// The two audio-level detectors that look at a block after it is written.
+#[doc(hidden)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DetectorKind {
+    Repeat,
+    ZeroGap,
+}
+
+impl DetectorKind {
+    fn name(self) -> &'static str {
+        match self {
+            Self::Repeat => "repeated_block",
+            Self::ZeroGap => "zero_gap",
+        }
+    }
+}
+
+/// A fault injected into a detector (tests only).
+#[doc(hidden)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DetectorFault {
+    /// The detector panics the next time it is fed.
+    Panic(DetectorKind),
+    /// Every feed of the detector sleeps this long first (a detector that has become slow).
+    Sleep(DetectorKind, Duration),
+}
+
+/// Detector time per block is limited to this fraction of the block's audio duration (1/20),
+/// but never below `DETECTOR_BUDGET_MIN`.
+const DETECTOR_BUDGET_DIVISOR: u32 = 20;
+const DETECTOR_BUDGET_MIN: Duration = Duration::from_millis(2);
+/// The detectors are fed in slices of this much audio, so the budget is checked between slices.
+const DETECTOR_SLICE_MS: u64 = 10;
+
+/// The time the detectors may spend on a block of `block_frames` frames at `rate`.
+fn detector_budget(block_frames: u64, rate: u32) -> Duration {
+    let block = Duration::from_micros(block_frames * 1_000_000 / u64::from(rate.max(1)));
+    (block / DETECTOR_BUDGET_DIVISOR).max(DETECTOR_BUDGET_MIN)
+}
+
+fn panic_text(payload: &(dyn std::any::Any + Send)) -> String {
+    payload
+        .downcast_ref::<&str>()
+        .map(|s| (*s).to_string())
+        .or_else(|| payload.downcast_ref::<String>().cloned())
+        .unwrap_or_else(|| "unknown panic".into())
 }
 
 /// Where an injected recorder panic happens (tests and the gate hook only).
@@ -97,6 +149,8 @@ const MAX_PANICS_PER_BATCH: u8 = 3;
 /// `recorder_restarted` events (session.json, toast) are written at most this often; the restart
 /// counter still counts every restart.
 const RESTART_EVENT_EVERY: Duration = Duration::from_secs(5);
+/// `capture_buffer` events in session.json: one per stream opened (a flapping device opens many).
+const MAX_CAPTURE_BUFFER_EVENTS: u32 = 20;
 
 /// What the recorder left behind at Stop.
 #[derive(Debug, Clone, Serialize)]
@@ -122,6 +176,33 @@ pub struct StopReport {
     pub recorder_restarts: u32,
     pub recorder_cpu_ms: Option<u64>,
     pub manifest_files: usize,
+    /// Blocks on which the detectors ran out of their time budget and skipped the rest.
+    pub detector_over_budget_blocks: u64,
+    /// Audio the detectors did not look at because of the budget, in milliseconds.
+    pub detector_skipped_ms: u64,
+    /// Longest time the detectors took on one block, in microseconds.
+    pub detector_max_block_us: u64,
+    /// Detectors that panicked and were switched off for the rest of the session.
+    pub detectors_disabled: Vec<String>,
+    /// Each capture stream the session opened: what it asked the device for and what the audio
+    /// engine granted (one entry per stream; more than one after a reconnect).
+    pub capture_buffers: Vec<String>,
+    /// The smallest endpoint buffer granted to any stream of the session, in milliseconds.
+    pub capture_buffer_granted_ms: Option<f64>,
+    /// Longest time between two data callbacks over the session, in milliseconds: how long the
+    /// capture thread was away from the device at worst.
+    pub capture_max_callback_gap_ms: f64,
+    /// Granted buffer minus the longest callback gap: how much room was left (negative: audio
+    /// was lost).
+    pub capture_margin_ms: Option<f64>,
+    /// Callback gaps of at least 50, 100, 250 and 500 ms.
+    pub capture_gaps_ge_50ms: u64,
+    pub capture_gaps_ge_100ms: u64,
+    pub capture_gaps_ge_250ms: u64,
+    pub capture_gaps_ge_500ms: u64,
+    /// Mean and minimum callback period when nothing stalled (gaps under 50 ms), in milliseconds.
+    pub capture_callback_period_ms: Option<f64>,
+    pub capture_callback_period_min_ms: Option<f64>,
 }
 
 pub struct RecorderConfig {
@@ -375,6 +456,24 @@ struct Recorder {
     last_gap_event: Option<Instant>,
     write_blocked_until: Option<Instant>,
 
+    /// Callback-gap numbers of the streams already closed (the open one is read live).
+    gaps_before: CallbackGapStats,
+    /// The capture buffers of the streams opened so far, as `BufferInfo::label` prints them.
+    capture_buffers: Vec<String>,
+    granted_ms_min: Option<f64>,
+    /// Smallest margin (granted buffer minus longest callback gap) over the streams already
+    /// closed that had a known grant, and whether any closed stream had none.
+    margin_closed_ms: Option<f64>,
+    margin_closed_unknown: bool,
+    /// `capture_stall` events written to session.json (capped), and the gap of the last one.
+    stall_events_done: u32,
+    stall_events_live: u32,
+    /// The stall going on now already has its `still_going_on` event.
+    live_stall_logged: bool,
+    /// `capture_buffer` events written to session.json (capped; session.log gets every one).
+    capture_buffer_events: u32,
+    /// Longest callback gap already written to session.log, in microseconds.
+    logged_max_gap_us: u64,
     overruns_before: u64,
     xruns_before: u64,
     position_breaks_before: u64,
@@ -384,6 +483,22 @@ struct Recorder {
     repeat: Option<RepeatDetector>,
     /// Detector for zero gaps (short digital silence inside live audio), one per stream.
     dropout: Option<DropoutDetector>,
+    /// A detector that panicked stays off for the rest of the session (a new stream does not
+    /// bring it back).
+    repeat_off: bool,
+    dropout_off: bool,
+    /// Test hooks: a detector panic due on the next feed, and a delay added to every feed.
+    fault_panic: Option<DetectorKind>,
+    fault_sleep: Option<(DetectorKind, Duration)>,
+    detector_over_budget_blocks: u64,
+    detector_skipped_ms: u64,
+    detector_max_block_us: u64,
+    detectors_disabled: Vec<String>,
+    last_budget_log: Option<Instant>,
+    /// The detectors have started on the pending batch: a restart that finishes the batch does
+    /// not show them the same block again (a panic in the event logging would otherwise repeat
+    /// its events).
+    detectors_started: bool,
     zero_gaps: u64,
     zero_gap_events_in_meta: usize,
     last_zero_gap_notice: Option<Instant>,
@@ -483,6 +598,16 @@ fn run(cfg: RecorderConfig, rx: &Receiver<RecorderMsg>, events: Sender<Event>) {
         first_write_pending: false,
         last_gap_event: None,
         write_blocked_until: None,
+        gaps_before: CallbackGapStats::default(),
+        capture_buffers: Vec::new(),
+        granted_ms_min: None,
+        margin_closed_ms: None,
+        margin_closed_unknown: false,
+        stall_events_done: 0,
+        stall_events_live: 0,
+        live_stall_logged: false,
+        capture_buffer_events: 0,
+        logged_max_gap_us: 0,
         overruns_before: 0,
         xruns_before: 0,
         position_breaks_before: 0,
@@ -490,6 +615,16 @@ fn run(cfg: RecorderConfig, rx: &Receiver<RecorderMsg>, events: Sender<Event>) {
         pair_flags_before: 0,
         repeat: None,
         dropout: None,
+        repeat_off: false,
+        dropout_off: false,
+        fault_panic: None,
+        fault_sleep: None,
+        detector_over_budget_blocks: 0,
+        detector_skipped_ms: 0,
+        detector_max_block_us: 0,
+        detectors_disabled: Vec::new(),
+        last_budget_log: None,
+        detectors_started: false,
         zero_gaps: 0,
         zero_gap_events_in_meta: 0,
         last_zero_gap_notice: None,
@@ -526,11 +661,7 @@ fn run(cfg: RecorderConfig, rx: &Receiver<RecorderMsg>, events: Sender<Event>) {
             Ok(Step::Continue) => {}
             Ok(Step::Exit) => return,
             Err(payload) => {
-                let msg = payload
-                    .downcast_ref::<&str>()
-                    .map(|s| (*s).to_string())
-                    .or_else(|| payload.downcast_ref::<String>().cloned())
-                    .unwrap_or_else(|| "unknown panic".into());
+                let msg = panic_text(payload.as_ref());
                 if rec.after_panic(&msg) {
                     return;
                 }
@@ -558,6 +689,10 @@ impl Recorder {
                     panic!("injected recorder panic (test hook)")
                 }
                 Ok(RecorderMsg::InjectPanic(point)) => self.panic_point = Some(point),
+                Ok(RecorderMsg::InjectDetectorFault(fault)) => match fault {
+                    DetectorFault::Panic(kind) => self.fault_panic = Some(kind),
+                    DetectorFault::Sleep(kind, d) => self.fault_sleep = Some((kind, d)),
+                },
                 Ok(msg) => self.handle(msg),
                 Err(mpsc::TryRecvError::Empty) => break,
                 Err(mpsc::TryRecvError::Disconnected) => {
@@ -593,6 +728,7 @@ impl Recorder {
         if now.duration_since(t.status) >= STATUS_INTERVAL {
             t.status = now;
             self.log_counters();
+            self.log_capture_margin();
             self.send_status();
         }
         Step::Continue
@@ -613,6 +749,7 @@ impl Recorder {
             self.batch_len = 0;
             self.batch_done = 0;
             self.batch_panics = 0;
+            self.detectors_started = false;
         }
         // The drain buffer may have been moved out when the panic hit: rebuild it.
         self.rebuild_scratch();
@@ -718,6 +855,9 @@ impl Recorder {
     }
 
     fn take_stream(&mut self) {
+        // A stall that ends in a reopen (the 3 s or 5 s watchdog, a lost device) never saw its next
+        // callback, so the counters do not hold it: it counts here.
+        let open_gap_us = self.open_gap_us();
         if let Some(old) = self.stream.take() {
             self.overruns_before += old.counters.overrun_samples.load(Ordering::Relaxed);
             self.xruns_before += old.counters.xruns.load(Ordering::Relaxed);
@@ -725,6 +865,19 @@ impl Recorder {
             self.timestamp_outliers_before +=
                 old.counters.timestamp_outliers.load(Ordering::Relaxed);
             self.pair_flags_before += old.counters.position_pair_flags.load(Ordering::Relaxed);
+            let mut old_gaps = CallbackGapStats::from_counters(&old.counters);
+            old_gaps.max_gap_us = old_gaps.max_gap_us.max(open_gap_us);
+            self.gaps_before.merge(&old_gaps);
+            // This stream's own margin: its granted buffer against its own longest gap.
+            match old.buffer.granted_ms {
+                Some(g) => {
+                    let gap_ms = old_gaps.max_gap_ms();
+                    let margin = g - gap_ms;
+                    self.margin_closed_ms =
+                        Some(self.margin_closed_ms.map_or(margin, |m| m.min(margin)));
+                }
+                None => self.margin_closed_unknown = true,
+            }
         }
         self.meter = None;
         self.repeat = None;
@@ -759,13 +912,21 @@ impl Recorder {
                     handle.input.channels,
                     20,
                 ));
-                self.repeat = Some(RepeatDetector::new(handle.input.channels));
-                self.dropout = Some(DropoutDetector::new(
-                    handle.input.channels,
-                    handle.input.sample_rate,
-                ));
+                self.repeat =
+                    (!self.repeat_off).then(|| RepeatDetector::new(handle.input.channels));
+                self.dropout = (!self.dropout_off)
+                    .then(|| DropoutDetector::new(handle.input.channels, handle.input.sample_rate));
                 let restored = self.had_stream && !self.input_ok;
                 let input = handle.input.clone();
+                let buffer_label = handle.buffer.label();
+                if let Some(ms) = handle.buffer.granted_ms {
+                    self.granted_ms_min = Some(self.granted_ms_min.map_or(ms, |m| m.min(ms)));
+                }
+                if self.capture_buffers.len() < MAX_CAPTURE_BUFFER_EVENTS as usize {
+                    self.capture_buffers.push(buffer_label.clone());
+                }
+                self.logged_max_gap_us = 0;
+                self.live_stall_logged = false;
                 self.stream = Some(handle);
                 self.rebuild_scratch();
                 self.had_stream = true;
@@ -773,6 +934,16 @@ impl Recorder {
                 self.input_lost_since = None;
                 self.last_callbacks = (0, Instant::now());
                 self.meta.input = Some(input.clone());
+                if self.capture_buffer_events < MAX_CAPTURE_BUFFER_EVENTS {
+                    self.capture_buffer_events += 1;
+                    self.event("capture_buffer", Some(buffer_label));
+                } else {
+                    session::append_log(
+                        &self.dir,
+                        now_ist(),
+                        &format!("capture_buffer audio_ms={} {buffer_label}", self.audio_ms()),
+                    );
+                }
                 if restored {
                     self.event(
                         "input_restored",
@@ -802,7 +973,9 @@ impl Recorder {
                     self.event("resumed", None);
                 }
             }
-            RecorderMsg::Stop(_) | RecorderMsg::InjectPanic(_) => {}
+            RecorderMsg::Stop(_)
+            | RecorderMsg::InjectPanic(_)
+            | RecorderMsg::InjectDetectorFault(_) => {}
         }
         self.send_status();
     }
@@ -900,6 +1073,7 @@ impl Recorder {
                 self.batch_len = 0;
                 self.batch_done = 0;
                 self.batch_panics = 0;
+                self.detectors_started = false;
             }
             Err(payload) => {
                 self.batch_panics = self.batch_panics.saturating_add(1);
@@ -959,18 +1133,53 @@ impl Recorder {
             session::append_log(&self.dir, at, &format!("audio_started audio_ms={audio_ms}"));
             self.save_meta();
         }
-        if *done == 0 {
-            // Once per batch, before it is written; not again when a restart finishes the batch.
-            self.feed_repeat(samples, input.sample_rate);
+        let on_the_clock = self.write_samples(samples, done, &input, channels);
+        // Only now do the detectors look at the block: a slow or failing detector can no longer
+        // delay the write. They see a block once, also when a restart finishes the batch.
+        if !self.detectors_started {
+            self.detectors_started = true;
+            if on_the_clock {
+                self.run_detectors(samples, &input);
+            } else {
+                // The block was carried to a later part or dropped, so it is not on the audio
+                // clock yet and its events would be placed a block too early. The detectors skip
+                // it and start afresh after it; the skip is counted.
+                self.skip_detectors(samples.len() / channels, input.sample_rate);
+            }
         }
+    }
+
+    /// The detectors do not see a block that is not on the audio clock: end what they follow,
+    /// start afresh, and count the audio as skipped.
+    fn skip_detectors(&mut self, frames: usize, rate: u32) {
+        if self.repeat.is_none() && self.dropout.is_none() {
+            return;
+        }
+        self.finish_repeat();
+        self.detector_over_budget_blocks += 1;
+        self.detector_skipped_ms += frames_to_ms(frames as u64, rate);
+    }
+
+    /// Writes `samples` from the cursor `done` on into the open part, opening the next part at a
+    /// rollover and carrying samples over a failed write.
+    fn write_samples(
+        &mut self,
+        samples: &[f32],
+        done: &mut usize,
+        input: &InputInfo,
+        channels: usize,
+    ) -> bool {
+        // True while every sample of the block went into a part that is on the audio clock.
+        let mut on_the_clock = true;
         let part_frames = u64::from(self.part_seconds) * u64::from(input.sample_rate);
         while *done < samples.len() {
             let rest = &samples[*done..];
             if self.writer.is_none() {
-                match self.open_part(&input) {
+                match self.open_part(input) {
                     OpenResult::Opened => {
                         if !self.write_carry() {
                             // The new part failed at once; write_failed has handled it.
+                            on_the_clock = false;
                             continue;
                         }
                     }
@@ -979,7 +1188,7 @@ impl Recorder {
                         // batch (it goes into the next part, after the carried samples).
                         self.carry.extend(rest.iter().map(|&s| f32_to_i16(s)));
                         *done = samples.len();
-                        return;
+                        return false;
                     }
                     OpenResult::Failed => {
                         // The next part cannot be opened either: what the failed part owed and
@@ -988,13 +1197,13 @@ impl Recorder {
                         self.dropped_samples += (self.carry.len() + rest.len()) as u64;
                         self.carry.clear();
                         *done = samples.len();
-                        return;
+                        return false;
                     }
                 }
             }
             let Some(writer) = self.writer.as_mut() else {
                 *done = samples.len();
-                return;
+                return false;
             };
             let room = part_frames.saturating_sub(writer.frames()) as usize * channels;
             let take = rest.len().min(room.max(channels));
@@ -1004,6 +1213,7 @@ impl Recorder {
                 // reach the disk into the next part; the rest of the batch follows it.
                 *done += take;
                 self.write_failed(e);
+                on_the_clock = false;
                 continue;
             }
             *done += take;
@@ -1017,6 +1227,7 @@ impl Recorder {
                 self.first_write_pending = false;
                 if let Some(Err(e)) = self.writer.as_mut().map(PartWriter::flush) {
                     self.write_failed(e);
+                    on_the_clock = false;
                     continue;
                 }
             }
@@ -1028,6 +1239,7 @@ impl Recorder {
                 self.close_part();
             }
         }
+        on_the_clock
     }
 
     fn open_part(&mut self, input: &InputInfo) -> OpenResult {
@@ -1257,25 +1469,208 @@ impl Recorder {
             })
     }
 
-    /// Shows the batch about to be written to the repeated-block and zero-gap detectors.
-    fn feed_repeat(&mut self, samples: &[f32], rate: u32) {
-        let origin_ms = self.audio_ms();
-        if let Some(det) = self.repeat.as_mut() {
-            let first_frame = det.frames_seen();
-            let mut found: Vec<RepeatedBlock> = Vec::new();
-            det.push(samples, |b| found.push(b));
-            for b in found {
-                self.note_repeated_block(b, first_frame, origin_ms, rate);
+    /// Shows a block that has been written to the repeated-block and zero-gap detectors, in
+    /// slices of 10 ms of audio.
+    ///
+    /// The recording never waits for this and never depends on it. Each detector runs inside its
+    /// own `catch_unwind`: a panic switches that detector off for the rest of the session and
+    /// records one `detector_disabled` event. The time spent on a block is limited to 1/20 of the
+    /// block's duration (at least 2 ms): when it runs out, the rest of the block is not shown to
+    /// the detectors, they start afresh on the next block, and the skip is counted. The budget
+    /// is checked between slices, so one call that hangs is not interrupted (it blocks the
+    /// recorder thread; the ring holds 20 seconds).
+    fn run_detectors(&mut self, samples: &[f32], input: &InputInfo) {
+        if self.repeat.is_none() && self.dropout.is_none() {
+            return;
+        }
+        let channels = usize::from(input.channels.max(1));
+        let rate = input.sample_rate;
+        let block_frames = samples.len() / channels;
+        if block_frames == 0 {
+            return;
+        }
+        // The block is written, so the audio clock now stands at its end.
+        let origin_ms = self
+            .audio_ms()
+            .saturating_sub(frames_to_ms(block_frames as u64, rate));
+        let budget = detector_budget(block_frames as u64, rate);
+        let slice_frames = ((u64::from(rate) * DETECTOR_SLICE_MS / 1000) as usize).max(1);
+        let started = Instant::now();
+        let mut resynced = [false; 2];
+        let mut any_skipped = false;
+        let mut offset = 0usize;
+        while offset < block_frames {
+            let n = slice_frames.min(block_frames - offset);
+            let slice = &samples[offset * channels..(offset + n) * channels];
+            let slice_ms = origin_ms + frames_to_ms(offset as u64, rate);
+            let out_of_time = started.elapsed() >= budget;
+            let mut skipped = false;
+            skipped |= self.feed_repeat_slice(slice, slice_ms, rate, out_of_time, &mut resynced[0]);
+            skipped |=
+                self.feed_zero_gap_slice(slice, slice_ms, rate, out_of_time, &mut resynced[1]);
+            if skipped {
+                any_skipped = true;
+                self.detector_skipped_ms += frames_to_ms(n as u64, rate);
+            }
+            offset += n;
+        }
+        let spent = started.elapsed();
+        self.detector_max_block_us = self.detector_max_block_us.max(spent.as_micros() as u64);
+        if any_skipped {
+            self.detector_over_budget_blocks += 1;
+            let due = self
+                .last_budget_log
+                .is_none_or(|t| t.elapsed() >= GAP_EVENT_INTERVAL);
+            if due {
+                self.last_budget_log = Some(Instant::now());
+                session::append_log(
+                    &self.dir,
+                    now_ist(),
+                    &format!(
+                        "detector_over_budget audio_ms={} spent_us={} budget_us={} blocks_so_far={} skipped_ms_so_far={}",
+                        self.audio_ms(),
+                        spent.as_micros(),
+                        budget.as_micros(),
+                        self.detector_over_budget_blocks,
+                        self.detector_skipped_ms
+                    ),
+                );
             }
         }
-        if let Some(det) = self.dropout.as_mut() {
-            let first_frame = det.frames_seen();
-            let mut found: Vec<ZeroGap> = Vec::new();
-            det.push(samples, |g| found.push(g));
-            for g in found {
-                self.note_zero_gap(g, first_frame, origin_ms, rate);
+    }
+
+    /// One slice for the repeated-block detector. True when the slice was skipped for lack of time.
+    fn feed_repeat_slice(
+        &mut self,
+        slice: &[f32],
+        slice_ms: u64,
+        rate: u32,
+        out_of_time: bool,
+        resynced: &mut bool,
+    ) -> bool {
+        let kind = DetectorKind::Repeat;
+        let panic_now = self.take_panic_fault(kind);
+        let delay = self.sleep_fault(kind);
+        let Some(det) = self.repeat.as_mut() else {
+            return false;
+        };
+        let first_frame = det.frames_seen();
+        let mut found: Vec<RepeatedBlock> = Vec::new();
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            if out_of_time {
+                // End what the detector follows, then start afresh after the gap.
+                if !*resynced {
+                    *resynced = true;
+                    det.flush(|b| found.push(b));
+                    det.reset();
+                }
+                return;
+            }
+            *resynced = false;
+            if let Some(d) = delay {
+                std::thread::sleep(d);
+            }
+            if panic_now {
+                panic!("injected detector panic (test hook)");
+            }
+            det.push(slice, |b| found.push(b));
+        }));
+        match result {
+            Ok(()) => {
+                for b in found {
+                    self.note_repeated_block(b, first_frame, slice_ms, rate);
+                }
+            }
+            Err(p) => self.disable_detector(kind, &panic_text(p.as_ref())),
+        }
+        out_of_time
+    }
+
+    /// One slice for the zero-gap detector. True when the slice was skipped for lack of time.
+    fn feed_zero_gap_slice(
+        &mut self,
+        slice: &[f32],
+        slice_ms: u64,
+        rate: u32,
+        out_of_time: bool,
+        resynced: &mut bool,
+    ) -> bool {
+        let kind = DetectorKind::ZeroGap;
+        let panic_now = self.take_panic_fault(kind);
+        let delay = self.sleep_fault(kind);
+        let Some(det) = self.dropout.as_mut() else {
+            return false;
+        };
+        let first_frame = det.frames_seen();
+        let mut found: Vec<ZeroGap> = Vec::new();
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            if out_of_time {
+                if !*resynced {
+                    *resynced = true;
+                    det.flush();
+                    det.reset();
+                }
+                return;
+            }
+            *resynced = false;
+            if let Some(d) = delay {
+                std::thread::sleep(d);
+            }
+            if panic_now {
+                panic!("injected detector panic (test hook)");
+            }
+            det.push(slice, |g| found.push(g));
+        }));
+        match result {
+            Ok(()) => {
+                for g in found {
+                    self.note_zero_gap(g, first_frame, slice_ms, rate);
+                }
+            }
+            Err(p) => self.disable_detector(kind, &panic_text(p.as_ref())),
+        }
+        out_of_time
+    }
+
+    fn take_panic_fault(&mut self, kind: DetectorKind) -> bool {
+        if self.fault_panic == Some(kind) {
+            self.fault_panic = None;
+            true
+        } else {
+            false
+        }
+    }
+
+    fn sleep_fault(&self, kind: DetectorKind) -> Option<Duration> {
+        self.fault_sleep.filter(|(k, _)| *k == kind).map(|(_, d)| d)
+    }
+
+    /// A detector panicked: it stays off for the rest of the session, and that is recorded once.
+    /// The recording itself is not touched.
+    fn disable_detector(&mut self, kind: DetectorKind, msg: &str) {
+        match kind {
+            DetectorKind::Repeat => {
+                self.repeat = None;
+                self.repeat_off = true;
+            }
+            DetectorKind::ZeroGap => {
+                self.dropout = None;
+                self.dropout_off = true;
             }
         }
+        self.detectors_disabled.push(kind.name().to_string());
+        let _ = self.events.send(Notice::event(
+            NoticeLevel::Warning,
+            "recorder",
+            format!(
+                "The {} check stopped after an internal error and is off for the rest of this session. The recording is not affected.",
+                kind.name()
+            ),
+        ));
+        self.event(
+            "detector_disabled",
+            Some(format!("detector={} panic={msg}", kind.name())),
+        );
     }
 
     /// Ends a repeat the detector is still following (stream change, pause, Stop). Call after
@@ -1283,19 +1678,32 @@ impl Recorder {
     fn finish_repeat(&mut self) {
         let rate = self.stream.as_ref().map_or(0, |s| s.input.sample_rate);
         let audio_ms = self.audio_ms();
-        if let Some(det) = self.dropout.as_mut() {
-            det.flush();
-            det.reset();
+        let dropout_result = self.dropout.as_mut().map(|det| {
+            catch_unwind(AssertUnwindSafe(|| {
+                det.flush();
+                det.reset();
+            }))
+        });
+        if let Some(Err(p)) = dropout_result {
+            self.disable_detector(DetectorKind::ZeroGap, &panic_text(p.as_ref()));
         }
-        let Some(det) = self.repeat.as_mut() else {
-            return;
-        };
-        let seen = det.frames_seen();
         let mut found: Vec<RepeatedBlock> = Vec::new();
-        det.flush(|b| found.push(b));
-        det.reset();
-        for b in found {
-            self.note_repeated_block(b, seen, audio_ms, rate);
+        let mut seen = 0u64;
+        let repeat_result = self.repeat.as_mut().map(|det| {
+            seen = det.frames_seen();
+            catch_unwind(AssertUnwindSafe(|| {
+                det.flush(|b| found.push(b));
+                det.reset();
+            }))
+        });
+        match repeat_result {
+            Some(Ok(())) => {
+                for b in found {
+                    self.note_repeated_block(b, seen, audio_ms, rate);
+                }
+            }
+            Some(Err(p)) => self.disable_detector(DetectorKind::Repeat, &panic_text(p.as_ref())),
+            None => {}
         }
     }
 
@@ -1442,6 +1850,111 @@ impl Recorder {
         }
     }
 
+    /// How long the open stream has delivered nothing, in microseconds (0 while callbacks arrive).
+    /// A stall that is still going on has not reached the counters yet: they note a gap only when
+    /// the next callback ends it.
+    fn open_gap_us(&self) -> u64 {
+        let Some(stream) = &self.stream else { return 0 };
+        let callbacks = stream.counters.callbacks.load(Ordering::Relaxed);
+        // Before its first callback a stream is starting up (a slow device, a slow play()), not
+        // stalled; the 5 s watchdog covers one that never calls back.
+        if !self.input_ok || callbacks == 0 || callbacks != self.last_callbacks.0 {
+            return 0;
+        }
+        u64::try_from(self.last_callbacks.1.elapsed().as_micros()).unwrap_or(u64::MAX)
+    }
+
+    /// Callback-gap numbers of the whole session: the closed streams plus the open one, with the
+    /// open stream's stall in progress counted in the longest gap.
+    fn callback_gaps(&self) -> CallbackGapStats {
+        let mut all = self.gaps_before;
+        if let Some(s) = &self.stream {
+            let mut open = CallbackGapStats::from_counters(&s.counters);
+            open.max_gap_us = open.max_gap_us.max(self.open_gap_us());
+            all.merge(&open);
+        }
+        all
+    }
+
+    /// The session's margin: the smallest (granted buffer minus longest callback gap) over its
+    /// streams, each against its own grant. Unknown when any stream's grant could not be read.
+    fn session_margin_ms(&self) -> Option<f64> {
+        if self.margin_closed_unknown {
+            return None;
+        }
+        let mut margin = self.margin_closed_ms;
+        if let Some(s) = &self.stream {
+            let g = s.buffer.granted_ms?;
+            let gap_us = s
+                .counters
+                .max_callback_gap_us
+                .load(Ordering::Relaxed)
+                .max(self.open_gap_us());
+            let m = g - gap_us as f64 / 1000.0;
+            margin = Some(margin.map_or(m, |x| x.min(m)));
+        }
+        margin
+    }
+
+    /// Writes a `capture_stall` event (session.log and session.json) when the longest gap between
+    /// capture callbacks of the open stream reaches a new high of at least 100 ms, and at least
+    /// 50 ms above the last one written, next to the buffer granted: a near miss is on record at
+    /// its audio time even if the app is killed later. A stall still going on gets one event (up to 5
+    /// a session), completed gaps up to 15 more; the status tick calls this.
+    fn log_capture_margin(&mut self) {
+        const MIN_US: u64 = 100_000;
+        const STEP_US: u64 = 50_000;
+        const MAX_DONE: u32 = 15;
+        const MAX_LIVE: u32 = 5;
+        let Some(stream) = &self.stream else { return };
+        let done_us = stream.counters.max_callback_gap_us.load(Ordering::Relaxed);
+        let live_us = self.open_gap_us();
+        // Callbacks are back (the gap in progress is below the logging floor): the next stall is a
+        // new one. The gap is never exactly 0 once the recorder has seen a callback.
+        if live_us < MIN_US {
+            self.live_stall_logged = false;
+        }
+        let from_live = live_us > done_us;
+        let max_us = done_us.max(live_us);
+        if max_us < MIN_US
+            || (self.logged_max_gap_us > 0 && max_us < self.logged_max_gap_us + STEP_US)
+        {
+            return;
+        }
+        if from_live {
+            // One event for a stall that is going on; its end is its own event if it was longer.
+            if self.live_stall_logged || self.stall_events_live >= MAX_LIVE {
+                return;
+            }
+            self.live_stall_logged = true;
+            self.stall_events_live += 1;
+        } else {
+            if self.stall_events_done >= MAX_DONE {
+                return;
+            }
+            self.stall_events_done += 1;
+        }
+        self.logged_max_gap_us = max_us;
+        let granted = stream.buffer.granted_ms;
+        let granted_txt = granted.map_or_else(|| "unknown".to_string(), |g| format!("{g:.0}"));
+        let margin_txt = granted.map_or_else(
+            || "unknown".to_string(),
+            |g| format!("{:.1}", g - max_us as f64 / 1000.0),
+        );
+        let still = if from_live {
+            " still_going_on=true"
+        } else {
+            ""
+        };
+        self.event(
+            "capture_stall",
+            Some(format!(
+                "max_callback_gap_ms={:.1} granted_buffer_ms={granted_txt} margin_ms={margin_txt}{still}",
+                max_us as f64 / 1000.0
+            )),
+        );
+    }
+
     fn counters(&self) -> (u64, u64) {
         let (o, x) = self.stream.as_ref().map_or((0, 0), |s| {
             (
@@ -1521,7 +2034,7 @@ impl Recorder {
             ring_max_fill_pct: self.max_fill_pct,
             priority: self.priority.mode,
             priority_note: self.priority.fallback_reason.clone(),
-            capture_buffer: self.stream.as_ref().map(|s| s.buffer.to_string()),
+            capture_buffer: self.stream.as_ref().map(|s| s.buffer.label()),
             capture_priority: self
                 .stream
                 .as_ref()
@@ -1562,6 +2075,8 @@ impl Recorder {
         let repeated_blocks = self.repeated_blocks;
         let zero_gaps = self.zero_gaps;
         let cpu = sys::thread_cpu_ms();
+        let gaps = self.callback_gaps();
+        let margin_ms = self.session_margin_ms();
         let final_status = self.status(RecState::Stopped);
         self.take_stream();
         let index = self.closer.finish().unwrap_or_default();
@@ -1570,10 +2085,25 @@ impl Recorder {
         self.event(
             "closed",
             Some(format!(
-                "overrun_samples={overrun_samples} xruns={xruns} dropped_samples={} recorder_restarts={} recorder_cpu_ms={}",
+                "overrun_samples={overrun_samples} xruns={xruns} dropped_samples={} recorder_restarts={} recorder_cpu_ms={} detector_over_budget_blocks={} detector_skipped_ms={} detector_max_block_us={} detectors_disabled={} capture_buffer_granted_ms={} capture_max_callback_gap_ms={:.1} capture_margin_ms={} capture_gaps_ge_50ms={} capture_gaps_ge_100ms={} capture_gaps_ge_250ms={} capture_gaps_ge_500ms={} capture_callback_period_ms={}",
                 self.dropped_samples,
                 self.restarts,
-                cpu.unwrap_or(0)
+                cpu.unwrap_or(0),
+                self.detector_over_budget_blocks,
+                self.detector_skipped_ms,
+                self.detector_max_block_us,
+                self.detectors_disabled.len(),
+                self.granted_ms_min
+                    .map_or_else(|| "unknown".to_string(), |g| format!("{g:.1}")),
+                gaps.max_gap_ms(),
+                margin_ms.map_or_else(|| "unknown".to_string(), |m| format!("{m:.1}")),
+                gaps.gaps_ge_50ms,
+                gaps.gaps_ge_100ms,
+                gaps.gaps_ge_250ms,
+                gaps.gaps_ge_500ms,
+                gaps
+                    .mean_period_ms()
+                    .map_or_else(|| "unknown".to_string(), |p| format!("{p:.2}"))
             )),
         );
         let manifest_files = session::write_manifest(&self.dir)?;
@@ -1595,6 +2125,21 @@ impl Recorder {
             recorder_restarts: self.restarts,
             recorder_cpu_ms: cpu,
             manifest_files,
+            detector_over_budget_blocks: self.detector_over_budget_blocks,
+            detector_skipped_ms: self.detector_skipped_ms,
+            detector_max_block_us: self.detector_max_block_us,
+            detectors_disabled: self.detectors_disabled.clone(),
+            capture_buffers: self.capture_buffers.clone(),
+            capture_buffer_granted_ms: self.granted_ms_min,
+            capture_max_callback_gap_ms: gaps.max_gap_ms(),
+            capture_margin_ms: margin_ms,
+            capture_gaps_ge_50ms: gaps.gaps_ge_50ms,
+            capture_gaps_ge_100ms: gaps.gaps_ge_100ms,
+            capture_gaps_ge_250ms: gaps.gaps_ge_250ms,
+            capture_gaps_ge_500ms: gaps.gaps_ge_500ms,
+            capture_callback_period_ms: gaps.mean_period_ms(),
+            capture_callback_period_min_ms: (gaps.period_min_us > 0)
+                .then(|| gaps.period_min_us as f64 / 1000.0),
         })
     }
 
@@ -1605,5 +2150,20 @@ impl Recorder {
             .checked_sub(COUNTER_EVENT_INTERVAL)
             .unwrap_or_else(Instant::now);
         self.log_counters();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_detector_budget_is_a_twentieth_of_the_block_with_a_floor() {
+        // A usual batch: half a second at 48 kHz gives 25 ms.
+        assert_eq!(detector_budget(24_000, 48_000), Duration::from_millis(25));
+        // A 10 ms block would give 0.5 ms; the floor is 2 ms.
+        assert_eq!(detector_budget(480, 48_000), Duration::from_millis(2));
+        // A zero rate does not divide by zero.
+        assert!(detector_budget(100, 0) >= DETECTOR_BUDGET_MIN);
     }
 }

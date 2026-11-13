@@ -30,16 +30,21 @@
 #>
 [CmdletBinding()]
 param(
-  [Parameter(Mandatory = $true)] [ValidateSet('soak', 'load', 'panic', 'webview')] [string]$Gate,
+  [Parameter(Mandatory = $true)] [ValidateSet('soak', 'load', 'panic', 'webview', 'hashing')] [string]$Gate,
   [ValidateSet('emu-low', 'emu-mid', 'native')] [string]$Profile = 'emu-low',
   [double]$Minutes = 0,
   [string]$Machine = 'Legion',
   [string]$WorkRoot = 'D:\STELMAR-Gate',
   [string]$BackupRoot = 'C:\STELMAR-Gate-Backup',
-  [string]$CaptureDevice = 'CABLE Output',
-  [string]$PlayDevice = 'CABLE Input',
+  # Empty = found automatically: the cable's capture and playback endpoints are paired by cable
+  # instance and proven with a known signal before the gate starts (scripts\lib\CableRig.psm1).
+  [string]$CaptureDevice = '',
+  [string]$PlayDevice = '',
   [string]$GpuName = 'UHD',
   [string]$OutDir,
+  # The hashing gate counts as started after a reboot when the machine had been up at most this
+  # long when the gate launched the app.
+  [int]$RebootWindowMinutes = 30,
   [string]$Exe,
   [string]$Testbench,
   [string]$Emulate,
@@ -49,6 +54,11 @@ param(
   # Run even though the cable is a default playback device (every sound the machine makes then
   # goes into the test signal). The evidence says so.
   [switch]$AllowCableDefault,
+  # A diagnostic run: not a verdict. The note says why it was run; the evidence says "DIAGNOSTIC, NOT A
+  # VERDICT" and what the checks would have said. -Sample adds per-second sampling of the machine
+  # (scripts/lib/Sampler.psm1) and the correlation of the app's xruns with it (xrun-correlate.ps1).
+  [string]$DiagnosticNote = '',
+  [switch]$Sample,
   [string]$FromRun,
   [string]$OriginalStarted,
   [double]$OriginalFreeRamStart = 0,
@@ -62,7 +72,7 @@ if (-not $OutDir) { $OutDir = Join-Path $repo 'docs\evidence\phase-1' }
 if (-not $Exe) { $Exe = Join-Path $repo 'target\gate\stelmar-voice-workbench.exe' }
 if (-not $Testbench) { $Testbench = Join-Path $repo 'target\release\wb-testbench.exe' }
 if (-not $Emulate) { $Emulate = Join-Path $repo 'target\release\wb-emulate.exe' }
-if ($Minutes -le 0) { $Minutes = @{ soak = 120; load = 30; panic = 3; webview = 3 }[$Gate] }
+if ($Minutes -le 0) { $Minutes = @{ soak = 120; load = 30; panic = 3; webview = 3; hashing = 10 }[$Gate] }
 Import-Module (Join-Path $repo 'scripts\lib\PsEnv.psm1') -Force
 Set-WbCleanPSModulePath
 Set-WbInvariantCulture
@@ -70,8 +80,10 @@ Import-Module (Join-Path $repo 'scripts\lib\GateRun.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Redact.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\AppProcess.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Rig.psm1') -Force
+Import-Module (Join-Path $repo 'scripts\lib\CableRig.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Fidelity.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Detector.psm1') -Force
+Import-Module (Join-Path $repo 'scripts\lib\Sampler.psm1') -Force
 foreach ($f in @($Exe, $Testbench, $Emulate)) { if (-not (Test-Path $f)) { throw "Missing $f; build it first (scripts\gates\build-gate.ps1)" } }
 
 function Q([string]$v) { ConvertTo-WbArg $v }
@@ -89,15 +101,11 @@ function Get-NvidiaPids {
   $pids
 }
 
-# Audio sessions playing into the cable now, other than $Allow (process ids). Anything else
-# mixes into the test signal (seen in Phase 1: a browser tab routed to CABLE Input).
-function Get-CableIntruders([int[]]$Allow = @()) {
-  $res = Invoke-WbNative -FilePath $Testbench -ArgumentList @('sessions', '--device', $PlayDevice)
-  if ($res.ExitCode -ne 0 -or $res.Output.Count -eq 0) { return @() }
-  @((($res.Output -join "`n") | ConvertFrom-Json) | Where-Object { $_.active -and $Allow -notcontains [int]$_.pid } | ForEach-Object {
-    $name = (Get-Process -Id $_.pid -ErrorAction SilentlyContinue).ProcessName
-    "$name (pid $($_.pid)) on $($_.endpoint)"
-  })
+# Audio sessions playing into the cable now (on any of its playback endpoints), other than $Allow
+# (process ids). Anything else mixes into the test signal (seen in Phase 1: a browser tab routed to
+# the cable).
+function Get-CableIntruders([string[]]$Names, [int[]]$Allow = @()) {
+  @(Get-WbCableIntruders -Testbench $Testbench -Names $Names -Allow $Allow)
 }
 
 function Read-Json([string]$Path) {
@@ -126,6 +134,8 @@ function Get-ResultFromRun([string]$run) {
     LastStatus = (Read-Json (Join-Path $run 'status.json')); HostStress = (Read-Json (Join-Path $run 'host-stress.json'))
     Reference = (Read-Json (Join-Path $run 'reference.json')); RefAnalysis = (Read-Json (Join-Path $run 'reference-analysis.json'))
     AnalysisError = $analysisErr; RefAnalysisError = $refAnalysisErr; Rig = $null
+    CacheNote = $null; BootTime = $null; UptimeMin = $null; FastStartup = $null; ModelsDisk = $null; RecDisk = $null
+    CableRig = $null; CableTest = $null
   }
 }
 
@@ -138,15 +148,25 @@ if ($FromRun) {
 } else {
 $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
   if (Get-Process stelmar-voice-workbench -ErrorAction SilentlyContinue) { throw 'The app is already running; close it first.' }
-  $cableRoles = @(Get-WbCableDefaultRoles -Testbench $Testbench -Cable $PlayDevice)
-  if ($cableRoles.Count -gt 0 -and -not $AllowCableDefault) { throw ("The default playback device ($($cableRoles -join ', ')) is ${PlayDevice}: every sound this computer makes would play into the test signal. Set the default playback device to the speakers (Windows Settings > System > Sound), then run the gate again (or pass -AllowCableDefault).") }
-  $intruders = @(Get-CableIntruders)
-  if ($intruders.Count -gt 0) { throw ("Another program is playing into $PlayDevice : " + ($intruders -join ', ') + '. Stop it (or close it) so only the gate player feeds the cable.') }
+  # The rig, before anything starts: the player's and the capture's endpoints on the same cable
+  # instance (refused otherwise), the cable not the default playback device, nobody else playing
+  # into it, and a known signal heard on the capture. A refusal stops the gate here.
+  Assert-WbNoResidentAudio
+  $cableRig = Resolve-WbCableRig -Testbench $Testbench -PlayDevice $PlayDevice -CaptureDevice $CaptureDevice
+  $cableRoles = @(Assert-WbCableNotDefault -Testbench $Testbench -Rig $cableRig -Allow:$AllowCableDefault)
+  $intruders = @(Get-CableIntruders -Names $cableRig.RenderNames)
+  if ($intruders.Count -gt 0) { throw ("RIG REFUSED: Another program is playing into the cable ($($cableRig.RenderNames -join '; ')): " + ($intruders -join ', ') + '. Stop it (or close it) so only the gate player feeds the cable.') }
+  $cableTest = Invoke-WbRigSelfTest -Rig $cableRig -Testbench $Testbench -WorkRoot $WorkRoot
+  $playName = $cableTest.PlayName
+  $capName = $cableTest.CaptureName
   # Where the player and the reference capture will run: outside the job's cores. The gate does
   # not start if the plan overlaps the job or itself.
   $rigPlan = Get-WbRigPlan -Emulate $Emulate -Profile $Profile
   if ($rigPlan) { Assert-WbRigPlacement -JobMask $rigPlan.JobMask -PlayerMask $rigPlan.PlayerMask -ReferenceMask $rigPlan.ReferenceMask -What 'planned, before anything starts' }
   $interference = New-Object System.Collections.Generic.List[string]
+  $interferenceKeys = @{}
+  $cableSeen = @{}
+  $pollProblems = New-Object System.Collections.Generic.List[string]
   $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
   $run = Join-Path $WorkRoot "$Gate-$Profile-$stamp"
   $rec = Join-Path $run 'rec'
@@ -165,7 +185,7 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
   $env:WB_GATE_ROOT = $rec
   $env:WB_GATE_BACKUP = $backup
   $env:WB_GATE_START = "Gate $Gate $stamp"
-  $env:WB_GATE_DEVICE = $CaptureDevice
+  $env:WB_GATE_DEVICE = $capName
   $env:WB_GATE_STOP_FILE = $stopFile
   $env:WB_GATE_REPORT = Join-Path $run 'stop-report.json'
   $env:WB_GATE_STATUS_FILE = Join-Path $run 'status.json'
@@ -174,6 +194,39 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
   $env:WB_GATE_RECORDER_PANIC_AT_S = $(if ($Gate -eq 'panic') { '100' } else { '' })
   $env:WB_GATE_PART_SECONDS = ''
   $logStart = $(if (Test-Path $logFile) { (Get-Item $logFile).Length } else { 0 })
+  # The hashing gate (R5): the model hash cache must be cold, so the app hashes the real model
+  # files while the recording starts. The cache is the app's verified-models.json.
+  $cacheNote = $null
+  $bootTime = $null
+  $uptimeMin = $null
+  $fastStartup = $null
+  $modelsDisk = $null
+  $recDisk = $null
+  if ($Gate -eq 'hashing') {
+    $cacheFile = Join-Path (Join-Path $env:APPDATA 'in.edu.bmu.stelmar.voiceworkbench') 'verified-models.json'
+    $existed = Test-Path -LiteralPath $cacheFile
+    if ($existed) { Remove-Item -LiteralPath $cacheFile -Force }
+    if (Test-Path -LiteralPath $cacheFile) { throw 'verified-models.json could not be removed: the hash cache is not cold' }
+    $cacheNote = "hash cache cleared before the app started: verified-models.json $(if ($existed) { 'removed' } else { 'was already absent' }); present now: no"
+    # The last full start of the kernel (event 12 of Microsoft-Windows-Kernel-General). With Fast
+    # Startup on, Windows's own LastBootUpTime can stay at an older value across a shutdown.
+    $bootTime = (Get-CimInstance Win32_OperatingSystem).LastBootUpTime
+    try {
+      $ev = Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = 'Microsoft-Windows-Kernel-General'; Id = 12 } -MaxEvents 1 -ErrorAction Stop
+      if ($ev.TimeCreated -gt $bootTime) { $bootTime = $ev.TimeCreated }
+    } catch { }
+    $uptimeMin = ((Get-Date) - $bootTime).TotalMinutes
+    $fastStartup = $(try { [int](Get-ItemPropertyValue 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power' -Name HiberbootEnabled) } catch { -1 })
+    # Which physical disk the models folder and the recording folder are on.
+    $diskOf = {
+      param([string]$p)
+      $letter = (Split-Path -Qualifier $p).TrimEnd(':')
+      $n = $(try { (Get-Partition -DriveLetter $letter -ErrorAction Stop).DiskNumber } catch { $null })
+      [pscustomobject]@{ Letter = $letter.ToUpper(); Disk = $n }
+    }
+    $modelsDisk = & $diskOf (Join-Path $repo 'models')
+    $recDisk = & $diskOf $rec
+  }
 
   $inner = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Q (Join-Path $here 'recorder-gate-inner.ps1')),
     '-Exe', (Q $Exe), '-ResultFile', (Q (Join-Path $run 'inner.json')))
@@ -181,6 +234,15 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
     $inner += @('-Stress', '-Testbench', (Q $Testbench), '-GpuName', (Q $GpuName), '-StressStopFile', (Q $stressStop), '-StressReport', (Q (Join-Path $run 'stress.json')))
   }
   $emuArgs = @('--profile', $Profile, '--log', (Q (Join-Path $run 'emulate.log')), '--', 'powershell.exe') + $inner
+  $emu = $null; $refProc = $null; $play = $null; $hostStress = $null; $sampler = $null; $samplerCsv = $null
+  $machineState = @(Get-WbMachineStateLines)
+  $finished = $false
+  # Whatever happens below, nothing started here may outlive the body (see the finally block).
+  try {
+  if ($Sample) {
+    $samplerCsv = Join-Path $run 'sampler.csv'
+    $sampler = Start-WbSampler -OutCsv $samplerCsv -Seconds ($seconds + 420)
+  }
   $emu = Start-Process -FilePath $Emulate -ArgumentList $emuArgs -PassThru -WindowStyle Hidden
 
   # Wait until the session records.
@@ -195,6 +257,7 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
   $sessionDir = $st.recorder.session_dir
   $progress = New-Object System.Collections.Generic.List[string]
   $progress.Add("$(Get-Date -Format 'HH:mm:ss') recording in $sessionDir")
+  if ($sampler) { $progress.Add("$(Get-Date -Format 'HH:mm:ss') sampler running (typeperf, once a second, pinned to logical processors 0-11, High priority class): $samplerCsv") }
 
   # Load test: also load every logical processor of the host outside the job, at normal priority,
   # so the audio engine and the cable driver (which run outside the job) are contended too.
@@ -206,9 +269,10 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
   $refDir = Join-Path $run 'reference'
   $refStop = Join-Path $run 'STOP-REF'
   $goFile = Join-Path $run 'GO-RIG'
-  $refProc = Start-Process -FilePath $Testbench -ArgumentList @('capture', '--device', (Q $CaptureDevice), '--dir', (Q $refDir), '--stop-file', (Q $refStop), '--go-file', (Q $goFile), '--report', (Q (Join-Path $run 'reference.json'))) -PassThru -WindowStyle Hidden
+  # Their error text goes to files: a player or capture that cannot start must leave its reason.
+  $refProc = Start-Process -FilePath $Testbench -ArgumentList @('capture', '--device', (Q $capName), '--dir', (Q $refDir), '--stop-file', (Q $refStop), '--go-file', (Q $goFile), '--report', (Q (Join-Path $run 'reference.json'))) -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $run 'reference.out') -RedirectStandardError (Join-Path $run 'reference.err')
   Start-Sleep -Seconds 1
-  $play = Start-Process -FilePath $Testbench -ArgumentList @('play', '--device', (Q $PlayDevice), '--file', (Q $source), '--go-file', (Q $goFile), '--report', (Q (Join-Path $run 'play.json'))) -PassThru -WindowStyle Hidden
+  $play = Start-Process -FilePath $Testbench -ArgumentList @('play', '--device', (Q $playName), '--file', (Q $source), '--go-file', (Q $goFile), '--report', (Q (Join-Path $run 'play.json'))) -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $run 'play.out') -RedirectStandardError (Join-Path $run 'play.err')
   # Pin both to cores outside the job at HIGH priority class; they wait for the go file before
   # they open their streams, so no callback runs unpinned. Then check what they really have.
   $rig = Set-WbRigPins -Plan $rigPlan -Player $play -Reference $refProc -GoFile $goFile
@@ -221,6 +285,12 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
   $nvPids = @(Get-NvidiaPids)
   $nvOverlap = @($nvPids | Where-Object { $jobPids -contains $_ })
   $progress.Add("$(Get-Date -Format 'HH:mm:ss') job processes: $($jobPids.Count); nvidia-smi processes: $($nvPids.Count); job processes on the NVIDIA GPU: $($nvOverlap.Count)")
+  # Load gate: read the stress processes' priority class and threads from the running processes.
+  $stressPriority = @()
+  if ($Gate -eq 'load') {
+    try { $stressPriority = @(Get-WbStressLines -Info @(Get-WbStressInfo)) } catch { $stressPriority = @("  stress priority: could not be read ($($_.Exception.Message))") }
+    foreach ($l in $stressPriority) { $progress.Add("$(Get-Date -Format 'HH:mm:ss') $($l.Trim())") }
+  }
 
   $webviewKill = $null
   if ($Gate -eq 'webview') {
@@ -253,7 +323,11 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
   while (-not $play.HasExited) {
     if (((Get-Date) - $lastCable).TotalSeconds -ge 1) {
       $lastCable = Get-Date
-      foreach ($i in (Get-CableIntruders -Allow @($play.Id))) { $interference.Add("$(Get-Date -Format 'HH:mm:ss') $i") }
+      # Every session on the cable is recorded by program name and path in $cableSeen; a look that
+      # fails or cannot be read is a note in the evidence, never an error that ends the gate.
+      $poll = Get-WbCablePoll -Testbench $Testbench -Names $cableRig.RenderNames -Allow @($play.Id) -Seen $cableSeen
+      foreach ($i in $poll.Intruders) { if (-not $interferenceKeys.ContainsKey($i)) { $interferenceKeys[$i] = $true; $interference.Add("$(Get-Date -Format 'HH:mm:ss') first seen playing: $i") } }
+      if ($poll.Error -and $pollProblems.Count -lt 5) { $pollProblems.Add("$(Get-Date -Format 'HH:mm:ss') $($poll.Error)") }
     }
     if (((Get-Date) - $lastProgress).TotalSeconds -ge 60) {
       $lastProgress = Get-Date
@@ -298,6 +372,20 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
     LastStatus = $lastStatus; HostStress = (Read-Json (Join-Path $run 'host-stress.json'))
     Reference = (Read-Json (Join-Path $run 'reference.json')); RefAnalysis = (Read-Json (Join-Path $run 'reference-analysis.json'))
     AnalysisError = $analysisErr; RefAnalysisError = $refAnalysisErr; CableDefaultRoles = $cableRoles; Rig = $rig
+    CacheNote = $cacheNote; BootTime = $bootTime; UptimeMin = $uptimeMin; FastStartup = $fastStartup; ModelsDisk = $modelsDisk; RecDisk = $recDisk
+    CableRig = $cableRig; CableTest = $cableTest; CableSeen = $cableSeen; CablePollProblems = @(ConvertTo-WbArray $pollProblems)
+    MachineState = $machineState; SamplerCsv = $samplerCsv; StressPriority = @($stressPriority)
+  }
+  Stop-WbSampler -Process $sampler
+  $finished = $true
+  } finally {
+    # On any error in the body: stop the app (its job), the player, the reference capture and the host
+    # stress, so a crash leaves no orphan holding the runner's pipes. On the normal path they have
+    # already stopped and this does nothing.
+    if (-not $finished) {
+      $left = @(Stop-WbRigLeftovers -Process @($emu, $play, $refProc, $hostStress, $sampler) -StopFile @($stopFile, $refStop, $stressStop) -GraceSeconds 45)
+      foreach ($l in $left) { Write-Host "cleanup after an error: $l" }
+    }
   }
 }
 }
@@ -350,6 +438,54 @@ $checks["driver xruns: none, or one within 2 s of the stream start with zero los
 $checks['zero samples dropped by the writer'] = ([int64]$rec.dropped_samples -eq 0)
 $checks["capture thread at MMCSS priority ($($r.LastStatus.recorder.capture_priority))"] = ("$($r.LastStatus.recorder.capture_priority)" -eq 'mmcss')
 if ($Gate -ne 'panic') { $checks['no recorder restarts'] = ([int]$rec.recorder_restarts -eq 0) }
+if (Test-WbHasProperty $rec 'detectors_disabled') {
+  $detOff = @($rec.detectors_disabled)
+  $checks["no detector was switched off by a panic ($($detOff.Count) switched off$(if ($detOff.Count) { ': ' + ($detOff -join ', ') }))"] = ($detOff.Count -eq 0)
+}
+# R5 (hashing gate): the app hashed the real model files while the recording ran, in background mode.
+$hashFiles = @()
+$hashOverlapS = 0.0
+$hashBytes = [int64]0
+$afterReboot = $false
+if ($Gate -eq 'hashing') {
+  foreach ($line in @($r.AppLog)) {
+    if ($line -match 'model_hash file=(\S+) bytes=(\d+) start_ms=(\d+) end_ms=(\d+) took_ms=(\d+) mb_per_s=(\d+) result=(\w+) background=(\w+) memory_priority=(\S+)') {
+      $hashFiles += [pscustomobject]@{ File = $Matches[1]; Bytes = [int64]$Matches[2]; StartMs = [int64]$Matches[3]; EndMs = [int64]$Matches[4]; TookMs = [int64]$Matches[5]; MbPerS = [int]$Matches[6]; Result = $Matches[7]; Background = ($Matches[8] -eq 'true'); MemoryPriority = $Matches[9] }
+    }
+  }
+  $metaText = Get-Content -LiteralPath (Join-Path $r.SessionDir 'session.json') -Raw
+  $startM = [regex]::Match($metaText, '"at"\s*:\s*"([^"]+)"\s*,\s*"audio_ms"\s*:\s*\d+\s*,\s*"kind"\s*:\s*"audio_started"')
+  $endM = [regex]::Match($metaText, '"closed_at"\s*:\s*"([^"]+)"')
+  $recStartMs = $(if ($startM.Success) { [DateTimeOffset]::Parse($startM.Groups[1].Value).ToUnixTimeMilliseconds() } else { 0 })
+  $recEndMs = $(if ($endM.Success) { [DateTimeOffset]::Parse($endM.Groups[1].Value).ToUnixTimeMilliseconds() } else { 0 })
+  $hashMsInRun = [int64]0
+  foreach ($h in $hashFiles) {
+    $ov = [math]::Min($h.EndMs, $recEndMs) - [math]::Max($h.StartMs, $recStartMs)
+    # Only a file that checked out and was being read while the recording ran counts.
+    if ($ov -gt 0 -and $h.Result -eq 'ok') {
+      $hashOverlapS += $ov / 1000.0
+      $hashBytes += $h.Bytes
+      $hashMsInRun += $h.TookMs
+    }
+  }
+  $afterReboot = ($null -ne $r.UptimeMin -and [double]$r.UptimeMin -le $RebootWindowMinutes)
+  $sameDisk = $false
+  if ($r.ModelsDisk -and $r.RecDisk) {
+    if ($null -ne $r.ModelsDisk.Disk -and $null -ne $r.RecDisk.Disk) { $sameDisk = ($r.ModelsDisk.Disk -eq $r.RecDisk.Disk) }
+    else { $sameDisk = ($r.ModelsDisk.Letter -eq $r.RecDisk.Letter) }
+  }
+  $hashedGB = $hashBytes / 1e9
+  $hashMBs = $(if ($hashMsInRun -gt 0) { $hashBytes / 1e6 / ($hashMsInRun / 1000.0) } else { 0 })
+  $checks['the models folder and the recording folder are on the same drive and physical disk (otherwise hashing cannot compete with the recorder for the disk)'] = [bool]$sameDisk
+  $checks["at least 1 GB of model files was hashed while the recording ran ($([math]::Round($hashedGB, 2)) GB at $([math]::Round($hashMBs)) MB/s while the recorder wrote)"] = ($hashedGB -ge 1.0)
+  $checks["model files were hashed while the recording ran: $($hashFiles.Count) files, $([math]::Round($hashBytes / 1e9, 2)) GB, $([math]::Round($hashOverlapS, 1)) s of hashing inside the recording (at least 10 s)"] = ($hashFiles.Count -ge 1 -and $hashOverlapS -ge 10 -and $recStartMs -gt 0 -and $recEndMs -gt 0)
+  $checks['every hashed file was read in Windows background mode (model_hash lines say background=true, memory priority 1)'] = ($hashFiles.Count -ge 1 -and @($hashFiles | Where-Object { -not $_.Background }).Count -eq 0)
+}
+$hashNote = $(if ($Gate -eq 'hashing' -and -not $afterReboot) { '; warm cache, not conclusive for R5' } else { '' })
+# Coverage of the live detectors (R1): audio the time budget made them skip. Reported, not gated:
+# the detectors are not the recording.
+$skippedPct = $(if ((Test-WbHasProperty $rec 'detector_skipped_ms') -and [double]$rec.audio_ms -gt 0) { 100.0 * [double]$rec.detector_skipped_ms / [double]$rec.audio_ms } else { 0.0 })
+$coverageNote = $(if ($skippedPct -gt 1.0) { ('; detector coverage {0:n1}% (the time budget skipped more than 1% of the audio): the live detector table is not conclusive for this run' -f (100.0 - $skippedPct)) } else { '' })
 $checks['every part decodes in Media Foundation'] = [bool]$r.Decode.all_playable
 $checks['mirror SHA-256 equals the originals'] = [bool]$stopped.mirror.all_match
 $checks['player had no underruns (source played cleanly)'] = ([int64]$r.Play.underrun_callbacks -eq 0)
@@ -366,6 +502,7 @@ if ($Gate -eq 'panic') {
   $checks['panic on a plain thread happened'] = ($pi -and [bool]$pi.thread_panicked)
   $checks['panic inside the recorder thread: it restarted once and continued in a new part'] = ([bool]$r.Report.recorder_panic_injection.sent -and [int]$rec.recorder_restarts -eq 1 -and @($rec.parts).Count -ge 2)
 }
+if ($Gate -eq 'hashing' -and @($r.AppLog).Count -eq 0) { $checks['the app log of the run was read (needed for the model_hash lines)'] = $false }
 if ($Gate -eq 'webview' -and @($r.AppLog).Count -gt 0) {
   $checks['display recovered in a new window'] = [bool]($r.AppLog | Where-Object { $_ -match 'display recovered in a new window' })
 }
@@ -376,7 +513,12 @@ $lines_cable = $(if ($null -eq $r.Interference) { 'cable interference polling: n
 $lines = @()
 $lines += Get-WbGateHeader -Machine $Machine -Profile $Profile -Builds @($Exe, $Testbench, $Emulate)
 $lines += "app build: target\gate\stelmar-voice-workbench.exe (cargo profile gate, features gate-hooks + custom-protocol)"
-$lines += "verdict: $(if ($verdict -eq 'INVALID') { 'INVALID (no verdict; the run must be repeated)' } elseif ($verdict -eq 'PASS' -and $Profile -ne 'native') { 'PASS (PROVISIONAL: emulated)' } else { $verdict })"
+$verdictText = "verdict: $(if ($verdict -eq 'INVALID') { 'INVALID (no verdict; the run must be repeated)' } elseif ($verdict -eq 'PASS' -and $Profile -ne 'native') { "PASS (PROVISIONAL: emulated$hashNote$coverageNote)" } elseif ($verdict -eq 'PASS') { "PASS$hashNote$coverageNote" } else { $verdict })"
+if ($DiagnosticNote) {
+  $lines += "verdict: DIAGNOSTIC, NOT A VERDICT. $DiagnosticNote"
+  $lines += "  what the checks below say about this run (not the gate result): $($verdictText -replace '^verdict: ', '')"
+} else { $lines += $verdictText }
+if ($r.MachineState) { $lines += @($r.MachineState) }
 $lines += ''
 $lines += 'checks:'
 foreach ($k in $checks.Keys) { $lines += "  [$(if ($checks[$k]) { 'x' } else { ' ' })] $k" }
@@ -386,9 +528,41 @@ if ($r.CompareError) { $lines += "comparison error: $($r.CompareError)" }
 if ($Gate -eq 'webview' -and @($r.AppLog).Count -eq 0) { $lines += 'display recovery: not re-evaluated here (the live app log is not saved); the original run''s evidence stands' }
 $lines += ''
 $lines += 'measurements:'
-$lines += ("  source: {0:n1} min of known noise, 48 kHz stereo, played by wb-testbench into '{1}' from outside the job" -f ($r.Analysis.source_ms / 60000.0), $PlayDevice)
+$lines += ("  source: {0:n1} min of known noise, 48 kHz stereo, played by wb-testbench into '{1}' from outside the job" -f ($r.Analysis.source_ms / 60000.0), $(if ($r.CableTest) { $r.CableTest.PlayName } else { 'the cable (name not recorded for this run)' }))
+$lines += Get-WbCableRigLines -Rig $r.CableRig -SelfTest $r.CableTest
 $lines += ("  recorded content: {0:n3} s against source {1:n3} s (difference {2:n1} ms); discontinuities {3}; silent gaps {4:n1} ms; unmatched {5:n1} ms; lowest block correlation {6:n4}" -f ($r.Analysis.content_ms / 1000.0), ($r.Analysis.source_ms / 1000.0), $r.Analysis.duration_diff_ms, @($r.Analysis.discontinuities).Count, $r.Analysis.silent_gap_ms, $r.Analysis.unmatched_ms, $r.Analysis.min_block_correlation)
 $lines += ("  parts: {0}; audio {1:n1} s; overrun samples {2}; driver xruns {3}; samples dropped by the writer {4}; recorder restarts {5}" -f @($rec.parts).Count, ($rec.audio_ms / 1000.0), $rec.overrun_samples, $rec.xruns, $rec.dropped_samples, $rec.recorder_restarts)
+if (Test-WbHasProperty $rec 'detector_max_block_us') {
+  $lines += ("  detector coverage: the time budget skipped {0} ms of {1:n0} ms of audio ({2:n2}%)" -f $rec.detector_skipped_ms, $rec.audio_ms, $skippedPct)
+  $lines += ("  detectors (R1: they run after the WAV write, each in catch_unwind, with a budget of 1/20 of the block's audio time, at least 2 ms): longest time on one block {0:n0} us; blocks over budget {1}; audio the detectors skipped {2} ms; detectors switched off {3}" -f $rec.detector_max_block_us, $rec.detector_over_budget_blocks, $rec.detector_skipped_ms, @($rec.detectors_disabled).Count)
+}
+if (Test-WbHasProperty $rec 'capture_max_callback_gap_ms') {
+  $bufTxt = $(if (@($rec.capture_buffers).Count -gt 0) { (@($rec.capture_buffers) -join ' | ') } else { 'not recorded' })
+  $lines += ("  capture device buffer (12 Nov decision: ask for 1,000 ms, then 500 ms, 200 ms, then the device default; shared mode kept): {0}" -f $bufTxt)
+  $grantedTxt = $(if ($null -ne $rec.capture_buffer_granted_ms) { ('{0:n0}' -f $rec.capture_buffer_granted_ms) } else { 'unknown' })
+  $marginTxt = $(if ($null -ne $rec.capture_margin_ms) { ('{0:n1}' -f $rec.capture_margin_ms) } else { 'unknown' })
+  $lines += ("  capture margin: longest gap between capture callbacks {0:n1} ms against a granted device buffer of {1} ms, so {2} ms of room were left (a negative number means audio was lost)" -f $rec.capture_max_callback_gap_ms, $grantedTxt, $marginTxt)
+  $lines += ("  capture callback gaps (histogram): at least 50 ms {0}; at least 100 ms {1}; at least 250 ms {2}; at least 500 ms {3}" -f $rec.capture_gaps_ge_50ms, $rec.capture_gaps_ge_100ms, $rec.capture_gaps_ge_250ms, $rec.capture_gaps_ge_500ms)
+  $periodTxt = $(if ($null -ne $rec.capture_callback_period_ms) { ('{0:n2} ms' -f $rec.capture_callback_period_ms) } else { 'not measured' })
+  $periodMin = $(if ($null -ne $rec.capture_callback_period_min_ms) { ('{0:n3} ms' -f $rec.capture_callback_period_min_ms) } else { 'not measured' })
+  $lines += ("  capture callback period measured in the app: mean {0} over every gap under 50 ms (the shortest, {1}, is two packets handed over back to back after a late wake-up); the larger buffer sits behind the callback and does not change this period" -f $periodTxt, $periodMin)
+  if ($null -ne $rec.capture_buffer_granted_ms -and [double]$rec.capture_buffer_granted_ms -lt 999) { $lines += ("  NOTE: the audio engine granted {0:n0} ms, less than the 1,000 ms asked for; the margin above is against that smaller buffer" -f $rec.capture_buffer_granted_ms) }
+} else {
+  $lines += '  capture device buffer and callback gaps: not in this recorder report (an older build)'
+}
+if ($Gate -eq 'hashing') {
+  $lines += ''
+  $lines += 'cold-cache model hashing while recording (R5):'
+  $lines += "  $($r.CacheNote)"
+  $lines += ("  Fast Startup (HiberbootEnabled): {0}; boot time is the later of Windows's LastBootUpTime and the last kernel start event 12; use Restart, not Shut down, for a cold start" -f $(if ($null -eq $r.FastStartup) { 'unknown' } else { $r.FastStartup }))
+  $lines += ("  models folder on drive {0}{1}, recording folder on drive {2}{3}: same disk {4}; hashed {5:n2} GB at {6:n0} MB/s over {7} files" -f $r.ModelsDisk.Letter, $(if ($null -ne $r.ModelsDisk.Disk) { " (physical disk $($r.ModelsDisk.Disk))" } else { '' }), $r.RecDisk.Letter, $(if ($null -ne $r.RecDisk.Disk) { " (physical disk $($r.RecDisk.Disk))" } else { '' }), $(if ($sameDisk) { 'yes' } else { 'NO' }), $hashedGB, $hashMBs, $hashFiles.Count)
+  $lines += ("  started after a reboot: {0} (the machine booted at {1}; it had been up {2:n1} min when the gate launched the app; 'yes' means at most {3} min)" -f $(if ($afterReboot) { 'yes' } else { 'no' }), $(if ($r.BootTime) { ([datetime]$r.BootTime).ToString('yyyy-MM-dd HH:mm') } else { 'unknown' }), [double]$r.UptimeMin, $RebootWindowMinutes)
+  if (-not $afterReboot) { $lines += '  R5 IS NOT CONCLUSIVE FROM THIS RUN: the operating system file cache was probably warm (the model files were read recently), so the disk contention was lighter than on a freshly started laptop. A hashing-only re-run after the next reboot is an open item.' }
+  $lines += '  limit: the operating system file cache cannot be emptied without administrator rights; a reboot is how this gate gets a cold cache.'
+  $lines += ("  recording interval, from session.json: {0} to {1} (epoch ms); model files hashed: {2}; bytes {3}; hashing inside the recording {4:n1} s" -f $recStartMs, $recEndMs, $hashFiles.Count, $hashBytes, $hashOverlapS)
+  $lines += '  file | bytes | start (ms after the recording began) | took ms | MB/s | result | background | memory priority'
+  foreach ($h in $hashFiles) { $lines += ("  {0} | {1} | {2:n0} | {3} | {4} | {5} | {6} | {7}" -f $h.File, $h.Bytes, ($h.StartMs - $recStartMs), $h.TookMs, $h.MbPerS, $h.Result, $h.Background, $h.MemoryPriority) }
+}
 $lines += ("  priorities: recorder thread {0}, capture thread {1}; ring buffer {2} s, highest fill {3:n2}%" -f $r.LastStatus.recorder.priority, $r.LastStatus.recorder.capture_priority, $r.LastStatus.recorder.ring_seconds, $r.LastStatus.recorder.ring_max_fill_pct)
 $lines += ("  recorder thread CPU: {0:n2} s over {1:n0} s = {2:n3}% of one core" -f ($rec.recorder_cpu_ms / 1000.0), $wall, $recCpuPctCore)
 $lines += ("  app process CPU (main process; WebView2 processes not counted): {0:n1} s = {1:n2}% of the job's {2} logical processors ({3:n2}% of one core)" -f $r.Inner.app_cpu_seconds, $appCpuPctMachine, $logical, $appCpuPctCore)
@@ -396,9 +570,12 @@ $lines += ("  exit codes (information, not gated): the app {0} (read inside the 
 $lines += ("  mirror: {0} files compared, all equal: {1} (mirror on the same machine, separate drive pending: C: instead of an external SSD)" -f @($stopped.mirror.files).Count, $stopped.mirror.all_match)
 $lines += ("  player: {0} frames of {1}, underrun callbacks {2}, render thread priority {3}, output buffer {4}" -f $r.Play.frames_played, $r.Play.frames_in_file, $r.Play.underrun_callbacks, $r.Play.render_priority, $r.Play.buffer)
 $lines += Get-WbRigLines -Rig $r.Rig -Play $r.Play -Reference $r.Reference
-$breakSources = @(@($r.Analysis.unmatched_ranges) | ForEach-Object { [double]$_.source_ms }) + @(@($r.Analysis.discontinuities) | ForEach-Object { [double]$_.source_ms })
-$lines += Get-WbLateCallbackLines -Play $r.Play -BreakSourceMs @($breakSources | Sort-Object -Unique)
+$breakSplit = Split-WbBreakSources -App $r.Analysis -Reference $r.RefAnalysis
+# A break the reference capture also shows is upstream ("shared break"); one only the app shows is the app's ("app-only break").
+$lines += Get-WbLateCallbackLines -Play $r.Play -BreakSourceMs @($breakSplit.Shared) -Label 'shared break'
+$lines += Get-WbLateCallbackLines -Play $r.Play -BreakSourceMs @($breakSplit.AppOnly) -Label 'app-only break (not in the reference capture)' | Where-Object { $_ -match 'app-only break' }
 $lines += "  $lines_cable"
+if ($null -ne $r.CableSeen) { $lines += @(Get-WbCableSeenLines -Seen $r.CableSeen -PollError (@($r.CablePollProblems) -join "; ")) }
 $lines += $(if ($null -eq $r.CableDefaultRoles) { '  default playback device: not recorded for this run' } elseif (@($r.CableDefaultRoles).Count -gt 0) { "  default playback device: THE CABLE for $(@($r.CableDefaultRoles) -join ', ') (run with -AllowCableDefault: other sounds on this computer can reach the test signal)" } else { '  default playback device: not the cable (checked at start)' })
 $playStart = [DateTimeOffset]::Parse($r.Play.started_at)
 $lines += ("  signal starts at source frame {0} ({1:n1} ms of the source's start never reached the captures: playback start-up); leading audio before the signal: {2:n0} ms" -f $r.Analysis.content_first_source_frame, ($r.Analysis.content_first_source_frame / 48.0), $r.Analysis.leading_junk_ms)
@@ -407,7 +584,8 @@ foreach ($u in @($r.Analysis.unmatched_ranges)) {
   $when = $playStart.AddMilliseconds([double]$u.source_ms - [double]$r.Analysis.content_first_source_frame / 48.0)
   $lines += ("  unmatched stretch: source {0:n2} s (about {1} IST), {2:n0} ms; also in the reference capture: {3}" -f ([double]$u.source_ms / 1000.0), $when.ToString('HH:mm:ss'), [double]$u.ms, $alsoRef)
 }
-$lines += Get-WbReferenceXrunLines -RefAnalysis $r.RefAnalysis -Reference $r.Reference -PlayStarted $playStart -BreakSourceMs @(@($r.Analysis.unmatched_ranges) | ForEach-Object { [double]$_.source_ms })
+$lines += Get-WbReferenceXrunLines -RefAnalysis $r.RefAnalysis -Reference $r.Reference -PlayStarted $playStart -BreakSourceMs @($breakSplit.Shared) -Label 'shared break'
+$lines += Get-WbReferenceXrunLines -RefAnalysis $r.RefAnalysis -Reference $r.Reference -PlayStarted $playStart -BreakSourceMs @($breakSplit.AppOnly) -Label 'app-only break (not in the reference capture)' | Where-Object { $_ -match 'app-only break' }
 $lines += ("  reference capture (separate cpal + hound recorder outside the job; shares the audio engine, cable driver and cpal with the app): {0} breaks, unmatched {1} ms, its overruns {2}, xruns {3}" -f @($r.RefAnalysis.discontinuities).Count, $refUnmatched, $r.Reference.overrun_samples, $r.Reference.xruns)
 $lines += ("  breaks in the app recording: recorder's own {0}; shared with the reference (upstream; see the upstream breaks section) {1}; start-up repeats within the old allowance {2} {3}" -f $split.Own.Count, $split.Chain.Count, $split.Excused.Count, ((@($split.Excused) | ForEach-Object { "(at source $([math]::Round([double]$_.source_ms)) ms, $([math]::Round([double]$_.source_jump_ms, 1)) ms)" }) -join ' '))
 $lines += ("  capture position breaks counted in the app's callback (device time not following on): {0}" -f $rec.position_breaks)
@@ -418,9 +596,12 @@ if ($r.Analysis -and (Test-Path -LiteralPath $sessionJson)) {
   $sessionMeta = Get-Content -LiteralPath $sessionJson -Raw | ConvertFrom-Json
   $detCheck = Get-WbDetectorMatches -Breaks @($rv.Breaks) -Analysis $r.Analysis -Events @($sessionMeta.events)
   $lines += Get-WbDetectorLines -Check $detCheck -Rec $rec
+  # Kept beside the run, so scripts\gates\detector-table.ps1 can put one table together.
+  Save-WbDetectorCheck -RunDir $r.Run -Gate $Gate -Profile $Profile -Check $detCheck -Rec $rec -AudioMs ([double]$rec.audio_ms) -Verdict $verdict
 } else {
   $lines += 'live detector check: not available (no analysis or session.json for this run)'
 }
+if ($Gate -eq 'load') { $lines += $(if ($r.StressPriority) { @($r.StressPriority) } else { '  stress priority: not measured for this run' }) }
 $lines += $(if ($null -ne $r.NvOverlap) { "  GPU check: {0} job processes, {1} processes in nvidia-smi, overlap {2}" -f @($r.JobPids).Count, @($r.NvPids).Count, @($r.NvOverlap).Count } else { '  GPU check: not re-evaluated (measured live, not saved); emulator-check.txt covers it' })
 if ($r.Stress) { $lines += ("  stress: {0} threads at {1:n1} M loops/thread/s for {2:n0} s; GPU {3}: {4} dispatches {5}" -f $r.Stress.cpu_threads, $r.Stress.cpu_mloops_per_thread_s, $r.Stress.seconds, $r.Stress.gpu_adapter, $r.Stress.gpu_dispatches, $r.Stress.gpu_error) }
 if ($r.WebviewKill) { $lines += "  webview: $($r.WebviewKill); display restarts reported: $($r.Report.display_restarts)" }
@@ -442,10 +623,17 @@ $lines += 'app log for this run (warnings, errors, session lines):'
 $lines += (@($r.AppLog) | Where-Object { $_ -match 'WARN|ERROR|session|part closed|recovery|display|gate|panic' } | Select-Object -Last 80 | ForEach-Object { "  $_" })
 $lines += ''
 $lines += "audio and reports: $($r.Run) (not in the repository)"
+if ($r.SamplerCsv -and (Test-Path -LiteralPath $r.SamplerCsv)) { $lines += "per-second sampler: $($r.SamplerCsv) (not in the repository); its correlation with the app's xruns is in $Gate-$Profile.xrun-correlation.txt" }
 
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 $evidence = Join-Path $OutDir "$Gate-$Profile.txt"
 Write-WbEvidence -Path $evidence -Lines $lines -MachineLabel $Machine
-Write-Host "${verdict}: $evidence"
+if ($r.SamplerCsv -and (Test-Path -LiteralPath $r.SamplerCsv)) {
+  try {
+    & (Join-Path $here 'xrun-correlate.ps1') -RunDir $r.Run -SessionDir $r.SessionDir -SamplerCsv $r.SamplerCsv -Out (Join-Path $OutDir "$Gate-$Profile.xrun-correlation.txt") -Machine $Machine
+  } catch { Write-Host "xrun correlation failed: $($_.Exception.Message)" }
+}
+Write-Host "$(if ($DiagnosticNote) { 'DIAGNOSTIC (not a verdict; the checks say ' + $verdict + ')' } else { $verdict }): $evidence"
+if ($DiagnosticNote) { exit 0 }
 if ($verdict -eq 'INVALID') { exit 3 }
 if ($verdict -eq 'FAIL') { exit 1 }

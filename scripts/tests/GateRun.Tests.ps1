@@ -50,6 +50,7 @@ $tmp = Join-Path $env:TEMP "wb-gaterun-tests-$PID"
 New-Item -ItemType Directory -Force -Path $tmp | Out-Null
 $gateLock = Join-Path $tmp 'gate.lock'
 $busyLock = Join-Path $tmp 'busy.lock'
+Check 'LatencyMon (LatMon.exe) counts as a resident tool that must be closed' ((Get-Content -LiteralPath (Join-Path $here '..\lib\GateRun.psm1') -Raw) -match "OverlayNames = @\('RTSS', 'MSIAfterburner', 'LatMon'\)")
 $overlay = @(Get-WbOverlayTools)
 if ($overlay.Count -gt 0) {
   Write-Host "skip Invoke-WbGate tests: overlay tools are running ($($overlay -join ', '))"
@@ -279,5 +280,23 @@ Check 'the evidence header says no engine build was running at the start and at 
 
 Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
 
+# A re-evaluated run (-FromRun) builds its context with Set-WbGateContext, not Invoke-WbGate. The
+# header reads BuildsAtEnd from it; under strict mode a missing property was an error that ended
+# the re-evaluation (13 Nov 2026).
+Set-WbGateContext -Name 'phase1-load-emu-low (re-evaluated from saved data)' -Started ([datetime]'2026-11-13 03:40') -FreeRamStart 20 -FreeRamEnd 19
+$threw = $false; $hdrFrom = ''
+try { Set-StrictMode -Version 2; $hdrFrom = (Get-WbGateHeader -Machine 'test' -Profile 'emu-low') -join "`n" } catch { $threw = $true; Write-Host "  $($_.Exception.Message)" } finally { Set-StrictMode -Off }
+Check 'the header of a re-evaluated run builds under strict mode (no BuildsAtEnd property error)' (-not $threw -and $hdrFrom -match 're-evaluated' -and $hdrFrom -match 'engine builds: checked by the original run')
+Check 'a re-evaluated run does not claim that no build was running at its end' ($hdrFrom -notmatch 'engine builds at the end')
+
+# ---- Split-WbBreakSources: which breaks the reference capture shows too ----
+$appB = [pscustomobject]@{ unmatched_ranges = @([pscustomobject]@{ source_ms = 47049.0; ms = 51 }, [pscustomobject]@{ source_ms = 90000.0; ms = 20 }); discontinuities = @([pscustomobject]@{ source_ms = 47100.0 }, [pscustomobject]@{ source_ms = 130750.0 }) }
+$refB = [pscustomobject]@{ unmatched_ranges = @([pscustomobject]@{ source_ms = 90030.0; ms = 20 }); discontinuities = @() }
+$sb = Split-WbBreakSources -App $appB -Reference $refB
+Check 'a break the reference also has (within 100 ms) is shared' (@($sb.Shared).Count -eq 1 -and $sb.Shared[0] -eq 90000.0)
+Check 'breaks only the app has are app-only' (@($sb.AppOnly).Count -eq 3 -and $sb.AppOnly -contains 47049.0 -and $sb.AppOnly -contains 130750.0)
+$sn = Split-WbBreakSources -App $appB -Reference ([pscustomobject]@{ unmatched_ranges = @(); discontinuities = @() })
+Check 'a reference with no breaks makes every app break app-only' (@($sn.Shared).Count -eq 0 -and @($sn.AppOnly).Count -eq 4)
+Check 'no reference analysis at all: every break is app-only' (@((Split-WbBreakSources -App $appB -Reference $null).AppOnly).Count -eq 4)
 if ($fails) { Write-Host "$fails failed"; exit 1 }
 Write-Host 'GateRun tests passed'

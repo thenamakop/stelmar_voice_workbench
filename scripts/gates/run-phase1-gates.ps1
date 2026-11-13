@@ -1,6 +1,8 @@
 <#
 .SYNOPSIS
-  Runs the six Phase 1 gates in order: panic, webview, emulator, kill, load, soak.
+  Runs the listed gates in order. Default: the six Phase 1 gates (panic, webview, emulator, kill,
+  load, soak). The Phase 2b night adds hashing (the cold-cache model-hashing gate) and uses
+  -Gates hashing,panic,webview,kill,load,soak.
 
 .DESCRIPTION
   Holds D:\Projects\stelmar-gate-request.flag for the whole sequence (removed in a finally block,
@@ -31,9 +33,12 @@ param(
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 Import-Module (Join-Path $here '..\lib\PsEnv.psm1') -Force
+# With powershell -File, -Gates a,b,c arrives as the single string 'a,b,c'; split it so both forms work.
+$Gates = Split-WbList $Gates
 Set-WbCleanPSModulePath
 Set-WbInvariantCulture
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Log) | Out-Null
+$logDir = Split-Path -Parent $Log
 
 function Write-Log([string]$Line) {
   $stamped = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') $Line"
@@ -47,7 +52,27 @@ Set-Content -LiteralPath $Log -Value "phase 1 gate sequence ($($Gates -join ', '
 Set-Content -LiteralPath $RequestFlag -Value "requested by=phase1 gate sequence`r`nstarted=$((Get-Date).ToString('o'))`r`npid=$PID`r`ngates=$($Gates -join ',')" -Encoding ascii
 $stopReason = $null
 try {
-  foreach ($g in $Gates) {
+  # The rig first, once, before any gate: the cable's playback and capture endpoints paired by cable
+  # instance, the cable not the default playback device, and a known signal heard on the capture.
+  # (Each gate repeats this check itself.) A failure stops the sequence with nothing started.
+  $gatesToRun = $Gates
+  if (@($Gates | Where-Object { $_ -ne 'emulator' }).Count -gt 0) {
+    Write-Log 'rig check: starting (pairs the cable endpoints by cable instance and plays a known signal through the pair)'
+    $rigArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $here 'rig-selftest.ps1'))
+    if ($AllowCableDefault) { $rigArgs += '-AllowCableDefault' }
+    $rigRun = Invoke-WbWindowsPowerShellToFile -ArgumentList $rigArgs -OutFile (Join-Path $logDir 'run-all-rig.out')
+    $rigOut = @($rigRun.Output) + @($rigRun.Error)
+    $rigCode = $rigRun.ExitCode
+    $rigLine = @($rigOut | Where-Object { $_ -match '^RIG ' } | Select-Object -Last 1)
+    if ($rigCode -ne 0) {
+      $stopReason = "rig check failed: $(if ($rigLine.Count) { $rigLine[0] } else { 'exit ' + $rigCode + '; last output: ' + (($rigOut | Select-Object -Last 3) -join ' | ') })"
+      $gatesToRun = @()
+      Write-Log "rig check: FAILED. No gate was started. $stopReason"
+    } else {
+      Write-Log "rig check: $(if ($rigLine.Count) { $rigLine[0] } else { 'passed' })"
+    }
+  }
+  foreach ($g in $gatesToRun) {
     Write-Log "$g : starting (free RAM $(Get-FreeRamGB) GB)"
     $script = $(switch ($g) {
         'emulator' { Join-Path $here 'emulator-check.ps1' }
@@ -55,22 +80,32 @@ try {
         default { Join-Path $here 'recorder-gate.ps1' }
       })
     $argList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $script)
-    if ($g -in @('panic', 'webview', 'load', 'soak')) { $argList += @('-Gate', $g, '-Profile', $Profile) }
+    if ($g -in @('panic', 'webview', 'load', 'soak', 'hashing')) { $argList += @('-Gate', $g, '-Profile', $Profile) }
     if ($g -eq 'kill') { $argList += @('-Profile', $Profile) }
     if ($OutDir) { $argList += @('-OutDir', $OutDir) }
-    if ($Minutes -gt 0 -and $g -in @('panic', 'webview', 'load', 'soak')) { $argList += @('-Minutes', $Minutes) }
+    if ($Minutes -gt 0 -and $g -in @('panic', 'webview', 'load', 'soak', 'hashing')) { $argList += @('-Minutes', $Minutes) }
     if ($AllowCableDefault -and $g -ne 'emulator') { $argList += '-AllowCableDefault' }
     # The helper gives the child Windows PowerShell 5.1's own module path (a parent shell's
-    # PowerShell 7 path makes Get-FileHash vanish) and collects stderr as text.
-    $out = @(Invoke-WbWindowsPowerShell -ArgumentList $argList)
-    $code = $LASTEXITCODE
+    # PowerShell 7 path makes Get-FileHash vanish). The child's output goes to a FILE, not a pipe: an
+    # orphan the gate left behind (a player, a capture) would hold a pipe open and hang this sequence.
+    $gateRun = Invoke-WbWindowsPowerShellToFile -ArgumentList $argList -OutFile (Join-Path $logDir "run-all-$g.out")
+    $out = @($gateRun.Output) + @($gateRun.Error)
+    $code = $gateRun.ExitCode
+    # Anything the gate left running would feed or load the next gate: it is named in the log and ended.
+    $orphans = @(Get-Process -Name wb-testbench, wb-emulate, stelmar-voice-workbench -ErrorAction SilentlyContinue)
+    foreach ($o in $orphans) {
+      Write-Log "$g : left a process running: $($o.ProcessName) (pid $($o.Id)); ending it"
+      Stop-Process -Id $o.Id -Force -ErrorAction SilentlyContinue
+    }
     $text = $out -join "`n"
     $verdict = @($out | Where-Object { $_ -match '^(PASS|FAIL|INVALID): ' } | Select-Object -Last 1)
     if ($text -match 'Ask the user before running gate') {
       $stopReason = "$g : Track B's busy lock was held for more than 30 minutes"
     } elseif ($text -match 'GB of RAM free; gate .* needs at least') {
       $stopReason = "$g : less than 14 GB of RAM free"
-    } elseif ($text -match 'The default playback device .* is CABLE Input') {
+    } elseif ($text -match 'RIG REFUSED|RIG SELF-TEST FAILED') {
+      $stopReason = "$g : the cable rig was refused or failed its signal check ($(@($out | Where-Object { $_ -match 'RIG (REFUSED|SELF-TEST FAILED)' } | Select-Object -First 1)))"
+    } elseif ($text -match 'The default playback device .* is (CABLE Input|the virtual cable)') {
       $stopReason = "$g : the virtual cable is a default playback device"
     } elseif ($text -match 'Overlay tools are running') {
       $stopReason = "$g : overlay tools are running"

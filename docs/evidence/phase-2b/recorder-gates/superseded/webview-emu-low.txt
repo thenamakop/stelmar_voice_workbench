@@ -1,0 +1,22 @@
+﻿source: commit 42d2028 with uncommitted or untracked changes (the build hashes below identify the code)
+build: stelmar-voice-workbench.exe sha256 0722e4c3f958c060f71e26d56eb65ba43a1cea366560b520d01ab11c15f4f006 (built 2026-11-12 16:31)
+build: wb-testbench.exe sha256 4cf668272f027a0d35d9f38606da9a2b3b84cf0a3312072bda1aaf6e4acb0672 (built 2026-11-12 16:31)
+build: wb-emulate.exe sha256 db54485692bd6faee263d9e4cda4ff422452ac6cfd7c5a932e6713dbe72da46e (built 2026-11-12 16:31)
+gate: phase1-webview-emu-low
+started: 2026-11-12 17:02:54 +05:30
+machine: Legion
+emulation profile: emu-low
+overlay tools closed: yes (RTSS.exe and MSIAfterburner.exe not running when the gate started)
+overlay tools at the end: none running
+engine builds: none running when the gate started (D:\Projects\stelmar-build.lock absent; no cargo.exe, rustc.exe, cl.exe, link.exe, cmake.exe, ninja.exe, nvcc.exe, glslc.exe, MSBuild.exe, cicc.exe, ptxas.exe, fatbinary.exe, nvlink.exe process)
+engine builds at the end: none running
+Track B paused: D:\Projects\stelmar-gate.lock held for the whole run (removed in a finally block)
+Track B busy lock: D:\Projects\stelmar-eval-busy.lock absent at start
+free RAM: 19.3 GB at start (needs 14 GB), 19.4 GB at end
+verdict: FAIL (the gate did not complete)
+
+reason: no verdict data: the run produced no analysis or reports to judge
+missing: Play, Analysis, RefAnalysis
+analyser (app recording): wb-testbench: the test signal was not found in the recording
+analyser (reference capture): wb-testbench: the test signal was not found in the recording
+run folder: D:\STELMAR-Gate\webview-emu-low-20261112-170254 (kept; nothing was deleted)

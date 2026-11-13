@@ -1,0 +1,19 @@
+﻿repeated_block detection rate on real speech with spliced repeats (R3, Phase 2b)
+source: commit af430ee
+machine: Legion; reads files only
+test: crates/wb-recorder/tests/repeat_detection_rate.rs, exit code 0
+
+language en: 40 clips, splices 173 of 400 found (43.2%)
+language hi: 40 clips, splices 366 of 400 found (91.5%)
+language ur: 40 clips, splices 369 of 400 found (92.2%)
+method: FLEURS test clips from eval/data (git-ignored, not committed), 16 kHz mono, 40 per language spread over the sorted file names; 10 separate splices per clip; lag 400 to 1,200 frames and length 256 to 1,200 frames drawn uniformly, splice point anywhere 4000 frames or more from the ends; the length frames after the point equal the frames lag before them; found = a reported block overlaps at least half of the spliced stretch
+detector: wb_recorder::repeat::RepeatDetector (the recorder's own code), fed 480 frames at a time, minimum run 256 frames, lag range 128 to 4,800 frames, minimum RMS -60 dBFS, runs over 2 x lag ignored as periodic
+clips: 120 (21.4 minutes of speech before splicing)
+all splices: 908 of 1200 found (75.7%)
+within the detector's design (length at most 2 x lag, stretch RMS at least -60 dBFS): 908 of 908 found (100.0%)
+length at most lag (a whole block repeated once or part of one): 538 of 686 found (78.4%)
+length between lag and 2 x lag: 370 of 460 found (80.4%)
+length over 2 x lag (excluded by design as a periodic signal): 0 of 54 found (0.0%)
+stretch RMS under -60 dBFS (excluded by design as near-silence): 0 of 248 found (0.0%)
+found with the right lag: 908 of 908
+control (the same 120 clips without a splice): 0 reported blocks

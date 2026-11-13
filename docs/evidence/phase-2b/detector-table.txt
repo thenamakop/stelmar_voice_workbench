@@ -1,0 +1,14 @@
+﻿Live detector table: the recorder's repeated_block and zero_gap detectors against the shared upstream breaks of each gate run (Phase 2b)
+source: commit fa36341; machine: Legion; run folders at or after 2026-11-13 03:00 with a detector-check.json (written by the gate scripts)
+rule: a shared upstream break is matched when a repeated_block or zero_gap event lies within +-50 ms of the break's span in the app's audio time; an event with no shared break is a false alarm unless it lies before the first source sample that reached the recording (lead-in)
+
+run | gate | profile | audio min | shared breaks | matched | missed | before recording | false alarms | lead-in | repeated_block events | zero_gap events | longest detector time on one block (us) | blocks over budget | detectors switched off | audio skipped by the budget (ms) | detector coverage % | gate verdict
+hashing-emu-low-20261113-031147 | hashing | emu-low | 10.1 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 1 | 293 | 0 | 0 | 0 | 100.00 | PASS
+kill-emu-low-20261113-033017 | kill | emu-low | 8.6 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 543 | 0 | 0 | 0 | 100.00 | PASS
+load-emu-low-20261113-034002 | load | emu-low | 30.1 | 3 | 3 | 0 | 0 | 0 | 0 | 0 | 3 | 2093 | 0 | 0 | 0 | 100.00 | PASS
+panic-emu-low-20261113-032247 | panic | emu-low | 3.1 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 1 | 309 | 0 | 0 | 0 | 100.00 | PASS
+soak-emu-low-20261113-041133 | soak | emu-low | 120.1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 435 | 0 | 0 | 0 | 100.00 | PASS
+webview-emu-low-20261113-032631 | webview | emu-low | 3.1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 124 | 0 | 0 | 0 | 100.00 | PASS
+total | 6 runs | | 175.1 | 5 | 5 | 0 | 0 | 0 | 0 | | | 2093 | 0 | 0
+
+false alarms outside lead-in: 0; misses: 0; detectors switched off: 0; blocks over the time budget: 0
