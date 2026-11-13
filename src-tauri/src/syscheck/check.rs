@@ -39,6 +39,11 @@ const HYBRID_SAFETY_MIN_S: f64 = 150.0;
 const SAFETY_SECONDS: f64 = 120.0;
 /// Seconds of audio the CPU engine decodes in each round of the hybrid test.
 const HYBRID_CPU_CLIP_S: f64 = 10.0;
+/// A bench run decodes its clip twice (a warm-up, then one timed run), so a round that did not end in its
+/// time limit decoded less than half of what a single decode would have.
+const HYBRID_DECODES_PER_RUN: f64 = 2.0;
+/// A recorder safety run shorter than this proves nothing about load (the test lasts `SAFETY_SECONDS`).
+const SAFETY_MIN_COUNTED_S: f64 = 110.0;
 /// The most the full check waits for one CPU round of the hybrid test.
 const HYBRID_CPU_LIMIT_FULL_S: u64 = 300;
 /// A cell whose warm-up runs slower than this gets one timed run only ("impractical: single run").
@@ -962,6 +967,22 @@ impl Run<'_> {
     ) -> Result<(), CheckError> {
         match run {
             Ok(r) => match r.finish() {
+                Ok(result) if !safety_counts(result.duration_s) => {
+                    // Too short to say anything about load: nothing is recorded, the profile stays
+                    // partial and processing waits for Stop.
+                    tracing::warn!(
+                        "system check: the recorder safety run lasted only {:.0} s and is not counted",
+                        result.duration_s
+                    );
+                    self.partial = true;
+                    self.skip(
+                        "recorder safety test",
+                        format!(
+                            "not recorded: the test recording ran only {:.0} s under load (it needs {SAFETY_MIN_COUNTED_S:.0} s)",
+                            result.duration_s
+                        ),
+                    );
+                }
                 Ok(result) => {
                     for c in covers {
                         self.profile.recorder_safety.push(RecorderSafety {
@@ -1162,11 +1183,11 @@ impl Run<'_> {
                 // The CPU engine did not finish HYBRID_CPU_CLIP_S seconds of audio in the time it had, so it
                 // decodes less than that many seconds in that time: an upper bound on what it adds.
                 let secs = cpu_timeout.as_secs_f64();
-                let most = HYBRID_CPU_CLIP_S / secs * gpu_alone_rtf;
+                let most = hybrid_bound(gpu_alone_rtf, HYBRID_CPU_CLIP_S, secs);
                 let reason = format!(
-                    "{model_id} {}: the processor engine ({cpu_threads} threads) did not finish {HYBRID_CPU_CLIP_S:.0} s of audio in {secs:.0} s beside the recorder test (RTF above {:.1}); the graphics adapter runs at {gpu_alone_rtf:.2}, so the processor could add {:.0}% at the most (the rule needs {:.0}%)",
+                    "{model_id} {}: the processor engine ({cpu_threads} threads) did not finish a warm-up and one timed decode of {HYBRID_CPU_CLIP_S:.0} s of audio in {secs:.0} s beside the recorder test (RTF above about {:.1}); the graphics adapter runs at {gpu_alone_rtf:.2}, so the processor could add {:.0}% at the most (the rule needs {:.0}%)",
                     lang.name(),
-                    secs / HYBRID_CPU_CLIP_S,
+                    secs / (HYBRID_DECODES_PER_RUN * HYBRID_CPU_CLIP_S),
                     most * 100.0,
                     (self.env.options.hybrid_min_gain - 1.0) * 100.0
                 );
@@ -1292,6 +1313,12 @@ impl Run<'_> {
             // The quick check measures the night model for Hindi only, and only where the rolling speed
             // predicts it fits (a large-v3-sized model is about 2.5 times slower than the rolling one).
             if !self.full() && (lang != Lang::Hi || hi_rtf.is_none_or(|r| r * 2.5 > limit)) {
+                let why = if lang != Lang::Hi {
+                    "left for the full check: the quick check times the night model for Hindi only, the language that decides it"
+                } else {
+                    "not measured: the rolling speed predicts a night model of this size does not fit overnight"
+                };
+                self.skip(&format!("night model speed ({})", lang.name()), why.into());
                 continue;
             }
             let list = self
@@ -1347,6 +1374,17 @@ fn extra_too_small(extra: f64, min_gain: f64) -> bool {
     1.0 + extra < min_gain
 }
 
+/// The most a CPU engine can add, as a fraction of the graphics adapter's speed, when it did not finish its
+/// round of `clip_s` seconds in `secs` seconds (the round is `HYBRID_DECODES_PER_RUN` decodes of the clip).
+fn hybrid_bound(gpu_rtf: f64, clip_s: f64, secs: f64) -> f64 {
+    HYBRID_DECODES_PER_RUN * clip_s / secs * gpu_rtf
+}
+
+/// Whether a finished recorder safety run lasted long enough to count.
+fn safety_counts(duration_s: f64) -> bool {
+    duration_s >= SAFETY_MIN_COUNTED_S
+}
+
 /// What the hybrid test came to.
 enum HybridOutcome {
     Measured(HybridMeasurement),
@@ -1365,7 +1403,7 @@ fn config_name(config: DeviceConfig) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::extra_too_small;
+    use super::{extra_too_small, hybrid_bound, safety_counts};
 
     #[test]
     fn the_hybrid_gain_is_a_ratio_not_a_fraction() {
@@ -1373,10 +1411,33 @@ mod tests {
         assert!(extra_too_small(0.07, 1.10), "7% extra cannot reach 10%");
         assert!(!extra_too_small(0.10, 1.10), "exactly 10% can");
         assert!(!extra_too_small(0.45, 1.10), "a fast processor can add 45%");
-        // The speeds the 13 Nov emu-low run saw: the adapter at 0.82, the processor beside the recorder test
-        // slower than 12: it adds under 7%.
-        assert!(extra_too_small(0.82 / 12.0, 1.10));
         // emu-mid: the adapter at 0.82 and a processor at 2.4 add 34% in isolation: not ruled out.
         assert!(!extra_too_small(0.82 / 2.4, 1.10));
+    }
+
+    #[test]
+    fn a_processor_round_that_timed_out_is_bounded_by_both_decodes() {
+        // The 13 Nov emu-low run: the adapter at 0.83, a 10 s clip, 120 s. The bench decodes the clip twice,
+        // so the processor could still add 14%: that does not rule the hybrid out, it only is not measured.
+        let most = hybrid_bound(0.83, 10.0, 120.0);
+        assert!((most - 0.1383).abs() < 0.001, "{most}");
+        assert!(!extra_too_small(most, 1.10));
+        // A slower adapter makes the bound looser, a faster one tighter.
+        assert!(hybrid_bound(0.4, 10.0, 120.0) < hybrid_bound(0.83, 10.0, 120.0));
+        assert!(extra_too_small(hybrid_bound(0.4, 10.0, 120.0), 1.10));
+    }
+
+    #[test]
+    fn a_recorder_safety_run_counts_only_if_it_lasted() {
+        assert!(
+            !safety_counts(0.4),
+            "a run that ended at once proves nothing"
+        );
+        assert!(
+            !safety_counts(15.0),
+            "a run cut short by the budget proves nothing"
+        );
+        assert!(safety_counts(120.0));
+        assert!(safety_counts(159.0));
     }
 }

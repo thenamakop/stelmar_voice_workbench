@@ -26,6 +26,14 @@ FLAG = 0.10
 HYBRID_GAIN = 0.10
 
 
+def stamp(path: Path) -> str:
+    """When a report was written: the evidence file is regenerated from every report in the work folder, so each
+    section says which invocation it comes from."""
+    import datetime
+
+    return datetime.datetime.fromtimestamp(path.stat().st_mtime).strftime("%Y-%m-%d %H:%M") if path.is_file() else "no report"
+
+
 def load(path: Path):
     if not path.is_file():
         return None
@@ -52,9 +60,11 @@ def single_throughput(cap: dict, model: str, lang: str):
     return best
 
 
-def section(label: str, report: dict, lines: list[str]) -> dict | None:
+def section(label: str, report: dict, lines: list[str], written: str = "") -> dict | None:
     lines.append("")
     lines.append(f"== {label} ==")
+    if written:
+        lines.append(f"report written: {written}")
     if report is None:
         lines.append("not run")
         return None
@@ -229,8 +239,12 @@ def main() -> int:
     caps = {}
     for name in RUNS:
         rep = load(work / name / "report.json")
-        caps[name] = section(name, rep, lines)
+        caps[name] = section(name, rep, lines, stamp(work / name / "report.json"))
     compare(caps["quick-emu-low"], caps["full-emu-low"], lines)
+    lines.append("")
+    lines.append(
+        "reports written: " + ", ".join(f"{n} {stamp(work / n / 'report.json')}" for n in ("start-during-check-emu-low", "view-same-emu-low", "view-changed-emu-low"))
+    )
     start_during_check(load(work / "start-during-check-emu-low" / "report.json"), lines)
     fingerprint(load(work / "view-same-emu-low" / "report.json"), load(work / "view-changed-emu-low" / "report.json"), lines)
     out.write_text("\n".join(lines) + "\n", encoding="utf-8")

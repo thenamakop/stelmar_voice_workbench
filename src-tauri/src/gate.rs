@@ -287,6 +287,7 @@ fn run_check(app: &AppHandle, mode: &str) -> Result<(), String> {
                         ..StartRequest::default()
                     },
                     mode: None,
+                    hindi_urdu_script: Some("devanagari".into()),
                 },
             );
             let took_ms = pressed.elapsed().as_secs_f64() * 1000.0;

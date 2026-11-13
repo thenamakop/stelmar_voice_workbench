@@ -357,7 +357,7 @@ fn live_decision(
         }
         if !*passes {
             let text = format!(
-                "The live test of {} on the graphics card ran at {:.2}x real time; live captions need {:.2} or better.",
+                "The live test of {} on the graphics card ran at {:.2}× real time; live captions need {:.2} or better.",
                 m.model, m.rtf, b.live_standin_rtf
             );
             // Slower than real time can never keep up: the override cannot lift that.
@@ -413,13 +413,13 @@ fn live_decision(
             Some((rk, m)) => {
                 if m.rtf >= 1.0 {
                     hard.push(format!(
-                        "Near-live text for {} runs slower than real time here ({:.2}x), so it can never keep up.",
+                        "Near-live text for {} runs slower than real time here ({:.2}×), so it can never keep up.",
                         lang.name(),
                         m.rtf
                     ));
                 } else if m.rtf > b.near_live_rtf {
                     soft.push(format!(
-                        "Near-live text for {} is too slow on this machine: {:.2}x real time, the bar is {:.2}.",
+                        "Near-live text for {} is too slow on this machine: {:.2}× real time, the bar is {:.2}.",
                         lang.name(),
                         m.rtf,
                         b.near_live_rtf
@@ -609,11 +609,15 @@ pub fn decide(p: &Profile, r: &Rankings, o: &Options) -> Decision {
     let nights = night_picks(p, r, o, config, &picks);
     let standins = live_standin(p, r, o, &b);
     let mut any_near_live = false;
+    let mut any_streaming = false;
     for lang in Lang::ALL {
         let rolling = picks.get(&lang).cloned();
         let live = live_decision(p, r, o, &b, lang, rolling.as_ref(), &standins);
         if live.kind.as_deref() == Some("near_live") {
             any_near_live = true;
+        }
+        if live.offered && live.kind.as_deref() == Some("streaming") {
+            any_streaming = true;
         }
         let (night, night_note) = nights.get(&lang).cloned().unwrap_or((None, None));
         languages.insert(
@@ -628,7 +632,8 @@ pub fn decide(p: &Profile, r: &Rankings, o: &Options) -> Decision {
     }
 
     // Tier.
-    let g = standins.iter().any(|(_, passes)| *passes);
+    // Tier G: the live test passed on a graphics card and live captions are offered for at least one language.
+    let g = any_streaming && standins.iter().any(|(_, passes)| *passes);
     let tier = if g {
         reasons.push("A graphics card works and the live test passed.".to_string());
         Tier::G
@@ -751,7 +756,7 @@ fn verdict_lines(
             ));
         } else if !rp.meets_bar {
             v.push(format!(
-                "{}: {}{}. It is within the {:.0}% safety margin of real time ({:.2}x, needs {:.2}); about {:.0} minutes after Stop.",
+                "{}: {}{}. It is within the {:.0}% safety margin of real time ({:.2}×, needs {:.2}); about {:.0} minutes after Stop.",
                 lang.name(), rp.model, tag, (1.0 - b.headroom_factor) * 100.0, rp.rtf, b.rolling_rtf, rp.ready_after_stop_min
             ));
         } else {

@@ -360,7 +360,7 @@
           "model": null,
           "rtf": null,
           "soft_reasons": [
-            "Near-live text for English is too slow on this machine: 0.39x real time, the bar is 0.26.",
+            "Near-live text for English is too slow on this machine: 0.39× real time, the bar is 0.26.",
             "No near-live model has been checked for accuracy in English yet."
           ],
           "hard_reasons": []
@@ -384,7 +384,7 @@
           "model": null,
           "rtf": null,
           "soft_reasons": [
-            "Near-live text for Hindi (Devanagari) is too slow on this machine: 0.66x real time, the bar is 0.26.",
+            "Near-live text for Hindi (Devanagari) is too slow on this machine: 0.66× real time, the bar is 0.26.",
             "No near-live model has been checked for accuracy in Hindi (Devanagari) yet."
           ],
           "hard_reasons": [

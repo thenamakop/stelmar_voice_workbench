@@ -71,6 +71,23 @@ fn tier_g_needs_the_standin_to_pass() {
 }
 
 #[test]
+fn tier_g_needs_live_offered_for_at_least_one_language() {
+    // The live test passes, but English (the only language cleared on a graphics card for now) misses the
+    // rolling bar, so no language is offered: the machine is not tier G.
+    let mut p = legion_native();
+    for m in p
+        .measurements
+        .iter_mut()
+        .filter(|m| m.lang == Lang::En && m.mode == Mode::Rolling)
+    {
+        m.rtf = 1.6;
+    }
+    let d = decide_with(&p, false);
+    assert!(!d.languages[&Lang::En].live.offered);
+    assert_ne!(d.tier, Tier::G);
+}
+
+#[test]
 fn tier_c_plus_strong_igpu_offers_near_live_only_where_validated() {
     // No near-live model is validated yet : speed alone does not offer live text.
     let d = decide_with(&strong_igpu_laptop(), false);

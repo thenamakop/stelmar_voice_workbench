@@ -17,6 +17,7 @@ export interface StartChoice {
   hall: string;
   expected_languages: string[];
   mode: "record_post" | "live_post";
+  hindi_urdu_script?: HindiUrduScript;
 }
 
 export interface StartSessionDialogProps {
@@ -167,7 +168,7 @@ export function StartSessionDialog({
           <Button
             iconLeft="circle"
             disabled={!canStart}
-            onClick={() => onStart({ title: title.trim(), hall: hall.trim(), expected_languages: langs, mode })}
+            onClick={() => onStart({ title: title.trim(), hall: hall.trim(), expected_languages: langs, mode, hindi_urdu_script: hindiUrdu ? script : undefined })}
           >
             Start Recording
           </Button>

@@ -159,6 +159,8 @@ export interface StartRequest {
   device_id?: string | null;
   /** `record_post` (default) or `live_post`; live is accepted only where the saved profile clears it. */
   mode?: string;
+  /** How Hindi and Urdu are written: the organiser's choice, kept beside the session. */
+  hindi_urdu_script?: HindiUrduScript;
 }
 
 export interface RecoveredSession {

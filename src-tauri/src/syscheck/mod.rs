@@ -138,6 +138,9 @@ pub struct SessionRequest {
     /// language of the session (AGENTS.md non-negotiable 7).
     #[serde(default)]
     pub mode: Option<String>,
+    /// `devanagari` or `nastaliq`: how Hindi and Urdu speech is written (the organiser's choice).
+    #[serde(default)]
+    pub hindi_urdu_script: Option<String>,
 }
 
 #[tauri::command]
@@ -172,7 +175,11 @@ pub fn start_with_mode(
     cancel_check_for_recording(app);
     let info = recording::start_blocking(app, request.base)?;
     // The chosen mode goes next to the session's own files. The recorder does not carry it yet.
-    let options = serde_json::json!({ "mode": mode, "expected_languages": languages });
+    let options = serde_json::json!({
+        "mode": mode,
+        "expected_languages": languages,
+        "hindi_urdu_script": request.hindi_urdu_script,
+    });
     if let Err(e) = wb_recorder::util::write_json_atomic(
         &PathBuf::from(&info.dir).join("start-options.json"),
         &options,
@@ -201,8 +208,7 @@ fn cancel_check_for_recording(app: &AppHandle) {
     }
 }
 
-/// True while a check is running. A recording never starts during one: the check opens the input and runs
-/// engines of its own.
+/// True while a check is running. Starting a recording cancels it (the recording comes first).
 pub fn is_running(app: &AppHandle) -> bool {
     lock(&app.state::<CheckState>().running).is_some()
 }
@@ -411,6 +417,17 @@ pub async fn set_override(
         };
         if beyond_verdict && !confirmed {
             return Err("Confirm the warning before turning this on.".into());
+        }
+        // Processing while the recorder runs is allowed only for a setup whose recorder safety test passed: a
+        // setup without a passed test cannot be switched on by an override.
+        if kind == OverrideKind::ProcessWhileRecording
+            && enabled
+            && !cap.decision.process_while_recording
+        {
+            return Err(
+                "The recorder safety test has not passed for this setup, so processing while recording stays off. Run the system check again."
+                    .into(),
+            );
         }
         cap.overrides.push(OverrideRecord {
             kind,

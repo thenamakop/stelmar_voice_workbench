@@ -122,6 +122,47 @@ mod tests {
     }
 
     #[test]
+    fn the_committed_manifest_gives_the_approved_ranking() {
+        // The ranking the app decides with is the committed manifest's (owner, 13 Nov 2026): large-v3-turbo
+        // q5_0 first for rolling in English, Hindi and Urdu, medium second, small third for English only;
+        // the night pass is large-v3 q5_0 for Hindi only; nothing is validated for near-live yet.
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../models/manifest.json");
+        let m = Manifest::load(&path).unwrap();
+        let r = from_manifest(&m);
+        let ids = |lang: Lang| -> Vec<&str> {
+            r.rolling[&lang].iter().map(|x| x.model.as_str()).collect()
+        };
+        assert_eq!(ids(Lang::En), ["large-v3-turbo-q5_0", "medium", "small"]);
+        assert_eq!(ids(Lang::Hi), ["large-v3-turbo-q5_0", "medium"]);
+        assert_eq!(ids(Lang::Ur), ["large-v3-turbo-q5_0", "medium"]);
+        assert!(
+            !r.rolling[&Lang::En][0].quality_unverified,
+            "decision 4 of 13 Nov 2026"
+        );
+        assert!(
+            !r.rolling[&Lang::Hi][0].quality_unverified,
+            "the Kathbath comparison backs it"
+        );
+        let night_hi: Vec<_> = r.night[&Lang::Hi]
+            .iter()
+            .map(|x| x.model.as_str())
+            .collect();
+        assert_eq!(night_hi, ["large-v3-q5_0"]);
+        assert!(r.night.get(&Lang::En).is_none_or(Vec::is_empty));
+        for lang in Lang::ALL {
+            assert!(
+                r.near_live
+                    .get(&lang)
+                    .into_iter()
+                    .flatten()
+                    .all(|x| !x.validated),
+                "no near-live model is validated yet ({lang:?})"
+            );
+        }
+        assert!(r.provisional);
+    }
+
+    #[test]
     fn a_manifest_without_ranks_is_not_provisional() {
         let r = from_manifest(&Manifest {
             version: 2,

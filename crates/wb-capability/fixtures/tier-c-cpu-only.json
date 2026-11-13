@@ -313,7 +313,7 @@
             "No near-live model has been checked for accuracy in English yet."
           ],
           "hard_reasons": [
-            "Near-live text for English runs slower than real time here (1.64x), so it can never keep up."
+            "Near-live text for English runs slower than real time here (1.64×), so it can never keep up."
           ]
         }
       },
@@ -338,7 +338,7 @@
             "No near-live model has been checked for accuracy in Hindi (Devanagari) yet."
           ],
           "hard_reasons": [
-            "Near-live text for Hindi (Devanagari) runs slower than real time here (2.35x), so it can never keep up.",
+            "Near-live text for Hindi (Devanagari) runs slower than real time here (2.35×), so it can never keep up.",
             "The near-live test for Hindi (Devanagari) lost speech (1 truncated chunk)."
           ]
         }
@@ -378,7 +378,7 @@
     "verdict": [
       "Record + post-process. Live text is off by default and not offered on this machine.",
       "Transcribing runs on CPU (Fixture CPU).",
-      "English: small (quality unverified). It is within the 25% safety margin of real time (0.95x, needs 0.75); about 9 minutes after Stop.",
+      "English: small (quality unverified). It is within the 25% safety margin of real time (0.95×, needs 0.75); about 9 minutes after Stop.",
       "Hindi (Devanagari): small (quality unverified). Processing will lag behind recording: about 67 minutes after the end of a 90-minute talk.",
       "Urdu (Nastaliq): small (quality unverified). Processing will lag behind recording: about 67 minutes after the end of a 90-minute talk.",
       "The code-switching (Hinglish) model is too slow to run on every chunk here.",

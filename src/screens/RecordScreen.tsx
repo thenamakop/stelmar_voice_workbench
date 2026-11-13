@@ -620,6 +620,7 @@ export function RecordScreen({ hasProfile, recorder, capability }: RecordScreenP
               device_id: deviceId || null,
               expected_languages: choice.expected_languages,
               mode: choice.mode,
+              hindi_urdu_script: choice.hindi_urdu_script,
             })
             .then((ok) => {
               if (ok) setStartOpen(false);
