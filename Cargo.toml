@@ -4,6 +4,7 @@ members = [
   "src-tauri",
   "crates/wb-protocol",
   "crates/wb-engine",
+  "crates/wb-capability",
   "crates/wb-engine-core",
   "crates/wb-machine",
   "crates/wb-models",
@@ -32,6 +33,7 @@ thiserror = "2"
 time = { version = "0.3", features = ["formatting", "parsing", "macros"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std", "ansi"] }
+wb-capability = { path = "crates/wb-capability" }
 wb-engine-core = { path = "crates/wb-engine-core" }
 wb-machine = { path = "crates/wb-machine" }
 wb-models = { path = "crates/wb-models" }

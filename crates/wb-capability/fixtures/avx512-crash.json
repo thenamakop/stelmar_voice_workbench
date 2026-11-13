@@ -1,0 +1,250 @@
+{
+  "schema_version": 1,
+  "app_version": "0.1.0",
+  "created_at": "2026-11-13T20:00:00+05:30",
+  "emulated": null,
+  "fingerprint": {
+    "os": "Windows 11",
+    "cpu_brand": "Fixture CPU",
+    "logical_processors": 8,
+    "physical_cores": 4,
+    "total_ram_gib": 16,
+    "gpus": [
+      {
+        "name": "Fixture GPU",
+        "driver": "1.0"
+      }
+    ],
+    "app_version": "0.1.0",
+    "manifest_hash": "fixture",
+    "emulated": null
+  },
+  "check": {
+    "kind": "quick",
+    "partial": false,
+    "started_at": "2026-11-13T20:00:00+05:30",
+    "duration_s": 400.0,
+    "bar_s": 480.0,
+    "excerpt_seconds": 30.0
+  },
+  "hardware": {
+    "os": "Windows 11",
+    "cpu_brand": "Fixture CPU",
+    "logical_processors": 12,
+    "physical_cores": 6,
+    "cpu_features": [
+      "avx",
+      "avx2",
+      "fma",
+      "f16c",
+      "bmi2"
+    ],
+    "avx2": true,
+    "avx512": true,
+    "total_ram_bytes": 17179869184,
+    "available_ram_bytes": 11811160064,
+    "gpus": [],
+    "disks": [],
+    "on_mains_power": true,
+    "audio_inputs": 2
+  },
+  "engines": [
+    {
+      "variant": "avx512",
+      "usable": false,
+      "reason": "the engine crashed at start (exit code 0xC0000005)",
+      "info_ms": 20000,
+      "devices": []
+    },
+    {
+      "variant": "avx2",
+      "usable": true,
+      "reason": null,
+      "info_ms": 250,
+      "devices": [
+        "cpu"
+      ]
+    }
+  ],
+  "measurements": [
+    {
+      "model": "medium",
+      "lang": "en",
+      "mode": "rolling",
+      "config": {
+        "kind": "cpu"
+      },
+      "engine_build": "avx2",
+      "device_name": "fixture",
+      "threads": 2,
+      "method": "fixture (numbers from the Phase 2 speed tables)",
+      "clip_seconds": 30.0,
+      "rtf": 0.6,
+      "warmup_rtf": 0.66,
+      "load_s": 1.0,
+      "peak_working_set_bytes": 2233382993,
+      "peak_commit_bytes": 2791728742,
+      "gpu_local_bytes": null,
+      "truncated_chunks": 0,
+      "live_standin": false
+    },
+    {
+      "model": "large-v3-turbo-q5_0",
+      "lang": "hi",
+      "mode": "rolling",
+      "config": {
+        "kind": "cpu"
+      },
+      "engine_build": "avx2",
+      "device_name": "fixture",
+      "threads": 2,
+      "method": "fixture (numbers from the Phase 2 speed tables)",
+      "clip_seconds": 30.0,
+      "rtf": 0.7,
+      "warmup_rtf": 0.77,
+      "load_s": 1.0,
+      "peak_working_set_bytes": 1202590842,
+      "peak_commit_bytes": 1503238553,
+      "gpu_local_bytes": null,
+      "truncated_chunks": 0,
+      "live_standin": false
+    },
+    {
+      "model": "medium",
+      "lang": "ur",
+      "mode": "rolling",
+      "config": {
+        "kind": "cpu"
+      },
+      "engine_build": "avx2",
+      "device_name": "fixture",
+      "threads": 2,
+      "method": "fixture (numbers from the Phase 2 speed tables)",
+      "clip_seconds": 30.0,
+      "rtf": 0.8,
+      "warmup_rtf": 0.8800000000000001,
+      "load_s": 1.0,
+      "peak_working_set_bytes": 2233382993,
+      "peak_commit_bytes": 2791728742,
+      "gpu_local_bytes": null,
+      "truncated_chunks": 0,
+      "live_standin": false
+    }
+  ],
+  "hybrid": null,
+  "recorder_safety": [],
+  "injectors": [],
+  "decision": {
+    "tier": "C",
+    "tier_reasons": [
+      "Rolling transcription works; live text is not offered on this machine."
+    ],
+    "record_only_reason": null,
+    "bars": {
+      "rolling_rtf": 1.0,
+      "near_live_rtf": 0.35,
+      "live_standin_rtf": 0.25,
+      "headroom_factor": 1.0
+    },
+    "config": {
+      "config": {
+        "kind": "cpu"
+      },
+      "label": "CPU (Fixture CPU)",
+      "why": "The CPU measured fastest for the rolling models.",
+      "cpu_threads": 5,
+      "recorder_safety_passed": null
+    },
+    "languages": {
+      "en": {
+        "rolling": {
+          "model": "medium",
+          "rtf": 0.6,
+          "meets_bar": true,
+          "quality_unverified": false,
+          "k_max": 1,
+          "ready_after_stop_min": 6.0,
+          "lags": false
+        },
+        "night": null,
+        "night_note": "The night model is measured by the full check.",
+        "live": {
+          "offered": false,
+          "kind": null,
+          "model": null,
+          "rtf": null,
+          "soft_reasons": [
+            "The near-live speed for English has not been measured yet."
+          ],
+          "hard_reasons": []
+        }
+      },
+      "hi": {
+        "rolling": {
+          "model": "large-v3-turbo-q5_0",
+          "rtf": 0.7,
+          "meets_bar": true,
+          "quality_unverified": true,
+          "k_max": 1,
+          "ready_after_stop_min": 7.0,
+          "lags": false
+        },
+        "night": null,
+        "night_note": "The night model is measured by the full check.",
+        "live": {
+          "offered": false,
+          "kind": null,
+          "model": null,
+          "rtf": null,
+          "soft_reasons": [
+            "The near-live speed for Hindi (Devanagari) has not been measured yet."
+          ],
+          "hard_reasons": []
+        }
+      },
+      "ur": {
+        "rolling": {
+          "model": "medium",
+          "rtf": 0.8,
+          "meets_bar": true,
+          "quality_unverified": false,
+          "k_max": 1,
+          "ready_after_stop_min": 8.0,
+          "lags": false
+        },
+        "night": null,
+        "night_note": "The night model is measured by the full check.",
+        "live": {
+          "offered": false,
+          "kind": null,
+          "model": null,
+          "rtf": null,
+          "soft_reasons": [
+            "Urdu live text is never offered on a machine without a working graphics card (no small Urdu model is good enough)."
+          ],
+          "hard_reasons": []
+        }
+      }
+    },
+    "hinglish": {
+      "ok": false,
+      "rtf": null,
+      "source": "unmeasured"
+    },
+    "dual_decode_en_hi": false,
+    "provisional": true,
+    "partial": false,
+    "verdict": [
+      "Record + post-process. Live text is off by default and not offered on this machine.",
+      "Transcribing runs on CPU (Fixture CPU).",
+      "English: medium, about 6 minutes after Stop.",
+      "Hindi (Devanagari): large-v3-turbo-q5_0 (quality unverified), about 7 minutes after Stop.",
+      "Urdu (Nastaliq): medium, about 8 minutes after Stop.",
+      "The code-switching (Hinglish) model is too slow to run on every chunk here.",
+      "The model choice is provisional until the models have been checked for accuracy."
+    ],
+    "process_while_recording": true,
+    "pause_on_battery": true
+  },
+  "overrides": []
+}

@@ -1,0 +1,558 @@
+{
+  "schema_version": 1,
+  "app_version": "0.1.0",
+  "created_at": "2026-11-13T20:00:00+05:30",
+  "emulated": null,
+  "fingerprint": {
+    "os": "Windows 11",
+    "cpu_brand": "Fixture CPU",
+    "logical_processors": 8,
+    "physical_cores": 4,
+    "total_ram_gib": 32,
+    "gpus": [
+      {
+        "name": "Fixture GPU",
+        "driver": "1.0"
+      }
+    ],
+    "app_version": "0.1.0",
+    "manifest_hash": "fixture",
+    "emulated": null
+  },
+  "check": {
+    "kind": "quick",
+    "partial": false,
+    "started_at": "2026-11-13T20:00:00+05:30",
+    "duration_s": 400.0,
+    "bar_s": 480.0,
+    "excerpt_seconds": 30.0
+  },
+  "hardware": {
+    "os": "Windows 11",
+    "cpu_brand": "Fixture CPU",
+    "logical_processors": 32,
+    "physical_cores": 24,
+    "cpu_features": [
+      "avx",
+      "avx2",
+      "fma",
+      "f16c",
+      "bmi2"
+    ],
+    "avx2": true,
+    "avx512": false,
+    "total_ram_bytes": 34359738368,
+    "available_ram_bytes": 25769803776,
+    "gpus": [
+      {
+        "index": 0,
+        "name": "Intel(R) UHD Graphics",
+        "vendor": "Intel",
+        "kind": "integrated",
+        "dedicated_bytes": 0,
+        "local_bytes": 2254857830,
+        "shared_bytes": 0,
+        "shared_assumed": false,
+        "driver": "32.0.101.0",
+        "vulkan_usable": true
+      },
+      {
+        "index": 1,
+        "name": "NVIDIA GeForce RTX 4070 Laptop GPU",
+        "vendor": "NVIDIA",
+        "kind": "discrete",
+        "dedicated_bytes": 8589934592,
+        "local_bytes": 8589934592,
+        "shared_bytes": 0,
+        "shared_assumed": false,
+        "driver": "560.0",
+        "vulkan_usable": true
+      }
+    ],
+    "disks": [],
+    "on_mains_power": true,
+    "audio_inputs": 2
+  },
+  "engines": [
+    {
+      "variant": "avx2",
+      "usable": true,
+      "reason": null,
+      "info_ms": 300,
+      "devices": [
+        "cpu"
+      ]
+    },
+    {
+      "variant": "avx512",
+      "usable": false,
+      "reason": "this CPU has no AVX-512 (exit code 3)",
+      "info_ms": 40,
+      "devices": []
+    },
+    {
+      "variant": "vulkan",
+      "usable": true,
+      "reason": null,
+      "info_ms": 900,
+      "devices": [
+        "gpu"
+      ]
+    }
+  ],
+  "measurements": [
+    {
+      "model": "medium",
+      "lang": "en",
+      "mode": "rolling",
+      "config": {
+        "kind": "gpu",
+        "index": 1
+      },
+      "engine_build": "vulkan",
+      "device_name": "fixture",
+      "threads": 2,
+      "method": "fixture (numbers from the Phase 2 speed tables)",
+      "clip_seconds": 30.0,
+      "rtf": 0.047,
+      "warmup_rtf": 0.0517,
+      "load_s": 1.0,
+      "peak_working_set_bytes": 1005022347,
+      "peak_commit_bytes": 1256277934,
+      "gpu_local_bytes": 2426656522,
+      "truncated_chunks": 0,
+      "live_standin": false
+    },
+    {
+      "model": "medium",
+      "lang": "hi",
+      "mode": "rolling",
+      "config": {
+        "kind": "gpu",
+        "index": 1
+      },
+      "engine_build": "vulkan",
+      "device_name": "fixture",
+      "threads": 2,
+      "method": "fixture (numbers from the Phase 2 speed tables)",
+      "clip_seconds": 30.0,
+      "rtf": 0.188,
+      "warmup_rtf": 0.2068,
+      "load_s": 1.0,
+      "peak_working_set_bytes": 1005022347,
+      "peak_commit_bytes": 1256277934,
+      "gpu_local_bytes": 2297807503,
+      "truncated_chunks": 0,
+      "live_standin": false
+    },
+    {
+      "model": "medium",
+      "lang": "ur",
+      "mode": "rolling",
+      "config": {
+        "kind": "gpu",
+        "index": 1
+      },
+      "engine_build": "vulkan",
+      "device_name": "fixture",
+      "threads": 2,
+      "method": "fixture (numbers from the Phase 2 speed tables)",
+      "clip_seconds": 30.0,
+      "rtf": 0.188,
+      "warmup_rtf": 0.2068,
+      "load_s": 1.0,
+      "peak_working_set_bytes": 1005022347,
+      "peak_commit_bytes": 1256277934,
+      "gpu_local_bytes": 2297807503,
+      "truncated_chunks": 0,
+      "live_standin": false
+    },
+    {
+      "model": "large-v3-turbo-q5_0",
+      "lang": "en",
+      "mode": "rolling",
+      "config": {
+        "kind": "gpu",
+        "index": 1
+      },
+      "engine_build": "vulkan",
+      "device_name": "fixture",
+      "threads": 2,
+      "method": "fixture (numbers from the Phase 2 speed tables)",
+      "clip_seconds": 30.0,
+      "rtf": 0.042,
+      "warmup_rtf": 0.046200000000000005,
+      "load_s": 1.0,
+      "peak_working_set_bytes": 532575944,
+      "peak_commit_bytes": 665719930,
+      "gpu_local_bytes": 966367641,
+      "truncated_chunks": 0,
+      "live_standin": false
+    },
+    {
+      "model": "large-v3-turbo-q5_0",
+      "lang": "hi",
+      "mode": "rolling",
+      "config": {
+        "kind": "gpu",
+        "index": 1
+      },
+      "engine_build": "vulkan",
+      "device_name": "fixture",
+      "threads": 2,
+      "method": "fixture (numbers from the Phase 2 speed tables)",
+      "clip_seconds": 30.0,
+      "rtf": 0.114,
+      "warmup_rtf": 0.1254,
+      "load_s": 1.0,
+      "peak_working_set_bytes": 532575944,
+      "peak_commit_bytes": 665719930,
+      "gpu_local_bytes": 966367641,
+      "truncated_chunks": 0,
+      "live_standin": false
+    },
+    {
+      "model": "large-v3-q5_0",
+      "lang": "en",
+      "mode": "rolling",
+      "config": {
+        "kind": "gpu",
+        "index": 1
+      },
+      "engine_build": "vulkan",
+      "device_name": "fixture",
+      "threads": 2,
+      "method": "fixture (numbers from the Phase 2 speed tables)",
+      "clip_seconds": 30.0,
+      "rtf": 0.061,
+      "warmup_rtf": 0.0671,
+      "load_s": 1.0,
+      "peak_working_set_bytes": 927712935,
+      "peak_commit_bytes": 1159641169,
+      "gpu_local_bytes": 2201170739,
+      "truncated_chunks": 0,
+      "live_standin": false
+    },
+    {
+      "model": "large-v3-q5_0",
+      "lang": "hi",
+      "mode": "rolling",
+      "config": {
+        "kind": "gpu",
+        "index": 1
+      },
+      "engine_build": "vulkan",
+      "device_name": "fixture",
+      "threads": 2,
+      "method": "fixture (numbers from the Phase 2 speed tables)",
+      "clip_seconds": 30.0,
+      "rtf": 0.245,
+      "warmup_rtf": 0.2695,
+      "load_s": 1.0,
+      "peak_working_set_bytes": 927712935,
+      "peak_commit_bytes": 1159641169,
+      "gpu_local_bytes": 2254857830,
+      "truncated_chunks": 0,
+      "live_standin": false
+    },
+    {
+      "model": "large-v3-q5_0",
+      "lang": "ur",
+      "mode": "rolling",
+      "config": {
+        "kind": "gpu",
+        "index": 1
+      },
+      "engine_build": "vulkan",
+      "device_name": "fixture",
+      "threads": 2,
+      "method": "fixture (numbers from the Phase 2 speed tables)",
+      "clip_seconds": 30.0,
+      "rtf": 0.245,
+      "warmup_rtf": 0.2695,
+      "load_s": 1.0,
+      "peak_working_set_bytes": 927712935,
+      "peak_commit_bytes": 1159641169,
+      "gpu_local_bytes": 2254857830,
+      "truncated_chunks": 0,
+      "live_standin": false
+    },
+    {
+      "model": "hinglish-q5_0",
+      "lang": "hi",
+      "mode": "rolling",
+      "config": {
+        "kind": "gpu",
+        "index": 1
+      },
+      "engine_build": "vulkan",
+      "device_name": "fixture",
+      "threads": 2,
+      "method": "fixture (numbers from the Phase 2 speed tables)",
+      "clip_seconds": 30.0,
+      "rtf": 0.25,
+      "warmup_rtf": 0.275,
+      "load_s": 1.0,
+      "peak_working_set_bytes": 927712935,
+      "peak_commit_bytes": 1159641169,
+      "gpu_local_bytes": 2254857830,
+      "truncated_chunks": 0,
+      "live_standin": false
+    },
+    {
+      "model": "large-v3-turbo-q5_0",
+      "lang": "hi",
+      "mode": "rolling",
+      "config": {
+        "kind": "cpu"
+      },
+      "engine_build": "avx2",
+      "device_name": "fixture",
+      "threads": 2,
+      "method": "fixture (numbers from the Phase 2 speed tables)",
+      "clip_seconds": 30.0,
+      "rtf": 1.363,
+      "warmup_rtf": 1.4993,
+      "load_s": 1.0,
+      "peak_working_set_bytes": 781684047,
+      "peak_commit_bytes": 977105059,
+      "gpu_local_bytes": null,
+      "truncated_chunks": 0,
+      "live_standin": false
+    },
+    {
+      "model": "small",
+      "lang": "en",
+      "mode": "near_live",
+      "config": {
+        "kind": "cpu"
+      },
+      "engine_build": "avx2",
+      "device_name": "fixture",
+      "threads": 2,
+      "method": "fixture (numbers from the Phase 2 speed tables)",
+      "clip_seconds": 30.0,
+      "rtf": 0.248,
+      "warmup_rtf": 0.27280000000000004,
+      "load_s": 1.0,
+      "peak_working_set_bytes": 1030792151,
+      "peak_commit_bytes": 1288490188,
+      "gpu_local_bytes": null,
+      "truncated_chunks": 0,
+      "live_standin": false
+    },
+    {
+      "model": "small",
+      "lang": "hi",
+      "mode": "near_live",
+      "config": {
+        "kind": "cpu"
+      },
+      "engine_build": "avx2",
+      "device_name": "fixture",
+      "threads": 2,
+      "method": "fixture (numbers from the Phase 2 speed tables)",
+      "clip_seconds": 30.0,
+      "rtf": 0.497,
+      "warmup_rtf": 0.5467000000000001,
+      "load_s": 1.0,
+      "peak_working_set_bytes": 1030792151,
+      "peak_commit_bytes": 1288490188,
+      "gpu_local_bytes": null,
+      "truncated_chunks": 2,
+      "live_standin": false
+    },
+    {
+      "model": "large-v3-turbo-q5_0",
+      "lang": "en",
+      "mode": "near_live",
+      "config": {
+        "kind": "gpu",
+        "index": 1
+      },
+      "engine_build": "vulkan",
+      "device_name": "fixture",
+      "threads": 2,
+      "method": "fixture (numbers from the Phase 2 speed tables)",
+      "clip_seconds": 30.0,
+      "rtf": 0.05,
+      "warmup_rtf": 0.05500000000000001,
+      "load_s": 1.0,
+      "peak_working_set_bytes": 1288490188,
+      "peak_commit_bytes": 1610612736,
+      "gpu_local_bytes": 1073741824,
+      "truncated_chunks": 0,
+      "live_standin": true
+    },
+    {
+      "model": "large-v3-turbo-q5_0",
+      "lang": "hi",
+      "mode": "near_live",
+      "config": {
+        "kind": "gpu",
+        "index": 1
+      },
+      "engine_build": "vulkan",
+      "device_name": "fixture",
+      "threads": 2,
+      "method": "fixture (numbers from the Phase 2 speed tables)",
+      "clip_seconds": 30.0,
+      "rtf": 0.12,
+      "warmup_rtf": 0.132,
+      "load_s": 1.0,
+      "peak_working_set_bytes": 1288490188,
+      "peak_commit_bytes": 1610612736,
+      "gpu_local_bytes": 1073741824,
+      "truncated_chunks": 0,
+      "live_standin": true
+    },
+    {
+      "model": "large-v3-q5_0",
+      "lang": "ur",
+      "mode": "near_live",
+      "config": {
+        "kind": "gpu",
+        "index": 1
+      },
+      "engine_build": "vulkan",
+      "device_name": "fixture",
+      "threads": 2,
+      "method": "fixture (numbers from the Phase 2 speed tables)",
+      "clip_seconds": 30.0,
+      "rtf": 0.14,
+      "warmup_rtf": 0.15400000000000003,
+      "load_s": 1.0,
+      "peak_working_set_bytes": 1288490188,
+      "peak_commit_bytes": 1610612736,
+      "gpu_local_bytes": 1073741824,
+      "truncated_chunks": 0,
+      "live_standin": true
+    }
+  ],
+  "hybrid": null,
+  "recorder_safety": [],
+  "injectors": [],
+  "decision": {
+    "tier": "G",
+    "tier_reasons": [
+      "A graphics card works and the live test passed."
+    ],
+    "record_only_reason": null,
+    "bars": {
+      "rolling_rtf": 1.0,
+      "near_live_rtf": 0.35,
+      "live_standin_rtf": 0.25,
+      "headroom_factor": 1.0
+    },
+    "config": {
+      "config": {
+        "kind": "gpu",
+        "index": 1
+      },
+      "label": "NVIDIA GeForce RTX 4070 Laptop GPU (Vulkan)",
+      "why": "The graphics card measured fastest for the rolling models.",
+      "cpu_threads": 2,
+      "recorder_safety_passed": null
+    },
+    "languages": {
+      "en": {
+        "rolling": {
+          "model": "medium",
+          "rtf": 0.047,
+          "meets_bar": true,
+          "quality_unverified": false,
+          "k_max": 21,
+          "ready_after_stop_min": 0.46999999999999886,
+          "lags": false
+        },
+        "night": {
+          "model": "large-v3-q5_0",
+          "rtf": 0.061,
+          "hours_for_a_day": 0.183,
+          "quality_unverified": true
+        },
+        "night_note": null,
+        "live": {
+          "offered": true,
+          "kind": "streaming",
+          "model": "large-v3-turbo-q5_0",
+          "rtf": 0.05,
+          "soft_reasons": [],
+          "hard_reasons": []
+        }
+      },
+      "hi": {
+        "rolling": {
+          "model": "large-v3-turbo-q5_0",
+          "rtf": 0.114,
+          "meets_bar": true,
+          "quality_unverified": true,
+          "k_max": 8,
+          "ready_after_stop_min": 1.1400000000000006,
+          "lags": false
+        },
+        "night": {
+          "model": "large-v3-q5_0",
+          "rtf": 0.245,
+          "hours_for_a_day": 0.735,
+          "quality_unverified": true
+        },
+        "night_note": null,
+        "live": {
+          "offered": true,
+          "kind": "streaming",
+          "model": "large-v3-turbo-q5_0",
+          "rtf": 0.12,
+          "soft_reasons": [],
+          "hard_reasons": []
+        }
+      },
+      "ur": {
+        "rolling": {
+          "model": "medium",
+          "rtf": 0.188,
+          "meets_bar": true,
+          "quality_unverified": false,
+          "k_max": 5,
+          "ready_after_stop_min": 1.8799999999999955,
+          "lags": false
+        },
+        "night": {
+          "model": "large-v3-q5_0",
+          "rtf": 0.245,
+          "hours_for_a_day": 0.735,
+          "quality_unverified": true
+        },
+        "night_note": null,
+        "live": {
+          "offered": true,
+          "kind": "streaming",
+          "model": "large-v3-q5_0",
+          "rtf": 0.14,
+          "soft_reasons": [],
+          "hard_reasons": []
+        }
+      }
+    },
+    "hinglish": {
+      "ok": true,
+      "rtf": 0.25,
+      "source": "measured"
+    },
+    "dual_decode_en_hi": true,
+    "provisional": true,
+    "partial": false,
+    "verdict": [
+      "Record + post-process by default; live captions can be chosen for each recording.",
+      "Transcribing runs on NVIDIA GeForce RTX 4070 Laptop GPU (Vulkan).",
+      "English: medium, about 0 minutes after Stop.",
+      "Hindi (Devanagari): large-v3-turbo-q5_0 (quality unverified), about 1 minutes after Stop.",
+      "Urdu (Nastaliq): medium, about 2 minutes after Stop.",
+      "The code-switching (Hinglish) model is fast enough to run on every chunk.",
+      "The model choice is provisional until the models have been checked for accuracy."
+    ],
+    "process_while_recording": true,
+    "pause_on_battery": true
+  },
+  "overrides": []
+}

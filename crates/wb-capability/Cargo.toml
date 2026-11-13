@@ -1,0 +1,17 @@
+[package]
+name = "wb-capability"
+description = "capability.json and the decision rules of the system check: tiers, devices, models, live availability (STELMAR Voice Workbench, Phase 3)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json = { workspace = true, features = ["float_roundtrip"] }
+sha2.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true
