@@ -1,0 +1,20 @@
+Coverage check of the FULL Kathbath test-unknown sets (Phase 3, 13 Nov 2026)
+rate = letters and digits per second of VAD speech (engine code: guards::letter_count; speech seconds from `wb-engine chunks --greedy`)
+sets: every utterance of eval/data/kathbath-hi and kathbath-ur (the official test-unknown files), reference text and VAD speech time only, no decoding
+no transcript text below: ids, counts and numbers only
+
+current floors: {'en': 5.79, 'hi': 5.03, 'ur': 7.7}
+set | language | utterances | judged (3 s of speech or more) | min | p1 | p5 | p50 | p95 | below the floor | share
+kathbath-hi | hi | 5059 | 4678 | 4.76 | 5.99 | 6.67 | 9.34 | 12.98 | 3 | 0.1%
+kathbath-ur | ur | 5129 | 4906 | 4.92 | 5.93 | 6.63 | 9.03 | 11.37 | 831 | 16.9%
+
+kathbath-hi: 381 utterance(s) under 3 s of speech (not judged); lowest reference rate 4.76; below the floor 5.03: tk_844424933524434-1052-m at 4.76, tk_844424933494900-1052-m at 4.80, tk_844424933478832-1052-m at 4.96
+kathbath-ur: 223 utterance(s) under 3 s of speech (not judged); lowest reference rate 4.92; below the floor 7.70: tu_844424931397875-777-f at 4.92, tk_844424931467642-58-f at 5.04, tk_844424931347791-544-m at 5.27, tu_844424930922043-376-f at 5.36, tk_844424932940138-58-f at 5.40, tk_844424931085085-15-m at 5.41, tu_844424930583809-376-f at 5.41, tk_844424932924581-58-f at 5.45, tk_844424930962704-791-f at 5.47, tk_844424931122835-544-m at 5.50 (the 831 counted; the 10 lowest listed)
+
+references below the floors: 834 of 9584 judged = 8.7% (limit 1%)
+RESULT: MORE than 1% below the floors: recalibrate the floors with Kathbath included
+
+recalibration (same method: 0.9 x the lowest reference rate, so no reference is under the floor)
+language | Phase 2 floor | engine floor now | Phase 2 lowest rate (floor / 0.9) | Kathbath lowest | new floor | under the Phase 2 floor | under the engine floor now | under the new floor | p0.1 | p1
+hi | 5.03 | 4.28 | 5.59 | 4.76 | 4.28 | 3 | 0 | 0 | 5.21 | 5.99
+ur | 7.70 | 4.43 | 8.56 | 4.92 | 4.43 | 831 | 0 | 0 | 5.41 | 5.93

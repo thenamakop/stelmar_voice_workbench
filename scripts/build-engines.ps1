@@ -51,6 +51,12 @@ Set-WbInvariantCulture
 Import-Module (Join-Path $here 'lib\GateRun.psm1') -Force
 Import-Module (Join-Path $here 'lib\Redact.psm1') -Force
 
+# MSBuild keeps idle worker nodes for about 15 minutes after a build (node reuse). The gate and timing scripts
+# treat any MSBuild process as "a build is running" and refuse to start (13 Nov 2026: a comparison run was held up
+# by five idle nodes). The CMake builds of whisper-rs-sys go through MSBuild and this script does not call MSBuild
+# itself, so the environment variable (the same switch as /nodeReuse:false) is set for everything it starts.
+$env:MSBUILDDISABLENODEREUSE = '1'
+
 $triple = 'x86_64-pc-windows-msvc'
 $binDir = Join-Path $repo 'src-tauri\binaries'
 
