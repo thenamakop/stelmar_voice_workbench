@@ -8,9 +8,16 @@
 //! | `WB_GATE_CLOCK_OFFSET_S=<n>` | Moves the scheduler's clock by n seconds (so a short run stands for the day: the first session maps to 10:00 IST); read in `queue::clock_ms` |
 //! | `WB_GATE_FORCE_HYBRID=1` | The queue works as if the profile had chosen a hybrid (processor and graphics engines at once). For the kill test only: neither emulation profile chose a hybrid, so the report labels the run as forced |
 //! | `WB_GATE_QUEUE_LOG=<path>` | Every line of the scheduler log is also appended to this file, with the scheduler's IST time |
+//! | `WB_GATE_NIGHT_WAIT_S=<n>` | The night pass waits n seconds (not 30 minutes) after the last session ended; for the smoke run only |
+//!
+//! The day plan may also carry `actions` (see [`PlanAction`]): the operator's pause and resume, a language lock
+//! and an import of a copy of a finished session, each fired at a time relative to a session's start or stop. They
+//! run the same functions the commands run, and each one's outcome goes into the report.
 
+use std::collections::BTreeMap;
 use std::io::Write;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use serde::Deserialize;
@@ -26,6 +33,16 @@ fn var(k: &str) -> Option<String> {
 /// `WB_GATE_FORCE_HYBRID` is set.
 pub fn force_hybrid() -> bool {
     var("WB_GATE_FORCE_HYBRID").is_some_and(|v| v != "0")
+}
+
+/// How much earlier than 30 minutes after the last session the night pass may start (`WB_GATE_NIGHT_WAIT_S`), in
+/// milliseconds: the queue adds it to the clock it passes to the 30-minute rule. Zero when the variable is not set.
+pub fn night_wait_shift_ms() -> u64 {
+    var("WB_GATE_NIGHT_WAIT_S")
+        .and_then(|v| v.parse::<u64>().ok())
+        .map_or(0, |wait| {
+            30u64.saturating_mul(60).saturating_sub(wait) * 1_000
+        })
 }
 
 /// Appends a scheduler log line to `WB_GATE_QUEUE_LOG`.
@@ -66,9 +83,40 @@ pub struct PlanSession {
     pub device: Option<String>,
 }
 
+/// One thing the plan does to the queue, `after_s` seconds after the named session started (`on` = `start`, the
+/// default) or stopped (`on` = `stop`).
+#[derive(Debug, Clone, Deserialize)]
+pub struct PlanAction {
+    /// Title of the session the time is relative to.
+    pub session: String,
+    #[serde(default)]
+    pub on: Option<String>,
+    #[serde(default)]
+    pub after_s: u64,
+    /// `lock_language` (needs `lang`: a language, or null/absent to return to detection, at the recorder's current
+    /// audio time), `queue_pause`, `queue_resume`, or `import_session` (needs `from`: the title of a finished
+    /// session; its folder is copied beside the recordings and the copy is imported).
+    #[serde(rename = "do")]
+    pub kind: String,
+    #[serde(default)]
+    pub lang: Option<String>,
+    #[serde(default)]
+    pub from: Option<String>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct DayPlan {
     pub sessions: Vec<PlanSession>,
+    #[serde(default)]
+    pub actions: Vec<PlanAction>,
+}
+
+/// When each session of the plan started and stopped, and where its folder is.
+#[derive(Default)]
+struct Events {
+    started: BTreeMap<String, Instant>,
+    stopped: BTreeMap<String, Instant>,
+    dirs: BTreeMap<String, PathBuf>,
 }
 
 /// Starts the day-plan thread if `WB_GATE_DAY_PLAN` is set.
@@ -103,6 +151,22 @@ fn run_day(app: &AppHandle, path: &std::path::Path) -> Result<(), String> {
     }
     // The queue starts in `setup`; give its monitor a moment to bring up the planner.
     let t0 = Instant::now();
+    let events: Arc<Mutex<Events>> = Arc::new(Mutex::new(Events::default()));
+    let outcomes: Arc<Mutex<Vec<serde_json::Value>>> = Arc::new(Mutex::new(Vec::new()));
+    if !plan.actions.is_empty() {
+        let (app2, events2, outcomes2, actions) = (
+            app.clone(),
+            events.clone(),
+            outcomes.clone(),
+            plan.actions.clone(),
+        );
+        let spawned = std::thread::Builder::new()
+            .name("wb-gate-actions".into())
+            .spawn(move || run_actions(&app2, &events2, &outcomes2, actions));
+        if let Err(e) = spawned {
+            return Err(format!("the plan's action thread did not start: {e}"));
+        }
+    }
     let mut done: Vec<serde_json::Value> = Vec::new();
     for s in &plan.sessions {
         let due = Duration::from_secs(s.at_s);
@@ -127,6 +191,11 @@ fn run_day(app: &AppHandle, path: &std::path::Path) -> Result<(), String> {
         let started_ist = wb_recorder::util::rfc3339(wb_recorder::util::now_ist());
         let info = crate::syscheck::start_with_mode(app, request)?;
         queue_log(&format!("DAY: started {:?} in {}", s.title, info.dir));
+        {
+            let mut ev = plock(&events);
+            ev.started.insert(s.title.clone(), Instant::now());
+            ev.dirs.insert(s.title.clone(), PathBuf::from(&info.dir));
+        }
         let end = Instant::now() + Duration::from_secs(s.duration_s);
         while Instant::now() < end {
             std::thread::sleep(Duration::from_millis(500));
@@ -134,6 +203,9 @@ fn run_day(app: &AppHandle, path: &std::path::Path) -> Result<(), String> {
         let stopped = recording::stop_blocking(app)?;
         let stopped_ist = wb_recorder::util::rfc3339(wb_recorder::util::now_ist());
         queue_log(&format!("DAY: stopped {:?}", s.title));
+        plock(&events)
+            .stopped
+            .insert(s.title.clone(), Instant::now());
         done.push(serde_json::json!({
             "title": s.title,
             "dir": info.dir,
@@ -153,6 +225,7 @@ fn run_day(app: &AppHandle, path: &std::path::Path) -> Result<(), String> {
     let report = serde_json::json!({
         "sessions": done,
         "forced_hybrid": force_hybrid(),
+        "actions": plock(&outcomes).clone(),
         "queue": super::report_json(app),
         "snapshot": lock(&st.snapshot).clone(),
     });
@@ -161,6 +234,163 @@ fn run_day(app: &AppHandle, path: &std::path::Path) -> Result<(), String> {
     }
     queue_log("DAY: report written; exiting");
     app.exit(0);
+    Ok(())
+}
+
+fn plock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// Fires each action when its reference moment has come. Every outcome (done, or the error the command gave) is
+/// recorded; a failing action never stops the plan.
+fn run_actions(
+    app: &AppHandle,
+    events: &Mutex<Events>,
+    outcomes: &Mutex<Vec<serde_json::Value>>,
+    actions: Vec<PlanAction>,
+) {
+    let mut pending: Vec<PlanAction> = actions;
+    while !pending.is_empty() {
+        std::thread::sleep(Duration::from_millis(250));
+        let due: Vec<usize> = {
+            let ev = plock(events);
+            pending
+                .iter()
+                .enumerate()
+                .filter(|(_, a)| {
+                    let table = if a.on.as_deref() == Some("stop") {
+                        &ev.stopped
+                    } else {
+                        &ev.started
+                    };
+                    table
+                        .get(&a.session)
+                        .is_some_and(|t| t.elapsed() >= Duration::from_secs(a.after_s))
+                })
+                .map(|(i, _)| i)
+                .collect()
+        };
+        for i in due.into_iter().rev() {
+            let action = pending.remove(i);
+            let (result, detail) = fire(app, events, &action);
+            let at = wb_recorder::util::rfc3339(wb_recorder::util::now_ist());
+            queue_log(&format!(
+                "ACTION {} on {:?} -> {}{}",
+                action.kind,
+                action.session,
+                match &result {
+                    Ok(()) => "ok".to_owned(),
+                    Err(e) => format!("ERROR {e}"),
+                },
+                detail
+                    .as_ref()
+                    .map(|d| format!(" ({d})"))
+                    .unwrap_or_default()
+            ));
+            plock(outcomes).push(serde_json::json!({
+                "do": action.kind,
+                "session": action.session,
+                "lang": action.lang,
+                "at_ist": at,
+                "ok": result.is_ok(),
+                "error": result.err(),
+                "detail": detail,
+            }));
+        }
+    }
+}
+
+fn fire(
+    app: &AppHandle,
+    events: &Mutex<Events>,
+    action: &PlanAction,
+) -> (Result<(), String>, Option<String>) {
+    match action.kind.as_str() {
+        "queue_pause" => (super::pause_now(app, None), None),
+        "queue_resume" => (super::resume_now(app, None), None),
+        "lock_language" => {
+            let st = app.state::<AppState>();
+            let audio_ms = lock(&st.snapshot)
+                .recorder
+                .as_ref()
+                .map_or(0, |r| r.audio_ms);
+            (
+                super::lock_language_now(app, action.lang.as_deref(), audio_ms),
+                Some(format!("lang {:?} at audio {audio_ms} ms", action.lang)),
+            )
+        }
+        "import_session" => {
+            let Some(from) = action.from.as_deref() else {
+                return (Err("import_session needs `from`".into()), None);
+            };
+            let Some(dir) = plock(events).dirs.get(from).cloned() else {
+                return (
+                    Err(format!("no session titled {from:?} was recorded")),
+                    None,
+                );
+            };
+            // A copy under another name stands for a folder carried over from another computer.
+            let copy_root = std::env::var("WB_GATE_ROOT")
+                .map(PathBuf::from)
+                .unwrap_or_else(|_| std::env::temp_dir())
+                .join("import-source");
+            let name = format!(
+                "{}-copy",
+                dir.file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("session")
+            );
+            let copy = copy_root.join(&name);
+            if let Err(e) = copy_session(&dir, &copy) {
+                return (Err(format!("copying {}: {e}", dir.display())), None);
+            }
+            match super::import_now(app, &copy.to_string_lossy()) {
+                Ok(imported) => (Ok(()), Some(format!("imported as {imported}"))),
+                Err(e) => (Err(e), Some(format!("source {}", copy.display()))),
+            }
+        }
+        other => (Err(format!("unknown action {other:?}")), None),
+    }
+}
+
+/// Copies a finished session's recording (`session.json`, `parts.json`, `audio/`, `start-options.json`) and leaves
+/// out what the queue made (`work/`, the transcript files), as a folder from another computer would arrive.
+fn copy_session(from: &std::path::Path, to: &std::path::Path) -> std::io::Result<()> {
+    if to.exists() {
+        std::fs::remove_dir_all(to)?;
+    }
+    std::fs::create_dir_all(to)?;
+    for entry in std::fs::read_dir(from)? {
+        let entry = entry?;
+        let name = entry.file_name();
+        let name_s = name.to_string_lossy();
+        if name_s == "work"
+            || name_s.starts_with("transcript.db")
+            || name_s.starts_with("post-")
+            || name_s == "language-log.jsonl"
+        {
+            continue;
+        }
+        let path = entry.path();
+        if entry.file_type()?.is_dir() {
+            copy_dir(&path, &to.join(&name))?;
+        } else {
+            std::fs::copy(&path, to.join(&name))?;
+        }
+    }
+    Ok(())
+}
+
+fn copy_dir(from: &std::path::Path, to: &std::path::Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(to)?;
+    for entry in std::fs::read_dir(from)? {
+        let entry = entry?;
+        if entry.file_type()?.is_dir() {
+            copy_dir(&entry.path(), &to.join(entry.file_name()))?;
+        } else {
+            std::fs::copy(entry.path(), to.join(entry.file_name()))?;
+        }
+    }
     Ok(())
 }
 
@@ -180,5 +410,50 @@ mod tests {
         assert_eq!(plan.sessions.len(), 2);
         assert!(plan.sessions[0].languages.is_none());
         assert_eq!(plan.sessions[1].script.as_deref(), Some("nastaliq"));
+        assert!(plan.actions.is_empty());
+    }
+
+    #[test]
+    fn a_day_plan_reads_its_actions() {
+        let plan: DayPlan = serde_json::from_str(
+            r#"{"sessions":[{"title":"A","at_s":0,"duration_s":60}],
+                "actions":[{"session":"A","after_s":30,"do":"lock_language","lang":"hi"},
+                           {"session":"A","on":"stop","do":"import_session","from":"A"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(plan.actions.len(), 2);
+        assert_eq!(plan.actions[0].kind, "lock_language");
+        assert_eq!(plan.actions[0].on, None);
+        assert_eq!(plan.actions[1].on.as_deref(), Some("stop"));
+        assert_eq!(plan.actions[1].after_s, 0);
+    }
+
+    #[test]
+    fn a_copied_session_leaves_out_what_the_queue_made() {
+        let tmp = std::env::temp_dir().join(format!("wb-copy-{}", std::process::id()));
+        let from = tmp.join("from");
+        std::fs::create_dir_all(from.join("audio")).unwrap();
+        std::fs::create_dir_all(from.join("work/post-1-unit-0000")).unwrap();
+        for f in [
+            "session.json",
+            "parts.json",
+            "transcript.db",
+            "post-1.jsonl",
+            "language-log.jsonl",
+            "audio/part-0001.wav",
+            "work/post-1-unit-0000/engine.log",
+        ] {
+            std::fs::write(from.join(f), b"x").unwrap();
+        }
+        let to = tmp.join("to");
+        copy_session(&from, &to).unwrap();
+        assert!(to.join("session.json").exists());
+        assert!(to.join("parts.json").exists());
+        assert!(to.join("audio/part-0001.wav").exists());
+        assert!(!to.join("work").exists());
+        assert!(!to.join("transcript.db").exists());
+        assert!(!to.join("post-1.jsonl").exists());
+        assert!(!to.join("language-log.jsonl").exists());
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 }

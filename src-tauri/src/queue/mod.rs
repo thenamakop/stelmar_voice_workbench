@@ -50,6 +50,19 @@ const NIGHT_CHECK: Duration = Duration::from_secs(30);
 
 /// Milliseconds since the Unix epoch. In a gate build `WB_GATE_CLOCK_OFFSET_S` moves it so a short test can
 /// stand for the day's programme (10:00 IST); every other build reads the system clock and nothing else.
+/// Gate builds may shorten the night pass's 30-minute wait (`WB_GATE_NIGHT_WAIT_S`); every other build waits 30
+/// minutes.
+fn night_wait_shift_ms() -> u64 {
+    #[cfg(feature = "gate-hooks")]
+    {
+        gate_hooks::night_wait_shift_ms()
+    }
+    #[cfg(not(feature = "gate-hooks"))]
+    {
+        0
+    }
+}
+
 pub fn clock_ms() -> u64 {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -219,6 +232,8 @@ pub struct Queue {
     open: Arc<Mutex<Vec<OpenSession>>>,
     slots_started: AtomicBool,
     feed: Arc<Feed>,
+    /// Read by the gate build's report (how often and how slowly the profile was read).
+    #[cfg(feature = "gate-hooks")]
     readings: Arc<AppReadings>,
 }
 
@@ -484,6 +499,7 @@ pub fn init(app: &AppHandle, feed: Arc<Feed>, parts_rx: Receiver<PartRecord>) {
         open,
         slots_started: AtomicBool::new(false),
         feed,
+        #[cfg(feature = "gate-hooks")]
         readings: readings.clone(),
     });
     app.manage(QueueState(queue.clone()));
@@ -654,7 +670,14 @@ impl Queue {
                 Some(_) => rolling_pending = true,
             }
         }
-        if candidates.is_empty() || !night::may_start(now, recording, rolling_pending, last_end) {
+        if candidates.is_empty()
+            || !night::may_start(
+                now.saturating_add(night_wait_shift_ms()),
+                recording,
+                rolling_pending,
+                last_end,
+            )
+        {
             return;
         }
         let mut audio = Vec::new();
@@ -935,39 +958,43 @@ pub async fn queue_snapshot(app: AppHandle) -> Result<QueueSnapshot, String> {
 
 #[tauri::command]
 pub async fn queue_pause(app: AppHandle, job: Option<i64>) -> Result<(), String> {
-    blocking("queue_pause", move || {
-        let q = queue_of(&app)?;
-        match job {
-            Some(id) => {
-                q.with_job(id, |s| s.set_paused(id, true, clock_ms()))?;
-                q.manager.cancel_running("the operator paused a job");
-            }
-            None => {
-                q.core.set_operator_paused(true);
-                q.manager.cancel_running("the operator paused the queue");
-            }
+    blocking("queue_pause", move || pause_now(&app, job)).await
+}
+
+/// What the `queue_pause` command does (the gate hook runs it too).
+pub(crate) fn pause_now(app: &AppHandle, job: Option<i64>) -> Result<(), String> {
+    let q = queue_of(app)?;
+    match job {
+        Some(id) => {
+            q.with_job(id, |s| s.set_paused(id, true, clock_ms()))?;
+            q.manager.cancel_running("the operator paused a job");
         }
-        q.core.push_log("the operator paused processing".into());
-        Ok(())
-    })
-    .await
+        None => {
+            q.core.set_operator_paused(true);
+            q.manager.cancel_running("the operator paused the queue");
+        }
+    }
+    q.core.push_log("the operator paused processing".into());
+    Ok(())
 }
 
 #[tauri::command]
 pub async fn queue_resume(app: AppHandle, job: Option<i64>) -> Result<(), String> {
-    blocking("queue_resume", move || {
-        let q = queue_of(&app)?;
-        match job {
-            Some(id) => {
-                q.with_job(id, |s| s.set_paused(id, false, clock_ms()))?;
-            }
-            None => q.core.set_operator_paused(false),
+    blocking("queue_resume", move || resume_now(&app, job)).await
+}
+
+/// What the `queue_resume` command does (the gate hook runs it too).
+pub(crate) fn resume_now(app: &AppHandle, job: Option<i64>) -> Result<(), String> {
+    let q = queue_of(app)?;
+    match job {
+        Some(id) => {
+            q.with_job(id, |s| s.set_paused(id, false, clock_ms()))?;
         }
-        q.core.push_log("the operator resumed processing".into());
-        q.manager.poke();
-        Ok(())
-    })
-    .await
+        None => q.core.set_operator_paused(false),
+    }
+    q.core.push_log("the operator resumed processing".into());
+    q.manager.poke();
+    Ok(())
 }
 
 #[tauri::command]
@@ -1005,59 +1032,70 @@ pub async fn set_language_lock(
     audio_ms: u64,
 ) -> Result<(), String> {
     blocking("set_language_lock", move || {
-        let st = app.state::<AppState>();
-        if !st.recording.load(Ordering::SeqCst) {
-            return Err("A language can be locked only while a session is recording.".into());
-        }
-        let (dir, languages) = {
-            let snap = lock(&st.snapshot);
-            let s = snap.session.as_ref().ok_or("No session is open.")?;
-            (PathBuf::from(&s.dir), s.expected_languages.clone())
-        };
-        if let Some(l) = lang.as_deref()
-            && !langlock::accepted(l, &languages)
-        {
-            return Err(format!("{l} is not one of this session's languages."));
-        }
-        langlock::append(&dir, audio_ms, lang.as_deref(), &ist_text())
-            .map_err(|e| format!("The language change could not be saved: {e}"))?;
-        tracing::info!(audio_ms, lang = ?lang, "language lock changed");
-        Ok(())
+        lock_language_now(&app, lang.as_deref(), audio_ms)
     })
     .await
 }
 
+/// What the `set_language_lock` command does (the gate hook runs it too).
+pub(crate) fn lock_language_now(
+    app: &AppHandle,
+    lang: Option<&str>,
+    audio_ms: u64,
+) -> Result<(), String> {
+    let st = app.state::<AppState>();
+    if !st.recording.load(Ordering::SeqCst) {
+        return Err("A language can be locked only while a session is recording.".into());
+    }
+    let (dir, languages) = {
+        let snap = lock(&st.snapshot);
+        let s = snap.session.as_ref().ok_or("No session is open.")?;
+        (PathBuf::from(&s.dir), s.expected_languages.clone())
+    };
+    if let Some(l) = lang
+        && !langlock::accepted(l, &languages)
+    {
+        return Err(format!("{l} is not one of this session's languages."));
+    }
+    langlock::append(&dir, audio_ms, lang, &ist_text())
+        .map_err(|e| format!("The language change could not be saved: {e}"))?;
+    tracing::info!(audio_ms, lang = ?lang, "language lock changed");
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn import_session(app: AppHandle, source: String) -> Result<String, String> {
-    blocking("import_session", move || {
-        let q = queue_of(&app)?;
-        let profile = q
-            .profile()
-            .ok_or("Run the system check first: this computer's abilities are not known yet.")?;
-        wb_queue::import::refuse_on_record_only(profile.record_only).map_err(|e| e.to_string())?;
-        let src = PathBuf::from(&source);
-        let name = src
-            .file_name()
-            .and_then(|n| n.to_str())
-            .ok_or("The folder has no name.")?
-            .to_owned();
-        let root = lock(&app.state::<AppState>().settings).recordings_root();
-        let dest = root.join(&name);
-        wb_queue::import::import_session(&src, &dest).map_err(|e| e.to_string())?;
-        // The imported session is processed like a recording that has ended.
-        let expected = read_expected_languages(&dest);
-        let languages = job_languages(&expected.0, expected.1.as_deref());
-        q.register(dest.clone(), &languages, &profile)?;
-        let mut open = plock(&q.open);
-        if let Some(s) = open.iter_mut().find(|s| s.dir == dest) {
-            s.finished = false;
-        }
-        drop(open);
-        q.submit_parts(Some(&dest.to_string_lossy()));
-        q.manager.poke();
-        Ok(name)
-    })
-    .await
+    blocking("import_session", move || import_now(&app, &source)).await
+}
+
+/// What the `import_session` command does (the gate hook runs it too).
+pub(crate) fn import_now(app: &AppHandle, source: &str) -> Result<String, String> {
+    let q = queue_of(app)?;
+    let profile = q
+        .profile()
+        .ok_or("Run the system check first: this computer's abilities are not known yet.")?;
+    wb_queue::import::refuse_on_record_only(profile.record_only).map_err(|e| e.to_string())?;
+    let src = PathBuf::from(source);
+    let name = src
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or("The folder has no name.")?
+        .to_owned();
+    let root = lock(&app.state::<AppState>().settings).recordings_root();
+    let dest = root.join(&name);
+    wb_queue::import::import_session(&src, &dest).map_err(|e| e.to_string())?;
+    // The imported session is processed like a recording that has ended.
+    let expected = read_expected_languages(&dest);
+    let languages = job_languages(&expected.0, expected.1.as_deref());
+    q.register(dest.clone(), &languages, &profile)?;
+    let mut open = plock(&q.open);
+    if let Some(s) = open.iter_mut().find(|s| s.dir == dest) {
+        s.finished = false;
+    }
+    drop(open);
+    q.submit_parts(Some(&dest.to_string_lossy()));
+    q.manager.poke();
+    Ok(name)
 }
 
 /// `expected_languages` and the script from a session folder's `start-options.json` (a folder from another

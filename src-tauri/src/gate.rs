@@ -53,6 +53,7 @@ fn active() -> bool {
         "WB_GATE_RECOVERY",
         "WB_GATE_STOP_FILE",
         "WB_GATE_CHECK",
+        "WB_GATE_DAY_PLAN",
     ]
     .iter()
     .any(|k| var(k).is_some())
