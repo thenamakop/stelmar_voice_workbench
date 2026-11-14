@@ -72,7 +72,7 @@ $g = Get-Content -LiteralPath (Join-Path $here '..\gates\recorder-gate.ps1') -Ra
 Check 'recorder-gate.ps1 has -Sample and -DiagnosticNote' ($g -match '\[switch\]\$Sample' -and $g -match '\[string\]\$DiagnosticNote')
 Check 'a diagnostic run says DIAGNOSTIC, NOT A VERDICT in the evidence' ($g -match 'verdict: DIAGNOSTIC, NOT A VERDICT')
 Check 'a diagnostic run never exits with the gate''s FAIL code' ($g -match 'if \(\$DiagnosticNote\) \{ exit 0 \}')
-Check 'the sampler is stopped by the cleanup after an error too' ($g -match 'Stop-WbRigLeftovers -Process @\(\$emu, \$play, \$refProc, \$hostStress, \$sampler\)')
+Check 'the sampler is stopped by the cleanup after an error too' ($g -match 'Stop-WbRigLeftovers -Process @\(\$emu, \$play, \$refProc, (\$ref2Proc, )?\$hostStress, \$sampler\)')
 Check 'machine state (uptime, power plan, mains) is written for every run' ($g -match 'Get-WbMachineStateLines' -and $g -match 'MachineState')
 
 if ($fails) { Write-Host "$fails failed"; exit 1 }

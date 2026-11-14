@@ -395,6 +395,290 @@ impl Drop for ComThread {
     }
 }
 
+// ---- Raw WASAPI capture (the second reference) and endpoint mute / volume ----------------------
+
+/// Which side of the machine an endpoint is on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Flow {
+    Capture,
+    Render,
+}
+
+/// An active audio endpoint whose friendly name contains `name_part` (case-insensitive).
+fn find_endpoint(
+    flow: Flow,
+    name_part: &str,
+) -> Result<(windows::Win32::Media::Audio::IMMDevice, String)> {
+    use windows::Win32::Devices::FunctionDiscovery::PKEY_Device_FriendlyName;
+    use windows::Win32::Media::Audio::{
+        DEVICE_STATE_ACTIVE, IMMDeviceEnumerator, MMDeviceEnumerator, eCapture, eRender,
+    };
+    use windows::Win32::System::Com::{CLSCTX_ALL, CoCreateInstance, STGM_READ};
+
+    let needle = name_part.to_lowercase();
+    // SAFETY: creates the system's device enumerator; COM is initialised on this thread by the caller.
+    let enumerator: IMMDeviceEnumerator =
+        unsafe { CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL) }
+            .context("MMDeviceEnumerator")?;
+    let data_flow = if flow == Flow::Capture {
+        eCapture
+    } else {
+        eRender
+    };
+    // SAFETY: `enumerator` is live; the flags are defined constants.
+    let devices = unsafe { enumerator.EnumAudioEndpoints(data_flow, DEVICE_STATE_ACTIVE) }
+        .context("EnumAudioEndpoints")?;
+    // SAFETY: `devices` is a live collection.
+    let count = unsafe { devices.GetCount() }?;
+    for i in 0..count {
+        // SAFETY: `i` is below the collection's count.
+        let device = unsafe { devices.Item(i) }?;
+        // SAFETY: `device` is live; read-only access to its properties.
+        let store = unsafe { device.OpenPropertyStore(STGM_READ) }?;
+        // SAFETY: `store` is live and the key is a valid static PROPERTYKEY.
+        let name = unsafe { store.GetValue(&PKEY_Device_FriendlyName) }
+            .map(|v| v.to_string())
+            .unwrap_or_default();
+        if name.to_lowercase().contains(&needle) {
+            return Ok((device, name));
+        }
+    }
+    bail!("no active audio endpoint whose name contains {name_part:?}")
+}
+
+fn endpoint_volume(
+    device: &windows::Win32::Media::Audio::IMMDevice,
+) -> Result<windows::Win32::Media::Audio::Endpoints::IAudioEndpointVolume> {
+    use windows::Win32::System::Com::CLSCTX_ALL;
+    // SAFETY: `device` is live; IAudioEndpointVolume is a documented interface of every endpoint.
+    unsafe { device.Activate(CLSCTX_ALL, None) }.context("IAudioEndpointVolume")
+}
+
+/// Reads (and, with `set`, changes) an endpoint's mute switch. Returns (endpoint name, muted now).
+pub fn endpoint_mute(flow: Flow, name_part: &str, set: Option<bool>) -> Result<(String, bool)> {
+    let _com = ComThread::start()?;
+    let (device, name) = find_endpoint(flow, name_part)?;
+    let vol = endpoint_volume(&device)?;
+    if let Some(m) = set {
+        // SAFETY: `vol` is live; a null event-context GUID is allowed.
+        unsafe { vol.SetMute(m, std::ptr::null()) }.context("SetMute")?;
+    }
+    // SAFETY: `vol` is live.
+    let muted = unsafe { vol.GetMute() }.context("GetMute")?;
+    Ok((name, muted.as_bool()))
+}
+
+/// Reads (and, with `set`, changes) an endpoint's master volume, 0.0 to 1.0. Returns (name, level now).
+pub fn endpoint_level(flow: Flow, name_part: &str, set: Option<f32>) -> Result<(String, f32)> {
+    let _com = ComThread::start()?;
+    let (device, name) = find_endpoint(flow, name_part)?;
+    let vol = endpoint_volume(&device)?;
+    if let Some(l) = set {
+        // SAFETY: `vol` is live; a null event-context GUID is allowed; the level is clamped to 0..1.
+        unsafe { vol.SetMasterVolumeLevelScalar(l.clamp(0.0, 1.0), std::ptr::null()) }
+            .context("SetMasterVolumeLevelScalar")?;
+    }
+    // SAFETY: `vol` is live.
+    let level =
+        unsafe { vol.GetMasterVolumeLevelScalar() }.context("GetMasterVolumeLevelScalar")?;
+    Ok((name, level))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SampleKind {
+    F32,
+    I16,
+    I24,
+    I32,
+}
+
+/// Turns one packet of little-endian PCM bytes into f32 samples in -1.0..1.0.
+fn convert_samples(kind: SampleKind, bytes: &[u8], out: &mut [f32]) {
+    match kind {
+        SampleKind::F32 => {
+            for (o, c) in out.iter_mut().zip(bytes.as_chunks::<4>().0) {
+                *o = f32::from_le_bytes(*c);
+            }
+        }
+        SampleKind::I16 => {
+            for (o, c) in out.iter_mut().zip(bytes.as_chunks::<2>().0) {
+                *o = f32::from(i16::from_le_bytes(*c)) / 32_768.0;
+            }
+        }
+        SampleKind::I24 => {
+            for (o, c) in out.iter_mut().zip(bytes.as_chunks::<3>().0) {
+                let v = i32::from_le_bytes([0, c[0], c[1], c[2]]) >> 8;
+                *o = v as f32 / 8_388_608.0;
+            }
+        }
+        SampleKind::I32 => {
+            for (o, c) in out.iter_mut().zip(bytes.as_chunks::<4>().0) {
+                *o = i32::from_le_bytes(*c) as f32 / 2_147_483_648.0;
+            }
+        }
+    }
+}
+
+/// One packet from the capture client, as interleaved 32-bit float samples.
+pub struct Packet {
+    pub samples: Vec<f32>,
+    pub frames: u32,
+    /// AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY: Windows says data was lost before this packet.
+    pub discontinuity: bool,
+}
+
+/// Raw WASAPI shared-mode, event-driven capture of one endpoint: no cpal in the path. Use it on the
+/// thread that opened it.
+pub struct WasapiCapture {
+    _com: ComThread,
+    client: windows::Win32::Media::Audio::IAudioClient,
+    capture: windows::Win32::Media::Audio::IAudioCaptureClient,
+    event: windows::Win32::Foundation::HANDLE,
+    pub device_name: String,
+    pub sample_rate: u32,
+    pub channels: u16,
+    kind: SampleKind,
+    block_align: usize,
+}
+
+impl WasapiCapture {
+    pub fn open(name_part: &str) -> Result<Self> {
+        use windows::Win32::Media::Audio::{
+            AUDCLNT_SHAREMODE_SHARED, IAudioCaptureClient, IAudioClient, WAVEFORMATEX,
+            WAVEFORMATEXTENSIBLE,
+        };
+        use windows::Win32::System::Com::{CLSCTX_ALL, CoTaskMemFree};
+        use windows::Win32::System::Threading::CreateEventW;
+        use windows::core::PCWSTR;
+
+        // AUDCLNT_STREAMFLAGS_EVENTCALLBACK
+        const EVENTCALLBACK: u32 = 0x0004_0000;
+        let com = ComThread::start()?;
+        let (device, device_name) = find_endpoint(Flow::Capture, name_part)?;
+        // SAFETY: `device` is live; IAudioClient is a documented interface of every endpoint.
+        let client: IAudioClient =
+            unsafe { device.Activate(CLSCTX_ALL, None) }.context("IAudioClient")?;
+        // SAFETY: `client` is live; the call returns a CoTaskMem-allocated format that is freed below.
+        let pwfx: *mut WAVEFORMATEX = unsafe { client.GetMixFormat() }.context("GetMixFormat")?;
+        if pwfx.is_null() {
+            bail!("GetMixFormat returned no format");
+        }
+        // SAFETY: `pwfx` is a valid WAVEFORMATEX returned by GetMixFormat; read_unaligned copes with
+        // the packed layout.
+        let wf = unsafe { std::ptr::read_unaligned(pwfx) };
+        let tag = wf.wFormatTag;
+        let bits = wf.wBitsPerSample;
+        let rate = wf.nSamplesPerSec;
+        let channels = wf.nChannels;
+        let block_align = usize::from(wf.nBlockAlign);
+        let float = if tag == 0xFFFE {
+            // SAFETY: a format tagged WAVE_FORMAT_EXTENSIBLE is a WAVEFORMATEXTENSIBLE in memory.
+            let ext = unsafe { std::ptr::read_unaligned(pwfx.cast::<WAVEFORMATEXTENSIBLE>()) };
+            let sub = ext.SubFormat;
+            // KSDATAFORMAT_SUBTYPE_IEEE_FLOAT starts with 0x00000003.
+            sub.data1 == 3
+        } else {
+            tag == 3
+        };
+        let kind = match (float, bits) {
+            (true, 32) => SampleKind::F32,
+            (false, 16) => SampleKind::I16,
+            (false, 24) => SampleKind::I24,
+            (false, 32) => SampleKind::I32,
+            _ => {
+                // SAFETY: frees the format GetMixFormat allocated; not used afterwards.
+                unsafe { CoTaskMemFree(Some(pwfx.cast_const().cast())) };
+                bail!("unsupported capture format: tag {tag}, {bits} bits")
+            }
+        };
+        // SAFETY: `client` is live and `pwfx` is its own valid mix format; 100 ms buffer, shared mode,
+        // event callback.
+        let init = unsafe {
+            client.Initialize(
+                AUDCLNT_SHAREMODE_SHARED,
+                EVENTCALLBACK,
+                1_000_000,
+                0,
+                pwfx.cast_const(),
+                None,
+            )
+        };
+        // SAFETY: frees the format GetMixFormat allocated; Initialize has copied what it needs.
+        unsafe { CoTaskMemFree(Some(pwfx.cast_const().cast())) };
+        init.context("IAudioClient::Initialize")?;
+        // SAFETY: creates an unnamed auto-reset event; no security attributes.
+        let event =
+            unsafe { CreateEventW(None, false, false, PCWSTR::null()) }.context("CreateEventW")?;
+        // SAFETY: `client` is initialised for event callbacks; `event` is a live event handle.
+        unsafe { client.SetEventHandle(event) }.context("SetEventHandle")?;
+        // SAFETY: `client` is initialised.
+        let capture: IAudioCaptureClient =
+            unsafe { client.GetService() }.context("IAudioCaptureClient")?;
+        // SAFETY: `client` is initialised and has its event handle.
+        unsafe { client.Start() }.context("IAudioClient::Start")?;
+        Ok(Self {
+            _com: com,
+            client,
+            capture,
+            event,
+            device_name,
+            sample_rate: rate,
+            channels,
+            kind,
+            block_align,
+        })
+    }
+
+    /// Waits up to `timeout_ms` for data, then returns the next packet, or None when there is none.
+    pub fn next_packet(&mut self, timeout_ms: u32) -> Result<Option<Packet>> {
+        use windows::Win32::System::Threading::WaitForSingleObject;
+        // SAFETY: `event` is a live event handle owned by self.
+        let _ = unsafe { WaitForSingleObject(self.event, timeout_ms) };
+        // SAFETY: `capture` is live.
+        let pending = unsafe { self.capture.GetNextPacketSize() }.context("GetNextPacketSize")?;
+        if pending == 0 {
+            return Ok(None);
+        }
+        let mut data: *mut u8 = std::ptr::null_mut();
+        let mut frames = 0u32;
+        let mut flags = 0u32;
+        // SAFETY: the three out-pointers point to live locals; the position outputs are not wanted.
+        unsafe {
+            self.capture
+                .GetBuffer(&mut data, &mut frames, &mut flags, None, None)
+        }
+        .context("GetBuffer")?;
+        // AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY = 1, AUDCLNT_BUFFERFLAGS_SILENT = 2.
+        let discontinuity = flags & 1 != 0;
+        let silent = flags & 2 != 0;
+        let n = frames as usize * usize::from(self.channels);
+        let mut samples = vec![0.0f32; n];
+        if !silent && !data.is_null() {
+            // SAFETY: GetBuffer returned `frames` frames of `block_align` bytes at `data`, valid until
+            // ReleaseBuffer below; the bytes are copied out before then.
+            let bytes =
+                unsafe { std::slice::from_raw_parts(data, frames as usize * self.block_align) };
+            convert_samples(self.kind, bytes, &mut samples);
+        }
+        // SAFETY: releases exactly the `frames` frames GetBuffer returned.
+        unsafe { self.capture.ReleaseBuffer(frames) }.context("ReleaseBuffer")?;
+        Ok(Some(Packet {
+            samples,
+            frames,
+            discontinuity,
+        }))
+    }
+}
+
+impl Drop for WasapiCapture {
+    fn drop(&mut self) {
+        // SAFETY: `client` is live; stopping a stream that is already stopped is harmless.
+        let _ = unsafe { self.client.Stop() };
+        // SAFETY: `event` was created by CreateEventW in `open` and is closed once, here.
+        let _ = unsafe { windows::Win32::Foundation::CloseHandle(self.event) };
+    }
+}
+
 /// Logical processors in this process's affinity mask (what a job limits it to).
 pub fn affinity_count() -> Option<u32> {
     affinity_mask().map(usize::count_ones)
@@ -473,4 +757,34 @@ pub fn mf_decode_ms(path: &Path) -> Result<u64> {
         }
     }
     Ok(u64::try_from(total_100ns / 10_000).unwrap_or(0))
+}
+
+#[cfg(test)]
+mod wasapi_tests {
+    use super::*;
+
+    #[test]
+    fn converts_16_bit_samples() {
+        let bytes = [0x00, 0x40, 0x00, 0xC0]; // 16384 and -16384
+        let mut out = [0.0f32; 2];
+        convert_samples(SampleKind::I16, &bytes, &mut out);
+        assert!((out[0] - 0.5).abs() < 1e-6 && (out[1] + 0.5).abs() < 1e-6);
+    }
+
+    #[test]
+    fn converts_24_bit_samples() {
+        let bytes = [0x00, 0x00, 0x40, 0x00, 0x00, 0xC0]; // +0.5 and -0.5
+        let mut out = [0.0f32; 2];
+        convert_samples(SampleKind::I24, &bytes, &mut out);
+        assert!((out[0] - 0.5).abs() < 1e-6 && (out[1] + 0.5).abs() < 1e-6);
+    }
+
+    #[test]
+    fn converts_32_bit_int_and_float_samples() {
+        let mut out = [0.0f32; 1];
+        convert_samples(SampleKind::I32, &0x4000_0000i32.to_le_bytes(), &mut out);
+        assert!((out[0] - 0.5).abs() < 1e-6);
+        convert_samples(SampleKind::F32, &0.25f32.to_le_bytes(), &mut out);
+        assert!((out[0] - 0.25).abs() < 1e-9);
+    }
 }

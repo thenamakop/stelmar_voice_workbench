@@ -11,6 +11,10 @@
 //! wb-testbench compare  --app SESSION --reference DIR [--reference-signal-start-ms N] [--app-signal-start-ms N] [--reference-tail ignore] [--report R.json]   fidelity: app vs reference
 //! wb-testbench capture  --device "CABLE Output" --dir DIR --stop-file F [--go-file G] [--report R.json]
 //!                       independent reference capture (to tell source-chain glitches from the recorder's)
+//! wb-testbench capture-wasapi --device "Microphone" --dir DIR --stop-file F [--go-file G] [--report R.json]
+//!                       the same capture through raw WASAPI (no cpal): the second reference
+//! wb-testbench mute    --device "Microphone" [--flow capture|render] [--state on|off]   read or set an endpoint's mute (prints before and after)
+//! wb-testbench volume  --device "Speakers" [--flow capture|render] [--level 0.0-1.0]   read or set an endpoint's master volume
 //! wb-testbench scan-repeats --session DIR [--report R.json]   run the recorder's repeated-block detector over a recorded session
 //! wb-testbench stress   [--threads N] [--gpu "UHD"] [--seconds N] [--stop-file F] [--report R.json]
 //! ```
@@ -364,6 +368,77 @@ fn run() -> Result<()> {
             )?;
             output(&args, &report)
         }
+        "capture-wasapi" => {
+            #[cfg(windows)]
+            {
+                let report = reference::capture_wasapi(
+                    args.get("device")?,
+                    Path::new(args.get("dir")?),
+                    Path::new(args.get("stop-file")?),
+                    args.opts.get("go-file").map(Path::new),
+                )?;
+                output(&args, &report)
+            }
+            #[cfg(not(windows))]
+            bail!("capture-wasapi needs Windows")
+        }
+        "mute" => {
+            #[cfg(windows)]
+            {
+                let flow = endpoint_flow(&args)?;
+                let set = match args.opts.get("state").map(String::as_str) {
+                    None => None,
+                    Some("on") => Some(true),
+                    Some("off") => Some(false),
+                    Some(other) => bail!("--state is on or off, not {other}"),
+                };
+                let before = win::endpoint_mute(flow, args.get("device")?, None)?;
+                let after = match set {
+                    Some(_) => win::endpoint_mute(flow, args.get("device")?, set)?,
+                    None => before.clone(),
+                };
+                output(
+                    &args,
+                    &MuteReport {
+                        device: after.0,
+                        was_muted: before.1,
+                        muted: after.1,
+                    },
+                )
+            }
+            #[cfg(not(windows))]
+            bail!("mute needs Windows")
+        }
+        "volume" => {
+            #[cfg(windows)]
+            {
+                let flow = endpoint_flow(&args)?;
+                let set = match args.opts.get("level") {
+                    None => None,
+                    Some(v) => Some(
+                        v.parse::<f32>()
+                            .ok()
+                            .filter(|l| (0.0..=1.0).contains(l))
+                            .ok_or_else(|| anyhow!("--level is a number from 0 to 1, not {v}"))?,
+                    ),
+                };
+                let before = win::endpoint_level(flow, args.get("device")?, None)?;
+                let after = match set {
+                    Some(_) => win::endpoint_level(flow, args.get("device")?, set)?,
+                    None => before.clone(),
+                };
+                output(
+                    &args,
+                    &VolumeReport {
+                        device: after.0,
+                        was_level: before.1,
+                        level: after.1,
+                    },
+                )
+            }
+            #[cfg(not(windows))]
+            bail!("volume needs Windows")
+        }
         "sessions" => {
             #[cfg(windows)]
             {
@@ -389,6 +464,31 @@ fn run() -> Result<()> {
             output(&args, &report)
         }
         other => bail!("unknown command {other}"),
+    }
+}
+
+/// What `mute` reports: the state before and after, so a script can restore it.
+#[derive(Serialize)]
+struct MuteReport {
+    device: String,
+    was_muted: bool,
+    muted: bool,
+}
+
+/// What `volume` reports: the level (0 to 1) before and after, so a script can restore it.
+#[derive(Serialize)]
+struct VolumeReport {
+    device: String,
+    was_level: f32,
+    level: f32,
+}
+
+#[cfg(windows)]
+fn endpoint_flow(args: &Args) -> Result<win::Flow> {
+    match args.opts.get("flow").map_or("capture", String::as_str) {
+        "capture" => Ok(win::Flow::Capture),
+        "render" => Ok(win::Flow::Render),
+        other => bail!("--flow is capture or render, not {other}"),
     }
 }
 

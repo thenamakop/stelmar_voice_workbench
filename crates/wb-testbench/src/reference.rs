@@ -239,6 +239,103 @@ pub fn capture(
     })
 }
 
+/// The same capture as [`capture`], but through raw WASAPI (shared mode, event driven) instead of
+/// cpal, so a fault that both the app and the cpal reference share still shows up against a third,
+/// independent path. Same output layout; a DATA_DISCONTINUITY packet counts as an xrun.
+#[cfg(windows)]
+pub fn capture_wasapi(
+    device_part: &str,
+    dir: &Path,
+    stop_file: &Path,
+    go_file: Option<&Path>,
+) -> Result<ReferenceReport> {
+    crate::play::wait_for_go(go_file)?;
+    let mut cap = crate::win::WasapiCapture::open(device_part)?;
+    let rate = cap.sample_rate;
+    let channels = cap.channels;
+    std::fs::create_dir_all(dir.join(AUDIO_DIR))?;
+    let path = dir.join(AUDIO_DIR).join(parts::part_file_name(1));
+    let spec = hound::WavSpec {
+        channels,
+        sample_rate: rate,
+        bits_per_sample: 16,
+        sample_format: hound::SampleFormat::Int,
+    };
+    let mut w =
+        hound::WavWriter::create(&path, spec).with_context(|| path.display().to_string())?;
+    // The writer runs on its own thread so a slow disk cannot hold up the capture loop.
+    let (tx, rx) = std::sync::mpsc::channel::<Vec<f32>>();
+    let writer = std::thread::spawn(move || -> Result<(u64, hound::WavWriter<_>)> {
+        let mut samples = 0u64;
+        while let Ok(block) = rx.recv() {
+            for &s in &block {
+                w.write_sample(wb_recorder::wav::f32_to_i16(s))?;
+            }
+            samples += block.len() as u64;
+        }
+        Ok((samples, w))
+    });
+    let _guard = wb_recorder::sys::raise_recorder_priority();
+    let started_at = rfc3339(now_ist());
+    let affinity_mask = crate::play::affinity_hex();
+    let mut xrun_log = XrunLog::new(rate);
+    let mut callbacks = 0u64;
+    let mut frames = 0u64;
+    let mut result: Result<()> = Ok(());
+    loop {
+        let stop = stop_file.exists();
+        match cap.next_packet(50) {
+            Ok(Some(p)) => {
+                if p.discontinuity {
+                    xrun_log.push(callbacks, frames, wall_clock_ms(now_ist()));
+                }
+                callbacks += 1;
+                frames += u64::from(p.frames);
+                if tx.send(p.samples).is_err() {
+                    result = Err(anyhow!("the reference writer thread stopped"));
+                    break;
+                }
+            }
+            Ok(None) => {
+                if stop {
+                    break;
+                }
+            }
+            Err(e) => {
+                result = Err(e);
+                break;
+            }
+        }
+    }
+    let device = cap.device_name.clone();
+    drop(cap);
+    drop(tx);
+    let (_samples, w) = writer
+        .join()
+        .map_err(|_| anyhow!("the reference writer thread panicked"))??;
+    w.finalize()?;
+    result?;
+    let mut index = PartsIndex::new();
+    index.parts.push(parts::record_for_file(dir, 1, 0)?);
+    parts::save(dir, &index)?;
+    std::fs::write(
+        dir.join(XRUNS_FILE),
+        serde_json::to_vec_pretty(&xrun_log.events)?,
+    )?;
+    Ok(ReferenceReport {
+        device,
+        sample_rate: rate,
+        channels,
+        frames,
+        overrun_samples: 0,
+        xruns: xrun_log.events.len() as u64,
+        xrun_events: xrun_log.events,
+        started_at,
+        ended_at: rfc3339(now_ist()),
+        affinity_mask,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
