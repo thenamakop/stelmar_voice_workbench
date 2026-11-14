@@ -58,5 +58,9 @@ Check 'run-gates.ps1 blocks sleep and screen-off with SetThreadExecutionState' (
 $pc = Get-Content -LiteralPath (Join-Path $here '..\lib\PackCore.psm1') -Raw
 Check 'the render volume is put back on the playback side of the endpoint' ($pc -match "'--flow', 'render', '--level'")
 
+$sm = Get-Content -LiteralPath (Join-Path $here '..\gate-pack-native-smoke.ps1') -Raw
+Check 'the native smoke runs the laptop profile, writes no zip, never calls the ingest, and leaves the audible mic run out by default' ($sm -match "'-Profile', 'laptop'" -and $sm -match "'-NoZip'" -and $sm -notmatch 'ingest-gate-results' -and $sm -match 'if \(-not \$IncludeMic\) \{ \$skip.Add\(''mic-run''\)')
+Check 'the native smoke is ASCII only' (-not ($sm -cmatch '[^\x00-\x7F]'))
+
 if ($fails) { Write-Host "$fails failed"; exit 1 }
 Write-Host 'MicRun tests passed'

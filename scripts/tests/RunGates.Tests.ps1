@@ -88,6 +88,14 @@ try {
   $st = State
   Check 'a crashed gate is INVALID and the reason says it ended without a result' ($st.gates.crash.status -eq 'INVALID' -and $st.gates.crash.reason -match 'without a result')
 
+  # 4b. A comma list given with -File (-Only a,b / -Skip a,b) arrives as one string and is split.
+  Remove-Item -LiteralPath (Join-Path $tmp 'work') -Recurse -Force
+  New-FakeGate 'x1' 'PASS'; New-FakeGate 'x2' 'PASS'; New-FakeGate 'x3' 'PASS'
+  New-Manifest @((G 'x1' 'P1' 1), (G 'x2' 'P1' 2), (G 'x3' 'P1' 3))
+  $r5c = Run-Runner @('-Skip', 'x1,x2')
+  $st = State
+  Check 'a comma list in -Skip skips every gate in it' ($st.gates.x3.status -eq 'PASS' -and -not $st.gates.PSObject.Properties['x1'] -and -not $st.gates.PSObject.Properties['x2'])
+
   # 5. A missing interface: the gate waits, the others run, the end says what is waiting.
   Remove-Item -LiteralPath (Join-Path $tmp 'work') -Recurse -Force
   New-FakeGate 'needs-if' 'PASS'; New-FakeGate 'free' 'PASS'

@@ -52,6 +52,9 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
+# With -File a comma list (-Only soak,kill) arrives as one string: split it.
+$Only = @($Only | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+$Skip = @($Skip | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 if (-not $PackRoot) {
   if (Test-Path -LiteralPath (Join-Path $here 'scripts\gate-pack\gates.manifest.json')) { $PackRoot = $here }
   else { $PackRoot = (Resolve-Path (Join-Path $here '..\..')).Path }
