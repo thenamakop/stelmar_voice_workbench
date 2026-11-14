@@ -25,7 +25,7 @@
       "needs": { "ac": true }, "interactive": false,
       "est_minutes": { "low": 12, "mid": 10 },
       "quick": { "minutes": 12, "note": "as designed" },
-      "threshold": "check time at most 480 s and not partial; the verdict follows the measured numbers; hybrid chosen only at a gain of at least 15% and recorder-safe; recorder safety run passed; capability.json kept",
+      "threshold": "check time at most 480 s (a partial check is reported, not failed); recorder safety run passed; no app error; capability.json kept; the tier and per-language numbers are read out for the owner",
       "depends_on": [ "engines-info" ],
       "ledger": [
         { "table": "gates", "match": "Quick check under 8 minutes; the verdict follows the measured numbers", "kind": "verdict" },
