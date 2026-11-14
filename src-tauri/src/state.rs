@@ -225,6 +225,10 @@ mod tests {
             9,
             "the fault total follows the last status"
         );
+        eprintln!(
+            "stalled queue: {total} events forwarded in {:?}, slowest single step {worst:?}",
+            started.elapsed()
+        );
         assert!(worst < Duration::from_millis(100), "slowest step {worst:?}");
         assert!(
             started.elapsed() < Duration::from_secs(120),
