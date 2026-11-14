@@ -640,7 +640,7 @@ function Invoke-PackCleanup {
           }
           'render-volume' {
             if (-not $Testbench -or -not (Test-Path -LiteralPath $Testbench)) { throw 'wb-testbench is not available' }
-            $res = Invoke-PackNative -FilePath $Testbench -ArgumentList @('volume', '--device', ([string]$rest['device']), '--level', ([string]$rest['level_before']))
+            $res = Invoke-PackNative -FilePath $Testbench -ArgumentList @('volume', '--device', ([string]$rest['device']), '--flow', 'render', '--level', ([string]$rest['level_before']))
             if ($res.ExitCode -ne 0) { throw ((@($res.Output) + @($res.Error)) -join ' ') }
             $ok = $true
           }

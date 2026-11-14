@@ -334,6 +334,16 @@ function Invoke-RestartNow {
   & shutdown.exe /r /t 15 /c 'STELMAR gate pack: restart for the cold-cache gates' | Out-Null
 }
 
+# ---- Keep the laptop awake while the pack runs (system and display), until this process ends -----
+# SetThreadExecutionState is per thread; this thread runs the whole loop. Nothing is changed in the
+# power plan, so there is nothing to put back: the request ends with the process.
+try {
+  Add-Type -Namespace WbPack -Name Awake -MemberDefinition '[System.Runtime.InteropServices.DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint flags);' -ErrorAction Stop
+  # ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED
+  [void][WbPack.Awake]::SetThreadExecutionState([uint32]2147483651)
+  Say 'the laptop is kept awake while the pack runs (sleep and screen-off are blocked until it ends)'
+} catch { Say ('warning: could not block sleep: ' + $_.Exception.Message) }
+
 # ---- The loop -------------------------------------------------------------------------------------
 $stopRequested = $false
 $restartsAsked = 0
