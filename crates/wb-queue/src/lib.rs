@@ -10,7 +10,7 @@
 //! * [`night`]: the night pass plan (decision D6);
 //! * [`import`]: registering a session folder copied from another machine.
 //!
-//! Work-unit cutting from VAD pauses (`units`) is added once the engine's `chunks` output may be exercised.
+//! * [`units`]: cutting a job into work units of about 5 minutes at VAD pauses given as plain data.
 
 pub mod estimate;
 pub mod import;
@@ -19,6 +19,7 @@ pub mod order;
 pub mod revision;
 pub mod sched;
 pub mod store;
+pub mod units;
 
 /// Everything that can go wrong in this crate. The app shows it in a Toast and the queue goes on.
 #[derive(Debug, thiserror::Error)]
