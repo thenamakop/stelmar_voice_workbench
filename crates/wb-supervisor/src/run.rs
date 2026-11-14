@@ -6,6 +6,8 @@
 //! reported through the observer (the app turns it into a Toast); none of it reaches the recorder.
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::RecvTimeoutError;
 use std::time::{Duration, Instant};
 
@@ -45,6 +47,24 @@ impl Default for Policy {
             engine_env: Vec::new(),
             scrub_env: !cfg!(debug_assertions),
         }
+    }
+}
+
+/// Asks a running batch to stop: the scheduler's pause (the engine is killed, which frees its memory, and the
+/// work resumes later from the committed cursor) or the operator's Pause. Clones share one flag.
+#[derive(Debug, Clone, Default)]
+pub struct Cancel(Arc<AtomicBool>);
+
+impl Cancel {
+    pub fn new() -> Self {
+        Self::default()
+    }
+    /// Asks the batch to stop. Safe to call from any thread, any number of times.
+    pub fn cancel(&self) {
+        self.0.store(true, Ordering::SeqCst);
+    }
+    pub fn is_cancelled(&self) -> bool {
+        self.0.load(Ordering::SeqCst)
     }
 }
 
@@ -104,6 +124,10 @@ pub enum RunError {
     },
     #[error("the engine reported a fatal error that restarting cannot fix: {0}")]
     Fatal(String),
+    /// [`Cancel::cancel`] was called. The engine was killed; nothing of the chunk it was working on was
+    /// committed, so a later run starts from `committed_until_ms` without a gap or a repeat.
+    #[error("cancelled at {committed_until_ms} ms")]
+    Cancelled { committed_until_ms: u64 },
 }
 
 /// Engine errors a restart cannot fix.
@@ -115,14 +139,42 @@ fn unrecoverable(code: &str) -> bool {
 /// request file and the engine's stderr log.
 pub fn run_batch(
     exe: &Path,
-    mut request: BatchRequest,
+    request: BatchRequest,
     committer: &mut Committer,
     work_dir: &Path,
     policy: &Policy,
     observer: &mut dyn Observer,
 ) -> Result<RunReport, RunError> {
+    run_batch_with(
+        exe,
+        request,
+        committer,
+        work_dir,
+        policy,
+        observer,
+        &Cancel::new(),
+    )
+}
+
+/// [`run_batch`] that can be stopped from another thread (the scheduler's pause rules, the operator's Pause).
+/// A cancelled run kills its engine at once, returns [`RunError::Cancelled`] and has committed only whole
+/// chunks, so starting it again resumes from the cursor.
+pub fn run_batch_with(
+    exe: &Path,
+    mut request: BatchRequest,
+    committer: &mut Committer,
+    work_dir: &Path,
+    policy: &Policy,
+    observer: &mut dyn Observer,
+    cancel: &Cancel,
+) -> Result<RunReport, RunError> {
     let mut restarts = 0u32;
     loop {
+        if cancel.is_cancelled() {
+            return Err(RunError::Cancelled {
+                committed_until_ms: committer.committed_until_ms(),
+            });
+        }
         // Resume exactly where the committed transcript ends.
         request.resume_from_ms = committer.committed_until_ms();
         let request_path = work_dir.join(format!("batch-request-{restarts}.json"));
@@ -163,7 +215,11 @@ pub fn run_batch(
                         committed_until_ms: committer.committed_until_ms(),
                     });
                 }
-                std::thread::sleep(backoff(policy, restarts));
+                if sleep_unless_cancelled(backoff(policy, restarts), cancel) {
+                    return Err(RunError::Cancelled {
+                        committed_until_ms: committer.committed_until_ms(),
+                    });
+                }
                 continue;
             }
         };
@@ -182,6 +238,12 @@ pub fn run_batch(
         // chunk is decoded again. Segments are shown (observer) only after they are committed.
         let mut pending: Vec<wb_protocol::SegmentEvent> = Vec::new();
         loop {
+            if cancel.is_cancelled() {
+                engine.kill();
+                return Err(RunError::Cancelled {
+                    committed_until_ms: committer.committed_until_ms(),
+                });
+            }
             match engine.events.recv_timeout(Duration::from_millis(500)) {
                 Ok(Line::Event(e)) => {
                     last_event = Instant::now();
@@ -275,7 +337,26 @@ pub fn run_batch(
                 committed_until_ms: committer.committed_until_ms(),
             });
         }
-        std::thread::sleep(backoff(policy, restarts));
+        if sleep_unless_cancelled(backoff(policy, restarts), cancel) {
+            return Err(RunError::Cancelled {
+                committed_until_ms: committer.committed_until_ms(),
+            });
+        }
+    }
+}
+
+/// Sleeps `total`, in short slices, and returns true as soon as `cancel` is set.
+fn sleep_unless_cancelled(total: Duration, cancel: &Cancel) -> bool {
+    let end = Instant::now() + total;
+    loop {
+        if cancel.is_cancelled() {
+            return true;
+        }
+        let left = end.saturating_duration_since(Instant::now());
+        if left.is_zero() {
+            return false;
+        }
+        std::thread::sleep(left.min(Duration::from_millis(100)));
     }
 }
 

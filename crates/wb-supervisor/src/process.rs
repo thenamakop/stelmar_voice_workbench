@@ -6,7 +6,7 @@
 //! goes to a log file. Nothing here can block or slow the recorder: it shares no lock with it.
 
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::mpsc::{self, Receiver};
@@ -144,21 +144,7 @@ impl EngineProcess {
         let (tx, rx) = mpsc::channel();
         let reader = std::thread::Builder::new()
             .name(format!("wb-engine-{pid}-stdout"))
-            .spawn(move || {
-                for line in BufReader::new(stdout).lines() {
-                    let Ok(line) = line else { break };
-                    if line.trim().is_empty() {
-                        continue;
-                    }
-                    let msg = match Event::from_line(&line) {
-                        Ok(e) => Line::Event(Box::new(e)),
-                        Err(_) => Line::Garbled(line),
-                    };
-                    if tx.send(msg).is_err() {
-                        break;
-                    }
-                }
-            })?;
+            .spawn(move || read_events(stdout, |msg| tx.send(msg).is_ok()))?;
         Ok(Self {
             child,
             events: rx,
@@ -206,7 +192,112 @@ impl Drop for EngineProcess {
     }
 }
 
+/// Reads an engine's stdout line by line and hands each line to `send` (which returns false when nobody is
+/// listening any more). The reader works on bytes: a line that is not valid UTF-8 becomes [`Line::Garbled`]
+/// (with the bad bytes shown as U+FFFD, and never parsed as an event, so damaged text cannot slip into a
+/// transcript as a segment) and the stream goes on. Only a read error or the end of the stream stops it.
+pub(crate) fn read_events<R: Read>(reader: R, mut send: impl FnMut(Line) -> bool) {
+    let mut reader = BufReader::new(reader);
+    let mut buf = Vec::new();
+    loop {
+        buf.clear();
+        match reader.read_until(b'\n', &mut buf) {
+            Ok(0) | Err(_) => break,
+            Ok(_) => {}
+        }
+        let trimmed = buf.trim_ascii();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let msg = match std::str::from_utf8(trimmed) {
+            Ok(text) => match Event::from_line(text) {
+                Ok(e) => Line::Event(Box::new(e)),
+                Err(_) => Line::Garbled(text.to_owned()),
+            },
+            Err(_) => Line::Garbled(String::from_utf8_lossy(trimmed).into_owned()),
+        };
+        if !send(msg) {
+            break;
+        }
+    }
+}
+
 /// The path of the engine for `variant` next to `dir`: `wb-engine-<variant>-x86_64-pc-windows-msvc.exe`.
 pub fn sidecar_path(dir: &Path, variant: &str) -> PathBuf {
     dir.join(format!("wb-engine-{variant}-x86_64-pc-windows-msvc.exe"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn collect(bytes: &[u8]) -> Vec<Line> {
+        let mut out = Vec::new();
+        read_events(bytes, |l| {
+            out.push(l);
+            true
+        });
+        out
+    }
+
+    fn warning(code: &str) -> Vec<u8> {
+        let mut v = Event::Warning {
+            code: code.into(),
+            message: "m".into(),
+        }
+        .to_line()
+        .expect("line")
+        .into_bytes();
+        v.push(b'\n');
+        v
+    }
+
+    #[test]
+    fn a_line_with_invalid_utf8_is_garbled_and_the_stream_continues() {
+        let mut data = warning("first");
+        data.extend_from_slice(b"{\"not\":\"an event \xff\xfe broken\"}\n");
+        data.extend(warning("second"));
+        let lines = collect(&data);
+        assert_eq!(lines.len(), 3);
+        assert!(
+            matches!(&lines[0], Line::Event(e) if matches!(**e, Event::Warning { ref code, .. } if code == "first"))
+        );
+        assert!(matches!(&lines[1], Line::Garbled(t) if t.contains('\u{FFFD}')));
+        assert!(
+            matches!(&lines[2], Line::Event(e) if matches!(**e, Event::Warning { ref code, .. } if code == "second"))
+        );
+    }
+
+    #[test]
+    fn an_event_line_damaged_by_invalid_utf8_is_not_parsed_as_an_event() {
+        // The text of a segment with a broken byte inside: never shown as transcript text.
+        let mut line = warning("w");
+        let at = line.len() - 8;
+        line.insert(at, 0xff);
+        let lines = collect(&line);
+        assert!(matches!(&lines[0], Line::Garbled(_)));
+    }
+
+    #[test]
+    fn blank_lines_are_skipped_and_a_last_line_without_a_newline_is_read() {
+        let mut data = b"\n  \r\n".to_vec();
+        let mut w = warning("last");
+        w.pop();
+        data.extend(w);
+        let lines = collect(&data);
+        assert_eq!(lines.len(), 1);
+        assert!(matches!(&lines[0], Line::Event(_)));
+    }
+
+    #[test]
+    fn the_reader_stops_when_nobody_is_listening() {
+        let mut data = warning("a");
+        data.extend(warning("b"));
+        let mut seen = 0;
+        read_events(data.as_slice(), |_| {
+            seen += 1;
+            false
+        });
+        assert_eq!(seen, 1);
+    }
 }

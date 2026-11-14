@@ -12,4 +12,4 @@ mod win;
 
 pub use commit::Committer;
 pub use process::{EngineProcess, Line, Priority, SpawnSpec, sidecar_path};
-pub use run::{Notice, Observer, Policy, RunError, RunReport, run_batch};
+pub use run::{Cancel, Notice, Observer, Policy, RunError, RunReport, run_batch, run_batch_with};
