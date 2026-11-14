@@ -1,0 +1,7 @@
+# The single source of the Rust version for the Legion, the gate pack builds and CI
+# (decision of 13 Nov 2026, docs/GATES.md). Move it deliberately: change the channel here,
+# rebuild the engines, re-run the speed check cell, and record the move in docs/GATES.md.
+[toolchain]
+channel = "1.99.1"
+components = ["clippy", "rustfmt"]
+profile = "minimal"

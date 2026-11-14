@@ -22,6 +22,7 @@ const ENTRY_KEYS = new Set([
   "languages",
   "candidate_roles",
   "validated_roles",
+  "provisional_rank",
   "licence",
   "source",
   "conversion",

@@ -8,7 +8,7 @@ are never downloaded by the app, and the engines open no sockets (checked by `of
 
 | Tool | Used for | Notes |
 | --- | --- | --- |
-| Git, Rust stable (1.88 or newer), Node.js LTS, pnpm | app, UI, scripts | `rust-version` is 1.88 because whisper-rs-sys 0.15 needs it |
+| Git, Rust (the version pinned in `rust-toolchain.toml`; `rust-version` 1.88 is the floor), Node.js LTS, pnpm | app, UI, scripts | `rust-version` is 1.88 because whisper-rs-sys 0.15 needs it |
 | Visual Studio Build Tools (C++ workload, Windows 11 SDK) | MSVC for Rust and for ggml | `cl.exe`, `link.exe`, `dumpbin.exe` (used by `scripts/check-no-zmm.ps1`) |
 | CMake 3.20 or newer | whisper.cpp / ggml | found on `PATH` |
 | LLVM (libclang) | `bindgen` in whisper-rs-sys | `LIBCLANG_PATH` points at `C:\Program Files\LLVM\bin` |

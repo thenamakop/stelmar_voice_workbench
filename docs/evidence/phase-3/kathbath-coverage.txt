@@ -1,0 +1,15 @@
+Coverage check of the Kathbath references (Phase 3, 13 Nov 2026)
+rate = letters and digits per second of VAD speech (engine code: guards::letter_count; speech seconds from `wb-engine chunks --greedy`)
+sets: the 100 Kathbath test-unknown utterances per language of eval/clips/phase3-kathbath-hi.txt and -ur.txt
+no transcript text below: ids, counts and numbers only
+
+current floors: {'en': 5.79, 'hi': 5.03, 'ur': 7.7}
+set | language | utterances | judged (3 s of speech or more) | min | p1 | p5 | p50 | p95 | below the floor | share
+kathbath-hi | hi | 100 | 95 | 5.85 | 6.70 | 7.04 | 10.10 | 13.27 | 0 | 0.0%
+kathbath-ur | ur | 100 | 92 | 5.68 | 6.08 | 6.66 | 9.08 | 10.72 | 14 | 15.2%
+
+kathbath-hi: 5 utterance(s) under 3 s of speech (not judged); lowest reference rate 5.85; below the floor 5.03: none
+kathbath-ur: 8 utterance(s) under 3 s of speech (not judged); lowest reference rate 5.68; below the floor 7.70: tu_844424930341736-166-f at 7.64, tu_844424930818660-376-f at 6.17, tu_844424930818674-376-f at 7.14, tu_844424930818685-376-f at 7.08, tu_844424930922223-376-f at 5.68, tu_844424931384730-777-f at 6.12, tu_844424932452022-211-m at 7.45, tu_844424932891660-917-f at 7.49, tu_844424932894799-29-m at 6.40, tu_844424932904166-706-f at 7.32, tu_844424932904193-706-f at 7.17, tu_844424932904219-706-f at 6.55, tu_844424932904228-706-f at 6.75, tu_844424932922342-29-m at 7.56
+
+references below the floors: 14 of 187 judged = 7.5% (limit 1%)
+RESULT: MORE than 1% below the floors: recalibrate the floors with Kathbath included

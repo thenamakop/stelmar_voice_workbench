@@ -12,7 +12,10 @@ import { RecordScreen } from "./screens/RecordScreen";
 import { ReviewScreen } from "./screens/ReviewScreen";
 import { SessionsScreen } from "./screens/SessionsScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
-import { SystemScreen } from "./screens/SystemScreen";
+import { SystemScreen, systemStatus } from "./screens/SystemScreen";
+import { useCapability } from "./system/useCapability";
+import { machineLabel } from "./system/view";
+import type { CapabilityState } from "./system/useCapability";
 import { Note } from "./shell/layout";
 import { StatusBar } from "./shell/StatusBar";
 import { TopBar } from "./shell/TopBar";
@@ -31,6 +34,7 @@ export function App() {
   const [toast, setToast] = useState<ToastState | null>(null);
   const notify = useCallback((t: ToastState) => setToast(t), []);
   const recorder = useRecorder(notify);
+  const capability = useCapability(recorder.subscribeCheck, notify);
 
   useEffect(() => {
     let cancelled = false;
@@ -64,8 +68,19 @@ export function App() {
     if (sessionDir) setRoute("record");
   }
 
-  const profileText =
-    hasProfile === null ? "Checking…" : hasProfile ? "System check saved" : "System check not run";
+  const cap = capability.view?.capability ?? null;
+  const profileKnown = capability.view !== null || hasProfile !== null;
+  const profileSaved = capability.view ? cap !== null : !!hasProfile;
+  const profileText = !profileKnown
+    ? "Checking…"
+    : capability.running
+      ? "System check running"
+      : cap
+        ? machineLabel(cap)
+        : profileSaved
+          ? "System check saved"
+          : "System check not run";
+  const sys = route === "system" ? systemStatus(capability) : null;
   const recovering = recorder.recovery[0] ?? null;
 
   return (
@@ -77,19 +92,34 @@ export function App() {
         overflow: "hidden",
       }}
     >
-      <TopBar active={route} onNavigate={setRoute} machineLabel={profileText} />
-      <Screen route={route} hasProfile={!!hasProfile} recorder={recorder} notify={notify} />
+      <TopBar
+        active={route}
+        onNavigate={setRoute}
+        machineLabel={profileText}
+        machineMono={!!cap && !capability.running}
+      />
+      <Screen
+        route={route}
+        hasProfile={profileSaved}
+        recorder={recorder}
+        notify={notify}
+        capability={capability}
+        onNavigate={setRoute}
+      />
       <StatusBar
         items={[
           <span key="v" style={{ fontFamily: "var(--font-mono)" }}>
             v{APP_VERSION}
           </span>,
+          ...(sys ? sys.items : []),
           recorder.snapshot?.recorder?.disk_free_bytes != null
             ? `Queue: no jobs · disk ${gigabytes(recorder.snapshot.recorder.disk_free_bytes)} free`
             : "Queue: no jobs",
         ]}
-        trailing={recordingSession ? recordingSession.dir : "No session open"}
-        trailingMono={!!recordingSession}
+        trailing={
+          sys && sys.trailing ? sys.trailing : recordingSession ? recordingSession.dir : "No session open"
+        }
+        trailingMono={!!(sys && sys.trailing) || !!recordingSession}
       />
       {recovering && !recordingSession && (
         <RecoveryDialog
@@ -179,23 +209,27 @@ function Screen({
   hasProfile,
   recorder,
   notify,
+  capability,
+  onNavigate,
 }: {
   route: RouteId | null;
   hasProfile: boolean;
   recorder: Recorder;
   notify: (t: ToastState) => void;
+  capability: CapabilityState;
+  onNavigate: (r: RouteId) => void;
 }) {
   switch (route) {
     case "sessions":
       return <SessionsScreen />;
     case "record":
-      return <RecordScreen hasProfile={hasProfile} recorder={recorder} />;
+      return <RecordScreen hasProfile={hasProfile} recorder={recorder} capability={capability} />;
     case "queue":
       return <QueueScreen />;
     case "review":
       return <ReviewScreen />;
     case "system":
-      return <SystemScreen hasProfile={hasProfile} />;
+      return <SystemScreen capability={capability} onContinue={() => onNavigate("record")} />;
     case "settings":
       return <SettingsScreen recorder={recorder} notify={notify} />;
     default:

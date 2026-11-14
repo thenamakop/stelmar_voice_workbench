@@ -64,7 +64,13 @@ pub const COMPRESSION_ABOVE: f32 = 2.64;
 /// that is not a loop and the model is confident of it, so no other guard sees it (one 14 s Hinglish
 /// chunk came out as 43 characters). The values come from `scripts/gates/coverage_calibration.py`
 /// (`docs/evidence/phase-2/coverage-calibration.txt`, 11 Nov 2026: 0.9 x the lowest reference rate of the language); a language with no entry is not checked.
-pub const COVERAGE_FLOOR: &[(&str, f32)] = &[("en", 5.79), ("hi", 5.03), ("ur", 7.70)];
+/// 13 Nov 2026 (Phase 3): the Urdu floor was 7.70 and the Hindi floor 5.03. Kathbath read speech, all 4,678 judged
+/// Hindi and 4,906 judged Urdu test-unknown references (`docs/evidence/phase-3/kathbath-coverage-full.txt`), has rates
+/// under both: 831 Urdu references (16.9%) under 7.70 and 3 Hindi under 5.03. Same method with Kathbath included: 0.9 x
+/// the lowest reference rate over every set used, Hindi 0.9 x 4.76 = 4.28, Urdu 0.9 x 4.92 = 4.43 (the 100-utterance
+/// sample of the first Phase 3 check gave 5.11 for Urdu). English has no Kathbath set and is unchanged. The Hinglish
+/// chunk the floor exists for (43 letters in 14 s, about 3 per second) is still caught.
+pub const COVERAGE_FLOOR: &[(&str, f32)] = &[("en", 5.79), ("hi", 4.28), ("ur", 4.43)];
 
 /// Chunks with less speech than this are not judged: their rate varies too much.
 pub const COVERAGE_MIN_SPEECH_S: f64 = 3.0;
@@ -335,7 +341,12 @@ mod tests {
         assert!(!low_coverage(&normal, "ur", 13.8));
         // The same short decode in a chunk with under 3 s of speech is not judged.
         assert!(!low_coverage("abc", "hi", 2.0));
-        assert_eq!(coverage_floor("hi"), Some(5.03));
+        assert_eq!(coverage_floor("hi"), Some(4.28));
+        // Urdu (13 Nov 2026): Kathbath read speech runs as low as 4.92 per second, so 6 per second is normal there
+        // and 3.3 per second is not.
+        assert_eq!(coverage_floor("ur"), Some(4.43));
+        assert!(!low_coverage(&"a".repeat(90), "ur", 13.8)); // 6.5 per second
+        assert!(low_coverage(&"a".repeat(46), "ur", 13.8)); // 3.3 per second
     }
 
     #[test]

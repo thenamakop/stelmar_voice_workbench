@@ -2,15 +2,20 @@
 // app command with fixture data, so screens render as they would on a machine. Fixture numbers
 // are placeholders, like the mockups'.
 import type {
+  Capability,
+  HindiUrduScript,
   InputDevice,
+  OverrideKind,
   MirrorStatus,
   PartRecord,
   RecorderStatus,
   RecoveredSession,
+  SavedCheck,
   SessionInfo,
   Settings,
   Snapshot,
 } from "../ipc";
+import { planFor, profile, safeDefaults } from "./profiles";
 
 export type MockState = "idle" | "recording" | "input_lost" | "recovery";
 
@@ -20,6 +25,14 @@ export interface MockOptions {
   state?: MockState;
   /** "none": every speech engine renamed away (list_engines finds no engine). Default: engines present. */
   engines?: "present" | "none";
+  /** A saved capability profile from crates/wb-capability/fixtures (src/test/profiles.ts); none by default. */
+  capability?: string;
+  /** The saved profile no longer matches this machine (fingerprint-change banner). */
+  fingerprintChange?: string[];
+  /** The system check is running right now. */
+  checkRunning?: boolean;
+  /** A partial check kept apart from the complete profile (a fixture name from src/test/profiles.ts). */
+  partialCapability?: string;
   /** Commands seen, in order (for assertions). */
   calls?: string[];
 }
@@ -170,6 +183,48 @@ function emit(channel: ChannelLike, messages: unknown[], first = 0) {
 export function bridge(opts: MockOptions = {}) {
   const state = opts.state ?? "idle";
   let recording = state === "recording" || state === "input_lost";
+  // A bare `profile: true` stands for "a profile exists": the low-baseline one.
+  const cap: Capability | null = opts.capability
+    ? profile(opts.capability)
+    : opts.profile === true
+      ? profile("tier-c-low")
+      : null;
+  const partialBase = opts.partialCapability ? profile(opts.partialCapability) : null;
+  const partialCap: Capability | null = partialBase
+    ? { ...partialBase, check: { ...partialBase.check, partial: true } }
+    : null;
+  const changed = (opts.fingerprintChange ?? []).length > 0;
+  // After a fingerprint change the app reads the profile with safe defaults (wb_capability::safe_defaults).
+  const inUse: Capability | null =
+    cap && changed
+      ? safeDefaults(
+          cap,
+          `This computer has changed since the check (${opts.fingerprintChange?.[0]}). Safe defaults apply: recording and post-processing only, until a new check has run.`,
+        )
+      : cap;
+  const summary = (c: Capability, file: "main" | "partial", used: boolean): SavedCheck => ({
+    file,
+    started_at: c.check.started_at,
+    kind: c.check.kind,
+    tier: c.decision.tier,
+    partial: c.check.partial,
+    duration_s: c.check.duration_s,
+    fingerprint_id: "3F2A-91C7",
+    in_use: used,
+  });
+  const savedChecks: SavedCheck[] = [
+    ...(cap ? [summary(cap, "main", true)] : []),
+    ...(partialCap ? [summary(partialCap, "partial", false)] : []),
+  ];
+  const view = () => ({
+    capability: inUse,
+    saved_checks: savedChecks,
+    error: null,
+    running: opts.checkRunning ?? false,
+    fingerprint_changes: opts.fingerprintChange ?? [],
+    fingerprint_id: cap ? "3F2A-91C7" : null,
+    development: true,
+  });
   return (cmd: string, payload?: unknown): unknown => {
     const args = payload as Record<string, unknown> | undefined;
     opts.calls?.push(cmd);
@@ -180,7 +235,27 @@ export function bridge(opts: MockOptions = {}) {
         return undefined;
       case "has_capability_profile":
         if (opts.profile instanceof Error) throw opts.profile;
-        return opts.profile ?? false;
+        return cap !== null || (opts.profile ?? false);
+      case "get_capability":
+        return view();
+      case "run_system_check":
+      case "cancel_system_check":
+        return undefined;
+      case "set_override": {
+        const a = args as { kind: OverrideKind; enabled: boolean; confirmed: boolean };
+        if (cap)
+          cap.overrides.push({
+            kind: a.kind,
+            enabled: a.enabled,
+            confirmed: a.confirmed,
+            at: "2026-11-13T11:00:00Z",
+          });
+        return view();
+      }
+      case "session_plan": {
+        const a = args as { english: boolean; hindiUrdu: boolean; script: HindiUrduScript };
+        return inUse ? planFor(inUse, a.english, a.hindiUrdu, a.script) : null;
+      }
       case "list_inputs":
         return INPUTS;
       case "get_settings":
@@ -209,7 +284,7 @@ export function bridge(opts: MockOptions = {}) {
         }
         return null;
       }
-      case "start_session": {
+      case "start_recording": {
         recording = true;
         const req = (args as { request: { title: string; hall?: string | null } }).request;
         return { ...SESSION, title: req.title, hall: req.hall ?? null, scheduled: null };

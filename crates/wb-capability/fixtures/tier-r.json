@@ -1,0 +1,131 @@
+{
+  "schema_version": 1,
+  "app_version": "0.1.0",
+  "created_at": "2026-11-13T20:00:00+05:30",
+  "emulated": null,
+  "fingerprint": {
+    "os": "Windows 11",
+    "cpu_brand": "Fixture CPU",
+    "logical_processors": 8,
+    "physical_cores": 4,
+    "total_ram_gib": 8,
+    "gpus": [
+      {
+        "name": "Fixture GPU",
+        "driver": "1.0"
+      }
+    ],
+    "app_version": "0.1.0",
+    "manifest_hash": "fixture",
+    "emulated": null
+  },
+  "check": {
+    "kind": "quick",
+    "partial": false,
+    "started_at": "2026-11-13T20:00:00+05:30",
+    "duration_s": 400.0,
+    "bar_s": 480.0,
+    "excerpt_seconds": 30.0
+  },
+  "hardware": {
+    "os": "Windows 11",
+    "cpu_brand": "Fixture CPU",
+    "logical_processors": 4,
+    "physical_cores": 2,
+    "cpu_features": [
+      "avx"
+    ],
+    "avx2": false,
+    "avx512": false,
+    "total_ram_bytes": 8589934592,
+    "available_ram_bytes": 5368709120,
+    "gpus": [],
+    "disks": [],
+    "on_mains_power": true,
+    "audio_inputs": 2
+  },
+  "engines": [
+    {
+      "variant": "avx2",
+      "usable": false,
+      "reason": "this CPU lacks avx2 (exit code 3)",
+      "info_ms": 30,
+      "devices": []
+    }
+  ],
+  "measurements": [],
+  "hybrid": null,
+  "recorder_safety": [],
+  "injectors": [],
+  "decision": {
+    "tier": "R",
+    "tier_reasons": [
+      "This processor has no AVX2, which the speech engines need."
+    ],
+    "record_only_reason": "This processor has no AVX2, which the speech engines need.",
+    "bars": {
+      "rolling_rtf": 1.0,
+      "near_live_rtf": 0.35,
+      "live_standin_rtf": 0.25,
+      "headroom_factor": 1.0
+    },
+    "config": null,
+    "languages": {
+      "en": {
+        "rolling": null,
+        "night": null,
+        "night_note": null,
+        "live": {
+          "offered": false,
+          "kind": null,
+          "model": null,
+          "rtf": null,
+          "soft_reasons": [],
+          "hard_reasons": []
+        }
+      },
+      "hi": {
+        "rolling": null,
+        "night": null,
+        "night_note": null,
+        "live": {
+          "offered": false,
+          "kind": null,
+          "model": null,
+          "rtf": null,
+          "soft_reasons": [],
+          "hard_reasons": []
+        }
+      },
+      "ur": {
+        "rolling": null,
+        "night": null,
+        "night_note": null,
+        "live": {
+          "offered": false,
+          "kind": null,
+          "model": null,
+          "rtf": null,
+          "soft_reasons": [],
+          "hard_reasons": []
+        }
+      }
+    },
+    "hinglish": {
+      "ok": false,
+      "rtf": null,
+      "source": "unmeasured"
+    },
+    "dual_decode_en_hi": false,
+    "provisional": true,
+    "partial": false,
+    "verdict": [
+      "Record only.",
+      "This processor has no AVX2, which the speech engines need.",
+      "Copy the session folder to a stronger computer to transcribe it."
+    ],
+    "process_while_recording": false,
+    "pause_on_battery": true
+  },
+  "overrides": []
+}

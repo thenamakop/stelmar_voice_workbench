@@ -145,7 +145,10 @@ export type AppEvent =
   | ({ kind: "part_closed" } & PartRecord)
   | { kind: "notice"; level: NoticeLevel; source: string; message: string }
   | { kind: "display_recovered"; restarts: number; failure: string }
-  | { kind: "close_blocked" };
+  | { kind: "close_blocked" }
+  | { kind: "check_progress"; progress: CheckProgress }
+  | { kind: "check_done" }
+  | { kind: "check_failed"; message: string };
 
 export interface StartRequest {
   title: string;
@@ -154,6 +157,10 @@ export interface StartRequest {
   scheduled?: string | null;
   expected_languages?: string[];
   device_id?: string | null;
+  /** `record_post` (default) or `live_post`; live is accepted only where the saved profile clears it. */
+  mode?: string;
+  /** How Hindi and Urdu are written: the organiser's choice, kept beside the session. */
+  hindi_urdu_script?: HindiUrduScript;
 }
 
 export interface RecoveredSession {
@@ -178,7 +185,7 @@ export interface RecoveryList {
 export const listInputs = () => invoke<InputDevice[]>("list_inputs");
 export const getSettings = () => invoke<Settings>("get_settings");
 export const saveSettings = (settings: Settings) => invoke<Settings>("save_settings", { settings });
-export const startSession = (request: StartRequest) => invoke<SessionInfo>("start_session", { request });
+export const startSession = (request: StartRequest) => invoke<SessionInfo>("start_recording", { request });
 export const pauseRecording = () => invoke<void>("pause");
 export const resumeRecording = () => invoke<void>("resume");
 export const stopSession = () => invoke<SessionStopped>("stop_session");
@@ -255,3 +262,214 @@ export interface RegistrySnapshot {
 
 export const listEngines = () => invoke<RegistrySnapshot>("list_engines");
 export const recheckRegistry = () => invoke<void>("recheck_registry");
+
+// ---- System check and capability.json (Phase 3) ---------------------------------------------------
+// Shapes follow crates/wb-capability/src/types.rs. Sizes are bytes, speeds are real-time factors
+// (processing time / audio time; lower is faster).
+
+export type CapLang = "en" | "hi" | "ur";
+export type Tier = "G" | "C+" | "C" | "R";
+export type DeviceConfig = { kind: "cpu" } | { kind: "gpu"; index: number } | { kind: "hybrid"; gpu: number };
+export type OverrideKind = "process_while_recording" | "pause_on_battery" | "allow_live_anyway";
+export type HindiUrduScript = "devanagari" | "nastaliq";
+
+export interface CapGpu {
+  index: number;
+  name: string;
+  vendor: string;
+  kind: "integrated" | "discrete";
+  dedicated_bytes: number;
+  local_bytes: number;
+  shared_bytes: number;
+  shared_assumed: boolean;
+  driver: string | null;
+  vulkan_usable: boolean;
+}
+
+export interface CapHardware {
+  os: string;
+  cpu_brand: string;
+  logical_processors: number;
+  physical_cores: number;
+  cpu_features: string[];
+  avx2: boolean;
+  avx512: boolean;
+  total_ram_bytes: number;
+  available_ram_bytes: number;
+  gpus: CapGpu[];
+  disks: { role: string; path: string; free_bytes: number }[];
+  on_mains_power: boolean | null;
+  audio_inputs: number;
+}
+
+export interface CapMeasurement {
+  model: string;
+  lang: CapLang;
+  mode: "rolling" | "near_live";
+  config: DeviceConfig;
+  engine_build: string;
+  device_name: string;
+  threads: number;
+  method: string;
+  clip_seconds: number;
+  rtf: number;
+  warmup_rtf: number | null;
+  load_s: number;
+  peak_working_set_bytes: number;
+  peak_commit_bytes: number;
+  gpu_local_bytes: number | null;
+  truncated_chunks: number;
+  live_standin?: boolean;
+}
+
+export interface RollingPick {
+  model: string;
+  rtf: number;
+  meets_bar: boolean;
+  quality_unverified: boolean;
+  k_max: number;
+  ready_after_stop_min: number;
+  lags: boolean;
+}
+
+export interface NightPick {
+  model: string;
+  rtf: number;
+  hours_for_a_day: number;
+  quality_unverified: boolean;
+}
+
+export interface LiveDecision {
+  offered: boolean;
+  kind: string | null;
+  model: string | null;
+  rtf: number | null;
+  soft_reasons: string[];
+  hard_reasons: string[];
+}
+
+export interface LangDecision {
+  rolling: RollingPick | null;
+  night: NightPick | null;
+  night_note: string | null;
+  live: LiveDecision;
+}
+
+export interface CapDecision {
+  tier: Tier;
+  tier_reasons: string[];
+  record_only_reason: string | null;
+  bars: { rolling_rtf: number; near_live_rtf: number; live_standin_rtf: number; headroom_factor: number };
+  config: {
+    config: DeviceConfig;
+    label: string;
+    why: string;
+    cpu_threads: number;
+    recorder_safety_passed: boolean | null;
+  } | null;
+  languages: Partial<Record<CapLang, LangDecision>>;
+  hinglish: { ok: boolean; rtf: number | null; source: string };
+  dual_decode_en_hi: boolean;
+  provisional: boolean;
+  partial: boolean;
+  verdict: string[];
+  process_while_recording: boolean;
+  pause_on_battery: boolean;
+}
+
+export interface Capability {
+  schema_version: number;
+  app_version: string;
+  created_at: string;
+  emulated: string | null;
+  fingerprint: { os: string; cpu_brand: string };
+  check: {
+    kind: "quick" | "full";
+    partial: boolean;
+    started_at: string;
+    duration_s: number;
+    bar_s: number;
+    excerpt_seconds: number;
+  };
+  hardware: CapHardware;
+  engines: {
+    variant: string;
+    usable: boolean;
+    reason: string | null;
+    info_ms: number | null;
+    devices: string[];
+  }[];
+  measurements: CapMeasurement[];
+  hybrid: {
+    model: string;
+    lang: CapLang;
+    gpu: number;
+    cpu_threads: number;
+    gpu_rtf_concurrent: number;
+    cpu_rtf_concurrent: number;
+    method: string;
+  } | null;
+  recorder_safety: {
+    config: DeviceConfig;
+    duration_s: number;
+    overruns: number;
+    driver_xruns: number;
+    passed: boolean;
+  }[];
+  injectors: string[];
+  skipped?: { step: string; reason: string }[];
+  decision: CapDecision;
+  overrides: { kind: OverrideKind; enabled: boolean; at: string; confirmed: boolean }[];
+}
+
+/** One saved check and the file it lives in (a partial or cancelled check never replaces a complete profile). */
+export interface SavedCheck {
+  file: "main" | "partial";
+  started_at: string;
+  kind: "quick" | "full";
+  tier: Tier;
+  partial: boolean;
+  duration_s: number;
+  fingerprint_id: string;
+  /** The profile the rest of the app reads. */
+  in_use: boolean;
+}
+
+export interface CapabilityView {
+  /** The profile in use; after a fingerprint change it carries safe defaults (record + post-process only). */
+  capability: Capability | null;
+  saved_checks: SavedCheck[];
+  error: string | null;
+  running: boolean;
+  fingerprint_changes: string[];
+  fingerprint_id: string | null;
+  development: boolean;
+}
+
+export interface SessionPlan {
+  default_mode: string;
+  record_only: boolean;
+  record_only_reason: string | null;
+  live: { selectable: boolean; reason: string | null; via_override: boolean };
+  devices: string;
+  models: { lang: CapLang; model: string; quality_unverified: boolean }[];
+  ready_after_stop_min: number | null;
+  lags: boolean;
+  provisional: boolean;
+  partial: boolean;
+}
+
+export interface CheckProgress {
+  phase: string;
+  detail: string;
+  elapsed_s: number;
+  cells_done: number;
+}
+
+export const getCapability = () => invoke<CapabilityView>("get_capability");
+export const runSystemCheck = (full: boolean) => invoke<void>("run_system_check", { full });
+export const cancelSystemCheck = () => invoke<void>("cancel_system_check");
+export const setOverride = (kind: OverrideKind, enabled: boolean, confirmed: boolean) =>
+  invoke<CapabilityView>("set_override", { kind, enabled, confirmed });
+export const sessionPlan = (english: boolean, hindiUrdu: boolean, script: HindiUrduScript) =>
+  invoke<SessionPlan | null>("session_plan", { english, hindiUrdu, script });

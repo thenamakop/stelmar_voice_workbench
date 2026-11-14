@@ -258,3 +258,167 @@ a = "verify-clichunks-rolling-fleurs-en"
 b = "verify-wb-medium-fleurs-en"
 max_wer_points = 3.0
 informational = true
+
+# ------------------------------------------------- Phase 3 informational comparison (turbo q5_0 vs stock medium)
+# Quality only, same device for both models (set WB_ENGINE to the vulkan engine and WB_ENGINE_DEVICE=gpu:N);
+# speeds come from the Phase 2 speed tables. Run by scripts/gates/turbo-medium-comparison.ps1.
+
+[[run]]
+name = "phase3-tm-turbo-fleurs-en"
+setup = "large-v3-turbo-q5_0"
+dataset = "fleurs-en"
+role = "rolling"
+engine = "wb-engine"
+limit = "eval/clips/phase2-verify-fleurs.txt"
+
+[[run]]
+name = "phase3-tm-turbo-fleurs-hi"
+setup = "large-v3-turbo-q5_0"
+dataset = "fleurs-hi"
+role = "rolling"
+engine = "wb-engine"
+limit = "eval/clips/phase2-verify-fleurs.txt"
+
+[[run]]
+name = "phase3-tm-turbo-fleurs-ur"
+setup = "large-v3-turbo-q5_0"
+dataset = "fleurs-ur"
+role = "rolling"
+engine = "wb-engine"
+limit = "eval/clips/phase2-verify-fleurs.txt"
+
+[[run]]
+name = "phase3-tm-turbo-kathbath-hi"
+setup = "large-v3-turbo-q5_0"
+dataset = "kathbath-hi"
+role = "rolling"
+engine = "wb-engine"
+limit = "eval/clips/phase3-kathbath-hi.txt"
+
+[[run]]
+name = "phase3-tm-turbo-kathbath-ur"
+setup = "large-v3-turbo-q5_0"
+dataset = "kathbath-ur"
+role = "rolling"
+engine = "wb-engine"
+limit = "eval/clips/phase3-kathbath-ur.txt"
+
+[[run]]
+name = "phase3-tm-medium-fleurs-en"
+setup = "medium"
+dataset = "fleurs-en"
+role = "rolling"
+engine = "wb-engine"
+limit = "eval/clips/phase2-verify-fleurs.txt"
+
+[[run]]
+name = "phase3-tm-medium-fleurs-hi"
+setup = "medium"
+dataset = "fleurs-hi"
+role = "rolling"
+engine = "wb-engine"
+limit = "eval/clips/phase2-verify-fleurs.txt"
+
+[[run]]
+name = "phase3-tm-medium-fleurs-ur"
+setup = "medium"
+dataset = "fleurs-ur"
+role = "rolling"
+engine = "wb-engine"
+limit = "eval/clips/phase2-verify-fleurs.txt"
+
+[[run]]
+name = "phase3-tm-medium-kathbath-hi"
+setup = "medium"
+dataset = "kathbath-hi"
+role = "rolling"
+engine = "wb-engine"
+limit = "eval/clips/phase3-kathbath-hi.txt"
+
+[[run]]
+name = "phase3-tm-medium-kathbath-ur"
+setup = "medium"
+dataset = "kathbath-ur"
+role = "rolling"
+engine = "wb-engine"
+limit = "eval/clips/phase3-kathbath-ur.txt"
+
+[[run]]
+name = "phase3-tm-large-fleurs-en"
+setup = "large-v3-q5_0"
+dataset = "fleurs-en"
+role = "rolling"
+engine = "wb-engine"
+limit = "eval/clips/phase2-verify-fleurs.txt"
+
+[[run]]
+name = "phase3-tm-large-fleurs-hi"
+setup = "large-v3-q5_0"
+dataset = "fleurs-hi"
+role = "rolling"
+engine = "wb-engine"
+limit = "eval/clips/phase2-verify-fleurs.txt"
+
+[[run]]
+name = "phase3-tm-large-fleurs-ur"
+setup = "large-v3-q5_0"
+dataset = "fleurs-ur"
+role = "rolling"
+engine = "wb-engine"
+limit = "eval/clips/phase2-verify-fleurs.txt"
+
+[[run]]
+name = "phase3-tm-large-kathbath-hi"
+setup = "large-v3-q5_0"
+dataset = "kathbath-hi"
+role = "rolling"
+engine = "wb-engine"
+limit = "eval/clips/phase3-kathbath-hi.txt"
+
+[[run]]
+name = "phase3-tm-large-kathbath-ur"
+setup = "large-v3-q5_0"
+dataset = "kathbath-ur"
+role = "rolling"
+engine = "wb-engine"
+limit = "eval/clips/phase3-kathbath-ur.txt"
+
+[[run]]
+name = "phase3-tm-small-fleurs-en"
+setup = "small"
+dataset = "fleurs-en"
+role = "rolling"
+engine = "wb-engine"
+limit = "eval/clips/phase2-verify-fleurs.txt"
+
+[[run]]
+name = "phase3-tm-small-fleurs-hi"
+setup = "small"
+dataset = "fleurs-hi"
+role = "rolling"
+engine = "wb-engine"
+limit = "eval/clips/phase2-verify-fleurs.txt"
+
+[[run]]
+name = "phase3-tm-small-fleurs-ur"
+setup = "small"
+dataset = "fleurs-ur"
+role = "rolling"
+engine = "wb-engine"
+limit = "eval/clips/phase2-verify-fleurs.txt"
+
+[[run]]
+name = "phase3-tm-small-kathbath-hi"
+setup = "small"
+dataset = "kathbath-hi"
+role = "rolling"
+engine = "wb-engine"
+limit = "eval/clips/phase3-kathbath-hi.txt"
+
+[[run]]
+name = "phase3-tm-small-kathbath-ur"
+setup = "small"
+dataset = "kathbath-ur"
+role = "rolling"
+engine = "wb-engine"
+limit = "eval/clips/phase3-kathbath-ur.txt"

@@ -1,0 +1,38 @@
+﻿Hindi turbo on the Vulkan UHD under emu-low: the clip against the excerpt length (decision 2 of 13 Nov 2026)
+date: 2026-11-13 22:03 (IST on the Legion)
+machine: Legion, profile emu-low (4 logical processors, 11 GiB job limit), Vulkan device index 0 (Intel(R) RaptorLake-S Mobile Graphics Controller)
+command: powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\gates\hindi-clip-check.ps1
+source: 12a6f42
+engine: wb-engine vulkan build, sha256 312de4131d96fa1be83d8fb0fd7cf4f6469b17498a05d00665d48987e63e8137; model large-v3-turbo q5_0; Silero VAD v6.2.0; 2 CPU threads; rolling settings; one process per run = a warm-up decode and one timed decode (the quick check's cell), RTF = decode time / clip length (load time apart)
+order: 3 rounds, each a (bundled 30 s), b (bundled 60 s), c (Phase 2 clip 60.2 s), so drift of the machine touches all three alike
+
+The clips
+  bundled clip 60.00 s, Phase 2 clip 60.22 s; the same audio over the common 60.00 s: True
+  a is the first 30 s of the bundled clip; b is the bundled clip; c is the Phase 2 speed-table clip (a trailing utterance fragment longer)
+  density (characters of reference text without spaces per second of clip; every 60 s window of the FLEURS Hindi test set, 413 windows): bundled clip 8.77, median 8.17, 10th to 90th percentile 7.43 to 9.11, the bundled clip sits at the 80th percentile
+  density per second of speech (frames above -45 dBFS): bundled 12.67, median 12.62, 10th to 90th 10.55 to 15.88, 51th percentile
+  the first 30 s of the bundled clip alone (the quick-check excerpt): 10.09 characters per second (approximate: the cut utterance counted in proportion)
+
+The runs (round, clip: timed RTF, warm-up RTF, clip seconds, load s, segments, truncated chunks, wall s)
+  1 a_bundled_30s  RTF 0.827  warm-up 1.064  30.0 s  load 0.8 s  segments 3  truncated 0  wall 58.9 s
+  1 b_bundled_60s  RTF 0.696  warm-up 0.694  60.0 s  load 0.7 s  segments 5  truncated 0  wall 85.5 s
+  1 c_phase2_60s   RTF 0.693  warm-up 0.679  60.2 s  load 0.7 s  segments 5  truncated 0  wall 84.6 s
+  2 a_bundled_30s  RTF 0.855  warm-up 0.852  30.0 s  load 0.6 s  segments 3  truncated 0  wall 53.3 s
+  2 b_bundled_60s  RTF 0.687  warm-up 0.694  60.0 s  load 0.8 s  segments 5  truncated 0  wall 85.1 s
+  2 c_phase2_60s   RTF 0.688  warm-up 0.687  60.2 s  load 0.6 s  segments 5  truncated 0  wall 85.1 s
+  3 a_bundled_30s  RTF 0.825  warm-up 0.832  30.0 s  load 0.6 s  segments 3  truncated 0  wall 51.5 s
+  3 b_bundled_60s  RTF 0.697  warm-up 0.693  60.0 s  load 0.6 s  segments 5  truncated 0  wall 85.6 s
+  3 c_phase2_60s   RTF 0.691  warm-up 0.693  60.2 s  load 0.7 s  segments 5  truncated 0  wall 85.3 s
+
+Medians of the three runs per clip (timed RTF; warm-up RTF; range of the timed runs)
+  a_bundled_30s  timed 0.827  warm-up 0.852  range 0.825 to 0.855  (3 run(s))
+  b_bundled_60s  timed 0.696  warm-up 0.694  range 0.687 to 0.697  (3 run(s))
+  c_phase2_60s   timed 0.691  warm-up 0.687  range 0.688 to 0.693  (3 run(s))
+
+Differences (arithmetic only; the reading is in a separate note that names its author)
+  excerpt length, same clip: 30 s against 60 s: 18.7%  (a over b)
+  clip, 60 s each: bundled against Phase 2: 0.8%  (b over c; the audio is the same over the common length)
+  against the Phase 2 speed-table figure (UHD, 2 threads, emu-low, turbo q5_0, Hindi): 0.734; c now 0.691: -5.9%
+  emulated bar 0.75: a misses
+  emulated bar 0.75: b meets
+  emulated bar 0.75: c meets

@@ -53,6 +53,8 @@ export interface Recorder {
   stop: () => Promise<SessionStopped | null>;
   recover: (dir: string, action: "resume" | "close") => Promise<void>;
   refreshInputs: () => Promise<void>;
+  /** Listens to the system check's progress events; returns the function that stops listening. */
+  subscribeCheck: (listener: (event: AppEvent) => void) => () => void;
   saveSettings: (settings: Settings) => Promise<boolean>;
 }
 
@@ -96,6 +98,13 @@ export function useRecorder(notify: Notify): Recorder {
   useEffect(() => {
     notifyRef.current = notify;
   }, [notify]);
+  const checkListeners = useRef(new Set<(event: AppEvent) => void>());
+  const subscribeCheck = useCallback((listener: (event: AppEvent) => void) => {
+    checkListeners.current.add(listener);
+    return () => {
+      checkListeners.current.delete(listener);
+    };
+  }, []);
 
   const onEvent = useCallback((e: AppEvent) => {
     switch (e.kind) {
@@ -161,6 +170,11 @@ export function useRecorder(notify: Notify): Recorder {
         });
         break;
       case "display_recovered":
+        break;
+      case "check_progress":
+      case "check_done":
+      case "check_failed":
+        checkListeners.current.forEach((listener) => listener(e));
         break;
     }
   }, []);
@@ -344,6 +358,7 @@ export function useRecorder(notify: Notify): Recorder {
     stop,
     recover,
     refreshInputs,
+    subscribeCheck,
     saveSettings,
   };
 }

@@ -116,10 +116,15 @@ if (-not $NoTools) {
   # ---------- Rust toolchain ----------
   $rustup = Get-Exe 'rustup'
   if ($rustup -and ($Update -or $InstallMissing)) {
-    Write-Report "    rustup: install stable, set default, update"
-    & $rustup toolchain install stable 2>&1 | Out-Null
-    & $rustup default stable 2>&1 | Out-Null
-    & $rustup update 2>&1 | Out-Null
+    # The version is pinned in rust-toolchain.toml (docs/GATES.md, 13 Nov 2026); never float on stable.
+    $pin = Select-String -Path (Join-Path $repo 'rust-toolchain.toml') -Pattern '^channel\s*=\s*"([^"]+)"'
+    $channel = if ($pin) { $pin.Matches[0].Groups[1].Value } else { $null }
+    if (-not $channel) { Write-Report "    rustup: rust-toolchain.toml has no channel, nothing installed"; }
+    else {
+      Write-Report "    rustup: install the pinned toolchain $channel (with clippy and rustfmt)"
+      & $rustup toolchain install $channel --component clippy --component rustfmt --profile minimal 2>&1 | Out-Null
+      & $rustup default $channel 2>&1 | Out-Null
+    }
   }
 
   # ---------- pnpm ----------

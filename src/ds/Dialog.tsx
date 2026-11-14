@@ -41,6 +41,11 @@ export function Dialog({ open, onClose, title, eyebrow, children, footer, width 
           boxShadow: "var(--shadow-3)",
           borderTop: px(3) + " solid var(--ink-900)",
           overflow: "hidden",
+          // A tall dialog scrolls inside the window instead of running past it (owner, 14 Nov 2026): the header
+          // and the footer stay, the body scrolls. Nothing changes while it fits.
+          display: "flex",
+          flexDirection: "column",
+          maxHeight: `calc(100vh - ${px(48)})`,
         }}
       >
         <div
@@ -50,6 +55,7 @@ export function Dialog({ open, onClose, title, eyebrow, children, footer, width 
             alignItems: "flex-start",
             gap: 16,
             padding: px(20, 24, 0),
+            flexShrink: 0,
           }}
         >
           <div>
@@ -85,6 +91,8 @@ export function Dialog({ open, onClose, title, eyebrow, children, footer, width 
         <div
           style={{
             padding: px(12, 24, 24),
+            overflowY: "auto",
+            minHeight: 0,
             fontFamily: "var(--font-ui)",
             fontSize: 15,
             lineHeight: px(24),
@@ -102,6 +110,7 @@ export function Dialog({ open, onClose, title, eyebrow, children, footer, width 
               padding: px(14, 24),
               background: "var(--paper-50)",
               borderTop: px(1) + " solid var(--ink-200)",
+              flexShrink: 0,
             }}
           >
             {footer}

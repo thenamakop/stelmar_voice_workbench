@@ -1,0 +1,55 @@
+{
+  "seconds": 60.0,
+  "rate": 16000,
+  "gap_s": 0.8,
+  "clips": {
+    "bench-en.wav": {
+      "sha256": "590fd730e9bbce4e58ea6af0579eb6d1d3a1009eca876349eb294d8c0442edb3",
+      "utterances": [
+        "fleurs-en/audio/1003119935936341070.wav",
+        "fleurs-en/audio/10052240106321793346.wav",
+        "fleurs-en/audio/10167324587744183095.wav",
+        "fleurs-en/audio/10197164397713068203.wav",
+        "fleurs-en/audio/10233995782544396174.wav",
+        "fleurs-en/audio/10235738076911595987.wav",
+        "fleurs-en/audio/10323357556845456822.wav"
+      ],
+      "source": "FLEURS test en"
+    },
+    "bench-hi.wav": {
+      "sha256": "27f9e06cef03ea9ec53dc7dc7785cf2a99a4ca4c42de3338dc99e933b72f3619",
+      "utterances": [
+        "fleurs-hi/audio/10011266027513218401.wav",
+        "fleurs-hi/audio/10014385262415025488.wav",
+        "fleurs-hi/audio/10015817292782645020.wav",
+        "fleurs-hi/audio/10027305580492162464.wav",
+        "fleurs-hi/audio/10069289676238419279.wav"
+      ],
+      "source": "FLEURS test hi"
+    },
+    "bench-ur.wav": {
+      "sha256": "4114d9f29d1d87a8211de33eeecd53666bb2dc0ecae3711da41e8f3a514c4fac",
+      "utterances": [
+        "fleurs-ur/audio/10032188829272002643.wav",
+        "fleurs-ur/audio/10095499047464363355.wav",
+        "fleurs-ur/audio/10125021012985362908.wav",
+        "fleurs-ur/audio/10333437275452354975.wav",
+        "fleurs-ur/audio/10396706355132117002.wav",
+        "fleurs-ur/audio/10426542763677365469.wav"
+      ],
+      "source": "FLEURS test ur"
+    },
+    "bench-codeswitch.wav": {
+      "sha256": "3feed49b0fd4a432a867e96ea70760350283da92199bb9e714437f9962be29f3",
+      "utterances": [
+        "fleurs-en/audio/1003119935936341070.wav",
+        "fleurs-hi/audio/10014385262415025488.wav",
+        "fleurs-en/audio/10167324587744183095.wav",
+        "fleurs-hi/audio/10027305580492162464.wav",
+        "fleurs-en/audio/10233995782544396174.wav",
+        "fleurs-hi/audio/10107687492910459268.wav"
+      ],
+      "source": "FLEURS test en and hi, alternating sentences (stand-in for real code-switched speech)"
+    }
+  }
+}

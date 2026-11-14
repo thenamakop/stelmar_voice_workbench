@@ -1,0 +1,54 @@
+﻿date: 2026-11-13 15:55 (IST on the Legion); report written again from the results on disk (no decoding); the run that made them took 32.2 min
+command: powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\gates\turbo-medium-comparison.ps1
+machine: Legion (native, no emulation); WB_ENGINE_DEVICE=gpu:1
+Phase 3 informational comparison: large-v3-turbo q5_0, stock medium f16, large-v3 q5_0 and small f16 (NOT a gate, NOT a speed measurement)
+engine: wb-engine 0.1.0 (vulkan, whisper.cpp v1.9.5 commit d1be6fde11ac tree e736b4c9a5be)
+engine file now: src-tauri/binaries/wb-engine-vulkan-x86_64-pc-windows-msvc.exe sha256 6d75bfed33bb58e4e0591b4dcae77ad00b96f2d29f3a0e97880601ad2873689b
+engine sha256 of each run is in the last column; builds used: 6d75bfed33bb58e4, ee3075018b3d4b01
+the Urdu coverage floor changed from 7.70 to 5.11 on 13 Nov 2026 (docs/evidence/phase-3/kathbath-coverage.txt) and the engine was rebuilt; every Urdu run and every run of large-v3 q5_0 and small used the rebuilt engine. English and Hindi runs of turbo and medium used the earlier build, which differs only in the Urdu floor.
+device used by all models: gpu:1 (NVIDIA GeForce RTX 4070 Laptop GPU, Vulkan, engine device index 1)
+method: eval/run.py -> wb-engine batch --file per utterance, rolling settings (beam 5, best of 5, temperature fallback, previous-text context, Silero VAD v6.2.0, 15 s chunks, 8 CPU threads), language given (single-language run), script-aware normaliser (eval/normalize.py); WER and CER keep the nukta
+sets: FLEURS test, the 20 clips per language of eval/clips/phase2-verify-fleurs.txt; Kathbath test-unknown (tu_), 100 utterances per language, fixed seed 20261113 (eval/clips/phase3-kathbath-hi.txt, -ur.txt)
+speed note: the RTF column is wall time per audio second including one process start and model load per utterance, on the GPU; it is NOT comparable with the speed tables (those use one loaded model). Speeds for decisions come from docs/evidence/phase-2/speed-table-A|B|C.txt.
+independence: stock Whisper checkpoints; their training data is not published in detail, so Kathbath and FLEURS are treated as independent for both models (neither is a fine-tune on these sets). Phase 5 still decides with its own sets.
+
+model | set | n | WER % | CER % | WER nukta ignored % | truncated utts | unclear segs | low_coverage segs | retried segs | failures | audio s | wall s | wall RTF | model sha256 | engine sha256
+large-v3-turbo q5_0 | fleurs-en | 20 | 4.38 | n/a | n/a | 0 | 0 | 0 | 0 | 0 | 171.7 | 28.7 | 0.167 | 394221709cd5ad1f... | ee3075018b3d4b01
+large-v3-turbo q5_0 | fleurs-hi | 20 | 38.37 | 13.45 | 37.77 | 0 | 0 | 0 | 0 | 0 | 243.1 | 40.7 | 0.167 | 394221709cd5ad1f... | ee3075018b3d4b01
+large-v3-turbo q5_0 | fleurs-ur | 20 | 22.15 | 7.35 | n/a | 0 | 0 | 0 | 0 | 0 | 208.5 | 34.5 | 0.165 | 394221709cd5ad1f... | 6d75bfed33bb58e4
+large-v3-turbo q5_0 | kathbath-hi | 100 | 32.26 | 11.91 | 31.67 | 1 | 0 | 0 | 0 | 0 | 571.4 | 161.4 | 0.282 | 394221709cd5ad1f... | ee3075018b3d4b01
+large-v3-turbo q5_0 | kathbath-ur | 100 | 20.53 | 6.06 | n/a | 0 | 0 | 0 | 0 | 0 | 588.9 | 146.8 | 0.249 | 394221709cd5ad1f... | 6d75bfed33bb58e4
+stock medium f16 | fleurs-en | 20 | 4.90 | n/a | n/a | 0 | 0 | 0 | 0 | 0 | 171.7 | 70.7 | 0.412 | 6c14d5adee5f8639... | ee3075018b3d4b01
+stock medium f16 | fleurs-hi | 20 | 47.71 | 19.66 | 47.51 | 0 | 0 | 0 | 0 | 0 | 243.1 | 92.5 | 0.381 | 6c14d5adee5f8639... | ee3075018b3d4b01
+stock medium f16 | fleurs-ur | 20 | 28.45 | 9.65 | n/a | 0 | 0 | 0 | 0 | 0 | 208.5 | 73.8 | 0.354 | 6c14d5adee5f8639... | 6d75bfed33bb58e4
+stock medium f16 | kathbath-hi | 100 | 40.90 | 16.32 | 40.47 | 0 | 0 | 0 | 0 | 0 | 571.4 | 349.2 | 0.611 | 6c14d5adee5f8639... | ee3075018b3d4b01
+stock medium f16 | kathbath-ur | 100 | 25.63 | 7.99 | n/a | 0 | 0 | 0 | 0 | 0 | 588.9 | 301.9 | 0.513 | 6c14d5adee5f8639... | 6d75bfed33bb58e4
+large-v3 q5_0 | fleurs-en | 20 | 3.35 | n/a | n/a | 0 | 0 | 0 | 0 | 0 | 171.7 | 58.0 | 0.338 | d75795ecff3f83b5... | 6d75bfed33bb58e4
+large-v3 q5_0 | fleurs-hi | 20 | 33.20 | 12.30 | 32.60 | 0 | 0 | 0 | 0 | 0 | 243.1 | 95.8 | 0.394 | d75795ecff3f83b5... | 6d75bfed33bb58e4
+large-v3 q5_0 | fleurs-ur | 20 | 23.34 | 7.91 | n/a | 0 | 0 | 0 | 0 | 0 | 208.5 | 79.4 | 0.381 | d75795ecff3f83b5... | 6d75bfed33bb58e4
+large-v3 q5_0 | kathbath-hi | 100 | 27.94 | 10.13 | 27.52 | 0 | 0 | 0 | 0 | 0 | 571.4 | 360.2 | 0.630 | d75795ecff3f83b5... | 6d75bfed33bb58e4
+large-v3 q5_0 | kathbath-ur | 100 | 19.59 | 5.56 | n/a | 0 | 0 | 0 | 0 | 0 | 588.9 | 316.9 | 0.538 | d75795ecff3f83b5... | 6d75bfed33bb58e4
+small f16 | fleurs-en | 20 | 5.41 | n/a | n/a | 0 | 0 | 0 | 0 | 0 | 171.7 | 33.1 | 0.193 | 1be3a9b2063867b9... | 6d75bfed33bb58e4
+small f16 | fleurs-hi | 20 | 61.63 | 28.93 | 61.23 | 0 | 0 | 0 | 0 | 0 | 243.1 | 51.2 | 0.210 | 1be3a9b2063867b9... | 6d75bfed33bb58e4
+small f16 | fleurs-ur | 20 | 38.84 | 14.63 | n/a | 0 | 0 | 0 | 0 | 0 | 208.5 | 40.2 | 0.193 | 1be3a9b2063867b9... | 6d75bfed33bb58e4
+small f16 | kathbath-hi | 100 | 55.12 | 21.99 | 54.70 | 0 | 0 | 0 | 0 | 0 | 571.4 | 182.4 | 0.319 | 1be3a9b2063867b9... | 6d75bfed33bb58e4
+small f16 | kathbath-ur | 100 | 36.07 | 11.45 | n/a | 0 | 0 | 0 | 0 | 0 | 588.9 | 153.3 | 0.260 | 1be3a9b2063867b9... | 6d75bfed33bb58e4
+
+rule (owner, 13 Nov 2026): turbo first for a language only if its Kathbath WER is no worse than stock medium's by more than 2 points; English: FLEURS en settles it.
+hi: Kathbath WER turbo 32.26 against medium 40.90 (turbo - medium = -8.64 points, limit 2) -> turbo first
+   for information, FLEURS hi: turbo 38.37 against medium 47.71 (-9.34 points)
+ur: Kathbath WER turbo 20.53 against medium 25.63 (turbo - medium = -5.09 points, limit 2) -> turbo first
+   for information, FLEURS ur: turbo 22.15 against medium 28.45 (-6.30 points)
+en: FLEURS en WER turbo 4.38 against medium 4.90 (turbo - medium = -0.52 points) -> turbo first (speeds are equal on the Vulkan iGPU: A/B/C rows 0.354 to 0.374); 20 clips, a difference of this size is within noise unless large
+
+night rule (owner, 13 Nov 2026): large-v3 q5_0 is a language's night model only if its WER is at least 2 points better than turbo's (Kathbath for hi and ur, FLEURS for en); otherwise that language gets no night pass and the rolling turbo result stands.
+en: fleurs-en WER large-v3 q5_0 3.35 against turbo 4.38 (large - turbo = -1.03 points, needs -2 or lower) -> no night pass
+hi: kathbath-hi WER large-v3 q5_0 27.94 against turbo 32.26 (large - turbo = -4.32 points, needs -2 or lower) -> large-v3 q5_0
+ur: kathbath-ur WER large-v3 q5_0 19.59 against turbo 20.53 (large - turbo = -0.95 points, needs -2 or lower) -> no night pass
+
+small fallback rule (owner, 13 Nov 2026): small stays third for a language only if its WER is within 15 points of turbo's; otherwise it is removed for that language (CPU-only weak machines then use turbo on the CPU with the lag estimate).
+en: fleurs-en WER small 5.41 against turbo 4.38 (small - turbo = +1.03 points, limit 15) -> stays third
+hi: kathbath-hi WER small 55.12 against turbo 32.26 (small - turbo = +22.86 points, limit 15) -> removed
+ur: kathbath-ur WER small 36.07 against turbo 20.53 (small - turbo = +15.53 points, limit 15) -> removed
+
+result: rolling first: hi: turbo, ur: turbo, en: turbo; night: en: no night pass, hi: large-v3 q5_0, ur: no night pass; small fallback: en: stays third, hi: removed, ur: removed (all provisional until Phase 5)

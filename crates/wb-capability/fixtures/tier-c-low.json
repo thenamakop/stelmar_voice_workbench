@@ -1,0 +1,543 @@
+{
+  "schema_version": 1,
+  "app_version": "0.1.0",
+  "created_at": "2026-11-13T20:00:00+05:30",
+  "emulated": "emu-low",
+  "fingerprint": {
+    "os": "Windows 11",
+    "cpu_brand": "Fixture CPU",
+    "logical_processors": 8,
+    "physical_cores": 4,
+    "total_ram_gib": 16,
+    "gpus": [
+      {
+        "name": "Fixture GPU",
+        "driver": "1.0"
+      }
+    ],
+    "app_version": "0.1.0",
+    "manifest_hash": "fixture",
+    "emulated": "emu-low"
+  },
+  "check": {
+    "kind": "quick",
+    "partial": false,
+    "started_at": "2026-11-13T20:00:00+05:30",
+    "duration_s": 400.0,
+    "bar_s": 480.0,
+    "excerpt_seconds": 30.0
+  },
+  "hardware": {
+    "os": "Windows 11",
+    "cpu_brand": "Fixture CPU",
+    "logical_processors": 4,
+    "physical_cores": 4,
+    "cpu_features": [
+      "avx",
+      "avx2",
+      "fma",
+      "f16c",
+      "bmi2"
+    ],
+    "avx2": true,
+    "avx512": false,
+    "total_ram_bytes": 17179869184,
+    "available_ram_bytes": 11811160064,
+    "gpus": [
+      {
+        "index": 0,
+        "name": "Intel(R) UHD Graphics",
+        "vendor": "Intel",
+        "kind": "integrated",
+        "dedicated_bytes": 0,
+        "local_bytes": 2254857830,
+        "shared_bytes": 0,
+        "shared_assumed": false,
+        "driver": "32.0.101.0",
+        "vulkan_usable": true
+      }
+    ],
+    "disks": [],
+    "on_mains_power": true,
+    "audio_inputs": 2
+  },
+  "engines": [
+    {
+      "variant": "avx2",
+      "usable": true,
+      "reason": null,
+      "info_ms": 300,
+      "devices": [
+        "cpu"
+      ]
+    },
+    {
+      "variant": "avx512",
+      "usable": false,
+      "reason": "this CPU has no AVX-512 (exit code 3)",
+      "info_ms": 40,
+      "devices": []
+    },
+    {
+      "variant": "vulkan",
+      "usable": true,
+      "reason": null,
+      "info_ms": 900,
+      "devices": [
+        "gpu"
+      ]
+    }
+  ],
+  "measurements": [
+    {
+      "model": "medium",
+      "lang": "en",
+      "mode": "rolling",
+      "config": {
+        "kind": "gpu",
+        "index": 0
+      },
+      "engine_build": "vulkan",
+      "device_name": "fixture",
+      "threads": 2,
+      "method": "fixture (numbers from the Phase 2 speed tables)",
+      "clip_seconds": 30.0,
+      "rtf": 0.354,
+      "warmup_rtf": 0.3894,
+      "load_s": 1.0,
+      "peak_working_set_bytes": 2353642078,
+      "peak_commit_bytes": 2942052597,
+      "gpu_local_bytes": 2265595248,
+      "truncated_chunks": 0,
+      "live_standin": false
+    },
+    {
+      "model": "medium",
+      "lang": "hi",
+      "mode": "rolling",
+      "config": {
+        "kind": "gpu",
+        "index": 0
+      },
+      "engine_build": "vulkan",
+      "device_name": "fixture",
+      "threads": 2,
+      "method": "fixture (numbers from the Phase 2 speed tables)",
+      "clip_seconds": 30.0,
+      "rtf": 0.929,
+      "warmup_rtf": 1.0219,
+      "load_s": 1.0,
+      "peak_working_set_bytes": 2362232012,
+      "peak_commit_bytes": 2952790016,
+      "gpu_local_bytes": 2254857830,
+      "truncated_chunks": 0,
+      "live_standin": false
+    },
+    {
+      "model": "medium",
+      "lang": "ur",
+      "mode": "rolling",
+      "config": {
+        "kind": "gpu",
+        "index": 0
+      },
+      "engine_build": "vulkan",
+      "device_name": "fixture",
+      "threads": 2,
+      "method": "fixture (numbers from the Phase 2 speed tables)",
+      "clip_seconds": 30.0,
+      "rtf": 0.929,
+      "warmup_rtf": 1.0219,
+      "load_s": 1.0,
+      "peak_working_set_bytes": 2362232012,
+      "peak_commit_bytes": 2952790016,
+      "gpu_local_bytes": 2254857830,
+      "truncated_chunks": 0,
+      "live_standin": false
+    },
+    {
+      "model": "large-v3-turbo-q5_0",
+      "lang": "en",
+      "mode": "rolling",
+      "config": {
+        "kind": "gpu",
+        "index": 0
+      },
+      "engine_build": "vulkan",
+      "device_name": "fixture",
+      "threads": 2,
+      "method": "fixture (numbers from the Phase 2 speed tables)",
+      "clip_seconds": 30.0,
+      "rtf": 0.359,
+      "warmup_rtf": 0.39490000000000003,
+      "load_s": 1.0,
+      "peak_working_set_bytes": 1297080123,
+      "peak_commit_bytes": 1621350154,
+      "gpu_local_bytes": 944892805,
+      "truncated_chunks": 0,
+      "live_standin": false
+    },
+    {
+      "model": "large-v3-turbo-q5_0",
+      "lang": "hi",
+      "mode": "rolling",
+      "config": {
+        "kind": "gpu",
+        "index": 0
+      },
+      "engine_build": "vulkan",
+      "device_name": "fixture",
+      "threads": 2,
+      "method": "fixture (numbers from the Phase 2 speed tables)",
+      "clip_seconds": 30.0,
+      "rtf": 0.734,
+      "warmup_rtf": 0.8074,
+      "load_s": 1.0,
+      "peak_working_set_bytes": 1279900254,
+      "peak_commit_bytes": 1599875317,
+      "gpu_local_bytes": 944892805,
+      "truncated_chunks": 0,
+      "live_standin": false
+    },
+    {
+      "model": "small",
+      "lang": "en",
+      "mode": "rolling",
+      "config": {
+        "kind": "gpu",
+        "index": 0
+      },
+      "engine_build": "vulkan",
+      "device_name": "fixture",
+      "threads": 2,
+      "method": "fixture (numbers from the Phase 2 speed tables)",
+      "clip_seconds": 30.0,
+      "rtf": 0.139,
+      "warmup_rtf": 0.15290000000000004,
+      "load_s": 1.0,
+      "peak_working_set_bytes": 1236950581,
+      "peak_commit_bytes": 1546188226,
+      "gpu_local_bytes": 880468295,
+      "truncated_chunks": 0,
+      "live_standin": false
+    },
+    {
+      "model": "small",
+      "lang": "hi",
+      "mode": "rolling",
+      "config": {
+        "kind": "gpu",
+        "index": 0
+      },
+      "engine_build": "vulkan",
+      "device_name": "fixture",
+      "threads": 2,
+      "method": "fixture (numbers from the Phase 2 speed tables)",
+      "clip_seconds": 30.0,
+      "rtf": 0.423,
+      "warmup_rtf": 0.46530000000000005,
+      "load_s": 1.0,
+      "peak_working_set_bytes": 1228360646,
+      "peak_commit_bytes": 1535450808,
+      "gpu_local_bytes": 880468295,
+      "truncated_chunks": 0,
+      "live_standin": false
+    },
+    {
+      "model": "small",
+      "lang": "ur",
+      "mode": "rolling",
+      "config": {
+        "kind": "gpu",
+        "index": 0
+      },
+      "engine_build": "vulkan",
+      "device_name": "fixture",
+      "threads": 2,
+      "method": "fixture (numbers from the Phase 2 speed tables)",
+      "clip_seconds": 30.0,
+      "rtf": 0.423,
+      "warmup_rtf": 0.46530000000000005,
+      "load_s": 1.0,
+      "peak_working_set_bytes": 1228360646,
+      "peak_commit_bytes": 1535450808,
+      "gpu_local_bytes": 880468295,
+      "truncated_chunks": 0,
+      "live_standin": false
+    },
+    {
+      "model": "large-v3-q5_0",
+      "lang": "hi",
+      "mode": "rolling",
+      "config": {
+        "kind": "gpu",
+        "index": 0
+      },
+      "engine_build": "vulkan",
+      "device_name": "fixture",
+      "threads": 2,
+      "method": "fixture (numbers from the Phase 2 speed tables)",
+      "clip_seconds": 30.0,
+      "rtf": 1.532,
+      "warmup_rtf": 1.6852000000000003,
+      "load_s": 1.0,
+      "peak_working_set_bytes": 2336462209,
+      "peak_commit_bytes": 2920577761,
+      "gpu_local_bytes": 2179695902,
+      "truncated_chunks": 0,
+      "live_standin": false
+    },
+    {
+      "model": "small",
+      "lang": "en",
+      "mode": "rolling",
+      "config": {
+        "kind": "cpu"
+      },
+      "engine_build": "avx2",
+      "device_name": "fixture",
+      "threads": 2,
+      "method": "fixture (numbers from the Phase 2 speed tables)",
+      "clip_seconds": 30.0,
+      "rtf": 0.948,
+      "warmup_rtf": 1.0428,
+      "load_s": 1.0,
+      "peak_working_set_bytes": 1133871366,
+      "peak_commit_bytes": 1417339207,
+      "gpu_local_bytes": null,
+      "truncated_chunks": 0,
+      "live_standin": false
+    },
+    {
+      "model": "small",
+      "lang": "hi",
+      "mode": "rolling",
+      "config": {
+        "kind": "cpu"
+      },
+      "engine_build": "avx2",
+      "device_name": "fixture",
+      "threads": 2,
+      "method": "fixture (numbers from the Phase 2 speed tables)",
+      "clip_seconds": 30.0,
+      "rtf": 1.629,
+      "warmup_rtf": 1.7919,
+      "load_s": 1.0,
+      "peak_working_set_bytes": 1142461300,
+      "peak_commit_bytes": 1428076625,
+      "gpu_local_bytes": null,
+      "truncated_chunks": 0,
+      "live_standin": false
+    },
+    {
+      "model": "medium",
+      "lang": "hi",
+      "mode": "rolling",
+      "config": {
+        "kind": "cpu"
+      },
+      "engine_build": "avx2",
+      "device_name": "fixture",
+      "threads": 2,
+      "method": "fixture (numbers from the Phase 2 speed tables)",
+      "clip_seconds": 30.0,
+      "rtf": 5.203,
+      "warmup_rtf": 5.723300000000001,
+      "load_s": 1.0,
+      "peak_working_set_bytes": 2250562863,
+      "peak_commit_bytes": 2813203578,
+      "gpu_local_bytes": null,
+      "truncated_chunks": 0,
+      "live_standin": false
+    },
+    {
+      "model": "small",
+      "lang": "en",
+      "mode": "near_live",
+      "config": {
+        "kind": "cpu"
+      },
+      "engine_build": "avx2",
+      "device_name": "fixture",
+      "threads": 2,
+      "method": "fixture (numbers from the Phase 2 speed tables)",
+      "clip_seconds": 30.0,
+      "rtf": 1.641,
+      "warmup_rtf": 1.8051000000000001,
+      "load_s": 1.0,
+      "peak_working_set_bytes": 1030792151,
+      "peak_commit_bytes": 1288490188,
+      "gpu_local_bytes": null,
+      "truncated_chunks": 0,
+      "live_standin": false
+    },
+    {
+      "model": "small",
+      "lang": "hi",
+      "mode": "near_live",
+      "config": {
+        "kind": "cpu"
+      },
+      "engine_build": "avx2",
+      "device_name": "fixture",
+      "threads": 2,
+      "method": "fixture (numbers from the Phase 2 speed tables)",
+      "clip_seconds": 30.0,
+      "rtf": 2.35,
+      "warmup_rtf": 2.5850000000000004,
+      "load_s": 1.0,
+      "peak_working_set_bytes": 1030792151,
+      "peak_commit_bytes": 1288490188,
+      "gpu_local_bytes": null,
+      "truncated_chunks": 1,
+      "live_standin": false
+    }
+  ],
+  "hybrid": null,
+  "recorder_safety": [
+    {
+      "config": {
+        "kind": "gpu",
+        "index": 0
+      },
+      "duration_s": 120.0,
+      "overruns": 0,
+      "driver_xruns": 0,
+      "passed": true
+    },
+    {
+      "config": {
+        "kind": "cpu"
+      },
+      "duration_s": 120.0,
+      "overruns": 0,
+      "driver_xruns": 0,
+      "passed": true
+    }
+  ],
+  "injectors": [],
+  "decision": {
+    "tier": "C",
+    "tier_reasons": [
+      "Rolling transcription works; live text is not offered on this machine."
+    ],
+    "record_only_reason": null,
+    "bars": {
+      "rolling_rtf": 0.75,
+      "near_live_rtf": 0.26249999999999996,
+      "live_standin_rtf": 0.1875,
+      "headroom_factor": 0.75
+    },
+    "config": {
+      "config": {
+        "kind": "gpu",
+        "index": 0
+      },
+      "label": "Intel(R) UHD Graphics (Vulkan)",
+      "why": "The graphics card measured fastest for the rolling models.",
+      "cpu_threads": 2,
+      "recorder_safety_passed": true
+    },
+    "languages": {
+      "en": {
+        "rolling": {
+          "model": "medium",
+          "rtf": 0.354,
+          "meets_bar": true,
+          "quality_unverified": false,
+          "k_max": 2,
+          "ready_after_stop_min": 3.5400000000000063,
+          "lags": false
+        },
+        "night": null,
+        "night_note": "The night model is measured by the full check.",
+        "live": {
+          "offered": false,
+          "kind": null,
+          "model": null,
+          "rtf": null,
+          "soft_reasons": [
+            "No near-live model has been checked for accuracy in English yet."
+          ],
+          "hard_reasons": [
+            "Near-live text for English runs slower than real time here (1.64×), so it can never keep up."
+          ]
+        }
+      },
+      "hi": {
+        "rolling": {
+          "model": "large-v3-turbo-q5_0",
+          "rtf": 0.734,
+          "meets_bar": true,
+          "quality_unverified": true,
+          "k_max": 1,
+          "ready_after_stop_min": 7.340000000000003,
+          "lags": false
+        },
+        "night": {
+          "model": "large-v3-q5_0",
+          "rtf": 1.532,
+          "hours_for_a_day": 4.596,
+          "quality_unverified": true
+        },
+        "night_note": null,
+        "live": {
+          "offered": false,
+          "kind": null,
+          "model": null,
+          "rtf": null,
+          "soft_reasons": [
+            "No near-live model has been checked for accuracy in Hindi (Devanagari) yet."
+          ],
+          "hard_reasons": [
+            "Near-live text for Hindi (Devanagari) runs slower than real time here (2.35×), so it can never keep up.",
+            "The near-live test for Hindi (Devanagari) lost speech (1 truncated chunk)."
+          ]
+        }
+      },
+      "ur": {
+        "rolling": {
+          "model": "small",
+          "rtf": 0.423,
+          "meets_bar": true,
+          "quality_unverified": true,
+          "k_max": 1,
+          "ready_after_stop_min": 4.230000000000004,
+          "lags": false
+        },
+        "night": null,
+        "night_note": "The night model is measured by the full check.",
+        "live": {
+          "offered": false,
+          "kind": null,
+          "model": null,
+          "rtf": null,
+          "soft_reasons": [],
+          "hard_reasons": [
+            "Urdu live text is never offered on a machine without a working graphics card (no small Urdu model is good enough)."
+          ]
+        }
+      }
+    },
+    "hinglish": {
+      "ok": false,
+      "rtf": 1.532,
+      "source": "proxy: large-v3-q5_0 (same size)"
+    },
+    "dual_decode_en_hi": false,
+    "provisional": true,
+    "partial": false,
+    "verdict": [
+      "Record + post-process. Live text is off by default and not offered on this machine.",
+      "Transcribing runs on Intel(R) UHD Graphics (Vulkan).",
+      "English: medium, about 4 minutes after Stop.",
+      "Hindi (Devanagari): large-v3-turbo-q5_0 (quality unverified), about 7 minutes after Stop.",
+      "Urdu (Nastaliq): small (quality unverified), about 4 minutes after Stop.",
+      "The code-switching (Hinglish) model is too slow to run on every chunk here.",
+      "The model choice is provisional until the models have been checked for accuracy."
+    ],
+    "process_while_recording": true,
+    "pause_on_battery": true
+  },
+  "overrides": []
+}

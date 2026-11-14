@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "_note": "Metadata only: ids, files, sizes, SHA-256, licences, sources and how a file was made. The model files are never committed and never downloaded by the app; it refuses a file whose SHA-256 differs from this list. Written by scripts/models/write_manifest.py.",
+  "_note": "Metadata only: ids, files, sizes, SHA-256, licences, sources and how a file was made. The model files are never committed and never downloaded by the app; it refuses a file whose SHA-256 differs from this list. Written by scripts/models/write_manifest.py. provisional_rank is the order the system check tries models in, provisional until Phase 5. English: large-v3-turbo-q5_0 is listed first and medium second although the gap is within noise (FLEURS English 4.38 against 4.90 WER on 20 clips); turbo goes first because its file is smaller at equal speed (owner's decision, 13 Nov 2026), so quality_unverified stays false.",
   "models": [
     {
       "id": "hinglish-f16",
@@ -87,6 +87,14 @@
         "night"
       ],
       "validated_roles": [],
+      "provisional_rank": [
+        {
+          "role": "night",
+          "lang": "hi",
+          "rank": 1,
+          "quality_unverified": false
+        }
+      ],
       "licence": "MIT",
       "source": {
         "repo": "ggerganov/whisper.cpp",
@@ -102,13 +110,53 @@
       "base": "large-v3-turbo",
       "quant": "q5_0",
       "languages": [
-        "en"
+        "en",
+        "hi",
+        "ur"
       ],
       "candidate_roles": [
         "rolling",
         "live"
       ],
       "validated_roles": [],
+      "provisional_rank": [
+        {
+          "role": "rolling",
+          "lang": "en",
+          "rank": 1,
+          "quality_unverified": false
+        },
+        {
+          "role": "rolling",
+          "lang": "hi",
+          "rank": 1,
+          "quality_unverified": false
+        },
+        {
+          "role": "rolling",
+          "lang": "ur",
+          "rank": 1,
+          "quality_unverified": false
+        },
+        {
+          "role": "live",
+          "lang": "en",
+          "rank": 1,
+          "quality_unverified": false
+        },
+        {
+          "role": "live",
+          "lang": "hi",
+          "rank": 1,
+          "quality_unverified": false
+        },
+        {
+          "role": "live",
+          "lang": "ur",
+          "rank": 1,
+          "quality_unverified": false
+        }
+      ],
       "licence": "MIT",
       "source": {
         "repo": "ggerganov/whisper.cpp",
@@ -132,6 +180,26 @@
         "baseline"
       ],
       "validated_roles": [],
+      "provisional_rank": [
+        {
+          "role": "rolling",
+          "lang": "en",
+          "rank": 2,
+          "quality_unverified": false
+        },
+        {
+          "role": "rolling",
+          "lang": "hi",
+          "rank": 2,
+          "quality_unverified": false
+        },
+        {
+          "role": "rolling",
+          "lang": "ur",
+          "rank": 2,
+          "quality_unverified": false
+        }
+      ],
       "licence": "MIT",
       "source": {
         "repo": "ggerganov/whisper.cpp",
@@ -243,6 +311,20 @@
         "baseline"
       ],
       "validated_roles": [],
+      "provisional_rank": [
+        {
+          "role": "rolling",
+          "lang": "en",
+          "rank": 3,
+          "quality_unverified": false
+        },
+        {
+          "role": "near-live",
+          "lang": "en",
+          "rank": 1,
+          "quality_unverified": false
+        }
+      ],
       "licence": "MIT",
       "source": {
         "repo": "ggerganov/whisper.cpp",

@@ -64,3 +64,19 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 
 For more information, please refer to <https://unlicense.org>
+
+## Bench clips in `resources/bench` (CC BY 4.0)
+
+The four 60-second clips the system check times (`bench-en.wav`, `bench-hi.wav`, `bench-ur.wav` and
+`bench-codeswitch.wav`) are made of utterances from the test split of FLEURS (Google, "FLEURS: Few-shot
+Learning Evaluation of Universal Representations of Speech", Conneau et al., 2022), published under the
+Creative Commons Attribution 4.0 International licence (<https://creativecommons.org/licenses/by/4.0/>).
+The utterances are joined with 0.8 s of silence and cut at 60 s; nothing else was changed. The list of
+utterance ids and the SHA-256 of each file is in `resources/bench/clips.json`, and `scripts/make-bench-clips.py`
+rebuilds them. `bench-codeswitch.wav` alternates English and Hindi utterances and stands in for real
+code-switched speech.
+
+_Note of 14 Nov 2026 (owner's decision on the review of the Phase 3 pull request):_ the four `resources/bench/*.wav`
+files are public FLEURS audio, published under CC BY 4.0 and credited above. They are not private audio, so
+committing them is allowed under the rule in `AGENTS.md` that bans private audio and model binaries from the
+repository. Recordings of real sessions, the Phase 5 local sets and anything under `eval/data/` stay out of Git.

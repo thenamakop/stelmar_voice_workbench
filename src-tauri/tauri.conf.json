@@ -65,7 +65,8 @@
       "icons/icon.ico"
     ],
     "resources": {
-      "../THIRD_PARTY_LICENCES.md": "THIRD_PARTY_LICENCES.md"
+      "../THIRD_PARTY_LICENCES.md": "THIRD_PARTY_LICENCES.md",
+      "../resources/bench/": "resources/bench/"
     }
   }
 }
