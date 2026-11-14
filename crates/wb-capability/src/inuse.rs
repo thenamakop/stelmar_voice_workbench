@@ -1,10 +1,10 @@
 //! Which saved profile is in use (owner's decisions 3 and 4 of 14 Nov 2026).
 //!
 //! The app keeps up to two files: `capability.json` (the profile in use) and `capability.partial.json` (a
-//! partial or cancelled check kept apart so that it never replaces a complete profile). After the computer's
-//! fingerprint changed, neither profile describes it: the partial one that was measured on this computer is
-//! used if there is one, and either way with safe defaults (record + post-process only: no live text, no
-//! processing while recording) until a new check has run and been saved as the profile in use.
+//! partial or cancelled check kept apart so that it never replaces a complete profile that still fits this
+//! computer). After the computer's fingerprint changed, the old profile describes another machine state: until
+//! a new check has run it is read with safe defaults (record + post-process only: no live text, no processing
+//! while recording), and the first new check made on this computer, partial or complete, replaces it.
 //!
 //! This module is pure: the app loads the files and the current fingerprint and asks here.
 
@@ -40,8 +40,20 @@ fn changes_for(cap: &Capability, now: Option<&Fingerprint>) -> Vec<String> {
 /// Where a new check's profile goes. A partial or cancelled check never replaces a complete profile in
 /// `capability.json`: it is kept in `capability.partial.json`. With no complete profile saved (none at all, or
 /// only a partial one) it becomes the profile in use.
-pub fn route_new_check(existing_main: Option<&Capability>, new: &Capability) -> SavedFile {
-    let protects = existing_main.is_some_and(|m| !m.profile.check.partial);
+///
+/// A complete profile protects itself only while its fingerprint matches this computer (`now`): one that
+/// describes another state of the machine is not worth protecting, and a new check made here, partial or
+/// complete, becomes the profile in use (owner's decision 1 of 14 Nov 2026, round 2). What that profile allows
+/// is still decided by its own measured cells (a partial check without a passed recorder safety run offers
+/// neither live text nor processing while recording). When `now` is `None` the fingerprint cannot be compared
+/// and the profile is protected as before (the decisions then run on safe defaults, see [`unidentified`]).
+pub fn route_new_check(
+    existing_main: Option<&Capability>,
+    new: &Capability,
+    now: Option<&Fingerprint>,
+) -> SavedFile {
+    let protects =
+        existing_main.is_some_and(|m| !m.profile.check.partial && changes_for(m, now).is_empty());
     if new.profile.check.partial && protects {
         SavedFile::Partial
     } else {

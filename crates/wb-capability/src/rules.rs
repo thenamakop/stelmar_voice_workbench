@@ -629,9 +629,32 @@ pub fn decide(p: &Profile, r: &Rankings, o: &Options) -> Decision {
     let standins = live_standin(p, r, o, &b);
     let mut any_near_live = false;
     let mut any_streaming = false;
+    // Live text runs beside the recorder like processing while recording does, so it needs the same
+    // passed recorder safety run for the chosen setup (a partial check that left it out offers no live text).
+    let safety_for_live = safety_of(p, config).map(|s| s.passed);
     for lang in Lang::ALL {
         let rolling = picks.get(&lang).cloned();
-        let live = live_decision(p, r, o, &b, lang, rolling.as_ref(), &standins);
+        let mut live = live_decision(p, r, o, &b, lang, rolling.as_ref(), &standins);
+        if live.offered && safety_for_live != Some(true) {
+            live = LiveDecision {
+                offered: false,
+                kind: None,
+                model: None,
+                rtf: None,
+                soft_reasons: live.soft_reasons,
+                hard_reasons: {
+                    let mut h = live.hard_reasons;
+                    h.push(if safety_for_live.is_none() {
+                        "The recorder safety test has not run for this setup, so live text is not offered."
+                            .to_string()
+                    } else {
+                        "The recorder safety test did not pass for this setup, so live text is not offered."
+                            .to_string()
+                    });
+                    h
+                },
+            };
+        }
         if live.kind.as_deref() == Some("near_live") {
             any_near_live = true;
         }

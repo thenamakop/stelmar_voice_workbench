@@ -306,8 +306,9 @@ export function SystemScreen({ capability, onContinue }: SystemScreenProps) {
         {view && view.fingerprint_changes.length > 0 && !running && (
           <Notice tone="warning" title="This computer or the app has changed since the last check">
             {capitalise(view.fingerprint_changes.join(" · "))}. Until the check has run again, this computer
-            records and post-processes only: live captions and processing while recording are off. A check
-            that ends partial keeps these limits; a complete check lifts them.
+            records and post-processes only: live captions and processing while recording are off. The next
+            check made on this computer, partial or complete, replaces the old one; what it allows depends on
+            what it measured, including the recorder safety test.
             <div style={{ marginTop: 8 }}>
               <Button size="sm" onClick={() => void capability.run(false)}>
                 Re-run Quick Check
@@ -319,7 +320,7 @@ export function SystemScreen({ capability, onContinue }: SystemScreenProps) {
           <Notice tone="info" title="A partial check is kept apart">
             {view.saved_checks.find((c) => c.file === "partial")?.in_use
               ? "The complete check belongs to an earlier state of this computer, so the partial check made on this computer is in use, with safe defaults."
-              : "It never replaces the complete check, which stays in use."}
+              : "While the complete check still fits this computer, a partial check never replaces it."}
           </Notice>
         )}
         {cap && cap.injectors.length > 0 && (

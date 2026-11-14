@@ -447,7 +447,8 @@ fn run_check(
         .map(|c| c.overrides)
         .unwrap_or_default();
     let cap = assemble(outcome.profile, &env.rankings, &env.options, overrides);
-    let file = store::save_routed(&data_dir(app), &cap).map_err(|e| e.to_string())?;
+    let file = store::save_routed(&data_dir(app), &cap, current_fingerprint(app).as_ref())
+        .map_err(|e| e.to_string())?;
     tracing::info!(
         file = ?file,
         tier = cap.decision.tier.label(),
@@ -605,7 +606,7 @@ mod tests {
         // A new complete check saved on the changed computer clears it again.
         let mut fresh = cap;
         fresh.profile.fingerprint = changed.clone();
-        store::save_routed(&d, &fresh).unwrap();
+        store::save_routed(&d, &fresh, Some(&changed)).unwrap();
         assert!(live_allowed(&d, &langs, Some(&changed)).is_ok());
         std::fs::remove_dir_all(&d).unwrap();
     }

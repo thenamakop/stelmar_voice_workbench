@@ -30,20 +30,113 @@ fn changed(fp: &Fingerprint) -> Fingerprint {
 fn a_partial_check_never_replaces_a_complete_profile() {
     let main = complete(legion_native());
     let new_partial = partial(complete(legion_native()));
+    let now = main.profile.fingerprint.clone();
     assert_eq!(
-        route_new_check(Some(&main), &new_partial),
+        route_new_check(Some(&main), &new_partial, Some(&now)),
         SavedFile::Partial
     );
     // A complete check replaces the profile in use.
     assert_eq!(
-        route_new_check(Some(&main), &complete(legion_native())),
+        route_new_check(Some(&main), &complete(legion_native()), Some(&now)),
         SavedFile::Main
     );
-    // With no complete profile saved, a partial one is what there is.
-    assert_eq!(route_new_check(None, &new_partial), SavedFile::Main);
+    // With no complete profile saved (a fresh install, or only a partial one), a partial one is what there is.
     assert_eq!(
-        route_new_check(Some(&new_partial), &new_partial),
+        route_new_check(None, &new_partial, Some(&now)),
         SavedFile::Main
+    );
+    assert_eq!(route_new_check(None, &new_partial, None), SavedFile::Main);
+    assert_eq!(
+        route_new_check(Some(&new_partial), &new_partial, Some(&now)),
+        SavedFile::Main
+    );
+}
+
+#[test]
+fn a_complete_profile_protects_itself_only_while_its_fingerprint_matches_this_computer() {
+    let main = complete(legion_native());
+    let fits = main.profile.fingerprint.clone();
+    let other = changed(&fits);
+    let new_partial = partial(complete(legion_native()));
+    // Matching fingerprint: the partial check goes to the side file.
+    assert_eq!(
+        route_new_check(Some(&main), &new_partial, Some(&fits)),
+        SavedFile::Partial
+    );
+    // Changed fingerprint: the old profile does not protect; the partial check made here becomes the profile
+    // in use, and so does a complete one.
+    assert_eq!(
+        route_new_check(Some(&main), &new_partial, Some(&other)),
+        SavedFile::Main
+    );
+    assert_eq!(
+        route_new_check(Some(&main), &complete(legion_native()), Some(&other)),
+        SavedFile::Main
+    );
+    // Unknown fingerprint: it cannot be compared, so the profile is protected as before, and the decisions
+    // read it with safe defaults.
+    assert_eq!(
+        route_new_check(Some(&main), &new_partial, None),
+        SavedFile::Partial
+    );
+    let used = wb_capability::unidentified(choose_in_use(Some(main), None, None).unwrap());
+    assert!(!used.cap.decision.process_while_recording);
+    assert!(
+        used.cap
+            .decision
+            .languages
+            .values()
+            .all(|l| !l.live.offered)
+    );
+}
+
+#[test]
+fn a_partial_check_that_became_the_profile_in_use_offers_nothing_its_cells_do_not_back() {
+    // After a fingerprint change a partial check is the profile in use (no safe defaults: it describes this
+    // computer). Live text and processing while recording stay gated by its own measured cells.
+    let full = decide_with(&legion_native(), false);
+    assert!(
+        full.process_while_recording && full.languages[&Lang::En].live.offered,
+        "the native check with its safety run offers both"
+    );
+    // Recorder safety cell missing.
+    let mut p = legion_native();
+    p.recorder_safety.clear();
+    let d = decide_with(&p, false);
+    assert!(!d.process_while_recording);
+    assert!(d.languages.values().all(|l| !l.live.offered));
+    assert!(
+        d.languages[&Lang::En]
+            .live
+            .hard_reasons
+            .iter()
+            .any(|r| r.contains("safety test has not run")),
+        "{:?}",
+        d.languages[&Lang::En].live
+    );
+    // Recorder safety cell failed.
+    let mut p = legion_native();
+    for s in &mut p.recorder_safety {
+        s.passed = false;
+        s.overruns = 3;
+    }
+    let d = decide_with(&p, false);
+    // Every configuration failed its recorder safety run: none is chosen, nothing runs beside the recorder.
+    assert!(d.config.is_none() && d.tier == Tier::R);
+    assert!(d.languages.values().all(|l| !l.live.offered));
+    // Through the profile in use: that partial check, saved on a changed computer, is read as it is.
+    let mut c = partial(cap(p, false));
+    let here = changed(&c.profile.fingerprint);
+    c.profile.fingerprint = here.clone();
+    let used = choose_in_use(Some(c), None, Some(&here)).unwrap();
+    assert!(used.changes.is_empty());
+    assert!(used.cap.decision.config.is_none());
+    assert!(
+        used.cap
+            .decision
+            .languages
+            .values()
+            .all(|l| !l.live.offered)
     );
 }
 

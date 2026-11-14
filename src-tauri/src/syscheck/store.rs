@@ -80,11 +80,15 @@ pub fn in_use(dir: &Path, now: Option<&Fingerprint>) -> Result<Option<InUse>, St
 }
 
 /// Saves a new check's profile where it belongs: a partial or cancelled check goes to the partial file when a
-/// complete profile is in use, anything else becomes the profile in use (and the partial file, which belonged to
+/// complete profile that still fits this computer is in use, anything else becomes the profile in use (and the partial file, which belonged to
 /// the profile it replaces, goes).
-pub fn save_routed(dir: &Path, new: &Capability) -> Result<SavedFile, StoreError> {
+pub fn save_routed(
+    dir: &Path,
+    new: &Capability,
+    now: Option<&Fingerprint>,
+) -> Result<SavedFile, StoreError> {
     let existing = load(dir).ok().flatten();
-    let target = route_new_check(existing.as_ref(), new);
+    let target = route_new_check(existing.as_ref(), new, now);
     match target {
         SavedFile::Main => {
             save(dir, new)?;
@@ -161,32 +165,96 @@ mod tests {
         c
     }
 
+    fn changed(fp: &Fingerprint) -> Fingerprint {
+        let mut f = fp.clone();
+        f.os = format!("{} (updated)", f.os);
+        f
+    }
+
     #[test]
-    fn a_partial_check_is_saved_apart_and_the_complete_profile_stays_in_use() {
+    fn a_partial_check_is_saved_apart_while_the_complete_profile_fits_this_computer() {
         let d = dir("routed");
         let complete = sample(false);
-        assert_eq!(save_routed(&d, &complete).unwrap(), SavedFile::Main);
+        let fp = complete.profile.fingerprint.clone();
+        assert_eq!(
+            save_routed(&d, &complete, Some(&fp)).unwrap(),
+            SavedFile::Main,
+            "fresh install: the first check is the profile in use"
+        );
         let mut partial = sample(true);
         partial.profile.created_at = "later".into();
-        assert_eq!(save_routed(&d, &partial).unwrap(), SavedFile::Partial);
+        assert_eq!(
+            save_routed(&d, &partial, Some(&fp)).unwrap(),
+            SavedFile::Partial
+        );
         assert_eq!(
             load(&d).unwrap().unwrap(),
             complete,
             "the complete profile is untouched"
         );
         assert_eq!(load_partial(&d).unwrap(), partial);
-        let used = in_use(&d, None).unwrap().unwrap();
+        let used = in_use(&d, Some(&fp)).unwrap().unwrap();
         assert_eq!(used.file, SavedFile::Main);
+        assert!(used.changes.is_empty());
         // A complete check later replaces the profile and the partial file goes.
-        assert_eq!(save_routed(&d, &complete).unwrap(), SavedFile::Main);
+        assert_eq!(
+            save_routed(&d, &complete, Some(&fp)).unwrap(),
+            SavedFile::Main
+        );
         assert!(load_partial(&d).is_none());
+        std::fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn after_a_fingerprint_change_a_partial_check_made_here_becomes_the_profile_in_use() {
+        let d = dir("routed-changed");
+        let complete = sample(false);
+        save(&d, &complete).unwrap();
+        let here = changed(&complete.profile.fingerprint);
+        let mut partial = sample(true);
+        partial.profile.fingerprint = here.clone();
+        assert_eq!(
+            save_routed(&d, &partial, Some(&here)).unwrap(),
+            SavedFile::Main
+        );
+        assert!(load_partial(&d).is_none());
+        let used = in_use(&d, Some(&here)).unwrap().unwrap();
+        assert_eq!(used.file, SavedFile::Main);
+        assert!(used.changes.is_empty(), "it describes this computer");
+        assert!(used.cap.profile.check.partial);
+        std::fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn with_an_unknown_fingerprint_the_profile_is_kept_and_read_with_safe_defaults() {
+        let d = dir("routed-unknown");
+        let complete = sample(false);
+        save(&d, &complete).unwrap();
+        assert_eq!(
+            save_routed(&d, &sample(true), None).unwrap(),
+            SavedFile::Partial
+        );
+        let used = in_use(&d, None).unwrap().unwrap();
+        assert!(!used.changes.is_empty());
+        assert!(!used.cap.decision.process_while_recording);
+        assert!(
+            used.cap
+                .decision
+                .languages
+                .values()
+                .all(|l| !l.live.offered)
+        );
         std::fs::remove_dir_all(&d).unwrap();
     }
 
     #[test]
     fn with_no_complete_profile_a_partial_check_is_the_profile_in_use() {
         let d = dir("only-partial");
-        assert_eq!(save_routed(&d, &sample(true)).unwrap(), SavedFile::Main);
+        let fp = sample(true).profile.fingerprint;
+        assert_eq!(
+            save_routed(&d, &sample(true), Some(&fp)).unwrap(),
+            SavedFile::Main
+        );
         assert!(load(&d).unwrap().unwrap().profile.check.partial);
         assert!(load_partial(&d).is_none());
         std::fs::remove_dir_all(&d).unwrap();
