@@ -167,3 +167,43 @@ fn without_a_limit_nothing_changes() {
     assert!(report.done.is_some());
     assert_eq!(report.memory_limit_deaths, 0);
 }
+
+#[cfg(windows)]
+#[test]
+fn two_engines_at_once_each_have_their_own_limit() {
+    // The same 100 MiB ask: the engine with room for it finishes while the one beside it, with a smaller
+    // limit, dies. A limit shared through one job would treat them alike.
+    let run = |name: &'static str, limit: u64| {
+        std::thread::spawn(move || {
+            let dir = temp(name);
+            let mut committer = Committer::open(&dir.join("post-1.jsonl")).expect("open");
+            let mut watch = Watch::default();
+            let result = run_batch(
+                &mock(),
+                request(),
+                &mut committer,
+                &dir,
+                &policy(&dir, 100, Some(limit), 0),
+                &mut watch,
+            );
+            (result, watch.notices)
+        })
+    };
+    let roomy = run("pair-roomy", 300 * MIB);
+    let tight = run("pair-tight", 70 * MIB);
+    let (roomy_result, _) = roomy.join().expect("roomy thread");
+    let (tight_result, tight_notices) = tight.join().expect("tight thread");
+    assert!(
+        roomy_result
+            .expect("the roomy engine finishes")
+            .done
+            .is_some()
+    );
+    assert!(matches!(tight_result, Err(RunError::GaveUp { .. })));
+    assert!(
+        tight_notices.iter().any(
+            |n| matches!(n, Notice::MemoryLimit { limit_bytes, .. } if *limit_bytes == 70 * MIB)
+        ),
+        "{tight_notices:?}"
+    );
+}
