@@ -38,6 +38,11 @@ pub struct Machine {
     pub available_ram_bytes: u64,
     pub job_memory_limit_bytes: Option<u64>,
     pub job_commit_used_bytes: Option<u64>,
+    /// Shared graphics memory (system RAM that the graphics driver holds for the job's processes, an
+    /// integrated GPU's working memory), from the GPU performance counters. A process's commit does not
+    /// include it, so under a job limit it is subtracted from `available_ram_bytes` on top of the commit. None
+    /// when the counters are missing or the process is in no job.
+    pub gpu_shared_in_job_bytes: Option<u64>,
     /// The emulation profile (`emu-low`, `emu-mid`, `native`) when run under `wb-emulate`.
     pub emulated: Option<String>,
 }
@@ -55,6 +60,8 @@ pub struct Inputs {
     pub job_limit: Option<u64>,
     /// Commit of the processes in that job.
     pub job_used: Option<u64>,
+    /// Shared graphics memory used by the processes of that job.
+    pub gpu_shared_in_job: Option<u64>,
     pub env_emulated: Option<String>,
     pub env_reported_ram: Option<u64>,
     pub env_job_memory: Option<u64>,
@@ -76,7 +83,10 @@ impl Machine {
             (Some(a), Some(b)) => Some(a.min(b)),
             (a, b) => a.or(b),
         };
-        let from_job = limit.map(|l| l.saturating_sub(i.job_used.unwrap_or(0)));
+        let from_job = limit.map(|l| {
+            l.saturating_sub(i.job_used.unwrap_or(0))
+                .saturating_sub(i.gpu_shared_in_job.unwrap_or(0))
+        });
         let available = from_job.map_or(i.host_available_ram, |j| j.min(i.host_available_ram));
         Self {
             logical_processors: logical.max(1),
@@ -88,6 +98,7 @@ impl Machine {
             available_ram_bytes: available,
             job_memory_limit_bytes: limit,
             job_commit_used_bytes: i.job_used,
+            gpu_shared_in_job_bytes: i.gpu_shared_in_job,
             emulated: i.env_emulated.clone(),
         }
     }
@@ -138,6 +149,17 @@ pub fn probe() -> Machine {
         }
         inputs.job_limit = win::job_memory_limit();
         inputs.job_used = win::job_commit_used();
+        // A job (the emulation job, or a laptop job) counts commit only: add the graphics memory its processes
+        // hold, which on an integrated GPU is system RAM.
+        if inputs.job_used.is_some() {
+            let pids = win::job_pids();
+            inputs.gpu_shared_in_job = gpu_process_memory().map(|all| {
+                all.iter()
+                    .filter(|u| pids.contains(&u.pid))
+                    .map(|u| u.shared_bytes)
+                    .sum()
+            });
+        }
     }
     #[cfg(not(windows))]
     {
@@ -148,6 +170,69 @@ pub fn probe() -> Machine {
         };
     }
     Machine::from_inputs(&inputs)
+}
+
+/// Graphics memory one process uses on one adapter (the counters behind Task Manager's GPU memory columns).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct GpuProcessMemory {
+    pub pid: u32,
+    /// The adapter, as the counter names it: `0x<high>_0x<low>` (the LUID).
+    pub adapter_luid: String,
+    /// Memory on the adapter itself: video memory of a discrete card, the small reserved part of an integrated one.
+    pub dedicated_bytes: u64,
+    /// System RAM the driver holds for the process.
+    pub shared_bytes: u64,
+}
+
+/// Reads a GPU performance-counter instance name, `pid_1234_luid_0x00000000_0x0000AB12_phys_0`, into the
+/// process id and the adapter LUID. None for any other shape.
+pub fn parse_gpu_instance(name: &str) -> Option<(u32, String)> {
+    let rest = name.strip_prefix("pid_")?;
+    let (pid, rest) = rest.split_once("_luid_")?;
+    let pid: u32 = pid.parse().ok()?;
+    let luid = rest.rsplit_once("_phys_").map_or(rest, |(l, _)| l);
+    let hex_part = |p: &str| {
+        p.strip_prefix("0x")
+            .is_some_and(|h| !h.is_empty() && h.bytes().all(|b| b.is_ascii_hexdigit()))
+    };
+    let valid = luid.split('_').count() == 2 && luid.split('_').all(hex_part);
+    valid.then(|| (pid, luid.to_string()))
+}
+
+/// Graphics memory of every process that uses the GPU, one entry per process and adapter. None when the counters
+/// do not exist on this machine (a virtual machine, an old driver) or cannot be read; the caller then relies on
+/// the engines' measured `gpu_local_bytes` and says so.
+pub fn gpu_process_memory() -> Option<Vec<GpuProcessMemory>> {
+    #[cfg(windows)]
+    {
+        let raw = win::gpu_process_memory()?;
+        let mut out: Vec<GpuProcessMemory> = Vec::new();
+        for (name, dedicated, shared) in raw {
+            let Some((pid, luid)) = parse_gpu_instance(&name) else {
+                continue;
+            };
+            // One process can have several physical-adapter instances of the same LUID: add them up.
+            if let Some(e) = out
+                .iter_mut()
+                .find(|e| e.pid == pid && e.adapter_luid == luid)
+            {
+                e.dedicated_bytes = e.dedicated_bytes.saturating_add(dedicated);
+                e.shared_bytes = e.shared_bytes.saturating_add(shared);
+            } else {
+                out.push(GpuProcessMemory {
+                    pid,
+                    adapter_luid: luid,
+                    dedicated_bytes: dedicated,
+                    shared_bytes: shared,
+                });
+            }
+        }
+        Some(out)
+    }
+    #[cfg(not(windows))]
+    {
+        None
+    }
 }
 
 fn u16_at(b: &[u8], o: usize) -> Option<u16> {
@@ -339,6 +424,78 @@ mod tests {
         bad.extend([0u8; 16]);
         assert_eq!(core_masks(&bad), vec![0b1]);
         assert!(core_masks(&[1, 2, 3]).is_empty());
+    }
+
+    #[test]
+    fn gpu_instance_names_give_the_process_and_the_adapter() {
+        assert_eq!(
+            parse_gpu_instance("pid_1234_luid_0x00000000_0x0000AB12_phys_0"),
+            Some((1234, "0x00000000_0x0000AB12".to_string()))
+        );
+        assert_eq!(
+            parse_gpu_instance("pid_7_luid_0x00000000_0x0001F4A0_phys_1"),
+            Some((7, "0x00000000_0x0001F4A0".to_string()))
+        );
+        for bad in [
+            "",
+            "_Total",
+            "pid_x_luid_0x0_0x1_phys_0",
+            "pid_5_luid_0x1_phys_0",
+            "pid_5_luid_0xZZ_0x1_phys_0",
+            "pid_5",
+        ] {
+            assert_eq!(parse_gpu_instance(bad), None, "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn graphics_memory_held_for_a_job_comes_off_what_the_job_may_still_use() {
+        let mut i = base();
+        i.job_limit = Some(11 << 30);
+        i.job_used = Some(3 << 30);
+        i.host_available_ram = 28 << 30;
+        let without = Machine::from_inputs(&i).available_ram_bytes;
+        assert_eq!(without, 8 << 30);
+        i.gpu_shared_in_job = Some(2 << 30);
+        let m = Machine::from_inputs(&i);
+        assert_eq!(m.available_ram_bytes, 6 << 30);
+        assert_eq!(m.gpu_shared_in_job_bytes, Some(2 << 30));
+    }
+
+    #[test]
+    fn graphics_memory_never_makes_the_view_negative_or_larger_than_the_host_has_free() {
+        let mut i = base();
+        i.job_limit = Some(4 << 30);
+        i.job_used = Some(3 << 30);
+        i.gpu_shared_in_job = Some(5 << 30);
+        assert_eq!(Machine::from_inputs(&i).available_ram_bytes, 0);
+        // Without a job the host's own free memory already reflects what the driver holds: nothing is subtracted.
+        let mut n = base();
+        n.host_available_ram = 9 << 30;
+        n.gpu_shared_in_job = Some(2 << 30);
+        assert_eq!(Machine::from_inputs(&n).available_ram_bytes, 9 << 30);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn the_gpu_counters_read_without_panicking_and_name_real_processes() {
+        // Where the counters exist (this Legion), every entry has a plausible process id; where they do not,
+        // the answer is None and nothing else breaks.
+        let read = gpu_process_memory();
+        eprintln!(
+            "GPU process memory counters: {}",
+            read.as_ref()
+                .map_or("not available".to_owned(), |a| format!(
+                    "{} instances",
+                    a.len()
+                ))
+        );
+        if let Some(all) = read {
+            assert!(
+                all.iter()
+                    .all(|u| u.pid > 0 && u.adapter_luid.starts_with("0x"))
+            );
+        }
     }
 
     #[test]

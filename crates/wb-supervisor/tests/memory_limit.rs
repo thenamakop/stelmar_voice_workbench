@@ -207,3 +207,76 @@ fn two_engines_at_once_each_have_their_own_limit() {
         "{tight_notices:?}"
     );
 }
+
+/// Row 106 (GATES): under emulation the app's machine view must count what its engines hold. Each engine runs in a
+/// Job Object of its own, nested inside the emulation job the app lives in; the app's view (`wb_machine::probe`,
+/// the job's commit used) has to include those children, or the scheduler would think there is room that the
+/// engines already use. Needs the app to be in a job, so it checks only under `wb-emulate` (the spawn-smoke gate
+/// runs it there); natively it says so and passes.
+#[cfg(windows)]
+#[test]
+fn the_apps_job_view_counts_an_engine_running_in_its_own_nested_job() {
+    let before = wb_machine::probe();
+    let Some(base) = before.job_commit_used_bytes else {
+        eprintln!("not inside a job (no wb-emulate): the job view cannot be checked here");
+        return;
+    };
+    struct Peek {
+        seen: Vec<u64>,
+        free: Vec<u64>,
+    }
+    impl Observer for Peek {
+        fn event(&mut self, _e: &Event) {
+            let m = wb_machine::probe();
+            if let Some(used) = m.job_commit_used_bytes {
+                self.seen.push(used);
+            }
+            self.free.push(m.available_ram_bytes);
+        }
+        fn notice(&mut self, _n: &Notice) {}
+    }
+    let dir = temp("view");
+    let mut committer = Committer::open(&dir.join("post-1.jsonl")).expect("open");
+    let mut peek = Peek {
+        seen: Vec::new(),
+        free: Vec::new(),
+    };
+    // The mock holds 300 MiB for the whole run (40 chunks of 50 ms).
+    let mut pol = policy(&dir, 300, Some(900 * MIB), 0);
+    for (k, v) in pol.engine_env.iter_mut() {
+        if k == "MOCK_CHUNKS" {
+            *v = "40".into();
+        }
+        if k == "MOCK_DELAY_MS" {
+            *v = "50".into();
+        }
+    }
+    run_batch(
+        &mock(),
+        request(),
+        &mut committer,
+        &dir.join("work"),
+        &pol,
+        &mut peek,
+    )
+    .expect("the mock finishes under its limit");
+    let most = peek.seen.iter().copied().max().unwrap_or(0);
+    eprintln!(
+        "job commit used before the engine {} MiB, most while it ran {} MiB, free RAM in the view {:?} MiB",
+        base / MIB,
+        most / MIB,
+        peek.free
+            .iter()
+            .map(|f| f / MIB)
+            .collect::<Vec<_>>()
+            .iter()
+            .take(3)
+            .collect::<Vec<_>>()
+    );
+    assert!(
+        most >= base + 250 * MIB,
+        "the app's view saw {} MiB while the engine held 300 MiB on top of {} MiB",
+        most / MIB,
+        base / MIB
+    );
+}
