@@ -619,7 +619,8 @@ pub fn decide(p: &Profile, r: &Rankings, o: &Options) -> Decision {
                 why,
                 "Copy the session folder to a stronger computer to transcribe it.".to_string(),
             ],
-            process_while_recording: true,
+            // Record only: there is nothing to process while recording.
+            process_while_recording: false,
             pause_on_battery: true,
         };
     };
@@ -631,29 +632,27 @@ pub fn decide(p: &Profile, r: &Rankings, o: &Options) -> Decision {
     let mut any_streaming = false;
     // Live text runs beside the recorder like processing while recording does, so it needs the same
     // passed recorder safety run for the chosen setup (a partial check that left it out offers no live text).
+    // The reason sits in every language's hard reasons (an operator's override can lift soft reasons only), also
+    // where live was not offered for another reason.
     let safety_for_live = safety_of(p, config).map(|s| s.passed);
     for lang in Lang::ALL {
         let rolling = picks.get(&lang).cloned();
         let mut live = live_decision(p, r, o, &b, lang, rolling.as_ref(), &standins);
-        if live.offered && safety_for_live != Some(true) {
-            live = LiveDecision {
-                offered: false,
-                kind: None,
-                model: None,
-                rtf: None,
-                soft_reasons: live.soft_reasons,
-                hard_reasons: {
-                    let mut h = live.hard_reasons;
-                    h.push(if safety_for_live.is_none() {
-                        "The recorder safety test has not run for this setup, so live text is not offered."
-                            .to_string()
-                    } else {
-                        "The recorder safety test did not pass for this setup, so live text is not offered."
-                            .to_string()
-                    });
-                    h
-                },
-            };
+        let blocked = match safety_for_live {
+            None => Some(
+                "The recorder safety test has not run for this setup, so live text is not offered.",
+            ),
+            Some(false) => Some(
+                "The recorder safety test did not pass for this setup, so live text is not offered.",
+            ),
+            Some(true) => None,
+        };
+        if let Some(why) = blocked {
+            live.offered = false;
+            live.kind = None;
+            live.model = None;
+            live.rtf = None;
+            live.hard_reasons.push(why.to_string());
         }
         if live.kind.as_deref() == Some("near_live") {
             any_near_live = true;

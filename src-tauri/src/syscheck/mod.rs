@@ -476,11 +476,10 @@ pub async fn set_override(
         let used = store::in_use(&dir, current_fingerprint(&app).as_ref())
             .map_err(|e| e.to_string())?
             .ok_or("There is no capability profile yet.")?;
-        if !used.changes.is_empty() {
-            return Err(
-                "This computer has changed since the last check, so no setting can be changed until the check has run again."
-                    .into(),
-            );
+        if let Some(why) = used.changes.first() {
+            return Err(format!(
+                "No setting can be changed until the check has run again: {why}"
+            ));
         }
         let mut cap = store::load(&dir)
             .map_err(|e| e.to_string())?

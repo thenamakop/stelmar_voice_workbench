@@ -165,6 +165,35 @@ fn without_the_alone_run_a_cell_on_another_excerpt_is_not_a_baseline() {
 }
 
 #[test]
+fn an_override_cannot_lift_a_missing_recorder_safety_run_even_where_live_was_only_softly_blocked() {
+    // Strong iGPU, near-live not validated: only a soft reason, which the override lifts while the safety run
+    // exists (see the test above). With no recorder safety run it must not.
+    let mut p = strong_igpu_laptop();
+    p.recorder_safety.clear();
+    let mut c = cap(p, false);
+    set_override(&mut c, OverrideKind::AllowLiveAnyway, true, true, "t");
+    let plan = plan_session(&c, &[Lang::En]);
+    assert!(!plan.live.selectable, "{:?}", plan.live);
+    assert!(
+        plan.live
+            .reason
+            .as_deref()
+            .unwrap_or_default()
+            .contains("safety test has not run"),
+        "{:?}",
+        plan.live.reason
+    );
+    assert!(!c.decision.process_while_recording);
+}
+
+#[test]
+fn record_only_processes_nothing_while_recording() {
+    let d = decide_with(&old_pc(), false);
+    assert!(d.config.is_none());
+    assert!(!d.process_while_recording);
+}
+
+#[test]
 fn processing_while_recording_override_lapses_when_a_later_check_did_not_pass_the_safety_test() {
     let mut c = cap(emu_low(), false);
     assert!(

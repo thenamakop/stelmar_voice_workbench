@@ -175,7 +175,8 @@
           "rtf": null,
           "soft_reasons": [],
           "hard_reasons": [
-            "Not measured: no validated near-live model for English."
+            "Not measured: no validated near-live model for English.",
+            "The recorder safety test has not run for this setup, so live text is not offered."
           ]
         }
       },
@@ -198,7 +199,8 @@
           "rtf": null,
           "soft_reasons": [],
           "hard_reasons": [
-            "Not measured: no validated near-live model for Hindi (Devanagari)."
+            "Not measured: no validated near-live model for Hindi (Devanagari).",
+            "The recorder safety test has not run for this setup, so live text is not offered."
           ]
         }
       },
@@ -221,7 +223,8 @@
           "rtf": null,
           "soft_reasons": [],
           "hard_reasons": [
-            "Urdu live text is never offered on a machine without a working graphics card (no small Urdu model is good enough)."
+            "Urdu live text is never offered on a machine without a working graphics card (no small Urdu model is good enough).",
+            "The recorder safety test has not run for this setup, so live text is not offered."
           ]
         }
       }

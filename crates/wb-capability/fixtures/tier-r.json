@@ -124,7 +124,7 @@
       "This processor has no AVX2, which the speech engines need.",
       "Copy the session folder to a stronger computer to transcribe it."
     ],
-    "process_while_recording": true,
+    "process_while_recording": false,
     "pause_on_battery": true
   },
   "overrides": []
