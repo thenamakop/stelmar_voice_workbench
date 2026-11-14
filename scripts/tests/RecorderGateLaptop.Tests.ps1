@@ -18,6 +18,13 @@ Check '-RigPrefer takes loopback or cable' ($params.ContainsKey('RigPrefer') -an
 Check '-SecondReference is a switch' ($params.ContainsKey('SecondReference') -and $params['SecondReference'].StaticType.Name -eq 'SwitchParameter')
 Check 'the default profile is still emu-low' ($params['Profile'].DefaultValue.Value -eq 'emu-low')
 
+$kill = (Resolve-Path (Join-Path $here '..\gates\kill-gate.ps1')).Path
+$kast = [System.Management.Automation.Language.Parser]::ParseFile($kill, [ref]$null, [ref]$null)
+$kp = @{}
+foreach ($p in $kast.ParamBlock.Parameters) { $kp[$p.Name.VariablePath.UserPath] = $p }
+Check 'kill-gate accepts the laptop profile, -RigPrefer and -SecondReference' ($kp['Profile'].Extent.Text -match "'laptop'" -and $kp.ContainsKey('RigPrefer') -and $kp.ContainsKey('SecondReference'))
+Check 'kill-gate: the default profile is still emu-low' ($kp['Profile'].DefaultValue.Value -eq 'emu-low')
+
 $tmp = Join-Path ([IO.Path]::GetTempPath()) ('wb-rg-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Force -Path $tmp | Out-Null
 try {

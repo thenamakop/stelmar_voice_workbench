@@ -121,9 +121,11 @@ function Invoke-PackRecorderGate {
   param(
     [Parameter(Mandatory = $true)] $Ctx,
     [Parameter(Mandatory = $true)] [string]$Id,
-    [Parameter(Mandatory = $true)] [ValidateSet('soak', 'load', 'panic', 'webview')] [string]$Gate,
+    [Parameter(Mandatory = $true)] [ValidateSet('soak', 'load', 'panic', 'webview', 'kill')] [string]$Gate,
     [double]$FullMinutes = 0,
     [double]$QuickMinutes = 0,
+    [int]$FullKills = 5,
+    [int]$QuickKills = 2,
     [switch]$Thermal,
     [string]$Threshold = ''
   )
@@ -132,13 +134,21 @@ function Invoke-PackRecorderGate {
   $paths = Get-PackPaths -Ctx $Ctx
   foreach ($f in @($paths.GateExe, $paths.Testbench)) { if (-not (Test-Path -LiteralPath $f)) { throw "the pack is missing $f (run run-gates.ps1 -Verify)" } }
   $minutes = $(if ($quick -and $QuickMinutes -gt 0) { $QuickMinutes } else { $FullMinutes })
-  $args1 = @(Get-PackLegacyCommon -Ctx $Ctx) + @('-Gate', $Gate, '-RigPrefer', [string]$Ctx.rig_prefer, '-SecondReference')
-  if ($minutes -gt 0) { $args1 += @('-Minutes', ($minutes.ToString([Globalization.CultureInfo]::InvariantCulture))) }
+  $script1 = 'recorder-gate.ps1'
+  $args1 = @(Get-PackLegacyCommon -Ctx $Ctx) + @('-RigPrefer', [string]$Ctx.rig_prefer, '-SecondReference')
+  if ($Gate -eq 'kill') {
+    $script1 = 'kill-gate.ps1'
+    $args1 += @('-Kills', "$(if ($quick) { $QuickKills } else { $FullKills })")
+    $minutes = 0
+  } else {
+    $args1 += @('-Gate', $Gate)
+    if ($minutes -gt 0) { $args1 += @('-Minutes', ($minutes.ToString([Globalization.CultureInfo]::InvariantCulture))) }
+  }
   $th = $null
   if ($Thermal) { $th = Start-PackThermal -OutCsv (Join-Path $gdir 'thermal.csv') }
   $startedAt = Get-Date
   try {
-    $e = Invoke-PackLegacyGate -Ctx $Ctx -Script 'recorder-gate.ps1' -Arguments $args1 -EvidenceName ("$Gate-$([string]$Ctx.profile).txt") -TimeoutMinutes ([int]($minutes + 120))
+    $e = Invoke-PackLegacyGate -Ctx $Ctx -Script $script1 -Arguments $args1 -EvidenceName ("$Gate-$([string]$Ctx.profile).txt") -TimeoutMinutes ([int]($minutes + 120))
   } finally {
     $thermalRes = $null
     if ($th) { $thermalRes = Stop-PackThermal -Handle $th }
