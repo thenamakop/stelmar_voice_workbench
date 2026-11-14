@@ -710,13 +710,13 @@ function New-PackSummary {
   foreach ($g in @(Get-PackProp $Manifest 'gates' @())) {
     $id = [string](Get-PackProp $g 'id' '')
     if ($null -ne $InPack -and $InPack -notcontains $id) {
-      [void]$notInPack.Add([ordered]@{ id = $id; priority = (Get-PackProp $g 'priority' ''); title = (Get-PackProp $g 'title' ''); reason = 'not in this pack' })
+      [void]$notInPack.Add([ordered]@{ id = $id; priority = (Get-PackProp $g 'priority' ''); title = (Get-PackProp $g 'title' ''); reason = 'not in this pack'; ledger = @(Get-PackProp $g 'ledger' @()) })
       continue
     }
     $gs = Get-PackGateState -State $State -Id $id
     $status = [string](Get-PackProp $gs 'status' '')
     if (-not $status -or $status -eq 'PENDING' -or $status -eq 'interrupted' -or $status -eq 'running') {
-      [void]$pending.Add([ordered]@{ id = $id; priority = (Get-PackProp $g 'priority' ''); title = (Get-PackProp $g 'title' ''); reason = [string](Get-PackProp $gs 'reason' 'not run') })
+      [void]$pending.Add([ordered]@{ id = $id; priority = (Get-PackProp $g 'priority' ''); title = (Get-PackProp $g 'title' ''); reason = [string](Get-PackProp $gs 'reason' 'not run'); ledger = @(Get-PackProp $g 'ledger' @()) })
       continue
     }
     $res = $null

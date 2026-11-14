@@ -1,0 +1,153 @@
+# Tests for scripts/lib/Ingest.psm1 and scripts/ingest-gate-results.ps1: a fixture zip, a failing zip, an
+# emulated zip, the VB-CABLE fallback, re-ingest, a damaged zip, and -Preview.
+# Run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/tests/Ingest.Tests.ps1
+# ASCII only; Windows PowerShell 5.1.
+$ErrorActionPreference = 'Stop'
+$here = Split-Path -Parent $MyInvocation.MyCommand.Path
+$repo = (Resolve-Path (Join-Path $here '..\..')).Path
+Import-Module (Join-Path $here '..\lib\Ingest.psm1') -Force
+Import-Module (Join-Path $here '..\lib\PackCore.psm1') -Force
+Import-Module (Join-Path $here '..\lib\PackNative.psm1') -Force
+$fails = 0
+function Check([string]$Name, [bool]$Ok) {
+  if ($Ok) { Write-Host "ok   $Name" } else { Write-Host "FAIL $Name"; $script:fails++ }
+}
+
+# --- pure parts ---
+Check 'a low-baseline-only row needs the low laptop' ((@(Get-IngestRequiredRoles -MachineCell 'low-baseline laptop')) -join ',' -eq 'low')
+Check 'a row naming both, or the Legion, needs both' ((@(Get-IngestRequiredRoles -MachineCell 'low-baseline and mid laptops')) -join ',' -eq 'low,mid' -and (@(Get-IngestRequiredRoles -MachineCell 'Legion, `emu-low`')) -join ',' -eq 'low,mid')
+Check 'a mid-only row needs the mid laptop' ((@(Get-IngestRequiredRoles -MachineCell 'mid laptop')) -join ',' -eq 'mid')
+$r = @(ConvertTo-IngestRedacted -Line @('path C:\Users\Someone\x\y.txt', 'HF_TOKEN=abc123', 'plain'))
+Check 'user paths and secret values are removed' ($r[0] -eq 'path %USERPROFILE%\x\y.txt' -and $r[1] -eq 'HF_TOKEN=<redacted>' -and $r[2] -eq 'plain')
+$cell = 'PASS (PROVISIONAL) [was: x] ;; gate pack: low/soak PASS (M1, 17 Nov 2026); mid/soak FAIL (M2, 18 Nov 2026)'
+$a = Read-IngestAnnotations -Cell $cell
+Check 'the annotations of a cell are read back' ($a.Base -eq 'PASS (PROVISIONAL) [was: x]' -and $a.Results['low/soak'].State -eq 'PASS' -and $a.Results['mid/soak'].Machine -eq 'M2')
+
+# --- fixture ---
+$tmp = Join-Path ([IO.Path]::GetTempPath()) ('wb-ing-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+$fixture = @(
+  '# Gate ledger', '', '## Machines', '',
+  '| Name | Make and model | CPU | RAM | GPUs and driver versions | First used |', '| --- | --- | --- | --- | --- | --- |',
+  '| Legion | Lenovo | i9 | 32 GB | RTX | 8 Nov 2026 |',
+  '| Low-baseline laptop | (fill in on arrival) | | 16 GB | | |',
+  '| Mid laptop | (fill in on arrival) | | 16 GB | | |', '',
+  '## Gates', '',
+  '| Phase | Gate item | Machine or profile | Status | Evidence | Date |', '| --- | --- | --- | --- | --- | --- |',
+  '| 1 | Soak: 2 hours from VB-CABLE; no gaps | Legion, `emu-low` | PASS (PROVISIONAL) | `docs/evidence/phase-1/soak.txt` | 10 Nov 2026 |',
+  '| 3 | Verdicts and tiers on the real laptops | low-baseline and mid laptops | DEFERRED (not before 17 Nov 2026) | gate pack | |',
+  '| 2 | Quick-check time on the real low-baseline laptop | low-baseline laptop | DEFERRED | gate pack | |', '',
+  '## Open items', '',
+  '| Found in | Belongs to | Item | Status | Evidence | Date |', '| --- | --- | --- | --- | --- | --- |',
+  '| 1 | gate pack | Re-run Phase 1 on both laptops with a hardware audio interface: every run shows a block | OPEN | `docs/x` | 9 Nov 2026 |',
+  '| 2 | gate pack | Measure the zero_gap rates of the recorder on real audio | OPEN | `docs/y` | 12 Nov 2026 |', '')
+$gatesMd = Join-Path $tmp 'GATES.md'
+[IO.File]::WriteAllText($gatesMd, ($fixture -join "`r`n"), (New-Object Text.UTF8Encoding($false)))
+$ledgerSoak = @(
+  @{ table = 'gates'; match = 'Soak: 2 hours from VB-CABLE'; kind = 'verdict' },
+  @{ table = 'open'; match = 'Re-run Phase 1 on both laptops with a hardware audio interface'; kind = 'verdict'; needs_hardware_interface = $true },
+  @{ table = 'open'; match = 'Measure the zero_gap rates of the recorder'; kind = 'info'; needs_hardware_interface = $true })
+$ledgerQuick = @(
+  @{ table = 'gates'; match = 'Verdicts and tiers on the real laptops'; kind = 'info' },
+  @{ table = 'gates'; match = 'Quick-check time on the real low-baseline laptop'; kind = 'verdict' })
+
+function New-RunZip([string]$Name, [string]$Machine, [string]$Role, [string]$Emulated, $Gates, [string]$Created) {
+  $work = Join-Path $tmp ("work-" + $Name)
+  New-Item -ItemType Directory -Force -Path (Join-Path $work 'gates\soak') | Out-Null
+  Set-Content -LiteralPath (Join-Path $work 'gates\soak\gate.log') -Value @('log of C:\Users\Real Person\pack', 'TOKEN=zzz') -Encoding UTF8
+  $summary = [ordered]@{
+    pack_version = 1; source_commit = 'abc1234'; machine = $Machine; role = $Role; emulated = $(if ($Emulated) { $Emulated } else { $null })
+    quick = [bool]$Emulated; created = $Created; gates = @($Gates); pending = @(); not_in_pack = @(); still_changed = @()
+    fingerprint = [ordered]@{ maker = 'Acme'; model = 'Book 14'; cpu = 'Test CPU'; physical_cores = 4; logical_processors = 8; avx2 = $true; avx512f = $false; ram_gb = 15.8; gpus = @([ordered]@{ name = 'Intel UHD'; driver = '31.0.101.1'; integrated = $true }) }
+  }
+  $zip = Join-Path $tmp ("$Name.zip")
+  New-PackZip -WorkDir $work -ZipPath $zip -Summary $summary -CommitText 'abc1234' | Out-Null
+  $zip
+}
+function Gate([string]$Id, [string]$Status, $Ledger, [string]$Rig = 'hardware interface loopback', [string]$Head = 'ok') {
+  [ordered]@{ id = $Id; priority = 'P1'; status = $Status; headline = $Head; rig = $Rig; measured = [ordered]@{ rig = $(if ($Rig -match 'VB-CABLE') { 'vb-cable-fallback' } else { 'loopback' }) }; quick = $false; not_at_full_length = $false; ledger = @($Ledger) }
+}
+$ps = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+function Ingest([string[]]$A) {
+  $r = Invoke-PackNative -FilePath $ps -ArgumentList (@('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $repo 'scripts\ingest-gate-results.ps1'), '-Repo', $tmp, '-GatesMd', $gatesMd, '-EvidenceRoot', (Join-Path $tmp 'evidence')) + $A) -TimeoutSeconds 120
+  [pscustomobject]@{ Code = $r.ExitCode; Text = ((@($r.Output) + @($r.Error)) -join "`n") }
+}
+New-Item -ItemType Directory -Force -Path (Join-Path $tmp 'scripts') | Out-Null
+Copy-Item -LiteralPath (Join-Path $repo 'scripts\lib') -Destination (Join-Path $tmp 'scripts\lib') -Recurse
+try {
+  $orig = Get-Content -LiteralPath $gatesMd -Raw
+
+  # --- 1. a real run on the low laptop: the interface soak passes, the quick check is info ---
+  $z1 = New-RunZip 'low1' 'Acme-Book-14-aabbcc' 'low' '' @((Gate 'soak' 'PASS' $ledgerSoak), (Gate 'quick-check' 'INFO' $ledgerQuick 'n/a')) '2026-11-17T10:00:00Z'
+  $p = Ingest @('-Zip', $z1, '-Preview')
+  Check 'the preview says what it would change' ($p.Code -eq 0 -and $p.Text -match 'preview' -and $p.Text -match 'line\(s\) change')
+  Check 'the preview writes nothing' ((Get-Content -LiteralPath $gatesMd -Raw) -eq $orig -and -not (Test-Path (Join-Path $tmp 'docs\evidence')))
+  $i1 = Ingest @('-Zip', $z1)
+  $t = Get-Content -LiteralPath $gatesMd -Raw
+  if ($i1.Code -ne 0) { Write-Host $i1.Text }
+  Check 'the ingest ran' ($i1.Code -eq 0)
+  Check 'the file keeps its CRLF line endings' ($t.Contains("`r`n") -and -not ($t -match "[^\r]\n"))
+  Check 'the soak row names the laptop but stays provisional until the mid laptop has run' ($t -match 'Soak: 2 hours[^\r\n]*PASS \(PROVISIONAL\) ;; gate pack: low/soak PASS \(Acme-Book-14-aabbcc, 17 Nov 2026\); still to run: mid/soak')
+  Check 'a DEFERRED info row becomes RESULT IN, owner to read' ($t -match 'Verdicts and tiers on the real laptops[^\r\n]*RESULT IN, owner to read \[was: DEFERRED')
+  Check 'a low-only verdict row closes with the old status kept' ($t -match 'Quick-check time on the real low-baseline laptop[^\r\n]*FAIL|PASS \(gate pack\) \[was: DEFERRED\]')
+  Check 'an Open item is annotated, never closed by ingest of one laptop' ($t -match 'Re-run Phase 1 on both laptops[^\r\n]*\| OPEN ;; gate pack: low/soak PASS')
+  Check 'the Machines row of the low laptop is filled in' ($t -match 'Low-baseline laptop \| Acme Book 14 \(Acme-Book-14-aabbcc\) \| Test CPU \(4 cores, 8 threads; AVX2 yes, AVX-512 no\) \| 15.8 GB \| Intel UHD \(driver 31.0.101.1\)')
+  Check 'the run is listed in the Gate pack runs block' ($t -match '## Gate pack runs' -and $t -match '\| soak \| PASS \| low laptop, Acme-Book-14-aabbcc')
+  $ev = Join-Path $tmp 'docs\evidence\gate-pack\Acme-Book-14-aabbcc\gates\soak\gate.log'
+  Check 'evidence is copied with user paths and secrets removed' ((Test-Path $ev) -and ((Get-Content -LiteralPath $ev -Raw) -match '%USERPROFILE%\\pack' -and (Get-Content -LiteralPath $ev -Raw) -match 'TOKEN=<redacted>'))
+  Check 'RESULTS.txt is written by the script' (Test-Path (Join-Path $tmp 'docs\evidence\gate-pack\Acme-Book-14-aabbcc\RESULTS.txt'))
+
+  # --- 2. re-ingest of the same zip changes nothing ---
+  $before = Get-Content -LiteralPath $gatesMd -Raw
+  [void](Ingest @('-Zip', $z1))
+  Check 're-ingesting the same zip changes nothing' ((Get-Content -LiteralPath $gatesMd -Raw) -eq $before)
+
+  # --- 3. the mid laptop, a pass: the soak row closes and the open item is still annotated only ---
+  $z2 = New-RunZip 'mid1' 'Acme-Book-16-ddeeff' 'mid' '' @((Gate 'soak' 'PASS' $ledgerSoak), (Gate 'quick-check' 'INFO' $ledgerQuick 'n/a')) '2026-11-18T10:00:00Z'
+  [void](Ingest @('-Zip', $z2))
+  $t = Get-Content -LiteralPath $gatesMd -Raw
+  Check 'both laptops passing closes the soak row and keeps the old status' ($t -match 'Soak: 2 hours[^\r\n]*PASS \(gate pack\) \[was: PASS \(PROVISIONAL\)\] ;; gate pack: low/soak PASS[^\r\n]*mid/soak PASS')
+  Check 'the open item says the result is in and leaves closing to the owner' ($t -match 'Re-run Phase 1 on both laptops[^\r\n]*RESULT IN: PASS everywhere it is needed, owner to close')
+
+  # --- 4. the VB-CABLE fallback leaves the hardware-interface rows open ---
+  $gatesMd2 = Join-Path $tmp 'GATES2.md'
+  [IO.File]::WriteAllText($gatesMd2, $orig, (New-Object Text.UTF8Encoding($false)))
+  $gatesMd = $gatesMd2
+  $z3 = New-RunZip 'fb' 'Acme-Book-14-aabbcc' 'low' '' @((Gate 'soak' 'PASS' $ledgerSoak 'VB-CABLE fallback')) '2026-11-17T12:00:00Z'
+  [void](Ingest @('-Zip', $z3))
+  $t = Get-Content -LiteralPath $gatesMd2 -Raw
+  Check 'a fallback run leaves the Open item exactly OPEN' ($t -match 'Re-run Phase 1 on both laptops[^\r\n]*\| OPEN ;; gate pack: low/soak FALLBACK')
+  Check 'a fallback run does not become a PASS of the hardware-interface row' ($t -notmatch 'RESULT IN: PASS everywhere[^\r\n]*Re-run Phase 1' -and $t -notmatch 'Re-run Phase 1[^\r\n]*RESULT IN: PASS')
+
+  # --- 5. a FAIL reopens the phase ---
+  [IO.File]::WriteAllText($gatesMd2, $orig, (New-Object Text.UTF8Encoding($false)))
+  $z4 = New-RunZip 'fail' 'Acme-Book-14-aabbcc' 'low' '' @((Gate 'soak' 'FAIL' $ledgerSoak 'hardware interface loopback' 'app-only break at 3,171 ms')) '2026-11-17T14:00:00Z'
+  $i4 = Ingest @('-Zip', $z4)
+  $t = Get-Content -LiteralPath $gatesMd2 -Raw
+  Check 'a failing gate marks its row FAIL with the old status kept' ($t -match 'Soak: 2 hours[^\r\n]*FAIL \(gate pack\) \[was: PASS \(PROVISIONAL\)\]')
+  Check 'a failing gate adds a REOPENED row to the Open items' ($t -match '\| 1 \| gate pack \| Phase 1 REOPENED: gate soak FAILED on Acme-Book-14-aabbcc[^\r\n]*app-only break')
+  Check 'the ingest says plainly that a gate failed' ($i4.Text -match 'GATE FAILED: soak')
+  $rows = @(Get-PackLedgerRows -GatesMdPath $gatesMd2)
+  Check 'the file still reads as the same two tables (one row more in the Open items)' (@($rows | Where-Object { $_.Table -eq 'open' }).Count -eq 3 -and @($rows | Where-Object { $_.Table -eq 'gates' }).Count -eq 3)
+
+  # --- 6. an emulated run changes no real row ---
+  [IO.File]::WriteAllText($gatesMd2, $orig, (New-Object Text.UTF8Encoding($false)))
+  $z5 = New-RunZip 'emu' 'Legion' 'low' 'emu-low' @((Gate 'soak' 'PASS' $ledgerSoak 'cable'), (Gate 'quick-check' 'INFO' $ledgerQuick 'n/a')) '2026-11-15T09:00:00Z'
+  [void](Ingest @('-Zip', $z5))
+  $t = Get-Content -LiteralPath $gatesMd2 -Raw
+  $stripped = ($t -split "## Gate pack runs")[0].TrimEnd()
+  Check 'an emulated run leaves every row of the two tables as it was' ($stripped -eq $orig.TrimEnd())
+  Check 'an emulated run is listed as emulated and not at full length' ($t -match 'emulated: emu-low on the Legion \(not a laptop\)' -and $t -match '-Quick: not at full length')
+  Check 'an emulated run goes to its own evidence folder' (Test-Path (Join-Path $tmp 'docs\evidence\gate-pack-dryrun\emu-low\RESULTS.txt'))
+
+  # --- 7. a damaged zip is refused ---
+  $bad = Join-Path $tmp 'bad.zip'
+  Copy-Item -LiteralPath $z1 -Destination $bad
+  Add-Type -AssemblyName System.IO.Compression
+  $zf = [System.IO.Compression.ZipFile]::Open($bad, 'Update')
+  try { $e = $zf.GetEntry('summary.json'); $s = New-Object IO.StreamReader($e.Open()); $txt = $s.ReadToEnd(); $s.Dispose(); $e.Delete(); $ne = $zf.CreateEntry('summary.json'); $w = New-Object IO.StreamWriter($ne.Open()); $w.Write($txt); $w.Dispose(); $e2 = $zf.GetEntry('work/gates/soak/gate.log'); $e2.Delete(); $n2 = $zf.CreateEntry('work/gates/soak/gate.log'); $w2 = New-Object IO.StreamWriter($n2.Open()); $w2.Write('tampered'); $w2.Dispose() } finally { $zf.Dispose() }
+  $ib = Ingest @('-Zip', $bad)
+  Check 'a zip whose file no longer matches its manifest is refused' ($ib.Code -ne 0 -and $ib.Text -match 'does not match its ZIP-MANIFEST')
+} finally { Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue }
+if ($fails) { Write-Host "$fails failed"; exit 1 }
+Write-Host 'Ingest tests passed'

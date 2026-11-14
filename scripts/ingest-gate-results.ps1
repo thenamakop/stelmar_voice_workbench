@@ -1,0 +1,142 @@
+<#
+.SYNOPSIS
+  Reads the results zip of a gate-pack run and updates docs\GATES.md and docs\evidence\.
+
+.DESCRIPTION
+  1. Checks the zip (every file's SHA-256 against ZIP-MANIFEST.json) and reads summary.json.
+  2. Copies the run's logs, reports and capability files to docs\evidence\gate-pack\<machine>\ (a dry run
+     on the Legion goes to docs\evidence\gate-pack-dryrun\<profile>\), removing user paths and secret
+     values on the way. Evidence files are written by this script only.
+  3. Real laptop run: the rows of docs\GATES.md named by each gate's ledger entry change from PROVISIONAL
+     or DEFERRED to PASS or FAIL only when every laptop and every gate the row needs has a verdict; the
+     old status stays in the cell as "[was: ...]". A FAIL adds a "Phase N REOPENED" row to the Open
+     items. INFO results never close anything. A run on the VB-CABLE fallback rig leaves the rows that
+     need the hardware audio interface open. The Machines table is filled for the laptop.
+  4. Every run, real or emulated, also gets one row per gate in the "Gate pack runs" block. An emulated
+     run changes no other row.
+  -Preview prints what would change and writes nothing.
+
+.EXAMPLE
+  powershell -ExecutionPolicy Bypass -File .\scripts\ingest-gate-results.ps1 -Zip D:\usb\gate-results-X.zip -Preview
+  powershell -ExecutionPolicy Bypass -File .\scripts\ingest-gate-results.ps1 -Zip D:\usb\gate-results-X.zip
+#>
+[CmdletBinding()]
+param(
+  [Parameter(Mandatory = $true)] [string]$Zip,
+  [ValidateSet('', 'low', 'mid')] [string]$Role = '',
+  [switch]$Preview,
+  [string]$Repo = '',
+  [string]$GatesMd = '',
+  [string]$EvidenceRoot = ''
+)
+$ErrorActionPreference = 'Stop'
+$here = Split-Path -Parent $MyInvocation.MyCommand.Path
+if (-not $Repo) { $Repo = (Resolve-Path (Join-Path $here '..')).Path }
+if (-not $GatesMd) { $GatesMd = Join-Path $Repo 'docs\GATES.md' }
+if (-not $EvidenceRoot) { $EvidenceRoot = Join-Path $Repo 'docs\evidence' }
+Import-Module (Join-Path $Repo 'scripts\lib\Ingest.psm1') -Force
+Import-Module (Join-Path $Repo 'scripts\lib\PackCore.psm1') -Force
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+function Fail([string]$m) { Write-Host "ingest-gate-results: $m" -ForegroundColor Red; exit 1 }
+if (-not (Test-Path -LiteralPath $Zip)) { Fail "no such file: $Zip" }
+
+# ---- 1. Unpack and verify ----
+$tmp = Join-Path ([IO.Path]::GetTempPath()) ('wb-ingest-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+try {
+  [System.IO.Compression.ZipFile]::ExtractToDirectory((Resolve-Path $Zip).Path, $tmp)
+  $zm = Read-PackJson -Path (Join-Path $tmp 'ZIP-MANIFEST.json')
+  if ($null -eq $zm) { Fail 'the zip has no ZIP-MANIFEST.json: it was not written by the gate pack' }
+  $bad = New-Object System.Collections.Generic.List[string]
+  foreach ($f in @($zm.files)) {
+    $p = Join-Path $tmp (([string]$f.path) -replace '/', '\')
+    if (-not (Test-Path -LiteralPath $p)) { $bad.Add("missing: $($f.path)"); continue }
+    if ((Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash.ToLowerInvariant() -ne [string]$f.sha256) { $bad.Add("changed: $($f.path)") }
+  }
+  if ($bad.Count -gt 0) { Fail ("the zip does not match its ZIP-MANIFEST.json:`n  " + ($bad -join "`n  ")) }
+  $summary = Read-PackJson -Path (Join-Path $tmp 'summary.json')
+  if ($null -eq $summary) { Fail 'the zip has no summary.json' }
+  if ([int]$summary.pack_version -ne 1) { Fail "pack_version $($summary.pack_version) is not understood by this script" }
+  # Windows PowerShell turns ISO date strings into dates; one stable text keeps the run id the same.
+  $summary.created = ([datetime]$summary.created).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ', [Globalization.CultureInfo]::InvariantCulture)
+  if (-not $Role) { $Role = [string]$summary.role }
+  if ($Role -notin 'low', 'mid') { Fail 'the zip does not say which laptop it came from; pass -Role low or -Role mid' }
+  $emu = [string]$summary.emulated
+  $created = [datetime]::Parse([string]$summary.created, [Globalization.CultureInfo]::InvariantCulture).ToLocalTime()
+  $date = $created.ToString('d MMM yyyy', [Globalization.CultureInfo]::InvariantCulture)
+  $machine = ([string]$summary.machine -replace '[^A-Za-z0-9._-]', '-')
+  $evRel = $(if ($emu) { "docs/evidence/gate-pack-dryrun/$emu" } else { "docs/evidence/gate-pack/$machine" })
+  $evDir = Join-Path $Repo ($evRel -replace '/', '\')
+  Write-Host ("zip: {0}" -f (Split-Path -Leaf $Zip))
+  Write-Host ("run: {0} laptop, machine {1}{2}; pack commit {3}; created {4}; {5}" -f $Role, $summary.machine, $(if ($emu) { " [EMULATED: $emu on the Legion]" } else { '' }), $summary.source_commit, $date, $(if ($summary.quick) { '-Quick (not at full length)' } else { 'full length' }))
+  $counts = @($summary.gates | Group-Object status | ForEach-Object { "$($_.Count) $($_.Name)" }) -join ', '
+  Write-Host ("gates: {0}; waiting {1}; not in this pack {2}" -f $counts, @($summary.pending).Count, @($summary.not_in_pack).Count)
+
+  # ---- 2. Evidence ----
+  $textExt = '.txt', '.json', '.log', '.csv', '.md', '.jsonl', '.out', '.err'
+  $copied = 0
+  if (-not $Preview) {
+    New-Item -ItemType Directory -Force -Path $evDir | Out-Null
+    foreach ($f in @(Get-ChildItem -LiteralPath (Join-Path $tmp 'work') -Recurse -File -ErrorAction SilentlyContinue)) {
+      $rel = $f.FullName.Substring((Join-Path $tmp 'work').Length).TrimStart('\')
+      $to = Join-Path $evDir $rel
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $to) | Out-Null
+      if ($textExt -contains $f.Extension.ToLowerInvariant()) {
+        $lines = @(Get-Content -LiteralPath $f.FullName -Encoding UTF8)
+        [IO.File]::WriteAllText($to, ((@(ConvertTo-IngestRedacted -Line $lines) -join "`r`n") + "`r`n"), (New-Object Text.UTF8Encoding($false)))
+      } else { Copy-Item -LiteralPath $f.FullName -Destination $to -Force }
+      $copied++
+    }
+    Copy-Item -LiteralPath (Join-Path $tmp 'summary.json') -Destination (Join-Path $evDir 'summary.json') -Force
+    # A short reading of the summary, written by this script.
+    $txt = New-Object System.Collections.Generic.List[string]
+    $txt.Add("Gate pack run: $Role laptop, machine $($summary.machine), created $($summary.created)")
+    $txt.Add("Pack commit $($summary.source_commit); $(if ($emu) { "EMULATED ($emu), not a laptop" } else { 'real laptop' }); $(if ($summary.quick) { '-Quick, not at full length' } else { 'full length' })")
+    foreach ($g in @($summary.gates)) { $txt.Add(('{0,-8} {1,-20} {2}' -f $g.status, $g.id, $g.headline)) }
+    foreach ($p in @($summary.pending)) { $txt.Add(('WAITING  {0,-20} {1}' -f $p.id, $p.reason)) }
+    foreach ($p in @($summary.not_in_pack)) { $txt.Add(('NOT IN THIS PACK  {0}' -f $p.id)) }
+    if (@($summary.still_changed).Count -gt 0) { $txt.Add('LEFT CHANGED ON THE LAPTOP:'); foreach ($s in @($summary.still_changed)) { $txt.Add("  $s") } }
+    [IO.File]::WriteAllText((Join-Path $evDir 'RESULTS.txt'), ((@(ConvertTo-IngestRedacted -Line @($txt.ToArray())) -join "`r`n") + "`r`n"), (New-Object Text.UTF8Encoding($false)))
+    Write-Host "evidence: $copied files to $evRel"
+  } else { Write-Host "preview: evidence would go to $evRel" }
+
+  # ---- 3 and 4. docs\GATES.md ----
+  $raw = [IO.File]::ReadAllText($GatesMd)
+  $eol = $(if ($raw.Contains("`r`n")) { "`r`n" } else { "`n" })
+  $trail = $raw.EndsWith($eol)
+  $lines = @($raw -split "`r?`n")
+  if ($trail -and $lines.Count -gt 0 -and $lines[-1] -eq '') { $lines = @($lines[0..($lines.Count - 2)]) }
+  $changes = New-Object System.Collections.Generic.List[string]
+  $newLines = $lines
+  if (-not $emu) {
+    $u = Update-IngestGatesLines -Lines $lines -Summary $summary -Role $Role -Date $date -EvidenceDir $evRel
+    $newLines = $u.Lines
+    foreach ($c in $u.Changes) { $changes.Add($c) }
+    $m = Update-IngestMachines -Lines $newLines -Summary $summary -Role $Role -Date $date
+    $newLines = $m.Lines
+    if ($m.Changed) { $changes.Add("  Machines table: filled in the $Role laptop") }
+    if ($u.Reopened.Count -gt 0) {
+      Write-Host ''
+      Write-Host ('=' * 78) -ForegroundColor Red
+      foreach ($r in $u.Reopened) { Write-Host "  GATE FAILED: $r on $($summary.machine): its phase is REOPENED (row added to the Open items)" -ForegroundColor Red }
+      Write-Host ('=' * 78) -ForegroundColor Red
+    }
+  } else { $changes.Add('  an emulated run: the rows of the Gates and Open items tables are not touched') }
+  $newLines = Update-IngestRunsBlock -Lines $newLines -Summary $summary -Role $Role -Date $date -EvidenceDir $evRel
+  $diffCount = 0
+  $max = [math]::Max($lines.Count, $newLines.Count)
+  for ($i = 0; $i -lt $max; $i++) { $a = $(if ($i -lt $lines.Count) { $lines[$i] } else { $null }); $b = $(if ($i -lt $newLines.Count) { $newLines[$i] } else { $null }); if ($a -ne $b) { $diffCount++ } }
+  Write-Host ''
+  Write-Host ("docs\GATES.md: {0} line(s) change{1}" -f $diffCount, $(if ($Preview) { ' (preview, nothing written)' } else { '' }))
+  foreach ($c in $changes) { Write-Host $c }
+  $gatesTouched = @($newLines | Where-Object { $_.IndexOf("[run $($summary.created)]", [StringComparison]::Ordinal) -ge 0 }).Count
+  Write-Host ("  Gate pack runs block: {0} row(s) for this run" -f $gatesTouched)
+  if (-not $Preview) {
+    [IO.File]::WriteAllText($GatesMd, (($newLines -join $eol) + $(if ($trail) { $eol } else { '' })), (New-Object Text.UTF8Encoding($false)))
+    Write-Host 'written.'
+  }
+  $wait = @($summary.pending | ForEach-Object { $_.id })
+  if ($wait.Count -gt 0) { Write-Host ("still waiting (no verdict, nothing closed): " + ($wait -join ', ')) -ForegroundColor Yellow }
+  if (@($summary.still_changed).Count -gt 0) { Write-Host 'THE LAPTOP SAYS IT STILL HAS CHANGED SETTINGS (see RESULTS.txt).' -ForegroundColor Yellow }
+} finally { Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue }
