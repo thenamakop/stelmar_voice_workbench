@@ -113,7 +113,8 @@ fn load_manifest() -> Result<(PathBuf, Manifest, String), String> {
         engines::locate_models_dir().ok_or("No models folder with a manifest.json was found.")?;
     let path = dir.join("manifest.json");
     let manifest = Manifest::load(&path).map_err(|e| e.to_string())?;
-    let hash = wb_models::sha256_file(&path).map_err(|e| e.to_string())?;
+    // Line endings do not count: a CR LF checkout of the same manifest is the same manifest.
+    let hash = wb_models::sha256_text_file(&path).map_err(|e| e.to_string())?;
     Ok((dir, manifest, hash))
 }
 

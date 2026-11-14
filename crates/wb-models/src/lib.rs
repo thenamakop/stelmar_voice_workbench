@@ -237,6 +237,29 @@ pub fn sha256_file(path: &Path) -> std::io::Result<String> {
     Ok(h.finalize().iter().map(|b| format!("{b:02x}")).collect())
 }
 
+/// SHA-256 of a text file with every CR LF read as LF. The model manifest is hashed this way for the system check's
+/// fingerprint: Git on Windows may check the file out with CR LF line endings, and the same manifest must not read as
+/// a different one (a saved check would then be called stale and the safe defaults would apply). A lone CR is kept.
+pub fn sha256_text_file(path: &Path) -> std::io::Result<String> {
+    let bytes = fs::read(path)?;
+    Ok(sha256_text_bytes(&bytes))
+}
+
+/// [`sha256_text_file`] for bytes already in memory.
+pub fn sha256_text_bytes(bytes: &[u8]) -> String {
+    let mut h = Sha256::new();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'\r' && bytes.get(i + 1) == Some(&b'\n') {
+            i += 1;
+            continue;
+        }
+        h.update([bytes[i]]);
+        i += 1;
+    }
+    h.finalize().iter().map(|b| format!("{b:02x}")).collect()
+}
+
 /// A file that was hashed once: it need not be again while its size and modification time stay.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Verified {
@@ -373,6 +396,24 @@ mod tests {
     use std::sync::atomic::{AtomicU32, Ordering};
 
     static N: AtomicU32 = AtomicU32::new(0);
+
+    #[test]
+    fn a_text_hash_does_not_depend_on_the_line_endings() {
+        let lf = b"{\n  \"a\": 1,\n  \"b\": 2\n}\n";
+        let crlf = b"{\r\n  \"a\": 1,\r\n  \"b\": 2\r\n}\r\n";
+        assert_eq!(sha256_text_bytes(lf), sha256_text_bytes(crlf));
+        // A lone CR is content, and a changed character changes the hash.
+        assert_ne!(sha256_text_bytes(b"a\rb"), sha256_text_bytes(b"ab"));
+        assert_ne!(
+            sha256_text_bytes(lf),
+            sha256_text_bytes(b"{\n  \"a\": 1,\n  \"b\": 3\n}\n")
+        );
+        // The hash of the LF text is the plain SHA-256 of it, so a profile saved from an LF checkout stays valid.
+        let mut h = Sha256::new();
+        h.update(lf);
+        let plain: String = h.finalize().iter().map(|b| format!("{b:02x}")).collect();
+        assert_eq!(sha256_text_bytes(lf), plain);
+    }
 
     struct Dir(PathBuf);
     impl Dir {
