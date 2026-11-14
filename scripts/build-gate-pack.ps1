@@ -121,6 +121,22 @@ New-Item -ItemType Directory -Force -Path (Join-Path $Out 'data') | Out-Null
 $slice = New-PackWavSlice -Source (Join-Path $repo 'resources\bench\bench-en.wav') -Dest (Join-Path $Out 'data\net-clip-en.wav') -StartSeconds 6 -Seconds 6
 $allowedWav.Add('data/net-clip-en.wav')
 ([ordered]@{ source = 'resources/bench/bench-en.wav (public FLEURS English, CC BY 4.0)'; start_s = 6; duration_s = $slice.duration_s; rate = $slice.rate } | ConvertTo-Json) | Set-Content -LiteralPath (Join-Path $Out 'data\net-clip-en.json') -Encoding UTF8
+# The batch-scripts gate: the first three clips per language of the Phase 2 clip list (public FLEURS test).
+if (-not $SkipModels) {
+  $perSet = @{}
+  foreach ($line in (Get-Content -LiteralPath (Join-Path $repo 'eval\clips\phase2-verify-fleurs.txt') -Encoding UTF8)) {
+    if ($line.StartsWith('#') -or -not $line.Trim()) { continue }
+    $p = $line -split "`t"
+    if ($p[0] -notmatch '^fleurs-(en|hi|ur)$') { continue }
+    $lang = $Matches[1]
+    if (-not $perSet.ContainsKey($lang)) { $perSet[$lang] = 0 }
+    if ($perSet[$lang] -ge 3) { continue }
+    $perSet[$lang]++
+    $rel = 'data\batch-clips\' + $lang + '\' + $p[1] + '.wav'
+    Copy-Into (Join-Path $art ('eval\data\fleurs-' + $lang + '\audio\' + $p[1] + '.wav')) $rel
+    $allowedWav.Add(($rel -replace '\\', '/').ToLowerInvariant())
+  }
+}
 if ($DataSource -and (Test-Path -LiteralPath $DataSource)) {
   foreach ($f in @(Get-ChildItem -LiteralPath $DataSource -Recurse -File)) {
     $rel = $f.FullName.Substring((Resolve-Path $DataSource).Path.TrimEnd('\').Length + 1)

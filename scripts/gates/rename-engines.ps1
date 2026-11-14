@@ -18,12 +18,20 @@
 #>
 [CmdletBinding()]
 param(
-  [ValidateSet('emu-low', 'emu-mid', 'native')] [string]$Profile = 'emu-low',
+  [ValidateSet('emu-low', 'emu-mid', 'native', 'laptop')] [string]$Profile = 'emu-low',
   [double]$Minutes = 3,
   [string]$Machine = 'Legion',
   [string]$Scratch = 'D:\STELMAR-Gate\rename-engines',
   [string]$OutDir,
-  [switch]$AllowCableDefault
+  [switch]$AllowCableDefault,
+  # Gate pack (laptop profile): the pack's own programs and folders, and the rig choice passed on to recorder-gate.ps1.
+  [string]$Exe = '',
+  [string]$Testbench = '',
+  [string]$WorkRoot = '',
+  [string]$BackupRoot = '',
+  [string]$Emulate = '',
+  [ValidateSet('', 'loopback', 'cable')] [string]$RigPrefer = '',
+  [switch]$SecondReference
 )
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -61,6 +69,9 @@ function Invoke-Run([string]$Label, [string]$EnginesDir) {
   $env:WB_ENGINES_DIR = $EnginesDir
   $argList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $gateScript, '-Gate', 'soak', '-Profile', $Profile, '-Minutes', $Minutes.ToString($inv), '-OutDir', $out)
   if ($AllowCableDefault) { $argList += '-AllowCableDefault' }
+  $argList += @('-Machine', $Machine)
+  foreach ($kv in @(@('-Exe', $Exe), @('-Testbench', $Testbench), @('-WorkRoot', $WorkRoot), @('-BackupRoot', $BackupRoot), @('-Emulate', $Emulate), @('-RigPrefer', $RigPrefer))) { if ($kv[1]) { $argList += @($kv[0], $kv[1]) } }
+  if ($SecondReference) { $argList += '-SecondReference' }
   try {
     $r = Invoke-WbNative -FilePath 'powershell.exe' -ArgumentList $argList
   } finally { Remove-Item Env:\WB_ENGINES_DIR -ErrorAction SilentlyContinue }
@@ -91,7 +102,7 @@ function Invoke-UiRun([string]$Tag, [string]$EnginesDir, [int[]]$Waits) {
   $env:WB_ENGINES_DIR = $EnginesDir
   try {
     if (Get-Process stelmar-voice-workbench -ErrorAction SilentlyContinue) { throw 'the app is already running' }
-    $app = Start-WbApp -Exe (Join-Path $repo 'target\gate\stelmar-voice-workbench.exe') -TimeoutSeconds 30
+    $app = Start-WbApp -Exe $(if ($Exe) { $Exe } else { Join-Path $repo 'target\gate\stelmar-voice-workbench.exe' }) -TimeoutSeconds 30
     $r.Opened = Invoke-WbAppButton -Handle $app.Handle -Name 'Record'
     if (-not $r.Opened) { throw 'the Record button was not found in the window' }
     # Present: found at once. Absent: the whole wait (15 s, longer than the engine probe) passes without it.
@@ -150,7 +161,7 @@ $lines += ''
 $lines += "the recorder evidence of both runs: $($run1.Evidence) and $($run2.Evidence) (scratch folder, not committed; audio never leaves D:\STELMAR-Gate)"
 if (-not $ok1) { $lines += ($run1.Console | ForEach-Object { "   console: $_" }) }
 if (-not $ok2) { $lines += ($run2.Console | ForEach-Object { "   console: $_" }) }
-$lines += $(if ($pass) { "verdict: PASS$(if ($Profile -ne 'native') { ' (PROVISIONAL: emulated)' })" } else { 'verdict: FAIL' })
+$lines += $(if ($pass) { "verdict: PASS$(if ($Profile -notin 'native', 'laptop') { ' (PROVISIONAL: emulated)' })" } else { 'verdict: FAIL' })
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 $path = Join-Path $OutDir "rename-engines-$Profile.txt"
 Write-WbEvidence -Path $path -Lines $lines -MachineLabel $Machine

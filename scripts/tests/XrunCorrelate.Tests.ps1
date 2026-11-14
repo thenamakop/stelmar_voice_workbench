@@ -87,5 +87,13 @@ foreach ($id in 'hashing-2-10', 'live-batch-safety', 'bg-decode-info') {
   Check "$id.ps1 uses the gate contract and the beside or hashing helpers" ($s -match "Invoke-PackGateBody -Ctx \`$ctx -Id '$id'" -and $s -match 'Invoke-PackRecorderGate')
 }
 
+# rename-engines runs in the pack with the pack's own programs; batch-scripts reads its clips from the pack.
+$re = Get-Content -LiteralPath (Join-Path $here '..\gates\rename-engines.ps1') -Raw
+Check 'rename-engines.ps1 takes the laptop profile and the pack paths and passes the rig choice on' ($re -match "'native', 'laptop'" -and $re -match '\[string\]\$Exe' -and $re -match '\[string\]\$Testbench' -and $re -match '-RigPrefer')
+$bs = Get-Content -LiteralPath (Join-Path $here '..\gate-pack\gates\batch-scripts.ps1') -Raw
+Check 'batch-scripts.ps1 reads data\batch-clips and judges the script share without keeping text' ($bs -match 'batch-clips' -and $bs -match '0\.9' -and $bs -match 'counts only')
+Check 'batch-scripts.ps1 is ASCII only (script ranges are written as escapes)' (-not ($bs -cmatch '[^\x00-\x7F]'))
+Check 'rename-engines gate wrapper wraps the legacy script' ((Get-Content -LiteralPath (Join-Path $here '..\gate-pack\gates\rename-engines.ps1') -Raw) -match "Invoke-PackLegacyGate -Ctx \`$ctx -Script 'rename-engines.ps1'")
+
 if ($fails) { Write-Host "$fails failed"; exit 1 }
 Write-Host 'XrunCorrelate tests passed'
