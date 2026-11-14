@@ -31,7 +31,16 @@
 [CmdletBinding()]
 param(
   [Parameter(Mandatory = $true)] [ValidateSet('soak', 'load', 'panic', 'webview', 'hashing')] [string]$Gate,
-  [ValidateSet('emu-low', 'emu-mid', 'native')] [string]$Profile = 'emu-low',
+  # 'laptop' is the gate pack on a room laptop: no wb-emulate, nothing pinned, no job, the machine's own
+  # logical processors. Everything else is as before.
+  [ValidateSet('emu-low', 'emu-mid', 'native', 'laptop')] [string]$Profile = 'emu-low',
+  # Empty = the VB-CABLE rig as before. 'loopback' = a hardware audio interface with an output cabled to
+  # an input (falls back to VB-CABLE with a loud banner); 'cable' = VB-CABLE through the pack's rig code.
+  # The pack passes it (scripts\lib\LoopbackRig.psm1).
+  [ValidateSet('', 'loopback', 'cable')] [string]$RigPrefer = '',
+  # Also record the same input with a raw WASAPI capture (wb-testbench capture-wasapi) and judge the app
+  # against both references (scripts\lib\RefVerdict.psm1).
+  [switch]$SecondReference,
   [double]$Minutes = 0,
   [string]$Machine = 'Legion',
   [string]$WorkRoot = 'D:\STELMAR-Gate',
@@ -71,7 +80,8 @@ $repo = Resolve-Path (Join-Path $here '..\..')
 if (-not $OutDir) { $OutDir = Join-Path $repo 'docs\evidence\phase-1' }
 if (-not $Exe) { $Exe = Join-Path $repo 'target\gate\stelmar-voice-workbench.exe' }
 if (-not $Testbench) { $Testbench = Join-Path $repo 'target\release\wb-testbench.exe' }
-if (-not $Emulate) { $Emulate = Join-Path $repo 'target\release\wb-emulate.exe' }
+$isLaptop = ($Profile -eq 'laptop')
+if (-not $Emulate -and -not $isLaptop) { $Emulate = Join-Path $repo 'target\release\wb-emulate.exe' }
 if ($Minutes -le 0) { $Minutes = @{ soak = 120; load = 30; panic = 3; webview = 3; hashing = 10 }[$Gate] }
 Import-Module (Join-Path $repo 'scripts\lib\PsEnv.psm1') -Force
 Set-WbCleanPSModulePath
@@ -84,7 +94,12 @@ Import-Module (Join-Path $repo 'scripts\lib\CableRig.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Fidelity.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Detector.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Sampler.psm1') -Force
-foreach ($f in @($Exe, $Testbench, $Emulate)) { if (-not (Test-Path $f)) { throw "Missing $f; build it first (scripts\gates\build-gate.ps1)" } }
+if ($RigPrefer) { Import-Module (Join-Path $repo 'scripts\lib\LoopbackRig.psm1') -Force }
+if ($SecondReference) { Import-Module (Join-Path $repo 'scripts\lib\RefVerdict.psm1') -Force }
+# Files the gate builds on; wb-emulate only where the profile is emulated.
+$builds = @($Exe, $Testbench)
+if (-not $isLaptop) { $builds += $Emulate }
+foreach ($f in $builds) { if (-not (Test-Path $f)) { throw "Missing $f; build it first (scripts\gates\build-gate.ps1)" } }
 
 function Q([string]$v) { ConvertTo-WbArg $v }
 
@@ -152,16 +167,24 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
   # instance (refused otherwise), the cable not the default playback device, nobody else playing
   # into it, and a known signal heard on the capture. A refusal stops the gate here.
   Assert-WbNoResidentAudio
-  $cableRig = Resolve-WbCableRig -Testbench $Testbench -PlayDevice $PlayDevice -CaptureDevice $CaptureDevice
+  if ($RigPrefer) {
+    # The pack's rig: a hardware interface loopback (or VB-CABLE); it proves itself with a known signal
+    # and checks the levels before it returns.
+    $cableRig = Resolve-PackRig -Testbench $Testbench -WorkRoot $WorkRoot -Prefer $RigPrefer -CaptureDevice $CaptureDevice -PlayDevice $PlayDevice
+  } else {
+    $cableRig = Resolve-WbCableRig -Testbench $Testbench -PlayDevice $PlayDevice -CaptureDevice $CaptureDevice
+  }
   $cableRoles = @(Assert-WbCableNotDefault -Testbench $Testbench -Rig $cableRig -Allow:$AllowCableDefault)
   $intruders = @(Get-CableIntruders -Names $cableRig.RenderNames)
   if ($intruders.Count -gt 0) { throw ("RIG REFUSED: Another program is playing into the cable ($($cableRig.RenderNames -join '; ')): " + ($intruders -join ', ') + '. Stop it (or close it) so only the gate player feeds the cable.') }
-  $cableTest = Invoke-WbRigSelfTest -Rig $cableRig -Testbench $Testbench -WorkRoot $WorkRoot
+  if ($RigPrefer) { $cableTest = $cableRig.SelfTest } else { $cableTest = Invoke-WbRigSelfTest -Rig $cableRig -Testbench $Testbench -WorkRoot $WorkRoot }
+  foreach ($b in @($(if ($RigPrefer) { $cableRig.Banner } else { @() }))) { Write-Host $b }
   $playName = $cableTest.PlayName
   $capName = $cableTest.CaptureName
   # Where the player and the reference capture will run: outside the job's cores. The gate does
-  # not start if the plan overlaps the job or itself.
-  $rigPlan = Get-WbRigPlan -Emulate $Emulate -Profile $Profile
+  # not start if the plan overlaps the job or itself. A laptop run has no job and pins nothing.
+  $rigPlan = $null
+  if (-not $isLaptop) { $rigPlan = Get-WbRigPlan -Emulate $Emulate -Profile $Profile }
   if ($rigPlan) { Assert-WbRigPlacement -JobMask $rigPlan.JobMask -PlayerMask $rigPlan.PlayerMask -ReferenceMask $rigPlan.ReferenceMask -What 'planned, before anything starts' }
   $interference = New-Object System.Collections.Generic.List[string]
   $interferenceKeys = @{}
@@ -234,7 +257,7 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
     $inner += @('-Stress', '-Testbench', (Q $Testbench), '-GpuName', (Q $GpuName), '-StressStopFile', (Q $stressStop), '-StressReport', (Q (Join-Path $run 'stress.json')))
   }
   $emuArgs = @('--profile', $Profile, '--log', (Q (Join-Path $run 'emulate.log')), '--', 'powershell.exe') + $inner
-  $emu = $null; $refProc = $null; $play = $null; $hostStress = $null; $sampler = $null; $samplerCsv = $null
+  $emu = $null; $refProc = $null; $ref2Proc = $null; $play = $null; $hostStress = $null; $sampler = $null; $samplerCsv = $null
   $machineState = @(Get-WbMachineStateLines)
   $finished = $false
   # Whatever happens below, nothing started here may outlive the body (see the finally block).
@@ -243,7 +266,12 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
     $samplerCsv = Join-Path $run 'sampler.csv'
     $sampler = Start-WbSampler -OutCsv $samplerCsv -Seconds ($seconds + 420)
   }
-  $emu = Start-Process -FilePath $Emulate -ArgumentList $emuArgs -PassThru -WindowStyle Hidden
+  if ($isLaptop) {
+    # No emulation job on a laptop: the inner script (which starts the app) runs directly.
+    $emu = Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') -ArgumentList $inner -PassThru -WindowStyle Hidden
+  } else {
+    $emu = Start-Process -FilePath $Emulate -ArgumentList $emuArgs -PassThru -WindowStyle Hidden
+  }
 
   # Wait until the session records.
   $deadline = (Get-Date).AddSeconds(120)
@@ -271,6 +299,12 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
   $goFile = Join-Path $run 'GO-RIG'
   # Their error text goes to files: a player or capture that cannot start must leave its reason.
   $refProc = Start-Process -FilePath $Testbench -ArgumentList @('capture', '--device', (Q $capName), '--dir', (Q $refDir), '--stop-file', (Q $refStop), '--go-file', (Q $goFile), '--report', (Q (Join-Path $run 'reference.json'))) -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $run 'reference.out') -RedirectStandardError (Join-Path $run 'reference.err')
+  # The second, independent reference: raw WASAPI capture of the same input, no cpal in it.
+  $ref2Dir = Join-Path $run 'reference2'
+  $ref2Stop = Join-Path $run 'STOP-REF2'
+  if ($SecondReference) {
+    $ref2Proc = Start-Process -FilePath $Testbench -ArgumentList @('capture-wasapi', '--device', (Q $capName), '--dir', (Q $ref2Dir), '--stop-file', (Q $ref2Stop), '--go-file', (Q $goFile), '--report', (Q (Join-Path $run 'reference2.json'))) -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $run 'reference2.out') -RedirectStandardError (Join-Path $run 'reference2.err')
+  }
   Start-Sleep -Seconds 1
   $play = Start-Process -FilePath $Testbench -ArgumentList @('play', '--device', (Q $playName), '--file', (Q $source), '--go-file', (Q $goFile), '--report', (Q (Join-Path $run 'play.json'))) -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $run 'play.out') -RedirectStandardError (Join-Path $run 'play.err')
   # Pin both to cores outside the job at HIGH priority class; they wait for the go file before
@@ -281,10 +315,15 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
 
   # GPU visibility: no process of the job may appear in nvidia-smi.
   Start-Sleep -Seconds 15
-  $jobPids = @(Get-Descendants $emu.Id)
-  $nvPids = @(Get-NvidiaPids)
-  $nvOverlap = @($nvPids | Where-Object { $jobPids -contains $_ })
-  $progress.Add("$(Get-Date -Format 'HH:mm:ss') job processes: $($jobPids.Count); nvidia-smi processes: $($nvPids.Count); job processes on the NVIDIA GPU: $($nvOverlap.Count)")
+  if ($isLaptop) {
+    # No emulation job on a laptop, so there is nothing to keep off the NVIDIA GPU.
+    $jobPids = @(); $nvPids = @(); $nvOverlap = $null
+  } else {
+    $jobPids = @(Get-Descendants $emu.Id)
+    $nvPids = @(Get-NvidiaPids)
+    $nvOverlap = @($nvPids | Where-Object { $jobPids -contains $_ })
+    $progress.Add("$(Get-Date -Format 'HH:mm:ss') job processes: $($jobPids.Count); nvidia-smi processes: $($nvPids.Count); job processes on the NVIDIA GPU: $($nvOverlap.Count)")
+  }
   # Load gate: read the stress processes' priority class and threads from the running processes.
   $stressPriority = @()
   if ($Gate -eq 'load') {
@@ -345,6 +384,7 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
   $lastStatus = Read-Json $env:WB_GATE_STATUS_FILE
   Set-Content -LiteralPath $refStop -Value 'stop'
   [void]$refProc.WaitForExit(120000)
+  if ($ref2Proc) { Set-Content -LiteralPath $ref2Stop -Value 'stop'; [void]$ref2Proc.WaitForExit(120000) }
   Set-Content -LiteralPath $stopFile -Value 'stop'
   if ($hostStress) { Set-Content -LiteralPath $stressStop -Value 'stop'; [void]$hostStress.WaitForExit(60000) }
   if (-not $emu.WaitForExit(900000)) { throw 'The app did not stop within 15 minutes' }
@@ -359,6 +399,25 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
   $refAnalysisErr = Invoke-WbAnalyse -Testbench $Testbench -Session $refDir -Source $source -Report (Join-Path $run 'reference-analysis.json')
   $decode = Read-Json (Join-Path $run 'decode.json')
   $cmp = Invoke-WbCompare -Testbench $Testbench -SessionDir $sessionDir -ReferenceDir $refDir -RunDir $run
+  $ref2AnalysisErr = $null; $compare2 = $null; $compareRefs = $null; $compare2Error = $null
+  if ($SecondReference -and (Test-Path -LiteralPath $ref2Dir)) {
+    $ref2AnalysisErr = Invoke-WbAnalyse -Testbench $Testbench -Session $ref2Dir -Source $source -Report (Join-Path $run 'reference2-analysis.json')
+    $startMsOf = { param($f) $j = Read-Json (Join-Path $run $f); if ($j -and (Test-WbHasProperty $j 'content_start_ms')) { ([double]$j.content_start_ms).ToString([Globalization.CultureInfo]::InvariantCulture) } else { $null } }
+    $sApp = & $startMsOf 'analysis.json'; $sRef = & $startMsOf 'reference-analysis.json'; $sRef2 = & $startMsOf 'reference2-analysis.json'
+    # The app against the WASAPI reference.
+    $a = @('compare', '--app', $sessionDir, '--reference', $ref2Dir, '--report', (Join-Path $run 'compare2.json'))
+    if ($sApp) { $a += @('--app-signal-start-ms', $sApp) }
+    if ($sRef2) { $a += @('--reference-signal-start-ms', $sRef2) }
+    $c2 = Invoke-WbNative -FilePath $Testbench -ArgumentList $a
+    if ($c2.ExitCode -ne 0) { $compare2Error = (@($c2.Error) + @($c2.Output)) -join ' ' }
+    # The cpal reference against the WASAPI reference.
+    $a = @('compare', '--app', $refDir, '--reference', $ref2Dir, '--report', (Join-Path $run 'compare-refs.json'))
+    if ($sRef) { $a += @('--app-signal-start-ms', $sRef) }
+    if ($sRef2) { $a += @('--reference-signal-start-ms', $sRef2) }
+    $null = Invoke-WbNative -FilePath $Testbench -ArgumentList $a
+    $compare2 = Read-Json (Join-Path $run 'compare2.json')
+    $compareRefs = Read-Json (Join-Path $run 'compare-refs.json')
+  }
   $appLog = @()
   if (Test-Path $logFile) {
     $fs = [System.IO.File]::Open($logFile, 'Open', 'Read', 'ReadWrite')
@@ -375,6 +434,7 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
     CacheNote = $cacheNote; BootTime = $bootTime; UptimeMin = $uptimeMin; FastStartup = $fastStartup; ModelsDisk = $modelsDisk; RecDisk = $recDisk
     CableRig = $cableRig; CableTest = $cableTest; CableSeen = $cableSeen; CablePollProblems = @(ConvertTo-WbArray $pollProblems)
     MachineState = $machineState; SamplerCsv = $samplerCsv; StressPriority = @($stressPriority)
+    Compare2 = $compare2; CompareRefs = $compareRefs; Compare2Error = $compare2Error; Reference2 = (Read-Json (Join-Path $run 'reference2.json')); RefAnalysis2 = (Read-Json (Join-Path $run 'reference2-analysis.json')); Ref2AnalysisError = $ref2AnalysisErr
   }
   Stop-WbSampler -Process $sampler
   $finished = $true
@@ -383,7 +443,7 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
     # stress, so a crash leaves no orphan holding the runner's pipes. On the normal path they have
     # already stopped and this does nothing.
     if (-not $finished) {
-      $left = @(Stop-WbRigLeftovers -Process @($emu, $play, $refProc, $hostStress, $sampler) -StopFile @($stopFile, $refStop, $stressStop) -GraceSeconds 45)
+      $left = @(Stop-WbRigLeftovers -Process @($emu, $play, $refProc, $ref2Proc, $hostStress, $sampler) -StopFile @($stopFile, $refStop, $ref2Stop, $stressStop) -GraceSeconds 45)
       foreach ($l in $left) { Write-Host "cleanup after an error: $l" }
     }
   }
@@ -391,7 +451,7 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
 }
 } catch {
   $detail = $(if ($script:Current -and $script:Current.Error) { $script:Current.Error } else { ($_.Exception.GetType().FullName + ': ' + $_.Exception.Message + "`r`n" + $_.ScriptStackTrace) })
-  Write-WbGateCrashEvidence -Path (Join-Path $OutDir "$Gate-$Profile.txt") -Reason "the $Gate gate stopped on an error: $($_.Exception.Message)" -Detail $detail -Machine $Machine -Profile $Profile -Builds @($Exe, $Testbench, $Emulate)
+  Write-WbGateCrashEvidence -Path (Join-Path $OutDir "$Gate-$Profile.txt") -Reason "the $Gate gate stopped on an error: $($_.Exception.Message)" -Detail $detail -Machine $Machine -Profile $Profile -Builds $builds
   Write-Host "FAIL: the $Gate gate did not complete: $($_.Exception.Message)"
   exit 1
 }
@@ -405,13 +465,14 @@ if ($missing.Count -gt 0) {
   if ($r.AnalysisError) { $extra += "analyser (app recording): $($r.AnalysisError)" }
   if ($r.RefAnalysisError) { $extra += "analyser (reference capture): $($r.RefAnalysisError)" }
   $extra += "run folder: $($r.Run) (kept; nothing was deleted)"
-  Write-WbGateCrashEvidence -Path (Join-Path $OutDir "$Gate-$Profile.txt") -Reason 'no verdict data: the run produced no analysis or reports to judge' -Machine $Machine -Profile $Profile -Builds @($Exe, $Testbench, $Emulate) -Extra $extra
+  Write-WbGateCrashEvidence -Path (Join-Path $OutDir "$Gate-$Profile.txt") -Reason 'no verdict data: the run produced no analysis or reports to judge' -Machine $Machine -Profile $Profile -Builds $builds -Extra $extra
   Write-Host "FAIL: no verdict data ($($missing -join ', '))"
   exit 1
 }
 $stopped = $r.Report.stopped
 $rec = $stopped.recorder
 $logical = 4
+if ($isLaptop) { $logical = [Environment]::ProcessorCount }
 $emuLog = Join-Path $r.Run 'emulate.log'
 if (Test-Path $emuLog) { $m = Select-String -Path $emuLog -Pattern 'logical_processors=(\d+)' | Select-Object -First 1; if ($m) { $logical = [int]$m.Matches[0].Groups[1].Value } }
 $wall = [double]$r.Inner.app_wall_seconds
@@ -508,12 +569,23 @@ if ($Gate -eq 'webview' -and @($r.AppLog).Count -gt 0) {
 }
 $pass = -not ($checks.Values -contains $false) -and $rv.Verdict -ne 'FAIL'
 $verdict = $(if ($rv.Verdict -eq 'INVALID') { 'INVALID' } elseif ($pass) { 'PASS' } else { 'FAIL' })
+# With the second reference the table in RefVerdict.psm1 decides what the fidelity result means: an app
+# that equals the WASAPI capture but not the cpal one is a cpal-reference fault (repeat), one that equals
+# cpal but not WASAPI is a fault the recorder shares with cpal (FAIL). Every other check still counts.
+$refV = $null
+if ($SecondReference) {
+  $refV = Get-PackRefVerdict -AppCpal $r.Compare -AppWasapi $r.Compare2 -CpalWasapi $r.CompareRefs
+  $fidKey = @($checks.Keys | Where-Object { $_ -like 'fidelity:*' })
+  $others = $true
+  foreach ($k in $checks.Keys) { if ($fidKey -notcontains $k -and -not $checks[$k]) { $others = $false } }
+  $verdict = $(if (-not $others) { 'FAIL' } elseif ($refV.Verdict -eq 'FAIL') { 'FAIL' } elseif ($refV.Verdict -eq 'INVALID' -or $rv.Verdict -eq 'INVALID') { 'INVALID' } elseif ($rv.Verdict -eq 'FAIL') { 'FAIL' } else { 'PASS' })
+}
 $lines_cable = $(if ($null -eq $r.Interference) { 'cable interference polling: not re-evaluated (measured live, not saved); the analysis above is the evidence' } elseif (@($r.Interference).Count -gt 0) { 'cable interference seen (run invalid for the "equals the source" check): ' + (@($r.Interference) -join '; ') } else { 'cable interference: none seen by the 1-second session poll (sounds shorter than a second can be missed; the analysis above is the check)' })
 
 $lines = @()
-$lines += Get-WbGateHeader -Machine $Machine -Profile $Profile -Builds @($Exe, $Testbench, $Emulate)
+$lines += Get-WbGateHeader -Machine $Machine -Profile $Profile -Builds $builds
 $lines += "app build: target\gate\stelmar-voice-workbench.exe (cargo profile gate, features gate-hooks + custom-protocol)"
-$verdictText = "verdict: $(if ($verdict -eq 'INVALID') { 'INVALID (no verdict; the run must be repeated)' } elseif ($verdict -eq 'PASS' -and $Profile -ne 'native') { "PASS (PROVISIONAL: emulated$hashNote$coverageNote)" } elseif ($verdict -eq 'PASS') { "PASS$hashNote$coverageNote" } else { $verdict })"
+$verdictText = "verdict: $(if ($verdict -eq 'INVALID') { 'INVALID (no verdict; the run must be repeated)' } elseif ($verdict -eq 'PASS' -and $Profile -notin @('native', 'laptop')) { "PASS (PROVISIONAL: emulated$hashNote$coverageNote)" } elseif ($verdict -eq 'PASS') { "PASS$hashNote$coverageNote" } else { $verdict })"
 if ($DiagnosticNote) {
   $lines += "verdict: DIAGNOSTIC, NOT A VERDICT. $DiagnosticNote"
   $lines += "  what the checks below say about this run (not the gate result): $($verdictText -replace '^verdict: ', '')"
@@ -529,7 +601,14 @@ if ($Gate -eq 'webview' -and @($r.AppLog).Count -eq 0) { $lines += 'display reco
 $lines += ''
 $lines += 'measurements:'
 $lines += ("  source: {0:n1} min of known noise, 48 kHz stereo, played by wb-testbench into '{1}' from outside the job" -f ($r.Analysis.source_ms / 60000.0), $(if ($r.CableTest) { $r.CableTest.PlayName } else { 'the cable (name not recorded for this run)' }))
-$lines += Get-WbCableRigLines -Rig $r.CableRig -SelfTest $r.CableTest
+if ($RigPrefer) { $lines += Get-PackRigLines -Rig $r.CableRig } else { $lines += Get-WbCableRigLines -Rig $r.CableRig -SelfTest $r.CableTest }
+if ($refV) {
+  $lines += "  two references (the app against the cpal capture and against a raw WASAPI capture of the same input): $($refV.Verdict) - $($refV.Reason)"
+  $lines += @($refV.Lines)
+  if ($r.Compare2Error) { $lines += "  comparison with the WASAPI reference failed: $($r.Compare2Error)" }
+  if ($r.Ref2AnalysisError) { $lines += "  analyser (WASAPI reference): $($r.Ref2AnalysisError)" }
+  if ($r.Reference2) { $lines += ("  WASAPI reference capture: overruns {0}, xruns {1}" -f $r.Reference2.overrun_samples, $r.Reference2.xruns) }
+}
 $lines += ("  recorded content: {0:n3} s against source {1:n3} s (difference {2:n1} ms); discontinuities {3}; silent gaps {4:n1} ms; unmatched {5:n1} ms; lowest block correlation {6:n4}" -f ($r.Analysis.content_ms / 1000.0), ($r.Analysis.source_ms / 1000.0), $r.Analysis.duration_diff_ms, @($r.Analysis.discontinuities).Count, $r.Analysis.silent_gap_ms, $r.Analysis.unmatched_ms, $r.Analysis.min_block_correlation)
 $lines += ("  parts: {0}; audio {1:n1} s; overrun samples {2}; driver xruns {3}; samples dropped by the writer {4}; recorder restarts {5}" -f @($rec.parts).Count, ($rec.audio_ms / 1000.0), $rec.overrun_samples, $rec.xruns, $rec.dropped_samples, $rec.recorder_restarts)
 if (Test-WbHasProperty $rec 'detector_max_block_us') {
