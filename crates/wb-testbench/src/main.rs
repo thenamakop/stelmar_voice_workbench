@@ -3,6 +3,8 @@
 //! ```text
 //! wb-testbench devices
 //! wb-testbench gen      --out FILE.wav --seconds N [--rate 48000] [--channels 2] [--seed S]
+//! wb-testbench mix      --out FILE.wav --clips A.wav,B.wav --seconds N [--rate 48000] [--pause-s 2] [--silent-from-s X --silent-for-s Y] [--gain G]
+//!                       a speech source for the microphone run: the clips joined with pauses, repeated, with one stretch of true silence
 //! wb-testbench play     --device "CABLE Input" --file FILE.wav [--stop-file F] [--go-file G] [--report R.json]
 //! wb-testbench analyse  --session DIR --source FILE.wav [--report R.json]
 //! wb-testbench decode   --session DIR [--report R.json]
@@ -24,6 +26,7 @@
 
 mod analyse;
 mod compare;
+mod mix;
 mod play;
 mod redact;
 mod reference;
@@ -102,6 +105,30 @@ fn output<T: Serialize>(args: &Args, value: &T) -> Result<()> {
         std::fs::write(path, body).with_context(|| format!("write {path}"))?;
     }
     Ok(())
+}
+
+fn mix_source(args: &Args) -> Result<()> {
+    let out = PathBuf::from(args.get("out")?);
+    let clips: Vec<PathBuf> = args
+        .get("clips")?
+        .split(',')
+        .map(|c| PathBuf::from(c.trim()))
+        .filter(|c| !c.as_os_str().is_empty())
+        .collect();
+    let refs: Vec<&Path> = clips.iter().map(PathBuf::as_path).collect();
+    let info = mix::write_mix(
+        &out,
+        &refs,
+        args.num("seconds", 600)?,
+        args.num("rate", 48_000)?,
+        args.num("pause-s", 2.0)?,
+        (
+            args.num("silent-from-s", 0.0)?,
+            args.num("silent-for-s", 0.0)?,
+        ),
+        args.num("gain", 1.0)?,
+    )?;
+    output(args, &info)
 }
 
 fn generate(args: &Args) -> Result<()> {
@@ -292,6 +319,7 @@ fn run() -> Result<()> {
     match args.cmd.as_str() {
         "devices" => devices(&args),
         "gen" => generate(&args),
+        "mix" => mix_source(&args),
         "play" => {
             let file = PathBuf::from(args.get("file")?);
             let stop = args.opts.get("stop-file").map(PathBuf::from);
