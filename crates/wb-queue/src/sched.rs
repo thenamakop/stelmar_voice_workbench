@@ -565,6 +565,26 @@ mod tests {
         assert_eq!(engine_memory_limit(3 * GIB, 4 * GIB), 3 * GIB);
     }
 
+    /// The first spawn smoke (14 Nov 2026) fed the formula 17 MiB of "available" memory by mistake, which gives a
+    /// limit equal to the peak (no headroom), and the real engine died at 100% of it. The start gate prevents that
+    /// in the app: an engine that may start has at least peak + 3 GiB free, so its limit is at least peak + 1 GiB.
+    #[test]
+    fn an_engine_the_start_gate_lets_start_always_gets_at_least_a_gib_of_headroom() {
+        for peak_mib in [200u64, 800, 1232, 3000, 5000] {
+            let peak = peak_mib << 20;
+            for extra_mib in [0u64, 1, 512, 4096] {
+                let free = peak + 3 * GIB + (extra_mib << 20);
+                assert!(start_gate(free, peak, 0, 0).is_ok());
+                assert!(
+                    engine_memory_limit(peak, free) >= peak + GIB,
+                    "peak {peak_mib} MiB free {free}"
+                );
+            }
+        }
+        // Without the gate (a bad reading), the limit falls back to the peak itself: no headroom.
+        assert_eq!(engine_memory_limit(1232 << 20, 17 << 20), 1232 << 20);
+    }
+
     #[test]
     fn seventy_percent_of_the_limit_is_the_smoke_line() {
         assert!(!over_safe_share(7 * GIB, 10 * GIB));

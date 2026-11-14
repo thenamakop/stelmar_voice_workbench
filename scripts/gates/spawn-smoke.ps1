@@ -81,7 +81,7 @@ function Summary([object]$r) { @($r.Run.Output + $r.Run.Error | Where-Object { $
 
 $results = [ordered]@{}
 Invoke-WbGate -Name "spawn smoke $Profile" -Body {
-  $freeMb = [int](Get-WbFreeRamGB * 1024)
+  $freeMb = [int]((Get-WbFreeRamGB) * 1024)
   $results.restart = Invoke-InProfile $exes.restart @('--test-threads', '1')
   $results.memory = Invoke-InProfile $exes.memory_limit @('--test-threads', '1')
   $env:WB_SMOKE_ENGINE = $engineBench; $env:WB_SMOKE_MODEL = $small; $env:WB_SMOKE_VAD = $vad
