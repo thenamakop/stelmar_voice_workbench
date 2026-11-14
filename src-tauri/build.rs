@@ -19,6 +19,14 @@ const COMMANDS: &[&str] = &[
     "cancel_system_check",
     "set_override",
     "session_plan",
+    "queue_snapshot",
+    "queue_pause",
+    "queue_resume",
+    "queue_move_up",
+    "queue_change_model",
+    "set_language_lock",
+    "import_session",
+    "session_transcript",
 ];
 
 fn main() {

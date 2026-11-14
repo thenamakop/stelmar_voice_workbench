@@ -24,6 +24,14 @@
     "allow-run-system-check",
     "allow-cancel-system-check",
     "allow-set-override",
-    "allow-session-plan"
+    "allow-session-plan",
+    "allow-queue-snapshot",
+    "allow-queue-pause",
+    "allow-queue-resume",
+    "allow-queue-move-up",
+    "allow-queue-change-model",
+    "allow-set-language-lock",
+    "allow-import-session",
+    "allow-session-transcript"
   ]
 }

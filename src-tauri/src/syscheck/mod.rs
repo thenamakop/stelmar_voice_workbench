@@ -158,6 +158,26 @@ fn current_fingerprint(app: &AppHandle) -> Option<wb_capability::Fingerprint> {
     Some(fp)
 }
 
+/// The profile in use for the queue (`store::in_use`, never the file itself): the profile, which carries safe
+/// defaults after a fingerprint change, and what changed. None when no check has run.
+pub(crate) fn profile_in_use(app: &AppHandle) -> Option<(Capability, Vec<String>)> {
+    let used = store::in_use(&data_dir(app), current_fingerprint(app).as_ref()).ok()??;
+    Some((used.cap, used.changes))
+}
+
+/// The computer runs on its battery. Unknown counts as mains: the scheduler must not stop the day's work
+/// because a desktop reports nothing.
+pub(crate) fn on_battery() -> bool {
+    #[cfg(windows)]
+    {
+        win::on_mains_power() == Some(false)
+    }
+    #[cfg(not(windows))]
+    {
+        false
+    }
+}
+
 /// What the Start Session dialog sends: the recorder's own request plus the recording mode. `recording.rs`
 /// stays exactly as the Phase 1 recorder gates verified it, so the mode is handled here, in the command
 /// layer that calls the recorder.
@@ -221,6 +241,13 @@ pub fn start_with_mode(
     ) {
         tracing::warn!("start-options.json was not written: {e}");
     }
+    // The session's rolling transcription job. A failure is reported and never touches the recording.
+    crate::queue::on_session_started(
+        app,
+        &info.dir,
+        &languages,
+        request.hindi_urdu_script.as_deref(),
+    );
     Ok(info)
 }
 

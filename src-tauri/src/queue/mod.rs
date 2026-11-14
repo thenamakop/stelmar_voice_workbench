@@ -1,0 +1,1147 @@
+//! The post-processing queue in the app (Phase 4): the jobs of every open session, the engine slots that work
+//! through their units, the scheduler's pause rules and the commands the Queue screen uses.
+//!
+//! The coordination logic is in `crates/wb-runner` and `crates/wb-queue` (no Tauri, tested with fake engines);
+//! this module supplies what only the app knows: the machine's readings, the capability profile in use, the
+//! recorder's closed parts and fault counters (through `feed`, which can never block the recorder) and the UI
+//! events. Nothing here touches the recorder: it reads `parts.json` and the files the recorder wrote.
+
+pub mod core;
+pub mod executor;
+pub mod feed;
+#[cfg(feature = "gate-hooks")]
+pub mod gate_hooks;
+pub mod langlock;
+pub mod profile;
+
+use std::collections::BTreeSet;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::Receiver;
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::time::{Duration, Instant};
+
+use serde::Serialize;
+use tauri::{AppHandle, Manager as _};
+use wb_capability::DeviceConfig;
+use wb_queue::store::{Device, JobKind, JobState, Segment, UnitState};
+use wb_recorder::events::{Notice, NoticeLevel};
+use wb_recorder::parts::PartRecord;
+use wb_runner::manager::{Config, Events, LogLevel, Manager, SessionHandle, Slot};
+use wb_runner::session_queue::SessionQueue;
+
+use self::core::{AppGate, Core, Readings};
+use self::executor::{AppExecutor, Environment, SessionInfoForUnits};
+use self::feed::Feed;
+use self::profile::ProfileView;
+use crate::boundary::blocking;
+use crate::state::{AppState, lock};
+
+fn plock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// How often the monitor re-reads the machine and `parts.json`.
+const MONITOR_STEP: Duration = Duration::from_secs(2);
+const PARTS_RECHECK: Duration = Duration::from_secs(5);
+const NIGHT_CHECK: Duration = Duration::from_secs(30);
+
+// ------------------------------------------------------------------------------------------------ the clock
+
+/// Milliseconds since the Unix epoch. In a gate build `WB_GATE_CLOCK_OFFSET_S` moves it so a short test can
+/// stand for the day's programme (10:00 IST); every other build reads the system clock and nothing else.
+pub fn clock_ms() -> u64 {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX));
+    now.saturating_add_signed(clock_offset_ms())
+}
+
+/// The gate build's clock offset (`WB_GATE_CLOCK_OFFSET_S`); zero in every other build.
+fn clock_offset_ms() -> i64 {
+    #[cfg(feature = "gate-hooks")]
+    {
+        std::env::var("WB_GATE_CLOCK_OFFSET_S")
+            .ok()
+            .and_then(|v| v.trim().parse::<i64>().ok())
+            .unwrap_or(0)
+            .saturating_mul(1000)
+    }
+    #[cfg(not(feature = "gate-hooks"))]
+    {
+        0
+    }
+}
+
+/// The profile in use as the queue reads it. A gate build can force a hybrid configuration for the kill test
+/// (`WB_GATE_FORCE_HYBRID`), which its report labels.
+fn view_of(cap: &wb_capability::Capability, changes: Vec<String>) -> ProfileView {
+    #[allow(unused_mut)]
+    let mut view = ProfileView::from_capability(cap, changes);
+    #[cfg(feature = "gate-hooks")]
+    if gate_hooks::force_hybrid() && !view.record_only {
+        let gpu = view.gpu_index.unwrap_or(0);
+        view.config = Some(DeviceConfig::Hybrid { gpu });
+        view.gpu_index = Some(gpu);
+    }
+    view
+}
+
+fn ist_text() -> String {
+    wb_recorder::util::rfc3339(wb_recorder::util::now_ist())
+}
+
+// -------------------------------------------------------------------------------------------- readings
+
+/// The scheduler's inputs on a real computer.
+struct AppReadings {
+    app: AppHandle,
+    feed: Arc<Feed>,
+    free: Mutex<Option<(Instant, u64)>>,
+    profile: Mutex<Option<(Instant, Option<ProfileView>)>>,
+}
+
+impl Readings for AppReadings {
+    fn now_ms(&self) -> u64 {
+        clock_ms()
+    }
+
+    fn free_ram_bytes(&self) -> u64 {
+        // One probe a second is plenty and keeps the gate's polling cheap. The machine view reports the host's
+        // free memory, or the job's remaining limit under emulation, less the engines' graphics memory held in
+        // system RAM.
+        let mut cached = plock(&self.free);
+        if let Some((at, v)) = *cached
+            && at.elapsed() < Duration::from_secs(1)
+        {
+            return v;
+        }
+        let v = wb_machine::probe().available_ram_bytes;
+        *cached = Some((Instant::now(), v));
+        v
+    }
+
+    fn recording(&self) -> bool {
+        self.app
+            .state::<AppState>()
+            .recording
+            .load(Ordering::SeqCst)
+    }
+
+    fn on_battery(&self) -> bool {
+        crate::syscheck::on_battery()
+    }
+
+    fn recorder_faults(&self) -> u64 {
+        self.feed.recorder_faults()
+    }
+
+    fn profile(&self) -> Option<ProfileView> {
+        let mut cached = plock(&self.profile);
+        if let Some((at, v)) = cached.as_ref()
+            && at.elapsed() < Duration::from_secs(5)
+        {
+            return v.clone();
+        }
+        let v =
+            crate::syscheck::profile_in_use(&self.app).map(|(cap, changes)| view_of(&cap, changes));
+        *cached = Some((Instant::now(), v.clone()));
+        v
+    }
+}
+
+// ----------------------------------------------------------------------------------------------- events
+
+struct AppEvents {
+    app: AppHandle,
+    core: Arc<Core>,
+}
+
+impl Events for AppEvents {
+    fn committed(&self, session: &str, segments: &[Segment]) {
+        self.app.state::<AppState>().broadcast(serde_json::json!({
+            "kind": "segment_committed",
+            "session": session,
+            "segments": segments,
+        }));
+    }
+
+    fn changed(&self) {
+        self.app
+            .state::<AppState>()
+            .broadcast(serde_json::json!({ "kind": "queue_update" }));
+    }
+
+    fn log(&self, level: LogLevel, text: &str) {
+        match level {
+            LogLevel::Info => tracing::info!(target: "queue", "{text}"),
+            LogLevel::Warn => tracing::warn!(target: "queue", "{text}"),
+            LogLevel::Error => tracing::error!(target: "queue", "{text}"),
+        }
+        self.core.push_log(text.to_owned());
+    }
+
+    fn problem(&self, text: &str) {
+        tracing::error!(target: "queue", "{text}");
+        self.core.push_log(text.to_owned());
+        let _ = self.app.state::<AppState>().events.send(Notice::event(
+            NoticeLevel::Error,
+            "queue",
+            text.to_owned(),
+        ));
+    }
+}
+
+// ------------------------------------------------------------------------------------------------- state
+
+struct OpenSession {
+    name: String,
+    dir: PathBuf,
+    handle: Arc<SessionHandle>,
+    job: i64,
+    languages: Vec<String>,
+    /// Parts already handed to the planner.
+    submitted: BTreeSet<u32>,
+    /// Stop was seen and the final cut was asked for.
+    finished: bool,
+    /// When Stop was seen (the scheduler's clock): the night pass starts 30 minutes after the last one.
+    ended_ms: Option<u64>,
+    /// The night pass has been planned for this session (or skipped, with the reason logged).
+    night_handled: bool,
+}
+
+pub struct Queue {
+    app: AppHandle,
+    core: Arc<Core>,
+    manager: Arc<Manager>,
+    executor: Arc<AppExecutor>,
+    open: Arc<Mutex<Vec<OpenSession>>>,
+    slots_started: AtomicBool,
+    feed: Arc<Feed>,
+}
+
+/// What the commands reach through Tauri's managed state.
+pub struct QueueState(pub Arc<Queue>);
+
+/// The languages a job decodes: `en` stays, Hindi and Urdu become the one language of the organiser's script
+/// (Devanagari `hi`, Nastaliq `ur`).
+pub fn job_languages(expected: &[String], script: Option<&str>) -> Vec<String> {
+    let hindi_urdu = if script == Some("nastaliq") {
+        "ur"
+    } else {
+        "hi"
+    };
+    let mut out: Vec<String> = Vec::new();
+    for l in expected {
+        let mapped = match l.as_str() {
+            "hi" | "ur" => hindi_urdu.to_owned(),
+            other => other.to_owned(),
+        };
+        if !out.contains(&mapped) {
+            out.push(mapped);
+        }
+    }
+    out
+}
+
+fn models_json(models: &std::collections::BTreeMap<String, String>) -> serde_json::Value {
+    serde_json::Value::Object(
+        models
+            .iter()
+            .map(|(k, v)| (k.clone(), serde_json::Value::String(v.clone())))
+            .collect(),
+    )
+}
+
+impl Queue {
+    /// Starts the engine slots the profile in use calls for (once): a processor slot, a graphics slot, or both
+    /// for a hybrid.
+    fn ensure_slots(&self, profile: &ProfileView) {
+        if self.slots_started.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        let Some(config) = profile.config else {
+            self.slots_started.store(false, Ordering::SeqCst);
+            return;
+        };
+        let (cpu, gpu) = match config {
+            DeviceConfig::Cpu => (true, false),
+            DeviceConfig::Gpu { .. } => (false, true),
+            DeviceConfig::Hybrid { .. } => (true, true),
+        };
+        self.manager.set_other_device_available(cpu && gpu);
+        for (wanted, name, device) in [(cpu, "cpu", Device::Cpu), (gpu, "gpu", Device::Gpu)] {
+            if !wanted {
+                continue;
+            }
+            let slot = Slot {
+                name: name.into(),
+                device,
+            };
+            if let Err(e) = self.manager.start_slot(slot) {
+                tracing::error!("could not start the {name} engine slot: {e}");
+            } else {
+                self.core.push_log(format!(
+                    "{name} engine slot started (configuration {config:?}, {} thread(s))",
+                    profile.cpu_threads
+                ));
+            }
+        }
+    }
+
+    /// Opens (or reopens) a session's queue and registers it. `languages` are the job's decoding languages.
+    fn register(
+        &self,
+        dir: PathBuf,
+        languages: &[String],
+        profile: &ProfileView,
+    ) -> Result<(), String> {
+        let name = dir
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("session")
+            .to_owned();
+        if plock(&self.open).iter().any(|s| s.name == name) {
+            return Ok(());
+        }
+        let models = profile.rolling_models(languages);
+        if models.is_empty() {
+            return Err(format!(
+                "no transcription model was measured for the languages of {name}; the recording goes on and the session stays untranscribed until a system check covers them"
+            ));
+        }
+        let mut queue = SessionQueue::open(&dir).map_err(|e| e.to_string())?;
+        let job = queue
+            .ensure_rolling_job(&name, models_json(&models), languages.to_vec(), clock_ms())
+            .map_err(|e| e.to_string())?;
+        let work_dir = dir.join("work");
+        let handle = Arc::new(SessionHandle {
+            name: name.clone(),
+            queue: Mutex::new(queue),
+            work_dir,
+        });
+        self.manager.add_session(handle.clone());
+        plock(&self.open).push(OpenSession {
+            name,
+            dir,
+            handle,
+            job,
+            languages: languages.to_vec(),
+            submitted: BTreeSet::new(),
+            finished: false,
+            ended_ms: None,
+            night_handled: false,
+        });
+        self.ensure_slots(profile);
+        Ok(())
+    }
+
+    /// Hands every closed part not yet seen to the planner, and, once Stop was seen, asks for the final cut.
+    fn submit_parts(&self, stopped_dir: Option<&str>) {
+        let mut open = plock(&self.open);
+        for s in open.iter_mut() {
+            let index = wb_recorder::parts::load(&s.dir).ok();
+            if let Some(index) = index {
+                for p in &index.parts {
+                    if s.submitted.insert(p.part) {
+                        self.submit_part(s, p);
+                    }
+                }
+            }
+            let is_stopped = stopped_dir.is_some_and(|d| std::path::Path::new(d) == s.dir);
+            if is_stopped && !s.finished {
+                s.finished = true;
+                s.ended_ms = Some(clock_ms());
+                self.manager.session_finished(&s.handle, s.job);
+            }
+        }
+    }
+
+    fn submit_part(&self, s: &OpenSession, p: &PartRecord) {
+        let wav = s.dir.join(&p.file);
+        self.manager.part_closed(
+            &s.handle,
+            s.job,
+            p.part,
+            p.start_ms,
+            p.end_ms(),
+            p.sample_rate,
+            wav,
+        );
+    }
+
+    /// One monitor step: the pause rules, the engines they stop, and the parts to plan.
+    fn step(&self, last_pause: &mut Option<String>) {
+        let (verdict, _transitions) = self.core.evaluate();
+        self.executor.set_threads_fewer(verdict.fewer_threads);
+        let now_pause = verdict.pause.map(|r| r.text().to_owned());
+        if now_pause.is_some() && *last_pause != now_pause {
+            // A rule began to hold: running engines stop now and resume from their staged files later.
+            if let Some(why) = &now_pause {
+                self.manager.cancel_running(why);
+            }
+        }
+        if *last_pause != now_pause {
+            self.app
+                .state::<AppState>()
+                .broadcast(serde_json::json!({ "kind": "scheduler_status" }));
+            self.manager.poke();
+        }
+        *last_pause = now_pause;
+    }
+}
+
+/// Starts the queue: the scheduler, the planner, the monitor and the sessions a restart left unfinished.
+/// `parts_rx` is the feed's receiver: a closed part is only a prompt to re-read `parts.json`.
+pub fn init(app: &AppHandle, feed: Arc<Feed>, parts_rx: Receiver<PartRecord>) {
+    let Some(engines_dir) = crate::engines::locate_engines_dir() else {
+        tracing::warn!("queue: no engines folder was found; post-processing is off");
+        return;
+    };
+    let Some(models_dir) = crate::engines::locate_models_dir() else {
+        tracing::warn!("queue: no models folder was found; post-processing is off");
+        return;
+    };
+    let manifest = match wb_models::Manifest::load(&models_dir.join("manifest.json")) {
+        Ok(m) => m,
+        Err(e) => {
+            tracing::warn!("queue: the model manifest could not be read: {e}");
+            return;
+        }
+    };
+    let engines = crate::engines::discover(&engines_dir);
+    let chunks_exe = ["avx2", "avx512"]
+        .iter()
+        .find_map(|v| engines.iter().find(|(n, _)| n == v).map(|(_, p)| p.clone()))
+        .or_else(|| engines.first().map(|(_, p)| p.clone()));
+    let Some(chunks_exe) = chunks_exe else {
+        tracing::warn!("queue: no engine build was found; post-processing is off");
+        return;
+    };
+    // Gate builds pass WB_* variables on to the engines on purpose (emulation needs them); every other build
+    // removes them (row 102).
+    let scrub_env = crate::engines::scrub_engine_env();
+
+    let readings: Arc<AppReadings> = Arc::new(AppReadings {
+        app: app.clone(),
+        feed: feed.clone(),
+        free: Mutex::new(None),
+        profile: Mutex::new(None),
+    });
+    let core = Arc::new(Core::new(readings.clone()));
+    let open: Arc<Mutex<Vec<OpenSession>>> = Arc::new(Mutex::new(Vec::new()));
+
+    let profile_for_exec = readings.clone();
+    let open_for_exec = open.clone();
+    let executor = Arc::new(AppExecutor::new(Environment {
+        models_dir: models_dir.clone(),
+        manifest,
+        engines,
+        scrub_env,
+        profile: Arc::new(move || profile_for_exec.profile()),
+        contexts: Arc::new(move |name| {
+            plock(&open_for_exec)
+                .iter()
+                .find(|s| s.name == name)
+                .map(|s| SessionInfoForUnits {
+                    dir: s.dir.clone(),
+                    glossary: String::new(),
+                    languages: s.languages.clone(),
+                })
+        }),
+    }));
+    let events: Arc<AppEvents> = Arc::new(AppEvents {
+        app: app.clone(),
+        core: core.clone(),
+    });
+    let gate = Arc::new(AppGate { core: core.clone() });
+    let manager = Manager::new(
+        gate,
+        executor.clone(),
+        events,
+        Config {
+            chunks_exe,
+            models_dir,
+            scrub_env,
+            chunks_timeout: Duration::from_secs(600),
+            gate_poll: Duration::from_secs(2),
+            clock_ms: Arc::new(clock_ms),
+            ist_text: Arc::new(ist_text),
+        },
+    );
+    if let Err(e) = manager.start_planner() {
+        tracing::error!("queue: the planner could not start: {e}");
+        return;
+    }
+    let queue = Arc::new(Queue {
+        app: app.clone(),
+        core,
+        manager,
+        executor,
+        open,
+        slots_started: AtomicBool::new(false),
+        feed,
+    });
+    app.manage(QueueState(queue.clone()));
+
+    // Monitor: pause rules every step, `parts.json` every few seconds or when the recorder announced a part.
+    let q = queue.clone();
+    let spawned = std::thread::Builder::new()
+        .name("wb-queue-monitor".into())
+        .spawn(move || {
+            let mut last_pause: Option<String> = None;
+            let mut last_dropped = 0u64;
+            let mut last_night = Instant::now();
+            let mut last_parts = Instant::now()
+                .checked_sub(PARTS_RECHECK)
+                .unwrap_or_else(Instant::now);
+            // Sessions left unfinished by a restart continue first.
+            q.resume_unfinished();
+            loop {
+                q.step(&mut last_pause);
+                let dropped = q.feed.dropped_parts();
+                if dropped != last_dropped {
+                    last_dropped = dropped;
+                    q.core.push_log(format!(
+                        "{dropped} closed-part notice(s) did not fit the queue's channel; parts.json is read for them"
+                    ));
+                }
+                if last_night.elapsed() >= NIGHT_CHECK {
+                    last_night = Instant::now();
+                    q.night_step();
+                }
+                let announced = parts_rx.try_iter().count() > 0;
+                if announced || last_parts.elapsed() >= PARTS_RECHECK {
+                    last_parts = Instant::now();
+                    let stopped = q.stopped_session_dir();
+                    q.submit_parts(stopped.as_deref());
+                }
+                std::thread::sleep(MONITOR_STEP);
+            }
+        });
+    if let Err(e) = spawned {
+        tracing::error!("queue: the monitor could not start: {e}");
+    }
+}
+
+impl Queue {
+    /// The folder of the session whose recording has just ended (Stop was pressed), if one is open here.
+    fn stopped_session_dir(&self) -> Option<String> {
+        let st = self.app.state::<AppState>();
+        if st.recording.load(Ordering::SeqCst) {
+            return None;
+        }
+        let snap = lock(&st.snapshot);
+        snap.session.as_ref().map(|s| s.dir.clone())
+    }
+
+    /// Sessions in the recordings folder with unfinished jobs (the app was closed or crashed): they continue
+    /// from their cursors.
+    fn resume_unfinished(&self) {
+        let st = self.app.state::<AppState>();
+        let root = lock(&st.settings).recordings_root();
+        let Ok(entries) = std::fs::read_dir(&root) else {
+            return;
+        };
+        for e in entries.flatten() {
+            let dir = e.path();
+            if !dir.join("transcript.db").is_file() {
+                continue;
+            }
+            let Some(profile) = self.profile() else {
+                return;
+            };
+            let Ok(q) = SessionQueue::open(&dir) else {
+                continue;
+            };
+            let unfinished = q.jobs().is_ok_and(|jobs| {
+                jobs.iter()
+                    .any(|j| matches!(j.state, JobState::Queued | JobState::Running))
+            });
+            let languages = q
+                .jobs()
+                .ok()
+                .and_then(|j| j.into_iter().find(|j| j.kind == JobKind::Rolling))
+                .map(|j| j.languages)
+                .unwrap_or_default();
+            drop(q);
+            if !unfinished || languages.is_empty() {
+                continue;
+            }
+            match self.register(dir.clone(), &languages, &profile) {
+                Ok(()) => {
+                    // A session whose recording ended before the restart gets its final cut.
+                    let finished =
+                        dir.join("session.json").is_file() && !self.is_recording_dir(&dir);
+                    if finished {
+                        let mut open = plock(&self.open);
+                        if let Some(s) = open.iter_mut().find(|s| s.dir == dir)
+                            && !s.finished
+                        {
+                            s.finished = true;
+                            s.ended_ms = Some(clock_ms());
+                            self.manager.session_finished(&s.handle, s.job);
+                        }
+                    }
+                }
+                Err(e) => tracing::warn!("queue: {}: {e}", dir.display()),
+            }
+        }
+    }
+
+    fn is_recording_dir(&self, dir: &std::path::Path) -> bool {
+        let st = self.app.state::<AppState>();
+        if !st.recording.load(Ordering::SeqCst) {
+            return false;
+        }
+        lock(&st.snapshot)
+            .session
+            .as_ref()
+            .is_some_and(|s| std::path::Path::new(&s.dir) == dir)
+    }
+}
+
+impl Queue {
+    /// The night pass (decision D6): once every rolling job of the day is done, nothing is recording and the last
+    /// session ended at least 30 minutes ago, each session with audio in a language that has a night model gets a
+    /// `post-2` job, if the estimate for all of them fits before 08:00 IST. Otherwise the pass is skipped and the
+    /// reason is logged. The programme's last session of the day is not consulted yet: a gap of 30 minutes between
+    /// two sessions starts the pass early (it yields to the rolling pass of the next session).
+    fn night_step(&self) {
+        use wb_queue::night::{self, Plan, SessionAudio};
+        let Some(profile) = self.profile() else {
+            return;
+        };
+        if profile.record_only {
+            return;
+        }
+        let now = clock_ms();
+        let recording = self
+            .app
+            .state::<AppState>()
+            .recording
+            .load(Ordering::SeqCst);
+        let mut open = plock(&self.open);
+        if open.is_empty() {
+            return;
+        }
+        let mut rolling_pending = false;
+        let mut last_end = 0u64;
+        let mut candidates: Vec<usize> = Vec::new();
+        for (i, s) in open.iter().enumerate() {
+            let Some(end) = s.ended_ms else {
+                rolling_pending = true;
+                continue;
+            };
+            last_end = last_end.max(end);
+            let q = plock(&s.handle.queue);
+            let jobs = q.jobs().unwrap_or_default();
+            match jobs
+                .iter()
+                .find(|j| j.kind == JobKind::Rolling)
+                .map(|j| j.state)
+            {
+                Some(JobState::Done) => {
+                    if !s.night_handled && !jobs.iter().any(|j| j.kind == JobKind::Night) {
+                        candidates.push(i);
+                    }
+                }
+                Some(JobState::Parked) | None => {}
+                Some(_) => rolling_pending = true,
+            }
+        }
+        if candidates.is_empty() || !night::may_start(now, recording, rolling_pending, last_end) {
+            return;
+        }
+        let mut audio = Vec::new();
+        let mut languages: BTreeSet<String> = BTreeSet::new();
+        for &i in &candidates {
+            let s = &open[i];
+            languages.extend(s.languages.iter().cloned());
+            let q = plock(&s.handle.queue);
+            let total = q
+                .jobs()
+                .ok()
+                .and_then(|jobs| jobs.into_iter().find(|j| j.kind == JobKind::Rolling))
+                .and_then(|j| q.units(j.id).ok())
+                .map_or(0, |u| u.iter().map(|u| u.end_ms).max().unwrap_or(0));
+            let mut mix: std::collections::BTreeMap<String, u64> =
+                std::collections::BTreeMap::new();
+            for seg in q
+                .transcript()
+                .store()
+                .segments("post-1", 0, u64::MAX)
+                .unwrap_or_default()
+            {
+                *mix.entry(seg.lang).or_default() += seg.end_ms.saturating_sub(seg.start_ms);
+            }
+            audio.push(SessionAudio {
+                id: s.name.clone(),
+                audio_ms_by_lang: wb_queue::estimate::split_by_mix(total, &s.languages, &mix)
+                    .into_iter()
+                    .collect(),
+            });
+        }
+        let langs: Vec<String> = languages.into_iter().collect();
+        let rtf = profile.night_rtf(&langs);
+        match night::plan(now, &audio, &rtf) {
+            Plan::Run {
+                sessions,
+                estimate_s,
+                finish_ms,
+            } => {
+                for name in &sessions {
+                    let Some(s) = open.iter().find(|s| &s.name == name) else {
+                        continue;
+                    };
+                    let models = profile.night_models(&s.languages);
+                    let created = plock(&s.handle.queue).create_night_job(
+                        &s.name,
+                        models_json(&models),
+                        s.languages.clone(),
+                        now,
+                    );
+                    if let Err(e) = created {
+                        self.core.push_log(format!(
+                            "{}: the night pass could not be planned: {e}",
+                            s.name
+                        ));
+                    }
+                }
+                self.core.push_log(format!(
+                    "night pass planned for {} session(s): about {:.1} h, ready by {} IST",
+                    sessions.len(),
+                    estimate_s / 3600.0,
+                    wb_queue::estimate::format_ist_hhmm(finish_ms)
+                ));
+                self.manager.poke();
+            }
+            Plan::Skip(reason) => {
+                self.core
+                    .push_log(format!("night pass skipped: {}", reason.text()));
+            }
+        }
+        for i in candidates {
+            open[i].night_handled = true;
+        }
+    }
+
+    /// The profile in use, read fresh (`store::in_use`: safe defaults after a fingerprint change).
+    fn profile(&self) -> Option<ProfileView> {
+        crate::syscheck::profile_in_use(&self.app).map(|(cap, changes)| view_of(&cap, changes))
+    }
+}
+
+// ----------------------------------------------------------------------------------- session start hook
+
+/// Called by the command layer after the recorder started: creates the session's rolling job when the profile
+/// in use allows processing at all. A failure here is reported and never touches the recording.
+pub fn on_session_started(app: &AppHandle, dir: &str, expected: &[String], script: Option<&str>) {
+    let Some(state) = app.try_state::<QueueState>() else {
+        return;
+    };
+    let queue = state.0.clone();
+    let languages = job_languages(expected, script);
+    let dir = PathBuf::from(dir);
+    let Some(profile) = queue.profile() else {
+        queue.core.push_log(
+            "no system check has run: the session is recorded and not transcribed yet".into(),
+        );
+        return;
+    };
+    if profile.record_only {
+        queue.core.push_log(format!(
+            "this computer only records: {}",
+            profile
+                .record_only_reason
+                .as_deref()
+                .unwrap_or("no transcription is planned here")
+        ));
+        return;
+    }
+    if let Err(e) = queue.register(dir, &languages, &profile) {
+        let _ = app.state::<AppState>().events.send(Notice::event(
+            NoticeLevel::Warning,
+            "queue",
+            e.clone(),
+        ));
+        queue.core.push_log(e);
+    }
+}
+
+// ------------------------------------------------------------------------------------------------ commands
+
+#[derive(Debug, Clone, Serialize)]
+pub struct JobRow {
+    pub id: i64,
+    pub session: String,
+    pub kind: String,
+    pub revision: String,
+    pub state: String,
+    pub cursor_ms: u64,
+    pub models_by_lang: serde_json::Value,
+    pub languages: Vec<String>,
+    pub units_total: usize,
+    pub units_committed: usize,
+    pub units_running: usize,
+    pub audio_ms: u64,
+    pub remaining_audio_ms: u64,
+    pub error: Option<String>,
+    pub position: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SchedulerRow {
+    /// What differs between this computer and its saved check (safe defaults are in force when not empty).
+    pub profile_changes: Vec<String>,
+    pub paused: Option<String>,
+    pub operator_paused: bool,
+    pub free_ram_bytes: u64,
+    pub fewer_threads: u32,
+    pub log: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct QueueSnapshot {
+    pub jobs: Vec<JobRow>,
+    pub scheduler: SchedulerRow,
+    pub ready_text: String,
+}
+
+fn state_name(s: JobState) -> &'static str {
+    match s {
+        JobState::Queued => "queued",
+        JobState::Running => "running",
+        JobState::Paused => "paused",
+        JobState::Done => "done",
+        JobState::Parked => "parked",
+    }
+}
+
+impl Queue {
+    pub fn snapshot(&self) -> QueueSnapshot {
+        let mut rows = Vec::new();
+        let mut seconds = Vec::new();
+        let open = plock(&self.open);
+        let profile = self.profile();
+        for s in open.iter() {
+            let q = plock(&s.handle.queue);
+            let Ok(jobs) = q.jobs() else { continue };
+            for j in jobs {
+                let units = q.units(j.id).unwrap_or_default();
+                let committed = units
+                    .iter()
+                    .filter(|u| u.state == UnitState::Committed)
+                    .count();
+                let running = units
+                    .iter()
+                    .filter(|u| u.state == UnitState::Running)
+                    .count();
+                let audio_ms = units.iter().map(|u| u.end_ms).max().unwrap_or(0);
+                let remaining = q.remaining_audio_ms(j.id).unwrap_or(0);
+                if matches!(j.state, JobState::Queued | JobState::Running) {
+                    // Remaining audio at the slowest measured speed of the job's models (an estimate; the
+                    // job's own measured speed replaces it as units finish).
+                    let rtf = profile.as_ref().map_or(1.0, |p| {
+                        j.models_by_lang
+                            .as_object()
+                            .map(|m| {
+                                m.values()
+                                    .filter_map(|v| v.as_str())
+                                    .map(|id| p.rtf_for(id, false))
+                                    .fold(0.0, f64::max)
+                            })
+                            .filter(|r| *r > 0.0)
+                            .unwrap_or(1.0)
+                    });
+                    seconds.push(remaining as f64 / 1000.0 * rtf);
+                }
+                rows.push(JobRow {
+                    id: j.id,
+                    session: j.session.clone(),
+                    kind: j.kind.as_str().to_owned(),
+                    revision: j.revision.clone(),
+                    state: state_name(j.state).to_owned(),
+                    cursor_ms: j.cursor_ms,
+                    models_by_lang: j.models_by_lang.clone(),
+                    languages: j.languages.clone(),
+                    units_total: units.len(),
+                    units_committed: committed,
+                    units_running: running,
+                    audio_ms,
+                    remaining_audio_ms: remaining,
+                    error: j.error.clone(),
+                    position: j.position,
+                });
+            }
+        }
+        let verdict = self.core.verdict();
+        QueueSnapshot {
+            jobs: rows,
+            scheduler: SchedulerRow {
+                profile_changes: profile
+                    .as_ref()
+                    .map(|p| p.changes.clone())
+                    .unwrap_or_default(),
+                paused: verdict.pause.map(|r| r.text().to_owned()),
+                operator_paused: self.core.operator_paused(),
+                free_ram_bytes: self.core.free_ram_bytes(),
+                fewer_threads: verdict.fewer_threads,
+                log: self
+                    .core
+                    .log()
+                    .into_iter()
+                    .rev()
+                    .take(60)
+                    .map(|l| l.text)
+                    .collect(),
+            },
+            ready_text: wb_queue::estimate::ready_text(clock_ms(), &seconds),
+        }
+    }
+
+    fn with_job<T>(
+        &self,
+        job: i64,
+        f: impl FnOnce(&mut SessionQueue) -> Result<T, wb_runner::session_queue::Error>,
+    ) -> Result<T, String> {
+        let open = plock(&self.open);
+        for s in open.iter() {
+            let mut q = plock(&s.handle.queue);
+            if q.jobs().is_ok_and(|jobs| jobs.iter().any(|j| j.id == job)) {
+                return f(&mut q).map_err(|e| e.to_string());
+            }
+        }
+        Err(format!("job {job} is not in an open session"))
+    }
+}
+
+fn queue_of(app: &AppHandle) -> Result<Arc<Queue>, String> {
+    app.try_state::<QueueState>()
+        .map(|s| s.0.clone())
+        .ok_or_else(|| {
+            "Post-processing is not available: no engines or models were found.".to_owned()
+        })
+}
+
+#[tauri::command]
+pub async fn queue_snapshot(app: AppHandle) -> Result<QueueSnapshot, String> {
+    blocking("queue_snapshot", move || Ok(queue_of(&app)?.snapshot())).await
+}
+
+#[tauri::command]
+pub async fn queue_pause(app: AppHandle, job: Option<i64>) -> Result<(), String> {
+    blocking("queue_pause", move || {
+        let q = queue_of(&app)?;
+        match job {
+            Some(id) => {
+                q.with_job(id, |s| s.set_paused(id, true, clock_ms()))?;
+                q.manager.cancel_running("the operator paused a job");
+            }
+            None => {
+                q.core.set_operator_paused(true);
+                q.manager.cancel_running("the operator paused the queue");
+            }
+        }
+        q.core.push_log("the operator paused processing".into());
+        Ok(())
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn queue_resume(app: AppHandle, job: Option<i64>) -> Result<(), String> {
+    blocking("queue_resume", move || {
+        let q = queue_of(&app)?;
+        match job {
+            Some(id) => {
+                q.with_job(id, |s| s.set_paused(id, false, clock_ms()))?;
+            }
+            None => q.core.set_operator_paused(false),
+        }
+        q.core.push_log("the operator resumed processing".into());
+        q.manager.poke();
+        Ok(())
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn queue_move_up(app: AppHandle, job: i64) -> Result<bool, String> {
+    blocking("queue_move_up", move || {
+        let q = queue_of(&app)?;
+        let moved = q.with_job(job, |s| s.move_up(job))?;
+        q.manager.poke();
+        Ok(moved)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn queue_change_model(
+    app: AppHandle,
+    job: i64,
+    models_by_lang: serde_json::Value,
+) -> Result<(), String> {
+    blocking("queue_change_model", move || {
+        let q = queue_of(&app)?;
+        q.with_job(job, |s| s.change_models(job, &models_by_lang))?;
+        // Running engines were started with the old models: stop them; the remaining units use the new ones.
+        q.manager.cancel_running("the models of a job were changed");
+        q.manager.poke();
+        Ok(())
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn set_language_lock(
+    app: AppHandle,
+    lang: Option<String>,
+    audio_ms: u64,
+) -> Result<(), String> {
+    blocking("set_language_lock", move || {
+        let st = app.state::<AppState>();
+        if !st.recording.load(Ordering::SeqCst) {
+            return Err("A language can be locked only while a session is recording.".into());
+        }
+        let (dir, languages) = {
+            let snap = lock(&st.snapshot);
+            let s = snap.session.as_ref().ok_or("No session is open.")?;
+            (PathBuf::from(&s.dir), s.expected_languages.clone())
+        };
+        if let Some(l) = lang.as_deref()
+            && !langlock::accepted(l, &languages)
+        {
+            return Err(format!("{l} is not one of this session's languages."));
+        }
+        langlock::append(&dir, audio_ms, lang.as_deref(), &ist_text())
+            .map_err(|e| format!("The language change could not be saved: {e}"))?;
+        tracing::info!(audio_ms, lang = ?lang, "language lock changed");
+        Ok(())
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn import_session(app: AppHandle, source: String) -> Result<String, String> {
+    blocking("import_session", move || {
+        let q = queue_of(&app)?;
+        let profile = q
+            .profile()
+            .ok_or("Run the system check first: this computer's abilities are not known yet.")?;
+        wb_queue::import::refuse_on_record_only(profile.record_only).map_err(|e| e.to_string())?;
+        let src = PathBuf::from(&source);
+        let name = src
+            .file_name()
+            .and_then(|n| n.to_str())
+            .ok_or("The folder has no name.")?
+            .to_owned();
+        let root = lock(&app.state::<AppState>().settings).recordings_root();
+        let dest = root.join(&name);
+        wb_queue::import::import_session(&src, &dest).map_err(|e| e.to_string())?;
+        // The imported session is processed like a recording that has ended.
+        let expected = read_expected_languages(&dest);
+        let languages = job_languages(&expected.0, expected.1.as_deref());
+        q.register(dest.clone(), &languages, &profile)?;
+        let mut open = plock(&q.open);
+        if let Some(s) = open.iter_mut().find(|s| s.dir == dest) {
+            s.finished = false;
+        }
+        drop(open);
+        q.submit_parts(Some(&dest.to_string_lossy()));
+        q.manager.poke();
+        Ok(name)
+    })
+    .await
+}
+
+/// `expected_languages` and the script from a session folder's `start-options.json` (a folder from another
+/// machine may lack it: English and Hindi are the defaults).
+fn read_expected_languages(dir: &std::path::Path) -> (Vec<String>, Option<String>) {
+    let text = std::fs::read_to_string(dir.join("start-options.json")).unwrap_or_default();
+    let v: serde_json::Value = serde_json::from_str(&text).unwrap_or_default();
+    let langs: Vec<String> = v["expected_languages"]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .filter_map(|x| x.as_str().map(str::to_owned))
+                .collect()
+        })
+        .filter(|l: &Vec<String>| !l.is_empty())
+        .unwrap_or_else(|| vec!["en".into(), "hi".into()]);
+    (langs, v["hindi_urdu_script"].as_str().map(str::to_owned))
+}
+
+#[tauri::command]
+pub async fn session_transcript(
+    app: AppHandle,
+    session: String,
+    revision: Option<String>,
+) -> Result<Vec<Segment>, String> {
+    blocking("session_transcript", move || {
+        let q = queue_of(&app)?;
+        let open = plock(&q.open);
+        let s = open
+            .iter()
+            .find(|s| s.name == session)
+            .ok_or_else(|| format!("{session} is not open in the queue"))?;
+        let guard = plock(&s.handle.queue);
+        let rev = revision.unwrap_or_else(|| "post-1".to_owned());
+        guard
+            .transcript()
+            .store()
+            .segments(&rev, 0, u64::MAX)
+            .map_err(|e| e.to_string())
+    })
+    .await
+}
+
+/// What a gate run records about the queue at the end: every job and unit state, the scheduler log, the
+/// configuration the queue worked in and whether it was forced.
+#[cfg(feature = "gate-hooks")]
+pub(crate) fn report_json(app: &AppHandle) -> serde_json::Value {
+    let Some(q) = app.try_state::<QueueState>().map(|s| s.0.clone()) else {
+        return serde_json::json!({ "error": "no queue" });
+    };
+    let snapshot = q.snapshot();
+    serde_json::json!({
+        "snapshot": snapshot,
+        "log": q.core.log().into_iter().map(|l| format!("{} {}", l.at_ms, l.text)).collect::<Vec<_>>(),
+        "configuration": q.profile().and_then(|p| p.config).map(|c| format!("{c:?}")),
+        "forced_hybrid": gate_hooks::force_hybrid(),
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hindi_and_urdu_become_one_language_in_the_organisers_script() {
+        let expected = vec!["en".to_string(), "hi".to_string(), "ur".to_string()];
+        assert_eq!(job_languages(&expected, None), vec!["en", "hi"]);
+        assert_eq!(
+            job_languages(&expected, Some("devanagari")),
+            vec!["en", "hi"]
+        );
+        assert_eq!(job_languages(&expected, Some("nastaliq")), vec!["en", "ur"]);
+        assert_eq!(
+            job_languages(&["en".to_string()], Some("nastaliq")),
+            vec!["en"]
+        );
+    }
+
+    /// The scheduler's clock is the system clock in every build without the gate hooks, so the clock offset
+    /// of the day simulation can never reach an installer build.
+    #[cfg(not(feature = "gate-hooks"))]
+    #[test]
+    fn the_scheduler_clock_is_the_system_clock_in_a_build_without_gate_hooks() {
+        let system = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+        let ours = clock_ms();
+        assert!(ours.abs_diff(system) < 5_000, "{ours} against {system}");
+    }
+}

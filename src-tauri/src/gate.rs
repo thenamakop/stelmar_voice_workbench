@@ -101,7 +101,7 @@ fn write_report(value: &serde_json::Value) {
     }
 }
 
-fn device_id(part: &str) -> Result<String, String> {
+pub(crate) fn device_id(part: &str) -> Result<String, String> {
     let needle = part.to_lowercase();
     let inputs = wb_recorder::capture::list_inputs().map_err(|e| e.to_string())?;
     inputs
