@@ -34,6 +34,10 @@ pub struct Policy {
     /// environment of the engines, whether inherited or listed in `engine_env`. On in release builds, off in
     /// debug builds; the app turns it off for gate builds, which pass them on purpose.
     pub scrub_env: bool,
+    /// The most memory (commit) each engine process may use; `wb_queue::sched::engine_memory_limit` computes
+    /// it from the engine's measured peak. An engine that reaches it dies, which is reported as
+    /// [`Notice::MemoryLimit`] and counts as a failure of the run.
+    pub memory_limit_bytes: Option<u64>,
 }
 
 impl Default for Policy {
@@ -46,6 +50,7 @@ impl Default for Policy {
             priority: Priority::BelowNormal,
             engine_env: Vec::new(),
             scrub_env: !cfg!(debug_assertions),
+            memory_limit_bytes: None,
         }
     }
 }
@@ -98,6 +103,12 @@ pub enum Notice {
     NotInJob(String),
     /// Gave up after too many restarts.
     GaveUp { restarts: u32 },
+    /// The engine ended after reaching its memory limit (its peak was within 5% of the limit).
+    MemoryLimit {
+        peak_bytes: u64,
+        limit_bytes: u64,
+        restart: u32,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -106,6 +117,10 @@ pub struct RunReport {
     pub segments_committed: u64,
     pub committed_until_ms: u64,
     pub done: Option<DoneSummary>,
+    /// The largest commit any engine of the run reached, to log next to the limit.
+    pub peak_memory_bytes: Option<u64>,
+    /// How many engines ended at their memory limit (reported apart from other failures).
+    pub memory_limit_deaths: u32,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -169,6 +184,8 @@ pub fn run_batch_with(
     cancel: &Cancel,
 ) -> Result<RunReport, RunError> {
     let mut restarts = 0u32;
+    let mut peak_memory: Option<u64> = None;
+    let mut memory_limit_deaths = 0u32;
     loop {
         if cancel.is_cancelled() {
             return Err(RunError::Cancelled {
@@ -203,7 +220,7 @@ pub fn run_batch_with(
             env: policy.engine_env.clone(),
             scrub_env: policy.scrub_env,
         };
-        let mut engine = match EngineProcess::spawn(&spec) {
+        let mut engine = match EngineProcess::spawn_limited(&spec, policy.memory_limit_bytes) {
             Ok(e) => e,
             Err(e) => {
                 observer.notice(&Notice::StartFailed(format!("{}: {e}", exe.display())));
@@ -309,21 +326,38 @@ pub fn run_batch_with(
             }
         }
         let exit = if hung { None } else { engine.wait() };
+        let peak = engine.peak_memory_bytes();
+        peak_memory = peak_memory.max(peak);
         if let Some(summary) = done {
             return Ok(RunReport {
                 restarts,
                 segments_committed: committer.segments(),
                 committed_until_ms: committer.committed_until_ms(),
                 done: Some(summary),
+                peak_memory_bytes: peak_memory,
+                memory_limit_deaths,
             });
         }
+        let hit_limit = match (peak, policy.memory_limit_bytes) {
+            (Some(p), Some(limit)) if u128::from(p) * 100 >= u128::from(limit) * 95 => {
+                memory_limit_deaths += 1;
+                Some((p, limit))
+            }
+            _ => None,
+        };
         if let Some((code, message)) = fatal
             && unrecoverable(&code)
         {
             return Err(RunError::Fatal(format!("{code}: {message}")));
         }
         restarts += 1;
-        if !hung {
+        if let Some((peak_bytes, limit_bytes)) = hit_limit {
+            observer.notice(&Notice::MemoryLimit {
+                peak_bytes,
+                limit_bytes,
+                restart: restarts,
+            });
+        } else if !hung {
             observer.notice(&Notice::Died {
                 exit,
                 restart: restarts,

@@ -18,33 +18,64 @@ use wb_protocol::Event;
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 
+/// The job of one engine. Each engine has its own, so each can have its own memory limit; closing the handle
+/// (the app exits or crashes, or the engine is dropped) ends the engine.
 #[cfg(windows)]
 mod job {
-    use std::sync::OnceLock;
-
     use super::Child;
-    use crate::win::Job;
+    use crate::win::{self, Job};
 
-    static JOB: OnceLock<Result<Job, String>> = OnceLock::new();
+    pub struct EngineJob(Result<Job, String>);
 
-    /// Adds the child to the app-wide job. Returns the reason when that was not possible (the
-    /// engine still runs, but would outlive the app).
-    pub fn assign(child: &Child) -> Result<(), String> {
-        match JOB.get_or_init(Job::new) {
-            Ok(j) => j.assign(child),
-            Err(e) => Err(e.clone()),
+    impl EngineJob {
+        pub fn new(memory_limit_bytes: Option<u64>) -> Self {
+            EngineJob(Job::with_memory_limit(memory_limit_bytes))
+        }
+
+        /// Puts the child in the job. The reason when that was not possible (the engine still runs, but
+        /// would outlive the app).
+        pub fn assign(&self, child: &Child) -> Result<(), String> {
+            match &self.0 {
+                Ok(j) => j.assign(child),
+                Err(e) => Err(e.clone()),
+            }
+        }
+
+        pub fn peak_memory(&self) -> Option<u64> {
+            self.0.as_ref().ok().and_then(Job::peak_process_memory)
+        }
+
+        pub fn resume(pid: u32) -> Result<(), String> {
+            win::resume_process(pid).map(|_| ())
         }
     }
 }
 
 #[cfg(not(windows))]
 mod job {
-    pub fn assign(_child: &super::Child) -> Result<(), String> {
-        Ok(())
+    use super::Child;
+
+    pub struct EngineJob;
+
+    impl EngineJob {
+        pub fn new(_memory_limit_bytes: Option<u64>) -> Self {
+            EngineJob
+        }
+        pub fn assign(&self, _child: &Child) -> Result<(), String> {
+            Ok(())
+        }
+        pub fn peak_memory(&self) -> Option<u64> {
+            None
+        }
+        pub fn resume(_pid: u32) -> Result<(), String> {
+            Ok(())
+        }
     }
 }
 
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+/// The process is created with its main thread suspended; it is resumed after it is in its job.
+const CREATE_SUSPENDED: u32 = 0x0000_0004;
 const BELOW_NORMAL_PRIORITY_CLASS: u32 = 0x0000_4000;
 const NORMAL_PRIORITY_CLASS: u32 = 0x0000_0020;
 
@@ -97,10 +128,22 @@ pub struct EngineProcess {
     pub pid: u32,
     /// Why the process is not in the kill-on-close job, if it is not.
     pub job_warning: Option<String>,
+    /// The per-process commit limit of its job, if one was set.
+    pub memory_limit_bytes: Option<u64>,
+    job: job::EngineJob,
 }
 
 impl EngineProcess {
     pub fn spawn(spec: &SpawnSpec) -> std::io::Result<Self> {
+        Self::spawn_limited(spec, None)
+    }
+
+    /// Starts the engine suspended, puts it in a job of its own (with a per-process commit limit when
+    /// `memory_limit_bytes` is given) and only then lets it run, so none of it runs outside the job.
+    pub fn spawn_limited(
+        spec: &SpawnSpec,
+        memory_limit_bytes: Option<u64>,
+    ) -> std::io::Result<Self> {
         if let Some(dir) = spec.stderr_log.parent() {
             std::fs::create_dir_all(dir)?;
         }
@@ -129,14 +172,25 @@ impl EngineProcess {
         #[cfg(windows)]
         cmd.creation_flags(
             CREATE_NO_WINDOW
+                | CREATE_SUSPENDED
                 | match spec.priority {
                     Priority::BelowNormal => BELOW_NORMAL_PRIORITY_CLASS,
                     Priority::Normal => NORMAL_PRIORITY_CLASS,
                 },
         );
         let mut child = cmd.spawn()?;
-        let job_warning = job::assign(&child).err();
         let pid = child.id();
+        let engine_job = job::EngineJob::new(memory_limit_bytes);
+        let mut job_warning = engine_job.assign(&child).err();
+        // Whatever happened to the job, the engine must run: a suspended process would hang the batch.
+        if let Err(e) = job::EngineJob::resume(pid) {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(std::io::Error::other(e));
+        }
+        if job_warning.is_some() && memory_limit_bytes.is_some() {
+            job_warning = job_warning.map(|w| format!("{w} (the memory limit is not in force)"));
+        }
         let stdout = child
             .stdout
             .take()
@@ -152,7 +206,14 @@ impl EngineProcess {
             started: Instant::now(),
             pid,
             job_warning,
+            memory_limit_bytes,
+            job: engine_job,
         })
+    }
+
+    /// The largest commit the engine has reached (readable after it has ended), when its job can tell.
+    pub fn peak_memory_bytes(&self) -> Option<u64> {
+        self.job.peak_memory()
     }
 
     /// The exit code if the process has ended.
