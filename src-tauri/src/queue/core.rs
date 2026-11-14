@@ -136,7 +136,7 @@ fn describe(t: &Transition) -> String {
     }
 }
 
-/// The gate the manager and the planner use: the verdict of the last [`Core::evaluate`] and the start reserve
+/// The gate the manager and the planner use: a fresh [`Core::evaluate`] for every decision and the start reserve
 /// from a fresh memory reading.
 pub struct AppGate {
     pub core: Arc<Core>,
@@ -144,10 +144,14 @@ pub struct AppGate {
 
 impl StartGate for AppGate {
     fn paused(&self) -> Option<String> {
+        // Every decision reads the machine and the profile in use afresh (tier R, processing while recording,
+        // the fingerprint's safe defaults); nothing is decided from an earlier reading.
+        self.core.evaluate();
         self.core.pause_text()
     }
 
     fn check(&self, request: &StartRequest) -> Result<Grant, Wait> {
+        self.core.evaluate();
         if let Some(reason) = self.core.pause_text() {
             return Err(Wait { reason });
         }
@@ -306,6 +310,50 @@ mod tests {
         // Peak 6 GB: only 2 GB would stay free: refused, and the reason says how much is needed.
         let refused = g.check(&req(6 * GIB)).unwrap_err();
         assert!(refused.reason.contains("3 GB stay free"), "{refused:?}");
+    }
+
+    #[test]
+    fn every_decision_reads_the_profile_in_use_afresh() {
+        // The profile starts as a computer that may process while recording; nobody calls `evaluate` between the
+        // changes below: the gate itself must see each one at once (a new check, a fingerprint change, a rule).
+        let mut p = tier_g();
+        p.process_while_recording = true;
+        let fake = Fake::new(Some(p.clone()));
+        fake.recording.store(true, Ordering::SeqCst);
+        let (_core, g) = gate(&fake);
+        assert!(g.paused().is_none());
+        assert!(g.check(&req(GIB)).is_ok());
+
+        // process_while_recording turns false (a new check says so): the very next decision refuses.
+        let mut refusing = p.clone();
+        refusing.process_while_recording = false;
+        *lock(&fake.profile) = Some(refusing);
+        assert!(g.paused().unwrap().contains("while recording"));
+        assert!(
+            g.check(&req(GIB))
+                .unwrap_err()
+                .reason
+                .contains("while recording")
+        );
+
+        // Back to allowed, then tier R, then a fingerprint change (the profile's safe defaults refuse recording
+        // work), then no profile at all: each takes effect at the next decision, without any evaluate call.
+        *lock(&fake.profile) = Some(p.clone());
+        assert!(g.paused().is_none());
+        *lock(&fake.profile) = Some(cap(include_str!(
+            "../../../crates/wb-capability/fixtures/tier-r.json"
+        )));
+        assert!(g.paused().unwrap().contains("only records"));
+        assert!(g.check(&req(GIB)).is_err());
+        let mut changed = p.clone();
+        changed.process_while_recording = false;
+        changed.changes = vec!["the graphics driver changed".into()];
+        *lock(&fake.profile) = Some(changed);
+        assert!(g.paused().is_some());
+        *lock(&fake.profile) = None;
+        assert!(g.paused().is_some());
+        *lock(&fake.profile) = Some(p);
+        assert!(g.paused().is_none());
     }
 
     #[test]

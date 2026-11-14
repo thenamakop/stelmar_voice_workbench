@@ -98,7 +98,9 @@ struct AppReadings {
     app: AppHandle,
     feed: Arc<Feed>,
     free: Mutex<Option<(Instant, u64)>>,
-    profile: Mutex<Option<(Instant, Option<ProfileView>)>>,
+    /// The slowest and the number of profile reads (the profile is read at every scheduling decision, not cached).
+    profile_reads: std::sync::atomic::AtomicU64,
+    profile_read_max_us: std::sync::atomic::AtomicU64,
 }
 
 impl Readings for AppReadings {
@@ -137,15 +139,14 @@ impl Readings for AppReadings {
     }
 
     fn profile(&self) -> Option<ProfileView> {
-        let mut cached = plock(&self.profile);
-        if let Some((at, v)) = cached.as_ref()
-            && at.elapsed() < Duration::from_secs(5)
-        {
-            return v.clone();
-        }
+        // Read fresh every time: a new check, a fingerprint change or a changed refusal rule must show in the
+        // very next scheduling decision. The cost is measured and goes into the report.
+        let t = Instant::now();
         let v =
             crate::syscheck::profile_in_use(&self.app).map(|(cap, changes)| view_of(&cap, changes));
-        *cached = Some((Instant::now(), v.clone()));
+        let us = u64::try_from(t.elapsed().as_micros()).unwrap_or(u64::MAX);
+        self.profile_reads.fetch_add(1, Ordering::Relaxed);
+        self.profile_read_max_us.fetch_max(us, Ordering::Relaxed);
         v
     }
 }
@@ -218,6 +219,7 @@ pub struct Queue {
     open: Arc<Mutex<Vec<OpenSession>>>,
     slots_started: AtomicBool,
     feed: Arc<Feed>,
+    readings: Arc<AppReadings>,
 }
 
 /// What the commands reach through Tauri's managed state.
@@ -426,7 +428,8 @@ pub fn init(app: &AppHandle, feed: Arc<Feed>, parts_rx: Receiver<PartRecord>) {
         app: app.clone(),
         feed: feed.clone(),
         free: Mutex::new(None),
-        profile: Mutex::new(None),
+        profile_reads: std::sync::atomic::AtomicU64::new(0),
+        profile_read_max_us: std::sync::atomic::AtomicU64::new(0),
     });
     let core = Arc::new(Core::new(readings.clone()));
     let open: Arc<Mutex<Vec<OpenSession>>> = Arc::new(Mutex::new(Vec::new()));
@@ -481,6 +484,7 @@ pub fn init(app: &AppHandle, feed: Arc<Feed>, parts_rx: Receiver<PartRecord>) {
         open,
         slots_started: AtomicBool::new(false),
         feed,
+        readings: readings.clone(),
     });
     app.manage(QueueState(queue.clone()));
 
@@ -1110,6 +1114,8 @@ pub(crate) fn report_json(app: &AppHandle) -> serde_json::Value {
         "log": q.core.log().into_iter().map(|l| format!("{} {}", l.at_ms, l.text)).collect::<Vec<_>>(),
         "configuration": q.profile().and_then(|p| p.config).map(|c| format!("{c:?}")),
         "forced_hybrid": gate_hooks::force_hybrid(),
+        "profile_reads": q.readings.profile_reads.load(Ordering::Relaxed),
+        "profile_read_max_us": q.readings.profile_read_max_us.load(Ordering::Relaxed),
     })
 }
 
