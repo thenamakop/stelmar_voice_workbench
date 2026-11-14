@@ -14,6 +14,8 @@
 
 Set-StrictMode -Version 2
 
+Import-Module (Join-Path $PSScriptRoot 'PackNative.psm1')
+
 # ---- Small helpers -------------------------------------------------------------------------------
 
 # A property of a parsed JSON object, or a default when it is absent (StrictMode throws otherwise).
@@ -494,7 +496,7 @@ function Invoke-PackGateProcess {
     if ($OnTick) { & $OnTick $p }
   }
   if ($timedOut) {
-    & taskkill.exe /F /T /PID $p.Id 2>&1 | Out-Null
+    $null = Invoke-PackNative -FilePath 'taskkill.exe' -ArgumentList @('/F', '/T', '/PID', "$($p.Id)") -TimeoutSeconds 30
     return [pscustomobject]@{ ExitCode = -1; TimedOut = $true }
   }
   $p.WaitForExit()
@@ -551,9 +553,8 @@ $script:RunKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
 # caller, so the call is made with its own Continue preference.
 function Invoke-PackSchtasks {
   param([string[]]$Arguments)
-  $ErrorActionPreference = 'Continue'
-  $out = @(& schtasks.exe @Arguments 2>&1 | ForEach-Object { "$_" })
-  [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = ($out -join ' ') }
+  $r = Invoke-PackNative -FilePath 'schtasks.exe' -ArgumentList $Arguments -TimeoutSeconds 60
+  [pscustomobject]@{ ExitCode = $r.ExitCode; Output = ((@($r.Output) + @($r.Error)) -join ' ') }
 }
 
 # A task that starts the runner again when this person logs in after the restart. With administrator
@@ -633,21 +634,21 @@ function Invoke-PackCleanup {
         switch ([string]$c['kind']) {
           'mic-mute' {
             if (-not $Testbench -or -not (Test-Path -LiteralPath $Testbench)) { throw 'wb-testbench is not available' }
-            $res = & $Testbench mute --device ([string]$rest['device']) --state ([string]$rest['state_before']) 2>&1
-            if ($LASTEXITCODE -ne 0) { throw ($res -join ' ') }
+            $res = Invoke-PackNative -FilePath $Testbench -ArgumentList @('mute', '--device', ([string]$rest['device']), '--state', ([string]$rest['state_before']))
+            if ($res.ExitCode -ne 0) { throw ((@($res.Output) + @($res.Error)) -join ' ') }
             $ok = $true
           }
           'render-volume' {
             if (-not $Testbench -or -not (Test-Path -LiteralPath $Testbench)) { throw 'wb-testbench is not available' }
-            $res = & $Testbench volume --device ([string]$rest['device']) --level ([string]$rest['level_before']) 2>&1
-            if ($LASTEXITCODE -ne 0) { throw ($res -join ' ') }
+            $res = Invoke-PackNative -FilePath $Testbench -ArgumentList @('volume', '--device', ([string]$rest['device']), '--level', ([string]$rest['level_before']))
+            if ($res.ExitCode -ne 0) { throw ((@($res.Output) + @($res.Error)) -join ' ') }
             $ok = $true
           }
           'power-timeouts' {
             foreach ($kv in @($rest['values'])) {
-              & powercfg.exe /setacvalueindex SCHEME_CURRENT ([string]$kv['sub']) ([string]$kv['setting']) ([string]$kv['value']) 2>&1 | Out-Null
+              $null = Invoke-PackNative -FilePath 'powercfg.exe' -ArgumentList @('/setacvalueindex', 'SCHEME_CURRENT', ([string]$kv['sub']), ([string]$kv['setting']), ([string]$kv['value']))
             }
-            & powercfg.exe /setactive SCHEME_CURRENT 2>&1 | Out-Null
+            $null = Invoke-PackNative -FilePath 'powercfg.exe' -ArgumentList @('/setactive', 'SCHEME_CURRENT')
             $ok = $true
           }
           default { $note = 'nothing to undo automatically' ; $ok = $true }

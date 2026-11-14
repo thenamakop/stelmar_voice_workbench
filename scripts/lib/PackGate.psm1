@@ -19,6 +19,7 @@
 #>
 
 Import-Module (Join-Path $PSScriptRoot 'PackCore.psm1')
+Import-Module (Join-Path $PSScriptRoot 'PackNative.psm1')
 
 function Read-PackCtx {
   param([Parameter(Mandatory = $true)] [string]$CtxFile)
@@ -92,6 +93,28 @@ function Complete-PackGate {
   Write-PackGateLog -Ctx $Ctx -Message ('{0}: {1} {2}' -f $Result['id'], $Result['status'], $Result['headline'])
 }
 
+# Pure. What a thrown message means for the gate: PENDING (the person can fix it: rig, overlay tools,
+# free memory; the gate is not counted as tried) or INVALID (a fault in the run).
+function Get-PackErrorStatus {
+  param([string]$Message)
+  if ($Message -match '^(RIG REFUSED|RIG SELF-TEST FAILED|Overlay tools are running|Only [0-9.,]+ GB of RAM free|An engine build is running)') { return 'PENDING' }
+  'INVALID'
+}
+
+# Runs a gate's body and always writes a result: what the body returns, or INVALID / PENDING with the
+# error text when it throws.
+function Invoke-PackGateBody {
+  param([Parameter(Mandatory = $true)] $Ctx, [Parameter(Mandatory = $true)] [string]$Id, [Parameter(Mandatory = $true)] [string]$ResultFile, [Parameter(Mandatory = $true)] [scriptblock]$Body)
+  try {
+    $r = & $Body
+    if ($r -is [array]) { $r = $r[-1] }
+  } catch {
+    $m = $_.Exception.Message
+    $r = New-PackResult -Id $Id -Status (Get-PackErrorStatus $m) -Headline $m -Notes @([string]$_.ScriptStackTrace) -Quick ([bool]$Ctx.quick)
+  }
+  Complete-PackGate -Ctx $Ctx -Result $r -ResultFile $ResultFile
+}
+
 # Runs one of the older gate scripts (scripts\gates\*.ps1, with -Profile laptop or an emulation
 # profile) in its own Windows PowerShell 5.1 process, output to a log. Returns ExitCode, Log and the
 # path of the evidence file it wrote (-EvidenceName under -OutDir).
@@ -114,7 +137,7 @@ function Invoke-PackLegacyGate {
   $p = Start-Process -FilePath $ps -ArgumentList $argList -PassThru -WindowStyle Hidden -RedirectStandardOutput $log -RedirectStandardError ($log + '.err')
   $null = $p.Handle
   if (-not $p.WaitForExit($TimeoutMinutes * 60000)) {
-    & taskkill.exe /F /T /PID $p.Id 2>&1 | Out-Null
+    $null = Invoke-PackNative -FilePath 'taskkill.exe' -ArgumentList @('/F', '/T', '/PID', "$($p.Id)") -TimeoutSeconds 30
     return [pscustomobject]@{ ExitCode = -1; TimedOut = $true; Log = $log; OutDir = $outDir; Evidence = '' }
   }
   $p.WaitForExit()
@@ -136,4 +159,4 @@ function Get-PackLegacyCommon {
   $a
 }
 
-Export-ModuleMember -Function Read-PackCtx, Get-PackPaths, Initialize-PackGate, Write-PackGateLog, Request-PackPrompt, Complete-PackGate, Invoke-PackLegacyGate, Get-PackLegacyCommon
+Export-ModuleMember -Function Read-PackCtx, Get-PackPaths, Initialize-PackGate, Write-PackGateLog, Request-PackPrompt, Complete-PackGate, Get-PackErrorStatus, Invoke-PackGateBody, Invoke-PackLegacyGate, Get-PackLegacyCommon

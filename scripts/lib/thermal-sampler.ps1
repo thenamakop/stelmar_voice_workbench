@@ -9,7 +9,8 @@ param(
   [int]$IntervalSec = 5
 )
 $ErrorActionPreference = 'Continue'
-$inv = [System.Globalization.CultureInfo]::InvariantCulture
+Import-Module (Join-Path $PSScriptRoot 'PackNative.psm1')
+$inv =[System.Globalization.CultureInfo]::InvariantCulture
 [System.Threading.Thread]::CurrentThread.CurrentCulture = $inv
 
 $paths = [ordered]@{
@@ -69,7 +70,7 @@ while (-not (Test-Path -LiteralPath $StopFile)) {
   $gt = $null; $gc = $null
   if ($nvidia) {
     try {
-      $o = (& $nvidia '--query-gpu=temperature.gpu,clocks.gr' '--format=csv,noheader,nounits' 2>$null | Select-Object -First 1)
+      $o = (Invoke-PackNative -FilePath $nvidia -ArgumentList @('--query-gpu=temperature.gpu,clocks.gr', '--format=csv,noheader,nounits') -TimeoutSeconds 10).Output | Select-Object -First 1
       if ($o -match '^\s*(\d+)\s*,\s*(\d+)') { $gt = [double]$Matches[1]; $gc = [double]$Matches[2] }
     } catch { }
   }
