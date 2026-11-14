@@ -121,7 +121,7 @@ function Invoke-PackRecorderGate {
   param(
     [Parameter(Mandatory = $true)] $Ctx,
     [Parameter(Mandatory = $true)] [string]$Id,
-    [Parameter(Mandatory = $true)] [ValidateSet('soak', 'load', 'panic', 'webview', 'kill')] [string]$Gate,
+    [Parameter(Mandatory = $true)] [ValidateSet('soak', 'load', 'panic', 'webview', 'kill', 'hashing')] [string]$Gate,
     [double]$FullMinutes = 0,
     [double]$QuickMinutes = 0,
     [int]$FullKills = 5,
