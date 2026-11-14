@@ -257,7 +257,7 @@ try {
             if ($age -ge 20) {
               $kr = Invoke-WbNative -FilePath 'taskkill.exe' -ArgumentList @('/F', '/PID', "$($e.ProcessId)")
               $kill = [pscustomobject]@{ At = (Get-Date -Format 'HH:mm:ss'); Pid = $e.ProcessId; Name = $e.Name; AgeS = [math]::Round($age, 1); Exit = $kr.ExitCode }
-              Add-Content -LiteralPath $queueLog -Value ("{0}`tSMOKE: killed engine pid {1} ({2}) after {3:n0} s, taskkill exit {4}" -f (Get-Date -Format 'HH:mm'), $e.ProcessId, $e.Name, $age, $kr.ExitCode) -Encoding UTF8
+              Add-Content -LiteralPath (Join-Path $run 'script-events.log') -Value ("{0}`tSMOKE: killed engine pid {1} ({2}) after {3:n0} s, taskkill exit {4}" -f (Get-Date -Format 'HH:mm'), $e.ProcessId, $e.Name, $age, $kr.ExitCode) -Encoding UTF8
               $progress.Add("$(Get-Date -Format 'HH:mm:ss') killed engine pid $($e.ProcessId) $($e.Name) after $([math]::Round($age)) s")
               break
             }

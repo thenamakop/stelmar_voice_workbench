@@ -246,6 +246,10 @@ def main() -> int:
     P("")
     P("PATH 6  one engine killed from outside, then resumed")
     P(f"  script: {notes.get('kill')}")
+    ev = run / "script-events.log"
+    if ev.exists():
+        for l in ev.read_text(encoding="utf-8", errors="replace").splitlines():
+            P(f"  {l}")
     for l in qlog:
         if re.search(r"SMOKE:|failed on the|trying again|restart|Restart|Crash|crash|Exited|exited", l):
             P(f"  {l}")
