@@ -1,0 +1,834 @@
+<#
+  PackCore.psm1: the engine of the laptop gate pack (scripts/gate-pack, built into gate-pack/ by
+  scripts/build-gate-pack.ps1).
+
+  What it holds:
+    - the registry (gates.manifest.json): reading it, checking it, and the pure rule that picks the
+      next gate (priority, restart and uptime rules, what is missing);
+    - the state file that lets the runner resume after a restart or a crash;
+    - gate results (one JSON file per gate) and the summary and zip the laptop hands back;
+    - the things the runner changes on a laptop (logon task, power use) and how -Cleanup undoes them.
+
+  Nothing here needs a development tool. ASCII only; Windows PowerShell 5.1.
+#>
+
+Set-StrictMode -Version 2
+
+# ---- Small helpers -------------------------------------------------------------------------------
+
+# A property of a parsed JSON object, or a default when it is absent (StrictMode throws otherwise).
+function Get-PackProp {
+  param($Object, [string]$Name, $Default = $null)
+  if ($null -eq $Object) { return $Default }
+  if ($Object -is [System.Collections.IDictionary]) {
+    if ($Object.Contains($Name)) { return $Object[$Name] }
+    return $Default
+  }
+  $p = $Object.PSObject.Properties[$Name]
+  if ($null -eq $p) { return $Default }
+  $p.Value
+}
+
+# Parsed JSON (PSCustomObject tree) to nested ordered hashtables and lists, so state can be changed.
+function ConvertTo-PackHashtable {
+  param($Object)
+  if ($null -eq $Object) { return $null }
+  if ($Object -is [string] -or $Object -is [ValueType]) { return $Object }
+  if ($Object -is [System.Collections.IDictionary]) {
+    $h = [ordered]@{}
+    foreach ($k in $Object.Keys) { $h[$k] = ConvertTo-PackHashtable $Object[$k] }
+    return $h
+  }
+  if ($Object -is [System.Collections.IEnumerable]) {
+    $l = New-Object System.Collections.ArrayList
+    foreach ($i in $Object) { [void]$l.Add((ConvertTo-PackHashtable $i)) }
+    return , $l
+  }
+  $o = [ordered]@{}
+  foreach ($p in $Object.PSObject.Properties) { $o[$p.Name] = ConvertTo-PackHashtable $p.Value }
+  $o
+}
+
+function Read-PackJson {
+  param([Parameter(Mandatory = $true)] [string]$Path, [switch]$AsHashtable)
+  if (-not (Test-Path -LiteralPath $Path)) { return $null }
+  $text = Get-Content -LiteralPath $Path -Raw -Encoding UTF8
+  if (-not $text -or -not $text.Trim()) { return $null }
+  $o = $text | ConvertFrom-Json
+  if ($AsHashtable) { return (ConvertTo-PackHashtable $o) }
+  $o
+}
+
+# Written to a temporary file and moved, so a crash or a restart never leaves half a file.
+function Write-PackJson {
+  param([Parameter(Mandatory = $true)] [string]$Path, [Parameter(Mandatory = $true)] $Value, [int]$Depth = 12)
+  $dir = Split-Path -Parent $Path
+  if ($dir -and -not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+  $tmp = "$Path.tmp"
+  $json = $Value | ConvertTo-Json -Depth $Depth
+  [System.IO.File]::WriteAllText($tmp, $json, (New-Object System.Text.UTF8Encoding($false)))
+  Move-Item -LiteralPath $tmp -Destination $Path -Force
+}
+
+function Write-PackLog {
+  param([string]$Message, [string]$LogFile = $script:PackLogFile)
+  $line = '{0} {1}' -f (Get-Date -Format 'HH:mm:ss'), $Message
+  Write-Host $line
+  if ($LogFile) {
+    try { Add-Content -LiteralPath $LogFile -Value $line -Encoding UTF8 } catch { }
+  }
+}
+$script:PackLogFile = $null
+function Set-PackLogFile { param([string]$Path) $script:PackLogFile = $Path }
+
+# ---- The registry --------------------------------------------------------------------------------
+
+$script:ValidGroups = @('any', 'interface', 'cold', 'settled', 'network', 'mic', 'long')
+$script:ValidPriorities = @('P1', 'P2', 'P3')
+
+function Get-PackManifestProblems {
+  param([Parameter(Mandatory = $true)] $Manifest)
+  $problems = New-Object System.Collections.Generic.List[string]
+  $gates = @(Get-PackProp $Manifest 'gates' @())
+  if ($gates.Count -eq 0) { $problems.Add('the manifest lists no gates') }
+  $ids = @{}
+  foreach ($g in $gates) {
+    $id = [string](Get-PackProp $g 'id' '')
+    if (-not $id) { $problems.Add('a gate has no id'); continue }
+    if ($ids.ContainsKey($id)) { $problems.Add("duplicate gate id '$id'") }
+    $ids[$id] = $true
+    if ($id -notmatch '^[a-z0-9][a-z0-9-]*$') { $problems.Add("gate id '$id' must be lower case letters, digits and dashes") }
+    $pri = [string](Get-PackProp $g 'priority' '')
+    if ($script:ValidPriorities -notcontains $pri) { $problems.Add("gate '$id': priority '$pri' is not P1, P2 or P3") }
+    $grp = [string](Get-PackProp $g 'group' '')
+    if ($script:ValidGroups -notcontains $grp) { $problems.Add("gate '$id': group '$grp' is not one of $($script:ValidGroups -join ', ')") }
+    if ($null -eq (Get-PackProp $g 'order' $null)) { $problems.Add("gate '$id': no order") }
+    if (-not (Get-PackProp $g 'script' '')) { $problems.Add("gate '$id': no script") }
+    if (-not (Get-PackProp $g 'title' '')) { $problems.Add("gate '$id': no title") }
+    $est = Get-PackProp $g 'est_minutes' $null
+    if ($null -eq $est -or $null -eq (Get-PackProp $est 'low' $null) -or $null -eq (Get-PackProp $est 'mid' $null)) { $problems.Add("gate '$id': est_minutes needs low and mid") }
+    $needs = Get-PackProp $g 'needs' $null
+    if ($grp -eq 'cold' -and $null -eq (Get-PackProp $needs 'boot_within_min' $null)) { $problems.Add("gate '$id': a cold gate needs needs.boot_within_min") }
+    if ($grp -eq 'settled' -and $null -eq (Get-PackProp $needs 'uptime_min' $null)) { $problems.Add("gate '$id': a settled gate needs needs.uptime_min") }
+    foreach ($l in @(Get-PackProp $g 'ledger' @())) {
+      if (-not (Get-PackProp $l 'match' '')) { $problems.Add("gate '$id': a ledger entry has no match text") }
+      $t = [string](Get-PackProp $l 'table' '')
+      if (@('gates', 'open') -notcontains $t) { $problems.Add("gate '$id': ledger table '$t' is not gates or open") }
+      $k = [string](Get-PackProp $l 'kind' '')
+      if (@('verdict', 'info') -notcontains $k) { $problems.Add("gate '$id': ledger kind '$k' is not verdict or info") }
+    }
+  }
+  foreach ($g in $gates) {
+    foreach ($d in @(Get-PackProp $g 'depends_on' @())) {
+      if (-not $ids.ContainsKey([string]$d)) { $problems.Add("gate '$(Get-PackProp $g 'id' '?')': depends_on '$d' is not a gate") }
+    }
+  }
+  @($problems.ToArray())
+}
+
+function Read-PackManifest {
+  param([Parameter(Mandatory = $true)] [string]$Path)
+  $m = Read-PackJson -Path $Path
+  if ($null -eq $m) { throw "The gate registry $Path is missing or empty." }
+  $problems = @(Get-PackManifestProblems -Manifest $m)
+  if ($problems.Count -gt 0) { throw ("The gate registry $Path is not valid: " + ($problems -join '; ')) }
+  $m
+}
+
+# The two tables of docs/GATES.md as rows of cells: the gate ledger ('gates': Phase | Gate item |
+# Machine or profile | Status | Evidence | Date) and the open items ('open': Found in | Belongs to |
+# Item | Status | Evidence | Date). Rows are found by the heading above each table.
+function Get-PackLedgerRows {
+  param([Parameter(Mandatory = $true)] [string]$GatesMdPath)
+  $rows = New-Object System.Collections.Generic.List[object]
+  $table = $null
+  $lineNo = 0
+  foreach ($line in (Get-Content -LiteralPath $GatesMdPath -Encoding UTF8)) {
+    $lineNo++
+    if ($line -match '^##\s+Gates\s*$') { $table = 'gates'; continue }
+    if ($line -match '^##\s+Open items\s*$') { $table = 'open'; continue }
+    if ($line -match '^##\s+') { $table = $null; continue }
+    if (-not $table) { continue }
+    if ($line -notmatch '^\|') { continue }
+    if ($line -match '^\|\s*(-+\s*\|\s*)+$') { continue }
+    # Cells are separated by " | "; a literal pipe inside a cell is written \| in this file.
+    $inner = $line.Trim().Trim('|')
+    $cells = @([regex]::Split($inner, '(?<!\\)\|') | ForEach-Object { $_.Trim() })
+    if ($cells.Count -lt 6) { continue }
+    if ($cells[0] -eq 'Phase' -or $cells[0] -eq 'Found in') { continue }
+    $rows.Add([pscustomobject]@{ Table = $table; Line = $lineNo; Cells = $cells; Raw = $line })
+  }
+  @($rows.ToArray())
+}
+
+# For each ledger entry of the manifest: how many rows of docs/GATES.md contain its match text in
+# the item cell (cell 1 of the gates table, cell 2 of the open items). Exactly one is correct.
+function Test-PackLedgerMatches {
+  param([Parameter(Mandatory = $true)] $Manifest, [Parameter(Mandatory = $true)] [string]$GatesMdPath)
+  $rows = @(Get-PackLedgerRows -GatesMdPath $GatesMdPath)
+  $out = New-Object System.Collections.Generic.List[object]
+  foreach ($g in @(Get-PackProp $Manifest 'gates' @())) {
+    foreach ($l in @(Get-PackProp $g 'ledger' @())) {
+      $table = [string](Get-PackProp $l 'table' '')
+      $match = [string](Get-PackProp $l 'match' '')
+      $cellIndex = $(if ($table -eq 'gates') { 1 } else { 2 })
+      $hits = @($rows | Where-Object { $_.Table -eq $table -and $_.Cells[$cellIndex].IndexOf($match, [StringComparison]::Ordinal) -ge 0 })
+      $out.Add([pscustomobject]@{ Gate = [string](Get-PackProp $g 'id' ''); Table = $table; Match = $match; Count = $hits.Count; Lines = @($hits | ForEach-Object { $_.Line }) })
+    }
+  }
+  @($out.ToArray())
+}
+
+# ---- Boot time and uptime ------------------------------------------------------------------------
+
+# The last full start of the kernel: the later of Windows's LastBootUpTime and the last event 12 of
+# Microsoft-Windows-Kernel-General. With Fast Startup on, LastBootUpTime can stay at an older value
+# across a shutdown (a restart is a full start, a shutdown is not).
+function Get-PackBootInfo {
+  $boot = (Get-CimInstance Win32_OperatingSystem).LastBootUpTime
+  try {
+    $ev = Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = 'Microsoft-Windows-Kernel-General'; Id = 12 } -MaxEvents 1 -ErrorAction Stop
+    if ($ev.TimeCreated -gt $boot) { $boot = $ev.TimeCreated }
+  } catch { }
+  [pscustomobject]@{ BootTime = $boot; UptimeMin = ((Get-Date) - $boot).TotalMinutes }
+}
+
+# ---- The rule that picks the next gate -----------------------------------------------------------
+
+$script:DoneStatuses = @('PASS', 'FAIL', 'INFO', 'SKIPPED')
+
+function Get-PackGateState {
+  param($State, [string]$Id)
+  $gs = Get-PackProp $State 'gates' $null
+  if ($null -eq $gs) { return $null }
+  Get-PackProp $gs $Id $null
+}
+
+# Pure: given the registry, the state, the uptime and what is true of the room right now, says what
+# to run next and what is waiting for what. Facts: interface, ac, idle (each $true, $false or $null
+# when unknown; unknown counts as missing for interface, as fine for the rest).
+#   Next          the gate to run now, or $null
+#   Waiting       gates that cannot run now, with the reason
+#   NeedsRestart  cold gates are pending and the machine has been up longer than their window
+#   WaitUptime    settled gates pending and the minutes still to wait
+#   NotInPack     registry entries whose script is not in this pack
+function Select-PackNextGate {
+  param(
+    [Parameter(Mandatory = $true)] $Manifest,
+    $State = $null,
+    [double]$UptimeMin = 0,
+    [hashtable]$Facts = @{},
+    [string[]]$Only = @(),
+    [string[]]$Skip = @(),
+    [string[]]$InPack = $null,
+    [switch]$Retry,
+    [switch]$Unattended,
+    [switch]$RestartAllowed,
+    [int]$MaxAttempts = 3
+  )
+  $waiting = New-Object System.Collections.Generic.List[object]
+  $notInPack = New-Object System.Collections.Generic.List[string]
+  $candidates = New-Object System.Collections.Generic.List[object]
+  $needsRestart = New-Object System.Collections.Generic.List[string]
+  $waitUptime = New-Object System.Collections.Generic.List[object]
+  $factOf = { param($k) if ($Facts.ContainsKey($k)) { $Facts[$k] } else { $null } }
+
+  foreach ($g in @(Get-PackProp $Manifest 'gates' @())) {
+    $id = [string](Get-PackProp $g 'id' '')
+    if ($Only.Count -gt 0 -and $Only -notcontains $id) { continue }
+    if ($Skip -contains $id) { continue }
+    if ($null -ne $InPack -and $InPack -notcontains $id) { $notInPack.Add($id); continue }
+    $gs = Get-PackGateState -State $State -Id $id
+    $status = [string](Get-PackProp $gs 'status' '')
+    $attempts = [int](Get-PackProp $gs 'attempts' 0)
+    $done = $false
+    if ($script:DoneStatuses -contains $status) { $done = -not ($Retry -and $status -eq 'FAIL') }
+    if ($status -eq 'INVALID' -or $status -eq 'interrupted') { $done = ($attempts -ge $MaxAttempts -and -not $Retry) }
+    if ($done) { continue }
+
+    $needs = Get-PackProp $g 'needs' $null
+    $why = New-Object System.Collections.Generic.List[string]
+    $isInteractive = [bool](Get-PackProp $g 'interactive' $false)
+    if ($Unattended -and $isInteractive) { $why.Add('needs a person at the keyboard (running unattended)') }
+    if ([bool](Get-PackProp $needs 'interface' $false)) {
+      $f = & $factOf 'interface'
+      if ($f -ne $true) { $why.Add('needs the audio interface with its loopback cable (or VB-CABLE) connected') }
+    }
+    if ([bool](Get-PackProp $needs 'ac' $false)) {
+      $f = & $factOf 'ac'
+      if ($f -eq $false) { $why.Add('needs the laptop on mains power (AC)') }
+    }
+    if ([bool](Get-PackProp $needs 'mic' $false)) {
+      $f = & $factOf 'mic'
+      if ($f -eq $false) { $why.Add('needs a built-in or connected microphone') }
+    }
+    $window = Get-PackProp $needs 'boot_within_min' $null
+    $windowPassed = $false
+    if ($null -ne $window -and $UptimeMin -gt [double]$window) {
+      $why.Add(("needs a fresh restart: up {0:n0} min, this gate starts only within {1} min of a restart" -f $UptimeMin, $window))
+      $windowPassed = $true
+    }
+    $minUp = Get-PackProp $needs 'uptime_min' $null
+    if ($null -ne $minUp -and $UptimeMin -lt [double]$minUp) {
+      $left = [double]$minUp - $UptimeMin
+      $why.Add(("needs the laptop up for {0} min: {1:n0} min to go" -f $minUp, $left))
+      $waitUptime.Add([pscustomobject]@{ Id = $id; MinutesLeft = $left })
+    }
+    if ($null -ne $minUp -and [bool](Get-PackProp $needs 'idle' $false)) {
+      $f = & $factOf 'idle'
+      if ($f -eq $false) { $why.Add('needs an idle laptop (something is using the processor)') }
+    }
+    $dep = @(Get-PackProp $g 'depends_on' @())
+    foreach ($d in $dep) {
+      $ds = Get-PackGateState -State $State -Id ([string]$d)
+      $dstat = [string](Get-PackProp $ds 'status' '')
+      if (@('PASS', 'INFO', 'FAIL') -notcontains $dstat) { $why.Add("waits for gate '$d' (status: $(if ($dstat) { $dstat } else { 'not run' }))") }
+    }
+    if ($why.Count -gt 0) {
+      # A restart is asked for only when it is all that is missing: no point restarting a laptop that
+      # has no interface connected yet.
+      if ($windowPassed -and $why.Count -eq 1) { $needsRestart.Add($id) }
+      $waiting.Add([pscustomobject]@{ Id = $id; Reasons = @($why.ToArray()); Gate = $g })
+      continue
+    }
+    $candidates.Add($g)
+  }
+
+  # Order: prepare gates first; then a gate that must follow a restart closely (it is ready now, so
+  # it goes before the rest); then priority; then the order in the registry.
+  $rank = {
+    param($g)
+    $prep = $(if ([bool](Get-PackProp $g 'prepare' $false)) { 0 } else { 1 })
+    $needs = Get-PackProp $g 'needs' $null
+    $bw = Get-PackProp $needs 'boot_within_min' $null
+    # Gates that must follow a restart closely go first, the one with the shortest window first.
+    $win = $(if ($null -ne $bw) { '0-{0:D4}' -f [int]$bw } else { '1-0000' })
+    $pri = [int]([string](Get-PackProp $g 'priority' 'P3')).Substring(1)
+    [pscustomobject]@{ Gate = $g; Key = ('{0}-{1}-{2}-{3:D5}' -f $prep, $win, $pri, [int](Get-PackProp $g 'order' 0)) }
+  }
+  $ranked = @($candidates | ForEach-Object { & $rank $_ } | Sort-Object Key)
+  $next = $null
+  if ($ranked.Count -gt 0) {
+    $next = $ranked[0].Gate
+    # A restart that would help takes precedence over any gate that is not a prepare gate: starting a
+    # long gate first would let the restart window pass for good.
+    if ($needsRestart.Count -gt 0 -and $RestartAllowed -and -not [bool](Get-PackProp $next 'prepare' $false)) { $next = $null }
+  }
+  [pscustomobject]@{
+    Next = $next
+    Waiting = @($waiting.ToArray())
+    NeedsRestart = ($needsRestart.Count -gt 0)
+    RestartFor = @($needsRestart.ToArray())
+    WaitUptime = @($waitUptime.ToArray())
+    NotInPack = @($notInPack.ToArray())
+  }
+}
+
+# ---- State ---------------------------------------------------------------------------------------
+
+function New-PackState {
+  param([string]$Role = '', [string]$Profile = 'laptop', [bool]$Quick = $false)
+  [ordered]@{
+    pack_version = 1
+    role = $Role
+    profile = $Profile
+    quick = $Quick
+    created = (Get-Date).ToString('o')
+    restart = [ordered]@{ requested_at = $null; boot_time_before = $null; resumed_at = $null; uptime_at_resume_min = $null }
+    gates = [ordered]@{}
+    order_used = New-Object System.Collections.ArrayList
+  }
+}
+
+function Get-PackStatePath { param([string]$WorkDir) Join-Path $WorkDir 'state.json' }
+
+function Read-PackState {
+  param([string]$WorkDir)
+  $p = Get-PackStatePath $WorkDir
+  $s = Read-PackJson -Path $p -AsHashtable
+  if ($null -eq $s) { return $null }
+  if (-not $s.Contains('gates')) { $s['gates'] = [ordered]@{} }
+  if (-not $s.Contains('order_used')) { $s['order_used'] = New-Object System.Collections.ArrayList }
+  $s
+}
+
+function Save-PackState {
+  param([string]$WorkDir, $State)
+  Write-PackJson -Path (Get-PackStatePath $WorkDir) -Value $State
+}
+
+function Set-PackGateStatus {
+  param([Parameter(Mandatory = $true)] $State, [Parameter(Mandatory = $true)] [string]$Id, [hashtable]$Fields)
+  if (-not $State['gates'].Contains($Id)) { $State['gates'][$Id] = [ordered]@{ attempts = 0 } }
+  foreach ($k in $Fields.Keys) { $State['gates'][$Id][$k] = $Fields[$k] }
+}
+
+# ---- Gate results --------------------------------------------------------------------------------
+
+$script:ResultStatuses = @('PASS', 'FAIL', 'INVALID', 'INFO', 'PENDING', 'SKIPPED')
+
+# What a gate script hands back. Status: PASS or FAIL (a verdict against a threshold), INVALID (no
+# verdict, repeat it), INFO (numbers only), PENDING (could not run yet, with the reason), SKIPPED.
+function New-PackResult {
+  param(
+    [Parameter(Mandatory = $true)] [string]$Id,
+    [Parameter(Mandatory = $true)] [string]$Status,
+    [string]$Headline = '',
+    $Measured = $null,
+    [string]$Threshold = '',
+    [string]$Rig = '',
+    [string]$RigDetail = '',
+    [string[]]$Evidence = @(),
+    [string[]]$Notes = @(),
+    [bool]$Quick = $false,
+    [bool]$NotAtFullLength = $false,
+    $SharedBreaks = $null
+  )
+  if ($script:ResultStatuses -notcontains $Status) { throw "Unknown gate status '$Status'" }
+  [ordered]@{
+    id = $Id
+    status = $Status
+    headline = $Headline
+    measured = $Measured
+    threshold = $Threshold
+    rig = $Rig
+    rig_detail = $RigDetail
+    shared_breaks = $SharedBreaks
+    evidence = @($Evidence)
+    notes = @($Notes)
+    quick = $Quick
+    not_at_full_length = $NotAtFullLength
+    finished = (Get-Date).ToString('o')
+  }
+}
+
+function Write-PackResult {
+  param([Parameter(Mandatory = $true)] [string]$Path, [Parameter(Mandatory = $true)] $Result)
+  Write-PackJson -Path $Path -Value $Result
+}
+
+# Reads the verdict of a legacy gate's evidence file (the "verdict:" line written by recorder-gate.ps1
+# and kill-gate.ps1, and by the other gate scripts) as PASS, FAIL, INVALID or $null.
+function Get-PackEvidenceVerdict {
+  param([Parameter(Mandatory = $true)] [string]$Path)
+  if (-not (Test-Path -LiteralPath $Path)) { return $null }
+  foreach ($l in (Get-Content -LiteralPath $Path -Encoding UTF8 -TotalCount 80)) {
+    if ($l -match '^verdict:\s*(PASS|FAIL|INVALID)') { return $Matches[1] }
+  }
+  $null
+}
+
+# Exit code of the legacy gate scripts to a status: 0 PASS (or a diagnostic), 1 FAIL, 3 INVALID.
+function ConvertTo-PackStatus {
+  param([int]$ExitCode)
+  switch ($ExitCode) { 0 { 'PASS' } 1 { 'FAIL' } 3 { 'INVALID' } 2 { 'INVALID' } default { 'INVALID' } }
+}
+
+# ---- Facts about the laptop ----------------------------------------------------------------------
+
+function Test-PackAdmin {
+  $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+  (New-Object Security.Principal.WindowsPrincipal($id)).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+# $true on mains power, $false on battery, $null when the machine has no battery (a desktop).
+function Get-PackMainsPower {
+  try {
+    $b = @(Get-CimInstance Win32_Battery -ErrorAction Stop)
+    if ($b.Count -eq 0) { return $null }
+    # BatteryStatus 1 = discharging (on battery); everything else is mains or charging.
+    return -not (@($b | Where-Object { [int]$_.BatteryStatus -eq 1 }).Count -gt 0)
+  } catch { return $null }
+}
+
+# Average processor use over a few seconds; $true when below the limit. Unknown (the counter is not
+# there) is $null, which the rule treats as fine.
+function Test-PackIdle {
+  param([double]$LimitPercent = 20, [int]$Seconds = 8)
+  try {
+    $s = @(Get-Counter '\Processor(_Total)\% Processor Time' -SampleInterval 1 -MaxSamples $Seconds -ErrorAction Stop)
+    $avg = ($s | ForEach-Object { $_.CounterSamples[0].CookedValue } | Measure-Object -Average).Average
+    return ([double]$avg -lt $LimitPercent)
+  } catch { return $null }
+}
+
+# Programs that must be closed before the recorder gates (they steal the processor or sit in the audio
+# path). The gate scripts refuse on their own; this tells the person at the start. -Names is for tests.
+function Get-PackBlockingPrograms {
+  param([string[]]$Names = $null)
+  if ($null -eq $Names) { $Names = @(Get-Process -ErrorAction SilentlyContinue | ForEach-Object { $_.ProcessName }) }
+  $rx = '^(LatMon|LatencyMon|RTSS|RTSSHooksLoader.*|MSIAfterburner|Steam|steamwebhelper|NahimicService|NahimicSvc.*|NahimicSmartAudio|A-Volute.*|AVolute.*|WavesSvc.*|DolbyDAX.*|SonicStudio.*)$'
+  @($Names | Where-Object { $_ -match $rx } | Sort-Object -Unique)
+}
+
+# ---- Starting a gate -----------------------------------------------------------------------------
+
+function ConvertTo-PackArg {
+  param([string]$Value)
+  if ($Value -match '[\s"]') { return '"' + ($Value -replace '"', '\"') + '"' }
+  $Value
+}
+
+# Runs a gate script in its own Windows PowerShell 5.1 process, output to a log file, and waits.
+# The gate script gets -CtxFile and -ResultFile and must write the result file. Returns the process
+# exit code and whether it timed out. Never throws for a failing gate.
+function Invoke-PackGateProcess {
+  param(
+    [Parameter(Mandatory = $true)] [string]$ScriptPath,
+    [Parameter(Mandatory = $true)] [string]$CtxFile,
+    [Parameter(Mandatory = $true)] [string]$ResultFile,
+    [Parameter(Mandatory = $true)] [string]$LogFile,
+    [int]$TimeoutMinutes = 240,
+    [scriptblock]$OnTick = $null
+  )
+  $ps = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+  $argList = @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', (ConvertTo-PackArg $ScriptPath), '-CtxFile', (ConvertTo-PackArg $CtxFile), '-ResultFile', (ConvertTo-PackArg $ResultFile))
+  $errFile = "$LogFile.err"
+  $p = Start-Process -FilePath $ps -ArgumentList $argList -PassThru -WindowStyle Hidden -RedirectStandardOutput $LogFile -RedirectStandardError $errFile
+  $null = $p.Handle
+  $deadline = (Get-Date).AddMinutes($TimeoutMinutes)
+  $timedOut = $false
+  while (-not $p.HasExited) {
+    if ((Get-Date) -gt $deadline) { $timedOut = $true; break }
+    Start-Sleep -Seconds 2
+    if ($OnTick) { & $OnTick $p }
+  }
+  if ($timedOut) {
+    & taskkill.exe /F /T /PID $p.Id 2>&1 | Out-Null
+    return [pscustomobject]@{ ExitCode = -1; TimedOut = $true }
+  }
+  $p.WaitForExit()
+  [pscustomobject]@{ ExitCode = [int]$p.ExitCode; TimedOut = $false }
+}
+
+# ---- Unblock and launch checks --------------------------------------------------------------------
+
+# Removes the "downloaded from the internet" mark from every file of the pack (what Windows adds to
+# files that came by zip, mail or a browser). Never touches protection settings. Returns what is
+# still marked afterwards (a file system without alternate streams has none).
+function Invoke-PackUnblock {
+  param([Parameter(Mandatory = $true)] [string]$Root)
+  $marked = 0
+  $still = New-Object System.Collections.Generic.List[string]
+  foreach ($f in (Get-ChildItem -LiteralPath $Root -Recurse -File -Force -ErrorAction SilentlyContinue)) {
+    if ($f.Extension -match '^\.(bin|wav|json|txt|md|csv)$') { continue }
+    $has = $false
+    try { $has = $null -ne (Get-Item -LiteralPath $f.FullName -Stream 'Zone.Identifier' -ErrorAction SilentlyContinue) } catch { }
+    if (-not $has) { continue }
+    $marked++
+    try { Unblock-File -LiteralPath $f.FullName -ErrorAction Stop } catch { }
+    $left = $false
+    try { $left = $null -ne (Get-Item -LiteralPath $f.FullName -Stream 'Zone.Identifier' -ErrorAction SilentlyContinue) } catch { }
+    if ($left) { $still.Add($f.FullName) }
+  }
+  [pscustomobject]@{ Unblocked = $marked - $still.Count; StillMarked = @($still.ToArray()) }
+}
+
+# Starts an executable with a harmless argument and reports plainly whether Windows let it run. A
+# block by Microsoft Defender, SmartScreen or a policy is reported with the file; nothing about
+# protection is changed here or anywhere else in the pack.
+function Test-PackLaunchable {
+  param([Parameter(Mandatory = $true)] [string]$Path, [string[]]$Arguments = @('--version'), [int]$TimeoutSeconds = 30)
+  if (-not (Test-Path -LiteralPath $Path)) { return [pscustomobject]@{ Path = $Path; Ok = $false; Blocked = $false; Message = 'the file is not there' } }
+  try {
+    $p = Start-Process -FilePath $Path -ArgumentList $Arguments -PassThru -WindowStyle Hidden -RedirectStandardOutput ([System.IO.Path]::GetTempFileName()) -RedirectStandardError ([System.IO.Path]::GetTempFileName())
+    if (-not $p.WaitForExit($TimeoutSeconds * 1000)) { try { $p.Kill() } catch { } }
+    return [pscustomobject]@{ Path = $Path; Ok = $true; Blocked = $false; Message = 'started' }
+  } catch {
+    $m = $_.Exception.Message
+    # 225 = the file contains a virus or potentially unwanted software; 1260 = blocked by policy; 5 = access denied.
+    $blocked = ($m -match 'virus|potentially unwanted|blocked|administrator has blocked|Access is denied|group policy|SmartScreen|Defender')
+    return [pscustomobject]@{ Path = $Path; Ok = $false; Blocked = $blocked; Message = $m }
+  }
+}
+
+# ---- Resume after a restart ----------------------------------------------------------------------
+
+$script:ResumeTaskName = 'STELMAR-GatePack-Resume'
+$script:RunKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+
+# schtasks.exe writes to stderr when a task is missing; under -ErrorAction Stop that would end the
+# caller, so the call is made with its own Continue preference.
+function Invoke-PackSchtasks {
+  param([string[]]$Arguments)
+  $ErrorActionPreference = 'Continue'
+  $out = @(& schtasks.exe @Arguments 2>&1 | ForEach-Object { "$_" })
+  [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = ($out -join ' ') }
+}
+
+# A task that starts the runner again when this person logs in after the restart. With administrator
+# rights it is a scheduled task that runs elevated (no prompt); without them it is a Run key entry
+# (the dry run on the Legion). Both are removed again by -Cleanup and when the pack finishes.
+function Register-PackResume {
+  param([Parameter(Mandatory = $true)] [string]$RunScript, [string[]]$ExtraArguments = @(), [bool]$Admin = $true)
+  $ps = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+  $argText = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -Resumed {1}' -f $RunScript, ($ExtraArguments -join ' ')
+  if ($Admin) {
+    $tr = '"{0}" {1}' -f $ps, $argText
+    $r = Invoke-PackSchtasks -Arguments @('/Create', '/F', '/TN', $script:ResumeTaskName, '/SC', 'ONLOGON', '/RL', 'HIGHEST', '/DELAY', '0000:20', '/TR', $tr)
+    if ($r.ExitCode -ne 0) { throw "Could not register the logon task: $($r.Output)" }
+    return 'scheduled task ' + $script:ResumeTaskName
+  }
+  Set-ItemProperty -Path $script:RunKey -Name $script:ResumeTaskName -Value ('"{0}" {1}' -f $ps, $argText)
+  'Run key entry ' + $script:ResumeTaskName
+}
+
+function Unregister-PackResume {
+  $removed = New-Object System.Collections.Generic.List[string]
+  $q = Invoke-PackSchtasks -Arguments @('/Query', '/TN', $script:ResumeTaskName)
+  if ($q.ExitCode -eq 0) {
+    $null = Invoke-PackSchtasks -Arguments @('/Delete', '/F', '/TN', $script:ResumeTaskName)
+    $removed.Add('scheduled task ' + $script:ResumeTaskName)
+  }
+  $v = Get-ItemProperty -Path $script:RunKey -Name $script:ResumeTaskName -ErrorAction SilentlyContinue
+  if ($v) {
+    Remove-ItemProperty -Path $script:RunKey -Name $script:ResumeTaskName -ErrorAction SilentlyContinue
+    $removed.Add('Run key entry ' + $script:ResumeTaskName)
+  }
+  @($removed.ToArray())
+}
+
+function Test-PackResumeRegistered {
+  $q = Invoke-PackSchtasks -Arguments @('/Query', '/TN', $script:ResumeTaskName)
+  if ($q.ExitCode -eq 0) { return $true }
+  [bool](Get-ItemProperty -Path $script:RunKey -Name $script:ResumeTaskName -ErrorAction SilentlyContinue)
+}
+
+# ---- What the pack changes, and putting it back --------------------------------------------------
+
+# Anything a gate changes on the laptop outside its own work folder is recorded here BEFORE it is
+# changed, with the way to put it back. -Cleanup (and the end of every run) undoes them; the banner
+# lists what could not be put back.
+function Get-PackChangesPath { param([string]$WorkDir) Join-Path $WorkDir 'changes.json' }
+
+function Add-PackChange {
+  param(
+    [Parameter(Mandatory = $true)] [string]$WorkDir,
+    [Parameter(Mandatory = $true)] [ValidateSet('mic-mute', 'render-volume', 'power-timeouts', 'other')] [string]$Kind,
+    [Parameter(Mandatory = $true)] [string]$Description,
+    [hashtable]$Restore = @{}
+  )
+  $p = Get-PackChangesPath $WorkDir
+  $list = Read-PackJson -Path $p -AsHashtable
+  if ($null -eq $list) { $list = [ordered]@{ changes = (New-Object System.Collections.ArrayList) } }
+  [void]$list['changes'].Add([ordered]@{ kind = $Kind; description = $Description; restore = $Restore; at = (Get-Date).ToString('o'); restored = $false; restore_note = '' })
+  Write-PackJson -Path $p -Value $list
+}
+
+# Puts back every recorded change. -Testbench is the pack's wb-testbench (volume and mute). Returns
+# lines for the banner: what was restored and what is still changed.
+function Invoke-PackCleanup {
+  param([Parameter(Mandatory = $true)] [string]$WorkDir, [string]$Testbench = '')
+  $lines = New-Object System.Collections.Generic.List[string]
+  foreach ($r in @(Unregister-PackResume)) { $lines.Add("removed: $r") }
+  $p = Get-PackChangesPath $WorkDir
+  $list = Read-PackJson -Path $p -AsHashtable
+  if ($null -ne $list) {
+    foreach ($c in @($list['changes'])) {
+      if ([bool]$c['restored']) { continue }
+      $ok = $false
+      $note = ''
+      $rest = $c['restore']
+      try {
+        switch ([string]$c['kind']) {
+          'mic-mute' {
+            if (-not $Testbench -or -not (Test-Path -LiteralPath $Testbench)) { throw 'wb-testbench is not available' }
+            $res = & $Testbench mute --device ([string]$rest['device']) --state ([string]$rest['state_before']) 2>&1
+            if ($LASTEXITCODE -ne 0) { throw ($res -join ' ') }
+            $ok = $true
+          }
+          'render-volume' {
+            if (-not $Testbench -or -not (Test-Path -LiteralPath $Testbench)) { throw 'wb-testbench is not available' }
+            $res = & $Testbench volume --device ([string]$rest['device']) --level ([string]$rest['level_before']) 2>&1
+            if ($LASTEXITCODE -ne 0) { throw ($res -join ' ') }
+            $ok = $true
+          }
+          'power-timeouts' {
+            foreach ($kv in @($rest['values'])) {
+              & powercfg.exe /setacvalueindex SCHEME_CURRENT ([string]$kv['sub']) ([string]$kv['setting']) ([string]$kv['value']) 2>&1 | Out-Null
+            }
+            & powercfg.exe /setactive SCHEME_CURRENT 2>&1 | Out-Null
+            $ok = $true
+          }
+          default { $note = 'nothing to undo automatically' ; $ok = $true }
+        }
+      } catch { $note = $_.Exception.Message }
+      $c['restored'] = $ok
+      $c['restore_note'] = $note
+      if ($ok) { $lines.Add("restored: $($c['description'])") }
+      else { $lines.Add("STILL CHANGED: $($c['description']) ($note)") }
+    }
+    Write-PackJson -Path $p -Value $list
+  }
+  if ($lines.Count -eq 0) { $lines.Add('nothing had been changed') }
+  @($lines.ToArray())
+}
+
+# What is still changed according to the record (for the end banner and summary.json).
+function Get-PackStillChanged {
+  param([string]$WorkDir)
+  $list = Read-PackJson -Path (Get-PackChangesPath $WorkDir) -AsHashtable
+  $out = New-Object System.Collections.Generic.List[string]
+  if ($null -ne $list) { foreach ($c in @($list['changes'])) { if (-not [bool]$c['restored']) { $out.Add([string]$c['description']) } } }
+  if (Test-PackResumeRegistered) { $out.Add('the logon task that resumes the pack after a restart') }
+  @($out.ToArray())
+}
+
+# ---- Machine name, summary, zip ------------------------------------------------------------------
+
+# Maker and model, with a short hash of the BIOS serial number so two laptops of one model can be told
+# apart. The computer's own name is never used: it can carry a person's name.
+function Get-PackMachineName {
+  try {
+    $cs = Get-CimInstance Win32_ComputerSystem
+    $make = ([string]$cs.Manufacturer).Trim()
+    $model = ([string]$cs.Model).Trim()
+    $serial = [string](Get-CimInstance Win32_BIOS).SerialNumber
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    $h = ($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($serial)) | Select-Object -First 3 | ForEach-Object { $_.ToString('x2') }) -join ''
+    $raw = "$make $model $h"
+  } catch { $raw = 'unknown-machine' }
+  ($raw -replace '[^A-Za-z0-9]+', '-').Trim('-')
+}
+
+function New-PackSummary {
+  param(
+    [Parameter(Mandatory = $true)] $Manifest,
+    [Parameter(Mandatory = $true)] $State,
+    [Parameter(Mandatory = $true)] [string]$Machine,
+    [string]$Emulated = '',
+    [string]$SourceCommit = '',
+    [string[]]$InPack = $null,
+    $Fingerprint = $null,
+    [string[]]$StillChanged = @(),
+    [string]$RunLabel = ''
+  )
+  $gates = New-Object System.Collections.ArrayList
+  $pending = New-Object System.Collections.ArrayList
+  $notInPack = New-Object System.Collections.ArrayList
+  foreach ($g in @(Get-PackProp $Manifest 'gates' @())) {
+    $id = [string](Get-PackProp $g 'id' '')
+    if ($null -ne $InPack -and $InPack -notcontains $id) {
+      [void]$notInPack.Add([ordered]@{ id = $id; priority = (Get-PackProp $g 'priority' ''); title = (Get-PackProp $g 'title' ''); reason = 'not in this pack' })
+      continue
+    }
+    $gs = Get-PackGateState -State $State -Id $id
+    $status = [string](Get-PackProp $gs 'status' '')
+    if (-not $status -or $status -eq 'PENDING' -or $status -eq 'interrupted' -or $status -eq 'running') {
+      [void]$pending.Add([ordered]@{ id = $id; priority = (Get-PackProp $g 'priority' ''); title = (Get-PackProp $g 'title' ''); reason = [string](Get-PackProp $gs 'reason' 'not run') })
+      continue
+    }
+    $res = $null
+    $rf = [string](Get-PackProp $gs 'result_file' '')
+    if ($rf -and (Test-Path -LiteralPath $rf)) { $res = Read-PackJson -Path $rf -AsHashtable }
+    $entry = [ordered]@{
+      id = $id
+      priority = (Get-PackProp $g 'priority' '')
+      status = $status
+      attempts = (Get-PackProp $gs 'attempts' 0)
+      started = (Get-PackProp $gs 'started' $null)
+      ended = (Get-PackProp $gs 'ended' $null)
+      minutes = (Get-PackProp $gs 'minutes' $null)
+      headline = $(if ($res) { $res['headline'] } else { [string](Get-PackProp $gs 'reason' '') })
+      measured = $(if ($res) { $res['measured'] } else { $null })
+      threshold = $(if ($res) { $res['threshold'] } else { (Get-PackProp $g 'threshold' '') })
+      rig = $(if ($res) { $res['rig'] } else { '' })
+      rig_detail = $(if ($res) { $res['rig_detail'] } else { '' })
+      shared_breaks = $(if ($res) { $res['shared_breaks'] } else { $null })
+      evidence = $(if ($res) { @($res['evidence']) } else { @() })
+      notes = $(if ($res) { @($res['notes']) } else { @() })
+      quick = [bool](Get-PackProp $State 'quick' $false)
+      not_at_full_length = $(if ($res) { [bool]$res['not_at_full_length'] } else { $false })
+      ledger = @(Get-PackProp $g 'ledger' @())
+    }
+    [void]$gates.Add($entry)
+  }
+  [ordered]@{
+    pack_version = 1
+    source_commit = $SourceCommit
+    machine = $Machine
+    role = (Get-PackProp $State 'role' '')
+    emulated = $(if ($Emulated) { $Emulated } else { $null })
+    quick = [bool](Get-PackProp $State 'quick' $false)
+    run_label = $RunLabel
+    created = (Get-Date).ToString('o')
+    restart = (Get-PackProp $State 'restart' $null)
+    order_used = @(Get-PackProp $State 'order_used' @())
+    gates = @($gates.ToArray())
+    pending = @($pending.ToArray())
+    not_in_pack = @($notInPack.ToArray())
+    still_changed = @($StillChanged)
+    fingerprint = $Fingerprint
+  }
+}
+
+# Files that go into the results zip: every small report, log, table and capability file under the
+# work folder; never audio (a recording, a source file, a mirror), a model or a very large file.
+function Get-PackCollectFiles {
+  param([Parameter(Mandatory = $true)] [string]$WorkDir, [long]$MaxBytes = 64MB)
+  $skipDirs = '\\(audio|source|backup|mirror|rec|reference|reference-wasapi|mic-keep|models)(\\|$)'
+  @(Get-ChildItem -LiteralPath $WorkDir -Recurse -File -Force -ErrorAction SilentlyContinue | Where-Object {
+      $rel = $_.FullName.Substring($WorkDir.Length)
+      $_.Length -le $MaxBytes -and $_.Extension -notmatch '^\.(wav|bin|zip|tmp|lock)$' -and $rel -notmatch $skipDirs
+    })
+}
+
+# Writes the zip with forward slashes in the entry names (the form Windows PowerShell 5.1's own
+# Compress-Archive does not guarantee) and a ZIP-MANIFEST.json with each file's SHA-256 for ingest.
+function New-PackZip {
+  param(
+    [Parameter(Mandatory = $true)] [string]$WorkDir,
+    [Parameter(Mandatory = $true)] [string]$ZipPath,
+    [Parameter(Mandatory = $true)] $Summary,
+    [string]$CommitText = ''
+  )
+  Add-Type -AssemblyName System.IO.Compression
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  if (Test-Path -LiteralPath $ZipPath) { Remove-Item -LiteralPath $ZipPath -Force }
+  $files = @(Get-PackCollectFiles -WorkDir $WorkDir)
+  $zip = [System.IO.Compression.ZipFile]::Open($ZipPath, [System.IO.Compression.ZipArchiveMode]::Create)
+  $manifest = New-Object System.Collections.ArrayList
+  try {
+    $add = {
+      param([string]$entryName, [byte[]]$bytes)
+      $e = $zip.CreateEntry($entryName, [System.IO.Compression.CompressionLevel]::Optimal)
+      $s = $e.Open()
+      try { $s.Write($bytes, 0, $bytes.Length) } finally { $s.Dispose() }
+    }
+    foreach ($f in $files) {
+      $rel = ($f.FullName.Substring($WorkDir.Length).TrimStart('\') -replace '\\', '/')
+      $bytes = [System.IO.File]::ReadAllBytes($f.FullName)
+      & $add ('work/' + $rel) $bytes
+      $sha = [System.Security.Cryptography.SHA256]::Create()
+      $hash = ($sha.ComputeHash($bytes) | ForEach-Object { $_.ToString('x2') }) -join ''
+      [void]$manifest.Add([ordered]@{ path = ('work/' + $rel); bytes = $bytes.Length; sha256 = $hash })
+    }
+    $summaryJson = $Summary | ConvertTo-Json -Depth 14
+    & $add 'summary.json' ([Text.Encoding]::UTF8.GetBytes($summaryJson))
+    $zm = [ordered]@{ pack_version = 1; source_commit = $CommitText; files = @($manifest.ToArray()) }
+    & $add 'ZIP-MANIFEST.json' ([Text.Encoding]::UTF8.GetBytes(($zm | ConvertTo-Json -Depth 6)))
+  } finally { $zip.Dispose() }
+  [pscustomobject]@{ Path = $ZipPath; Files = $files.Count + 2; Bytes = (Get-Item -LiteralPath $ZipPath).Length }
+}
+
+# ---- Plain-words lines for the console ------------------------------------------------------------
+
+function Format-PackMinutes {
+  param([double]$Minutes)
+  if ($Minutes -lt 60) { return ('{0:n0} min' -f $Minutes) }
+  $h = [math]::Floor($Minutes / 60.0)
+  $m = [math]::Round($Minutes - 60 * $h)
+  if ($m -ge 60) { $h++; $m = 0 }
+  if ($m -eq 0) { return ('{0:n0} h' -f $h) }
+  '{0:n0} h {1:n0} min' -f $h, $m
+}
+
+# One line per gate for the banner after each gate and at the end.
+function Format-PackGateLine {
+  param([string]$Id, [string]$Status, [string]$Headline, [string]$Rig = '', $Minutes = $null)
+  $r = $(if ($Rig) { " [rig: $Rig]" } else { '' })
+  $m = $(if ($null -ne $Minutes) { " ({0})" -f (Format-PackMinutes ([double]$Minutes)) } else { '' })
+  ('{0,-8} {1,-24}{2}{3} {4}' -f $Status, $Id, $m, $r, $Headline).TrimEnd()
+}
+
+Export-ModuleMember -Function Get-PackProp, ConvertTo-PackHashtable, Read-PackJson, Write-PackJson, Write-PackLog, Set-PackLogFile, Get-PackManifestProblems, Read-PackManifest, Get-PackLedgerRows, Test-PackLedgerMatches, Get-PackBootInfo, Select-PackNextGate, New-PackState, Get-PackStatePath, Read-PackState, Save-PackState, Set-PackGateStatus, Get-PackGateState, New-PackResult, Write-PackResult, Get-PackEvidenceVerdict, ConvertTo-PackStatus, Test-PackAdmin, Get-PackMainsPower, Test-PackIdle, Get-PackBlockingPrograms, ConvertTo-PackArg, Invoke-PackGateProcess, Invoke-PackUnblock, Test-PackLaunchable, Register-PackResume, Unregister-PackResume, Test-PackResumeRegistered, Get-PackChangesPath, Add-PackChange, Invoke-PackCleanup, Get-PackStillChanged, Get-PackMachineName, New-PackSummary, Get-PackCollectFiles, New-PackZip, Format-PackMinutes, Format-PackGateLine

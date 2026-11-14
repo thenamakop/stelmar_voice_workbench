@@ -23,7 +23,7 @@ models/converted/
 eval/data/
 eval/local/
 testdata/private/
-gate-pack/
+/gate-pack/
 models/manifest.local.json
 *.wav
 !testdata/*.wav

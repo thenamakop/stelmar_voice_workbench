@@ -1,0 +1,277 @@
+{
+  "pack_version": 1,
+  "note": "The gate registry. One entry per gate; the runner and the ingest script read only this file. Phase 4 adds its rows by adding entries here and scripts under gates/; run-gates.ps1 does not change. priority: P1 runs first, then P2, then P3. group: any | interface | cold | settled | network | mic | long. needs: interface (loopback cable on the audio interface, or VB-CABLE), ac, mic, boot_within_min (cold: starts only this soon after a restart), uptime_min and idle (settled). interactive: needs a person at the keyboard. prepare: runs before everything else. quick: what -Quick does (the dry run); skipped = not run under -Quick. ledger: the rows of docs/GATES.md the result feeds (table gates or open; match = text that occurs in exactly one item cell); kind verdict = a threshold decides PASS or FAIL, info = numbers for the owner to read.",
+  "gates": [
+    {
+      "id": "engines-info",
+      "title": "Machine fingerprint, engine info for every variant, driver versions",
+      "priority": "P1", "order": 20, "prepare": true, "script": "gates/engines-info.ps1", "group": "any",
+      "needs": {}, "interactive": false,
+      "est_minutes": { "low": 15, "mid": 15 },
+      "quick": { "minutes": 15, "note": "as designed" },
+      "threshold": "avx2 exits 0; avx512 exits 0 only where the CPU has AVX-512 and 3 where it has not, with a clear message; vulkan lists every graphics adapter once, integrated ones marked, with driver version; no development tool on PATH",
+      "ledger": [
+        { "table": "gates", "match": "`wb-engine-avx2 info` succeeds from an engines-only folder", "kind": "verdict" },
+        { "table": "gates", "match": "`wb-engine-avx512 info` exits with code 3", "kind": "verdict" },
+        { "table": "gates", "match": "`wb-engine-vulkan info` lists the Intel UHD once", "kind": "verdict" },
+        { "table": "gates", "match": "Portable builds (`GGML_NATIVE=OFF`) run on a CPU other than", "kind": "verdict" },
+        { "table": "gates", "match": "Vulkan on the laptops' own integrated GPUs and drivers", "kind": "verdict" }
+      ]
+    },
+    {
+      "id": "quick-check",
+      "title": "System check (quick) with per-cell times, graphics-alone run against the 480 s bar",
+      "priority": "P1", "order": 10, "script": "gates/quick-check.ps1", "group": "any",
+      "needs": { "ac": true }, "interactive": false,
+      "est_minutes": { "low": 12, "mid": 10 },
+      "quick": { "minutes": 12, "note": "as designed" },
+      "threshold": "check time at most 480 s and not partial; the verdict follows the measured numbers; hybrid chosen only at a gain of at least 15% and recorder-safe; recorder safety run passed; capability.json kept",
+      "depends_on": [ "engines-info" ],
+      "ledger": [
+        { "table": "gates", "match": "Quick check under 8 minutes; the verdict follows the measured numbers", "kind": "verdict" },
+        { "table": "gates", "match": "Verdicts and tiers on the real laptops", "kind": "info" },
+        { "table": "gates", "match": "Quick-check time on the real low-baseline laptop", "kind": "verdict" },
+        { "table": "open", "match": "PR #6 review round 2, decision 2 (owner, 14 Nov 2026): the graphics-alone run", "kind": "info" }
+      ]
+    },
+    {
+      "id": "speed-table-igpu",
+      "title": "Speed table on the real integrated graphics (driver versions recorded), five models, English and Hindi",
+      "priority": "P1", "order": 30, "script": "gates/speed-table-igpu.ps1", "group": "long",
+      "needs": { "ac": true }, "interactive": false,
+      "est_minutes": { "low": 60, "mid": 45 },
+      "quick": { "minutes": 10, "note": "1 model (small), 1 clip (English), integrated GPU only" },
+      "threshold": "information: RTF, load time, peak working set and commit, GPU memory per model, clip and adapter, with the adapter's driver version; no verdict (Phase 2 sets no speed bar)",
+      "depends_on": [ "engines-info" ],
+      "ledger": [
+        { "table": "gates", "match": "Speed tables: `wb-engine bench`, four models", "kind": "info" },
+        { "table": "open", "match": "Hinglish (a large-v3 model) ran at about RTF 2.5 to 3.7 on the Legion at 8 threads", "kind": "info" },
+        { "table": "open", "match": "Speed-table notes for the tiers (owner, 11 Nov 2026", "kind": "info" }
+      ]
+    },
+    {
+      "id": "soak",
+      "title": "2-hour soak on the loopback, with the thermal sampler",
+      "priority": "P1", "order": 40, "script": "gates/soak.ps1", "group": "interface",
+      "needs": { "interface": true, "ac": true }, "interactive": false,
+      "est_minutes": { "low": 130, "mid": 130 },
+      "quick": { "minutes": 12, "note": "10 minutes instead of 2 hours" },
+      "threshold": "recording equals both reference captures sample for sample; duration within 1 s of the source; zero overruns, xruns and dropped samples; recorder CPU under 5%; position breaks 0 on the hardware interface; mirror equal; on AC throughout",
+      "ledger": [
+        { "table": "gates", "match": "Soak: 2 hours from VB-CABLE", "kind": "verdict" },
+        { "table": "gates", "match": "Thermal behaviour during the 2-hour soak on a thin laptop", "kind": "info" },
+        { "table": "gates", "match": "Mirror SHA-256 equals the originals after Stop", "kind": "verdict" },
+        { "table": "open", "match": "Laptop gate pack: add a reference capture that does not use cpal", "kind": "info" },
+        { "table": "open", "match": "Re-run Phase 1 on both laptops with a hardware audio interface", "kind": "verdict" }
+      ]
+    },
+    {
+      "id": "load-cold",
+      "title": "30-minute load gate within an hour of a restart",
+      "priority": "P1", "order": 50, "script": "gates/load-cold.ps1", "group": "cold",
+      "needs": { "interface": true, "ac": true, "boot_within_min": 60 }, "interactive": false,
+      "est_minutes": { "low": 35, "mid": 35 },
+      "quick": { "minutes": 7, "note": "5 minutes instead of 30" },
+      "threshold": "recording equals both references; every logical CPU busy and the integrated GPU loaded; zero overruns and xruns; shared-break count reported",
+      "ledger": [
+        { "table": "gates", "match": "Load test: 30 minutes with every logical CPU of the job busy", "kind": "verdict" },
+        { "table": "open", "match": "Load gate on the laptops, two conditions", "kind": "verdict" }
+      ]
+    },
+    {
+      "id": "load-settled",
+      "title": "30-minute load gate on a settled, idle laptop (up over 3 hours)",
+      "priority": "P1", "order": 60, "script": "gates/load-settled.ps1", "group": "settled",
+      "needs": { "interface": true, "ac": true, "uptime_min": 180, "idle": true }, "interactive": false,
+      "est_minutes": { "low": 35, "mid": 35 },
+      "quick": { "minutes": 7, "note": "5 minutes instead of 30; the 3-hour rule is kept" },
+      "threshold": "as load-cold; compared with load-cold in the summary (a pass here and a fail there means the recorder needs more slack in the first hour after boot)",
+      "ledger": [
+        { "table": "gates", "match": "Load test: 30 minutes with every logical CPU of the job busy", "kind": "verdict" },
+        { "table": "open", "match": "Load gate on the laptops, two conditions", "kind": "verdict" }
+      ]
+    },
+    {
+      "id": "panic",
+      "title": "Recorder survives panics (command, plain thread, recorder thread)",
+      "priority": "P1", "order": 70, "script": "gates/panic.ps1", "group": "interface",
+      "needs": { "interface": true, "ac": true }, "interactive": false,
+      "est_minutes": { "low": 5, "mid": 5 },
+      "quick": { "minutes": 5, "note": "as designed" },
+      "threshold": "zero samples lost; the recorder restarts once and continues in a new part; recording equals both references",
+      "ledger": [
+        { "table": "gates", "match": "Recorder survives panics (in a command, on a plain thread, inside the recorder thread)", "kind": "verdict" }
+      ]
+    },
+    {
+      "id": "webview",
+      "title": "WebView2 browser process killed while recording",
+      "priority": "P1", "order": 80, "script": "gates/webview.ps1", "group": "interface",
+      "needs": { "interface": true, "ac": true }, "interactive": false,
+      "est_minutes": { "low": 5, "mid": 5 },
+      "quick": { "minutes": 5, "note": "as designed" },
+      "threshold": "display recovers in a new window; the recording has no gap; recording equals both references",
+      "ledger": [
+        { "table": "gates", "match": "WebView2 browser process killed while recording", "kind": "verdict" }
+      ]
+    },
+    {
+      "id": "kill",
+      "title": "Force-kill the app 5 times mid-recording, with the capture margin of every run",
+      "priority": "P1", "order": 90, "script": "gates/kill.ps1", "group": "interface",
+      "needs": { "interface": true, "ac": true }, "interactive": false,
+      "est_minutes": { "low": 20, "mid": 20 },
+      "quick": { "minutes": 8, "note": "2 kills instead of 5" },
+      "threshold": "at most 1 s lost per kill; every part plays before repair; restart offers Resume; parts.json equals a rebuild; each run equals both references; zero overruns; the longest capture gap and its margin are printed for every app run",
+      "ledger": [
+        { "table": "gates", "match": "Kill test, 5 times: `taskkill /F` mid-recording", "kind": "verdict" },
+        { "table": "open", "match": "Print the capture margin in the kill gate (13 Nov 2026)", "kind": "verdict" }
+      ]
+    },
+    {
+      "id": "hashing-1",
+      "title": "Cold-cache model hashing while recording starts: run 1, right after a real restart",
+      "priority": "P1", "order": 100, "script": "gates/hashing-1.ps1", "group": "cold",
+      "needs": { "interface": true, "ac": true, "boot_within_min": 30 }, "interactive": false,
+      "est_minutes": { "low": 12, "mid": 12 },
+      "quick": { "minutes": 12, "note": "as designed (this is the run that proves the restart-and-resume path)" },
+      "threshold": "zero overruns and no gap while the models are hashed in background mode over at least 1 GB and 10 s of the recording; recording equals both references; shared-break count reported; any break in the app only is a recorder failure",
+      "ledger": [
+        { "table": "open", "match": "R5 (owner's decision, 12 Nov 2026): CLOSED on the Legion under `emu-low`", "kind": "verdict" },
+        { "table": "open", "match": "Hashing and upstream breaks (13 Nov 2026)", "kind": "verdict" }
+      ]
+    },
+    {
+      "id": "network-off",
+      "title": "Network off: engines, static import check, the release app's quick check",
+      "priority": "P1", "order": 110, "script": "gates/network-off.ps1", "group": "network",
+      "needs": {}, "interactive": true,
+      "est_minutes": { "low": 25, "mid": 25 },
+      "quick": { "minutes": 12, "note": "engines avx2 only, release app check with a short wait" },
+      "threshold": "no non-loopback socket, listener or UDP endpoint in any engine process tree or in the release app and its WebView2 processes with the network adapters off; no shipped executable imports Winsock, WinHTTP or WinINet (positive control found)",
+      "depends_on": [ "engines-info" ],
+      "ledger": [
+        { "table": "gates", "match": "Engines run with the network adapters off", "kind": "verdict" },
+        { "table": "open", "match": "Network-off checker follow-ups (offline audit, 12 Nov 2026)", "kind": "verdict" }
+      ]
+    },
+    {
+      "id": "hashing-2-10",
+      "title": "Model hashing runs 2 to 10: four purged-cold, five warm",
+      "priority": "P2", "order": 10, "script": "gates/hashing-2-10.ps1", "group": "interface",
+      "needs": { "interface": true, "ac": true }, "interactive": false,
+      "est_minutes": { "low": 108, "mid": 108 },
+      "quick": { "minutes": 12, "note": "run 2 only (purged)" },
+      "threshold": "as hashing-1 for every run; a purged run counts as cold only if its read rate is at most 0.6 times the same laptop's warm-cache rate; shared-break counts compared between cold and warm runs",
+      "depends_on": [ "hashing-1" ],
+      "ledger": [
+        { "table": "open", "match": "Hashing and upstream breaks (13 Nov 2026)", "kind": "verdict" },
+        { "table": "open", "match": "VB-CABLE uses the whole upstream-break allowance", "kind": "info" }
+      ]
+    },
+    {
+      "id": "live-batch-safety",
+      "title": "Recorder safety with a live engine and a batch engine running beside it",
+      "priority": "P2", "order": 20, "script": "gates/live-batch-safety.ps1", "group": "interface",
+      "needs": { "interface": true, "ac": true }, "interactive": false,
+      "est_minutes": { "low": 20, "mid": 20 },
+      "quick": { "minutes": 8, "note": "5 minutes instead of 15" },
+      "threshold": "zero overruns, xruns and dropped samples; recording equals both references while wb-engine live (voice detection only until Phase 7) and a batch engine run beside the recorder",
+      "ledger": [
+        { "table": "open", "match": "PR #6 review round 2, decision 2 (owner, 14 Nov 2026): the graphics-alone run", "kind": "info" }
+      ]
+    },
+    {
+      "id": "bg-decode-info",
+      "title": "Information: break counts with and without a background decode",
+      "priority": "P2", "order": 30, "script": "gates/bg-decode-info.ps1", "group": "interface",
+      "needs": { "interface": true, "ac": true }, "interactive": false,
+      "est_minutes": { "low": 70, "mid": 70 },
+      "quick": { "minutes": 14, "note": "5 + 5 minutes instead of 30 + 30" },
+      "threshold": "information only: shared upstream breaks with and without a decode running; any break in the app only is reported as a recorder finding",
+      "ledger": [
+        { "table": "open", "match": "Shared upstream breaks in the recording rig are unexplained", "kind": "info" }
+      ]
+    },
+    {
+      "id": "rename-engines",
+      "title": "Every engine renamed away: the app still records and shows its message",
+      "priority": "P2", "order": 40, "script": "gates/rename-engines.ps1", "group": "interface",
+      "needs": { "interface": true, "ac": true }, "interactive": false,
+      "est_minutes": { "low": 12, "mid": 12 },
+      "quick": { "minutes": 12, "note": "as designed" },
+      "threshold": "both 3-minute recordings pass; the banner is present with the engines renamed and absent with them present",
+      "ledger": [
+        { "table": "gates", "match": "Every engine renamed away: the app still records", "kind": "verdict" }
+      ]
+    },
+    {
+      "id": "speed-table-cpu",
+      "title": "Speed table on the CPU (AVX2, and AVX-512 where the CPU has it)",
+      "priority": "P2", "order": 50, "script": "gates/speed-table-cpu.ps1", "group": "long",
+      "needs": { "ac": true }, "interactive": false,
+      "est_minutes": { "low": 125, "mid": 90 },
+      "quick": { "minutes": 6, "note": "1 model (small), 1 clip (English)" },
+      "threshold": "information: same table as the graphics rows, per CPU engine; a warm-up RTF over 2 is one run, marked impractical",
+      "depends_on": [ "engines-info" ],
+      "ledger": [
+        { "table": "gates", "match": "Speed tables: `wb-engine bench`, four models", "kind": "info" },
+        { "table": "open", "match": "Hinglish (a large-v3 model) ran at about RTF 2.5 to 3.7 on the Legion at 8 threads", "kind": "info" },
+        { "table": "open", "match": "The choice of a night (and rolling) model for code-switched sessions", "kind": "info" }
+      ]
+    },
+    {
+      "id": "batch-scripts",
+      "title": "Three FLEURS clips per language through medium: right script, no broken text",
+      "priority": "P2", "order": 60, "script": "gates/batch-scripts.ps1", "group": "long",
+      "needs": {}, "interactive": false,
+      "est_minutes": { "low": 30, "mid": 25 },
+      "quick": { "minutes": 6, "note": "1 clip per language" },
+      "threshold": "every run exits 0; the share of letters in the language's script is 100%; no broken text",
+      "depends_on": [ "engines-info" ],
+      "ledger": [
+        { "table": "gates", "match": "`batch`: three FLEURS clips per language (en, hi, ur)", "kind": "verdict" }
+      ]
+    },
+    {
+      "id": "full-check",
+      "title": "System check (full) and the 30 s against 60 s excerpt comparison",
+      "priority": "P2", "order": 70, "script": "gates/full-check.ps1", "group": "long",
+      "needs": { "ac": true }, "interactive": false,
+      "est_minutes": { "low": 108, "mid": 85 },
+      "quick": { "skipped": true, "minutes": 0, "note": "skipped under -Quick" },
+      "threshold": "the check completes within the 120 minute limit; quick against full RTFs reported with the 10% flag",
+      "depends_on": [ "quick-check" ],
+      "ledger": [
+        { "table": "gates", "match": "One full check under `emu-low` and the validity check", "kind": "info" }
+      ]
+    },
+    {
+      "id": "mic-run",
+      "title": "Built-in microphone run: detector rates, mute and room-silence windows, known speech kept local",
+      "priority": "P2", "order": 80, "script": "gates/mic-run.ps1", "group": "mic",
+      "needs": { "ac": true, "mic": true }, "interactive": false,
+      "est_minutes": { "low": 150, "mid": 150 },
+      "quick": { "minutes": 18, "note": "15 minutes with a 1-minute mute and a 1-minute room silence" },
+      "threshold": "information: zero_gap and repeated_block firings, false alarms and real dropouts against both references; a mute must not count as a dropout; the app equals both references",
+      "ledger": [
+        { "table": "open", "match": "Measure the `zero_gap` and `repeated_block` rates of the recorder on real audio", "kind": "info" },
+        { "table": "open", "match": "Validate `repeated_block` on real audio", "kind": "info" }
+      ]
+    },
+    {
+      "id": "supervisor-kill",
+      "title": "Batch engine killed at 5 random points (low value: Phase 4's supervisor replaces it)",
+      "priority": "P3", "order": 10, "script": "gates/supervisor-kill.ps1", "group": "long",
+      "needs": { "ac": true }, "interactive": false,
+      "est_minutes": { "low": 80, "mid": 70 },
+      "quick": { "minutes": 16, "note": "case 1 only" },
+      "threshold": "the supervisor restarts the engine; the committed segments equal an uninterrupted run; no segment lost or repeated; no watchdog kill in the long-decode cases",
+      "depends_on": [ "engines-info" ],
+      "ledger": [
+        { "table": "gates", "match": "Batch engine killed at 5 random points", "kind": "verdict" },
+        { "table": "gates", "match": "Speed after the heartbeat callbacks", "kind": "verdict" }
+      ]
+    }
+  ]
+}
