@@ -1,0 +1,116 @@
+STELMAR GATE PACK
+=================
+
+What this is
+------------
+A folder that tests the STELMAR Voice Workbench recorder and speech engines on THIS laptop, with no
+network and nothing to install. It runs a list of checks one after another, asks you for the few
+things only a person can do (move a cable, switch Wi-Fi off, type RESTART), and at the end makes one
+zip file of results. Someone then reads that zip on the development computer.
+
+You do not need to understand the checks. You need to follow the screen.
+
+What to bring for each laptop
+-----------------------------
+ 1. This folder on the USB drive (about 5 GB).
+ 2. The laptop's charger. The laptop must stay on mains power the whole time.
+ 3. The USB audio interface, with one short audio cable from an OUTPUT socket of the interface to an
+    INPUT socket of the same interface (the "loop-back" cable). Plug the interface into the laptop.
+ 4. A fast external SSD (the pack makes a second copy of every recording there). Plug it in.
+ 5. A quiet room for the microphone test (about 2.5 hours, near the end). Do not talk during it.
+
+Before you start (5 minutes)
+----------------------------
+ 1. Copy the whole folder from the USB drive to the laptop's OWN internal drive (for example
+    C:\STELMAR-Gate\gate-pack). Do not run it from the USB drive: the models and the recording must
+    be on the same disk, and a USB drive is slower and gives wrong answers.
+ 2. Close these programs if they are open (they disturb the measurements): LatencyMon, RTSS (RivaTuner),
+    MSI Afterburner, Steam, Nahimic and any other "audio booster", game overlay or screen recorder.
+ 3. Plug in the charger. Wi-Fi stays ON until the pack asks you to switch it off.
+ 4. Do not run anything else on the laptop while the pack runs. Let the screen stay on.
+
+How to start
+------------
+ Right-click  Start-Gates.cmd  and choose "Run as administrator", then answer yes to the Windows
+ question. (Administrator rights are needed to clear the file cache for the cold-start checks and to
+ register the "carry on after the restart" task. The pack changes no security settings.)
+
+ The first time it asks: "LOW laptop or MID laptop? Type L or M". Use L for the weakest laptop and M
+ for the other one. Type it once. After that it remembers.
+
+ If Windows or your antivirus blocks a file, the pack says which one and stops. Do NOT turn protection
+ off. Tell the pack owner which file and what Windows said.
+
+What it does, in order
+----------------------
+ The pack works through a list. The most important checks come first. The screen shows what it is
+ doing and about how long is left. The list is saved after every check, so you can close the window
+ or the laptop can restart and it carries on where it stopped (run Start-Gates.cmd again as
+ administrator and it continues).
+
+ Day 1 (about 6 hours per laptop):
+   - The laptop describes itself and checks its programs (15 minutes).
+   - The quick system check and the speed tables on the graphics chip (1 to 2 hours, no cables needed).
+   - The restart check. The pack says "A restart is needed" and waits. Type RESTART and press Enter.
+     The laptop restarts, you log in, and the pack carries on by itself within a minute. Do not
+     start anything yourself after logging in. Let the pack's window open on its own.
+   - The recorder checks on the audio interface: 30 minutes under heavy load straight after the
+     restart, then a 2-hour recording, then panic and kill tests (about 4 hours in all).
+   - The network test: the pack asks you to switch Wi-Fi OFF (and unplug any network cable), runs a
+     25-minute test, then asks you to switch it back ON. Do not forget to switch it back on.
+
+ Day 2 (about 11 hours per laptop; see "Two laptops" below):
+   - More recorder checks (cold-cache hashing, background decoding), the speed tables on the
+     processor, a full system check, and the 2.5-hour microphone test in a quiet room.
+
+ You can stop at any time. Anything not finished is marked "waiting" in the results.
+
+Two laptops, one interface
+--------------------------
+ There is only one audio interface and one SSD for both laptops. The pack tells you when it needs the
+ interface ("Plug the audio interface in"). When one laptop's recorder checks are done, move the
+ interface, its cable and the SSD to the other laptop. Each move takes about 10 minutes: the pack tests
+ the cable itself before it records anything and says so if the cable is wrong.
+
+ Gates that need no cable (speed tables, system checks, the network test) can run on one laptop while
+ the interface is on the other.
+
+When the pack asks you something
+--------------------------------
+ - "A restart is needed": type RESTART and press Enter. Nothing else restarts the laptop.
+ - "Switch the network OFF": switch Wi-Fi off, unplug the network cable, press Enter. Type SKIP to do
+   this part later.
+ - "Plug in the audio interface": plug it in, then press Enter.
+ - "Close LatencyMon / RTSS...": close the named programs, then run Start-Gates.cmd again.
+ - Anything in red: read it aloud to the pack owner. It says what to do.
+
+If something goes wrong
+-----------------------
+ - The window closed or the laptop restarted by itself: run Start-Gates.cmd as administrator again.
+ - You want to see what is done: right-click Start-Gates.cmd, Run as administrator is not needed for
+   this:  Start-Gates.cmd -Status
+ - Run one check again:  Start-Gates.cmd -Only soak     (use the name shown on the screen)
+ - Repeat the checks that failed:  Start-Gates.cmd -Retry
+ - The pack changed the volume, the microphone mute or the power plan and you want it back at once:
+   Start-Gates.cmd -Cleanup     (it also removes the "carry on after restart" task)
+ - Check that no file of the pack was damaged when it was copied:  Start-Gates.cmd -Verify
+
+When it is finished
+-------------------
+ At the end the screen says "end of this run" and lists every check: PASS, FAIL, INFO (numbers for
+ people to read), INVALID (the run was disturbed; run it again) or "waiting" (needs something it did
+ not have; the reason is shown). It also lists anything it left changed on the laptop. Then:
+   1. Run  Start-Gates.cmd -Cleanup  once, so volume, mute and the restart task are put back.
+   2. Switch Wi-Fi back ON if it is off.
+   3. Copy the file  gate-results-<laptop name>.zip  (next to this README) to the USB drive and give
+      it to the pack owner. It holds logs and numbers only: no audio recordings of speech, no models.
+      The zip may be copied more than once during the two days; the last one has everything.
+
+What stays on the laptop
+------------------------
+ The folder  work\  inside the pack holds the recordings of the test signal and the 10-minute
+ microphone sample used to compare recordings. They are not in the zip. Delete the whole pack folder
+ when the pack owner says the results are in. The SSD holds only copies of the test recordings.
+
+This pack never connects to the network, sends nothing anywhere, and installs nothing. It needs no
+development tools: everything it runs is in this folder.
