@@ -184,7 +184,12 @@ fn a_real_engine_bench_starts_suspended_in_its_own_job_and_reports_its_peak_agai
     )
     .unwrap();
     if let Some(r) = &second.report {
-        writeln!(text, "run 2 bench report: rtf {:.3}, segments {}", r.rtf_median, r.segments).unwrap();
+        writeln!(
+            text,
+            "run 2 bench report: rtf {:.3}, segments {}",
+            r.rtf_median, r.segments
+        )
+        .unwrap();
     }
     std::fs::write(out.join("report.txt"), &text).unwrap();
     println!("{text}");
