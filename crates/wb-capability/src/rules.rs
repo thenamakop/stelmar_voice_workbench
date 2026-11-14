@@ -633,8 +633,21 @@ pub fn decide(p: &Profile, r: &Rankings, o: &Options) -> Decision {
     // Live text runs beside the recorder like processing while recording does, so it needs the same
     // passed recorder safety run for the chosen setup (a partial check that left it out offers no live text).
     // The reason sits in every language's hard reasons (an operator's override can lift soft reasons only), also
-    // where live was not offered for another reason.
+    // where live was not offered for another reason. Streaming live runs on the discrete graphics card, so a
+    // failed safety run of that card (alone or in the hybrid setup) rules it out even when the processor was
+    // chosen for the rolling models.
     let safety_for_live = safety_of(p, config).map(|s| s.passed);
+    let gpu_failed = standins
+        .iter()
+        .filter_map(|(m, _)| m.config.gpu_index())
+        .any(|i| {
+            [
+                DeviceConfig::Gpu { index: i },
+                DeviceConfig::Hybrid { gpu: i },
+            ]
+            .iter()
+            .any(|c| safety_of(p, *c).is_some_and(|s| !s.passed))
+        });
     for lang in Lang::ALL {
         let rolling = picks.get(&lang).cloned();
         let mut live = live_decision(p, r, o, &b, lang, rolling.as_ref(), &standins);
@@ -644,6 +657,9 @@ pub fn decide(p: &Profile, r: &Rankings, o: &Options) -> Decision {
             ),
             Some(false) => Some(
                 "The recorder safety test did not pass for this setup, so live text is not offered.",
+            ),
+            Some(true) if gpu_failed && live.kind.as_deref() == Some("streaming") => Some(
+                "The recorder safety test did not pass with the graphics card, so live text on it is not offered.",
             ),
             Some(true) => None,
         };

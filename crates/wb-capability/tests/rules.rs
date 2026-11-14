@@ -187,6 +187,54 @@ fn an_override_cannot_lift_a_missing_recorder_safety_run_even_where_live_was_onl
 }
 
 #[test]
+fn live_on_the_graphics_card_is_ruled_out_by_a_failed_graphics_safety_run() {
+    // A discrete card whose own recorder safety run failed while the processor passed and keeps up: the
+    // processor is chosen for the rolling models, the live test on the card passes, and streaming live text on
+    // that card is still not offered; the override cannot lift it.
+    let mut p = legion_native();
+    let card = DeviceConfig::Gpu { index: 1 };
+    for m in p
+        .measurements
+        .iter_mut()
+        .filter(|m| m.config == DeviceConfig::Cpu)
+    {
+        m.rtf = 0.3;
+    }
+    p.measurements.push(rolling(
+        "large-v3-turbo-q5_0",
+        Lang::En,
+        DeviceConfig::Cpu,
+        0.3,
+        0.91,
+        None,
+    ));
+    assert!(
+        decide_with(&p, false).languages[&Lang::En].live.offered,
+        "with every safety run passed, English live is offered"
+    );
+    for s in &mut p.recorder_safety {
+        if s.config == card {
+            s.passed = false;
+            s.overruns = 3;
+        }
+    }
+    let d = decide_with(&p, false);
+    assert_eq!(d.config.as_ref().unwrap().config, DeviceConfig::Cpu);
+    let en = &d.languages[&Lang::En];
+    assert!(!en.live.offered, "{en:?}");
+    assert!(
+        en.live
+            .hard_reasons
+            .iter()
+            .any(|r| r.contains("graphics card")),
+        "{en:?}"
+    );
+    let mut c = cap(p, false);
+    set_override(&mut c, OverrideKind::AllowLiveAnyway, true, true, "t");
+    assert!(!plan_session(&c, &[Lang::En]).live.selectable);
+}
+
+#[test]
 fn record_only_processes_nothing_while_recording() {
     let d = decide_with(&old_pc(), false);
     assert!(d.config.is_none());
