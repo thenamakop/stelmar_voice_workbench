@@ -17,7 +17,8 @@ What to bring for each laptop
  3. The USB audio interface, with one short audio cable from an OUTPUT socket of the interface to an
     INPUT socket of the same interface (the "loop-back" cable). Plug the interface into the laptop.
  4. A fast external SSD (the pack makes a second copy of every recording there). Plug it in.
- 5. A quiet room for the microphone test (about 2.5 hours, near the end). Do not talk during it.
+ 5. Only if this pack has the microphone test (Start-Gates.cmd -Status lists it): a quiet room for
+    it (about 2.5 hours, near the end). Do not talk during it.
 
 Before you start (5 minutes)
 ----------------------------
@@ -61,7 +62,7 @@ What it does, in order
 
  Day 2 (about 11 hours per laptop; see "Two laptops" below):
    - More recorder checks (cold-cache hashing, background decoding), the speed tables on the
-     processor, a full system check, and the 2.5-hour microphone test in a quiet room.
+     processor, a full system check, and, if this pack has it, the 2.5-hour microphone test in a quiet room.
 
  You can stop at any time. Anything not finished is marked "waiting" in the results.
 
@@ -108,8 +109,8 @@ When it is finished
 
 What stays on the laptop
 ------------------------
- The folder  work\  inside the pack holds the recordings of the test signal and the 10-minute
- microphone sample used to compare recordings. They are not in the zip. Delete the whole pack folder
+ The folder  work\  inside the pack holds the recordings of the test signal (and, if the microphone
+ test was run, its 10-minute microphone sample). They are not in the zip. Delete the whole pack folder
  when the pack owner says the results are in. The SSD holds only copies of the test recordings.
 
 This pack never connects to the network, sends nothing anywhere, and installs nothing. It needs no
