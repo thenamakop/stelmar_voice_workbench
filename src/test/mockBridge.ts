@@ -7,6 +7,9 @@ import type {
   InputDevice,
   OverrideKind,
   MirrorStatus,
+  QueueJob,
+  QueueSegment,
+  QueueSnapshot,
   PartRecord,
   RecorderStatus,
   RecoveredSession,
@@ -16,6 +19,9 @@ import type {
   Snapshot,
 } from "../ipc";
 import { planFor, profile, safeDefaults } from "./profiles";
+
+/** The queue the mock reports: none (no jobs), a busy day, an operator pause, or no queue at all. */
+export type MockQueue = "none" | "busy" | "paused" | "unavailable";
 
 export type MockState = "idle" | "recording" | "input_lost" | "recovery";
 
@@ -33,6 +39,8 @@ export interface MockOptions {
   checkRunning?: boolean;
   /** A partial check kept apart from the complete profile (a fixture name from src/test/profiles.ts). */
   partialCapability?: string;
+  /** What `queue_snapshot` answers; default "none" (an empty queue). */
+  queue?: MockQueue;
   /** Commands seen, in order (for assertions). */
   calls?: string[];
 }
@@ -147,6 +155,115 @@ export const RECOVERED: RecoveredSession = {
   removed_empty: [],
   quarantined: [],
 };
+
+const SESSION_FOLDER = "seminar-hall-b__parallel-track-sessions-i";
+
+function job(over: Partial<QueueJob> & Pick<QueueJob, "id" | "session" | "kind" | "state">): QueueJob {
+  return {
+    revision: "post-1",
+    cursor_ms: 0,
+    models_by_lang: { en: "small", hi: "turbo-q5_0" },
+    languages: ["en", "hi"],
+    units_total: 0,
+    units_committed: 0,
+    units_running: 0,
+    audio_ms: 0,
+    remaining_audio_ms: 0,
+    error: null,
+    position: over.id,
+    ...over,
+  };
+}
+
+/** A busy day: the open session being transcribed 20 minutes behind, an earlier one done, the night pass waiting. */
+export const QUEUE_JOBS: QueueJob[] = [
+  job({
+    id: 1,
+    session: "2027-02-08__inaugural-session",
+    kind: "rolling",
+    state: "done",
+    cursor_ms: 5_400_000,
+    units_total: 18,
+    units_committed: 18,
+    audio_ms: 5_400_000,
+  }),
+  job({
+    id: 2,
+    session: SESSION_FOLDER,
+    kind: "rolling",
+    state: "running",
+    cursor_ms: 1_500_000,
+    units_total: 9,
+    units_committed: 5,
+    units_running: 1,
+    audio_ms: 2_715_000,
+    remaining_audio_ms: 1_215_000,
+    position: 1,
+  }),
+  job({
+    id: 3,
+    session: "2027-02-08__inaugural-session",
+    kind: "night",
+    state: "queued",
+    revision: "post-2",
+    models_by_lang: { hi: "large-v3-q5_0" },
+    languages: ["hi"],
+    units_total: 18,
+    audio_ms: 5_400_000,
+    remaining_audio_ms: 5_400_000,
+    position: 2,
+  }),
+];
+
+export function queueSnapshot(kind: MockQueue): QueueSnapshot {
+  const scheduler = {
+    profile_changes: [] as string[],
+    paused: null as string | null,
+    operator_paused: false,
+    free_ram_bytes: 7.4 * 1024 ** 3,
+    fewer_threads: 0,
+    log: [
+      "started unit 6 of the session on the graphics engine",
+      "resumed: the recorder has had no dropout for 60 s",
+      "paused: the recorder reported a dropout",
+    ],
+  };
+  if (kind === "none") return { jobs: [], scheduler, ready_text: "Nothing is waiting to be transcribed" };
+  if (kind === "paused")
+    return {
+      jobs: QUEUE_JOBS.map((j) =>
+        j.state === "running" ? { ...j, state: "paused" as const, units_running: 0 } : j,
+      ),
+      scheduler: { ...scheduler, paused: "the operator paused the queue", operator_paused: true },
+      ready_text: "All transcripts ready by 19:40",
+    };
+  return { jobs: QUEUE_JOBS, scheduler, ready_text: "All transcripts ready by 19:40" };
+}
+
+/** Rows the rolling pass has committed for the open session: English, Hindi, mixed and Urdu. */
+export const SEGMENTS: QueueSegment[] = [
+  ["en", false, 12_000, "Good afternoon, and welcome to the second parallel track on rooftop solar."],
+  ["hi", false, 41_000, "आज हम तीन इमारतों के आँकड़ों पर बात करेंगे।"],
+  ["hi", true, 78_000, "तो हमारा main finding यह है कि battery storage से peak load काफ़ी कम हुआ।"],
+  ["en", false, 131_000, "The second slide shows the monthly output against the campus average."],
+  ["ur", false, 190_000, "اس مطالعے میں ہم نے تین عمارتوں کی چھتوں پر لگے سولر پینلوں کا ڈیٹا دیکھا۔"],
+  ["hi", true, 262_000, "Next, यह graph बताता है कि सर्दियों में output कितना गिरता है।"],
+].map(([lang, mixed, start, text]) => ({
+  revision: "post-1",
+  start_ms: start as number,
+  end_ms: (start as number) + 20_000,
+  text: text as string,
+  lang: lang as string,
+  lang_prob: 0.96,
+  mixed: mixed as boolean,
+  dir: lang === "ur" ? "rtl" : "ltr",
+  avg_logprob: -0.2,
+  no_speech_prob: 0.01,
+  model: lang === "en" ? "small" : "turbo-q5_0",
+  device: { kind: "gpu" as const, index: 0 },
+  flags: [],
+  created_at: "2027-02-08T12:20:00+05:30",
+}));
 
 function snapshot(state: MockState): Snapshot {
   const base: Snapshot = {
@@ -284,6 +401,22 @@ export function bridge(opts: MockOptions = {}) {
         }
         return null;
       }
+      case "queue_snapshot":
+        if (opts.queue === "unavailable")
+          throw new Error("Post-processing is not available: no engines or models were found.");
+        return queueSnapshot(opts.queue ?? "none");
+      case "queue_pause":
+      case "queue_resume":
+      case "queue_move_up":
+      case "queue_change_model":
+      case "set_language_lock":
+        return cmd === "queue_move_up" ? true : null;
+      case "import_session":
+        return (args as { source: string }).source.split(/[\\/]/).pop() ?? "session";
+      case "session_transcript":
+        return (args as { session: string }).session === SESSION_FOLDER && opts.queue && opts.queue !== "none"
+          ? SEGMENTS
+          : [];
       case "start_recording": {
         recording = true;
         const req = (args as { request: { title: string; hall?: string | null } }).request;

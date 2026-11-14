@@ -55,6 +55,8 @@ export interface Recorder {
   refreshInputs: () => Promise<void>;
   /** Listens to the system check's progress events; returns the function that stops listening. */
   subscribeCheck: (listener: (event: AppEvent) => void) => () => void;
+  /** Listens to the queue's events (queue_update, scheduler_status, segment_committed); returns the unsubscribe. */
+  subscribeQueue: (listener: (event: AppEvent) => void) => () => void;
   saveSettings: (settings: Settings) => Promise<boolean>;
 }
 
@@ -103,6 +105,14 @@ export function useRecorder(notify: Notify): Recorder {
     checkListeners.current.add(listener);
     return () => {
       checkListeners.current.delete(listener);
+    };
+  }, []);
+
+  const queueListeners = useRef(new Set<(event: AppEvent) => void>());
+  const subscribeQueue = useCallback((listener: (event: AppEvent) => void) => {
+    queueListeners.current.add(listener);
+    return () => {
+      queueListeners.current.delete(listener);
     };
   }, []);
 
@@ -175,6 +185,11 @@ export function useRecorder(notify: Notify): Recorder {
       case "check_done":
       case "check_failed":
         checkListeners.current.forEach((listener) => listener(e));
+        break;
+      case "queue_update":
+      case "scheduler_status":
+      case "segment_committed":
+        queueListeners.current.forEach((listener) => listener(e));
         break;
     }
   }, []);
@@ -359,6 +374,7 @@ export function useRecorder(notify: Notify): Recorder {
     recover,
     refreshInputs,
     subscribeCheck,
+    subscribeQueue,
     saveSettings,
   };
 }

@@ -148,7 +148,10 @@ export type AppEvent =
   | { kind: "close_blocked" }
   | { kind: "check_progress"; progress: CheckProgress }
   | { kind: "check_done" }
-  | { kind: "check_failed"; message: string };
+  | { kind: "check_failed"; message: string }
+  | { kind: "queue_update" }
+  | { kind: "scheduler_status" }
+  | { kind: "segment_committed"; session: string; segments: QueueSegment[] };
 
 export interface StartRequest {
   title: string;
@@ -473,3 +476,79 @@ export const setOverride = (kind: OverrideKind, enabled: boolean, confirmed: boo
   invoke<CapabilityView>("set_override", { kind, enabled, confirmed });
 export const sessionPlan = (english: boolean, hindiUrdu: boolean, script: HindiUrduScript) =>
   invoke<SessionPlan | null>("session_plan", { english, hindiUrdu, script });
+
+// ---- Post-processing queue (Phase 4) ---------------------------------------------------------------
+// Shapes follow src-tauri/src/queue/mod.rs (JobRow, SchedulerRow, QueueSnapshot) and crates/wb-queue (Segment).
+
+export type JobKind = "rolling" | "night" | "translate" | "import";
+export type JobStateName = "queued" | "running" | "paused" | "done" | "parked";
+
+export interface QueueJob {
+  id: number;
+  /** The session's folder name. */
+  session: string;
+  kind: JobKind;
+  revision: string;
+  state: JobStateName;
+  cursor_ms: number;
+  /** Model id for each language code the job decodes. */
+  models_by_lang: Record<string, string>;
+  languages: string[];
+  units_total: number;
+  units_committed: number;
+  units_running: number;
+  audio_ms: number;
+  remaining_audio_ms: number;
+  error: string | null;
+  position: number;
+}
+
+export interface QueueScheduler {
+  /** What differs between this computer and its saved check; safe defaults are in force when not empty. */
+  profile_changes: string[];
+  /** Why processing is held right now (null when it runs). */
+  paused: string | null;
+  operator_paused: boolean;
+  free_ram_bytes: number;
+  fewer_threads: number;
+  /** Newest first. */
+  log: string[];
+}
+
+export interface QueueSnapshot {
+  jobs: QueueJob[];
+  scheduler: QueueScheduler;
+  /** "All transcripts ready by 19:40" (IST), or that nothing is waiting. */
+  ready_text: string;
+}
+
+export interface QueueSegment {
+  revision: string;
+  start_ms: number;
+  end_ms: number;
+  text: string;
+  /** "en", "hi" or "ur". */
+  lang: string;
+  lang_prob: number;
+  /** More than one language inside this segment. */
+  mixed: boolean;
+  dir: string;
+  avg_logprob: number;
+  no_speech_prob: number;
+  model: string;
+  device: { kind: "cpu" } | { kind: "gpu"; index: number };
+  flags: string[];
+  created_at: string;
+}
+
+export const queueSnapshot = () => invoke<QueueSnapshot>("queue_snapshot");
+export const queuePause = (job: number | null) => invoke<void>("queue_pause", { job });
+export const queueResume = (job: number | null) => invoke<void>("queue_resume", { job });
+export const queueMoveUp = (job: number) => invoke<boolean>("queue_move_up", { job });
+export const queueChangeModel = (job: number, modelsByLang: Record<string, string>) =>
+  invoke<void>("queue_change_model", { job, modelsByLang });
+export const importSession = (source: string) => invoke<string>("import_session", { source });
+export const setLanguageLock = (lang: string | null, audioMs: number) =>
+  invoke<void>("set_language_lock", { lang, audioMs });
+export const sessionTranscript = (session: string, revision?: string) =>
+  invoke<QueueSegment[]>("session_transcript", { session, revision: revision ?? null });

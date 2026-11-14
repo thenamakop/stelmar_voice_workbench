@@ -1,11 +1,22 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Badge, Button, Icon, IconButton, ProgressBar, Select, Switch, Tabs, Tag } from "../ds";
 import type { BadgeTone } from "../ds";
 import { px } from "../ds/units";
-import type { MirrorStatus, RecorderStatus, Snapshot } from "../ipc";
+import type { MirrorStatus, QueueJob, QueueSegment, RecorderStatus, Snapshot } from "../ipc";
 import { clock, istDateTime, languages, meterPercent, minutes, partFile } from "../recording/format";
 import type { Level, Recorder } from "../recording/useRecorder";
+import type { QueueState } from "../queue/useQueue";
+import {
+  behindMs,
+  behindText,
+  languageBadge,
+  partProgress,
+  percent,
+  rollingJob,
+  rowKind,
+  sessionName,
+} from "../queue/view";
 import { KeyValue, MainWithSide, Note, PageHead, SideCard } from "../shell/layout";
 import type { CapabilityState } from "../system/useCapability";
 import { liveUnavailableReason } from "./liveReason";
@@ -13,9 +24,10 @@ import { transcriptionRows } from "../system/view";
 import { StartSessionDialog } from "./StartSessionDialog";
 import { NoEngineBanner, useRegistry } from "./RegistrySections";
 
-// Record screen per design/mockups/record-only.html. Phase 1: input, meter, recording state,
-// parts strip (Recording and Waiting until Phase 4 adds transcription) and backup. While no
-// session is open, the rows are sample text that shows the English, Hindi, mixed and Urdu fonts.
+// Record screen per design/mockups/record-only.html. Input, meter, recording state, the parts strip
+// (Recording, Transcribing, Transcribed, Waiting) and backup. In record mode the rows are the committed
+// segments of the session's rolling pass, each with its language Badge. While no session is open, the rows
+// are sample text that shows the English, Hindi, mixed and Urdu fonts.
 
 type Lang = "en" | "hi" | "ur" | "mixed";
 
@@ -166,7 +178,7 @@ function Meter({ level }: { level: Level | null }) {
   );
 }
 
-type PartTone = "rec" | "wait" | "paused" | "lost";
+type PartTone = "rec" | "wait" | "paused" | "lost" | "done" | "run";
 
 /** One tile of the parts strip (.part in mockup.css). */
 function PartTile({ range, label, tone }: { range: string; label: string; tone: PartTone }) {
@@ -179,6 +191,12 @@ function PartTile({ range, label, tone }: { range: string; label: string; tone: 
       color: "var(--status-warning-fg)",
     },
     lost: { background: "var(--status-danger-bg)", border: "transparent", color: "var(--status-danger-fg)" },
+    done: {
+      background: "var(--status-success-bg)",
+      border: "transparent",
+      color: "var(--status-success-fg)",
+    },
+    run: { background: "var(--paper-0)", border: "var(--ink-900)", color: "var(--ink-900)" },
   };
   const s = styles[tone];
   return (
@@ -209,14 +227,26 @@ function PartTile({ range, label, tone }: { range: string; label: string; tone: 
   );
 }
 
-function PartsStrip({ snapshot }: { snapshot: Snapshot }) {
+function PartsStrip({ snapshot, job }: { snapshot: Snapshot; job: QueueJob | null }) {
   const rec = snapshot.recorder;
-  const tiles: { key: string; range: string; label: string; tone: PartTone }[] = snapshot.parts.map((p) => ({
-    key: `${p.part}-${p.start_ms}`,
-    range: `${minutes(p.start_ms)}–${minutes(p.start_ms + p.duration_ms)}`,
-    label: "Waiting",
-    tone: "wait",
-  }));
+  // The first part the job's cursor has not passed is the one being transcribed.
+  const firstOpen = snapshot.parts.findIndex((p) => !job || job.cursor_ms < p.start_ms + p.duration_ms);
+  const tiles: { key: string; range: string; label: string; tone: PartTone }[] = snapshot.parts.map(
+    (p, i) => {
+      const progress = partProgress(p, job, i === firstOpen);
+      return {
+        key: `${p.part}-${p.start_ms}`,
+        range: `${minutes(p.start_ms)}–${minutes(p.start_ms + p.duration_ms)}`,
+        label:
+          progress.tone === "done"
+            ? "Transcribed"
+            : progress.tone === "run"
+              ? `Transcribing ${percent(progress.fraction)}`
+              : "Waiting",
+        tone: progress.tone,
+      };
+    },
+  );
   if (rec && rec.state !== "stopped") {
     const start = rec.audio_ms - rec.part_audio_ms;
     tiles.push({
@@ -319,9 +349,31 @@ export interface RecordScreenProps {
   hasProfile: boolean;
   recorder: Recorder;
   capability: CapabilityState;
+  queue: QueueState;
 }
 
-export function RecordScreen({ hasProfile, recorder, capability }: RecordScreenProps) {
+/** Alt+1/2/3 lock English, Hindi or Urdu; Alt+4 returns to detection (PLAN section 4). */
+const LOCK_KEYS: Record<string, string | null> = { "1": "en", "2": "hi", "3": "ur", "4": null };
+const LOCK_LANGUAGES: [string, string][] = [
+  ["en", "English"],
+  ["hi", "Hindi"],
+  ["ur", "Urdu"],
+];
+
+/** The rows of the rolling transcript: one per committed segment, newest at the bottom. */
+function SegmentRows({ segments }: { segments: QueueSegment[] }) {
+  return (
+    <>
+      {segments.slice(-300).map((s) => (
+        <Row key={s.start_ms} time={clock(s.start_ms)} badge={<Badge>{languageBadge(s)}</Badge>}>
+          {rowText(rowKind(s), s.text)}
+        </Row>
+      ))}
+    </>
+  );
+}
+
+export function RecordScreen({ hasProfile, recorder, capability, queue }: RecordScreenProps) {
   const [tab, setTab] = useState("transcript");
   const [startOpen, setStartOpen] = useState(false);
   const { snapshot, level, inputs, settings, busy } = recorder;
@@ -345,6 +397,47 @@ export function RecordScreen({ hasProfile, recorder, capability }: RecordScreenP
   const partFraction = rec && rec.part !== null ? rec.part_audio_ms / (rec.part_seconds * 1000) : 0;
   const partLeftMin = rec ? Math.max(0, Math.ceil((rec.part_seconds * 1000 - rec.part_audio_ms) / 60000)) : 0;
   const input = rec?.input ?? session?.input ?? null;
+
+  // The session whose rolling transcript is shown: the open one, else the one just stopped.
+  const shownDir = session?.dir ?? snapshot?.last_stop?.recorder.session_dir ?? null;
+  const shownName = shownDir ? sessionName(shownDir) : null;
+  const { watch } = queue;
+  useEffect(() => watch(shownName), [watch, shownName, queue.snapshot]);
+  const segments = queue.segmentsFor(shownName);
+  const job = rollingJob(queue.snapshot, shownName);
+  const behind = behindMs(rec?.audio_ms ?? snapshot?.last_stop?.recorder.audio_ms ?? 0, job);
+
+  // Language locks: the operator's choice for this session (null: detection), saved with the audio time.
+  const [lock, setLock] = useState<string | null>(null);
+  const { lockLanguage } = queue;
+  const audioMsRef = useRef(0);
+  const recAudioMs = rec?.audio_ms ?? 0;
+  useEffect(() => {
+    audioMsRef.current = recAudioMs;
+  }, [recAudioMs]);
+  const lockTo = useCallback(
+    (lang: string | null) => {
+      void lockLanguage(lang, audioMsRef.current).then((ok) => {
+        if (ok) setLock(lang);
+      });
+    },
+    [lockLanguage],
+  );
+  useEffect(() => {
+    if (!recording) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.altKey || e.ctrlKey || e.metaKey || !(e.key in LOCK_KEYS)) return;
+      e.preventDefault();
+      lockTo(LOCK_KEYS[e.key] ?? null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [recording, lockTo]);
+  const [lockedFor, setLockedFor] = useState<string | null>(null);
+  if (lockedFor !== (session?.dir ?? null)) {
+    setLockedFor(session?.dir ?? null);
+    setLock(null);
+  }
 
   return (
     <>
@@ -454,13 +547,32 @@ export function RecordScreen({ hasProfile, recorder, capability }: RecordScreenP
             </SideCard>
             <SideCard title="Language">
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                <Tag selected>English</Tag>
-                <Tag selected>Hindi</Tag>
-                <Tag>Urdu</Tag>
+                {LOCK_LANGUAGES.map(([code, name]) => {
+                  const expected = (session?.expected_languages ?? ["en", "hi"]).includes(code);
+                  return (
+                    <Tag
+                      key={code}
+                      selected={lock === null ? expected : lock === code}
+                      role="button"
+                      aria-label={recording ? `Lock to ${name}` : name}
+                      aria-pressed={lock === code}
+                      onClick={recording && expected ? () => lockTo(code) : undefined}
+                    >
+                      {name}
+                    </Tag>
+                  );
+                })}
               </div>
               <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 8 }}>
-                Per sentence · Alt+1/2/3 lock · Alt+4 detect
+                {lock === null
+                  ? "Per sentence · Alt+1/2/3 lock · Alt+4 detect"
+                  : `Locked to ${LOCK_LANGUAGES.find(([c]) => c === lock)?.[1] ?? lock} · Alt+4 detect`}
               </div>
+              {recording && lock !== null && (
+                <Button size="sm" variant="secondary" style={{ marginTop: 8 }} onClick={() => lockTo(null)}>
+                  Detect Again
+                </Button>
+              )}
             </SideCard>
             <SideCard title="Transcription">
               <Switch label="Live captions" disabled />
@@ -470,11 +582,18 @@ export function RecordScreen({ hasProfile, recorder, capability }: RecordScreenP
                 {liveUnavailableReason(hasProfile, capability.view?.capability)}
               </div>
               <KeyValue
-                rows={transcriptionRows(capability.view?.capability).map(([k, v]) => [
-                  k,
-                  v,
-                  { mono: k === "Speed" },
-                ])}
+                rows={[
+                  ...transcriptionRows(capability.view?.capability).map(
+                    ([k, v]) => [k, v, { mono: k === "Speed" }] as [string, string, { mono?: boolean }],
+                  ),
+                  ...(shownName
+                    ? ([["Behind the room", behindText(behind), { mono: true }]] as [
+                        string,
+                        string,
+                        { mono?: boolean },
+                      ][])
+                    : []),
+                ]}
               />
             </SideCard>
             <SideCard title="Backup">
@@ -552,14 +671,19 @@ export function RecordScreen({ hasProfile, recorder, capability }: RecordScreenP
           <Icon name={recording ? "clock" : "info"} size={16} color="var(--text-secondary)" />
           <Note>
             {recording
-              ? session.backup_root
-                ? "Recording to this machine in 10-minute parts, copied to the backup folder as they are written. Transcription of closed parts comes in a later update."
-                : "Recording to this machine in 10-minute parts. No backup folder is set. Transcription of closed parts comes in a later update."
-              : "Transcription is not built yet. The lines below are sample text that checks the English, Hindi, mixed and Urdu fonts."}
+              ? `${
+                  session.backup_root
+                    ? "Recording to this machine in 10-minute parts, copied to the backup folder as they are written."
+                    : "Recording to this machine in 10-minute parts. No backup folder is set."
+                } Each closed part is transcribed in the background. ${queue.snapshot?.ready_text ?? ""}`.trim()
+              : shownName
+                ? `Session stopped. ${queue.snapshot?.ready_text ?? "The transcript fills in as the queue works."}`
+                : "No session is open. The lines below are sample text that checks the English, Hindi, mixed and Urdu fonts."}
           </Note>
         </div>
-        {recording && snapshot && <PartsStrip snapshot={snapshot} />}
+        {recording && snapshot && <PartsStrip snapshot={snapshot} job={job} />}
         <div style={{ paddingTop: 6 }}>
+          {shownName && <SegmentRows segments={segments} />}
           {recording ? (
             <Row
               time={clock(rec ? rec.audio_ms - rec.part_audio_ms : 0)}
@@ -578,6 +702,14 @@ export function RecordScreen({ hasProfile, recorder, capability }: RecordScreenP
                 />
               </div>
             </Row>
+          ) : shownName ? (
+            segments.length === 0 && (
+              <Row time="00:00:00" badge={<Icon name="loader" size={16} color="var(--ink-500)" />}>
+                <div style={{ fontSize: 14, lineHeight: px(22), color: "var(--text-secondary)" }}>
+                  Waiting for the queue to reach this session
+                </div>
+              </Row>
+            )
           ) : (
             <>
               {SAMPLE_ROWS.map((r) => (

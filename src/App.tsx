@@ -5,6 +5,9 @@ import { hasCapabilityProfile } from "./ipc";
 import type { RecoveredSession } from "./ipc";
 import { clock, gigabytes, istDateTime } from "./recording/format";
 import { useRecorder } from "./recording/useRecorder";
+import { useQueue } from "./queue/useQueue";
+import type { QueueState } from "./queue/useQueue";
+import { statusText } from "./queue/view";
 import type { Recorder } from "./recording/useRecorder";
 import { initialRoute, type RouteId } from "./routes";
 import { QueueScreen } from "./screens/QueueScreen";
@@ -35,6 +38,7 @@ export function App() {
   const notify = useCallback((t: ToastState) => setToast(t), []);
   const recorder = useRecorder(notify);
   const capability = useCapability(recorder.subscribeCheck, notify);
+  const queue = useQueue(recorder.subscribeQueue, notify);
 
   useEffect(() => {
     let cancelled = false;
@@ -104,6 +108,7 @@ export function App() {
         recorder={recorder}
         notify={notify}
         capability={capability}
+        queue={queue}
         onNavigate={setRoute}
       />
       <StatusBar
@@ -113,8 +118,8 @@ export function App() {
           </span>,
           ...(sys ? sys.items : []),
           recorder.snapshot?.recorder?.disk_free_bytes != null
-            ? `Queue: no jobs · disk ${gigabytes(recorder.snapshot.recorder.disk_free_bytes)} free`
-            : "Queue: no jobs",
+            ? `${statusText(queue.snapshot)} · disk ${gigabytes(recorder.snapshot.recorder.disk_free_bytes)} free`
+            : statusText(queue.snapshot),
         ]}
         trailing={
           sys && sys.trailing ? sys.trailing : recordingSession ? recordingSession.dir : "No session open"
@@ -210,6 +215,7 @@ function Screen({
   recorder,
   notify,
   capability,
+  queue,
   onNavigate,
 }: {
   route: RouteId | null;
@@ -217,15 +223,18 @@ function Screen({
   recorder: Recorder;
   notify: (t: ToastState) => void;
   capability: CapabilityState;
+  queue: QueueState;
   onNavigate: (r: RouteId) => void;
 }) {
   switch (route) {
     case "sessions":
       return <SessionsScreen />;
     case "record":
-      return <RecordScreen hasProfile={hasProfile} recorder={recorder} capability={capability} />;
+      return (
+        <RecordScreen hasProfile={hasProfile} recorder={recorder} capability={capability} queue={queue} />
+      );
     case "queue":
-      return <QueueScreen />;
+      return <QueueScreen queue={queue} capability={capability} />;
     case "review":
       return <ReviewScreen />;
     case "system":
