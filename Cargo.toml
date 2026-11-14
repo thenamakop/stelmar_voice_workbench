@@ -9,6 +9,7 @@ members = [
   "crates/wb-machine",
   "crates/wb-models",
   "crates/wb-recorder",
+  "crates/wb-queue",
   "crates/wb-supervisor",
   "crates/wb-emulate",
   "crates/wb-testbench",
