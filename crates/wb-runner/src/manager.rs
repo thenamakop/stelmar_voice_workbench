@@ -633,7 +633,29 @@ struct SlotObserver<'a> {
 }
 
 impl Observer for SlotObserver<'_> {
-    fn event(&mut self, _event: &Event) {}
+    fn event(&mut self, event: &Event) {
+        // The engine says why it failed in an `error` event just before it exits; without this the log would
+        // show only "Died { exit: 1 }" (found by the day-simulation smoke).
+        match event {
+            Event::Error {
+                code,
+                message,
+                fatal,
+            } => self.events.log(
+                LogLevel::Warn,
+                &format!(
+                    "{}: engine error {code}{}: {message}",
+                    self.who,
+                    if *fatal { " (fatal)" } else { "" }
+                ),
+            ),
+            Event::Warning { code, message } => self.events.log(
+                LogLevel::Info,
+                &format!("{}: engine warning {code}: {message}", self.who),
+            ),
+            _ => {}
+        }
+    }
 
     fn notice(&mut self, notice: &Notice) {
         let level = match notice {
@@ -648,5 +670,49 @@ impl Observer for SlotObserver<'_> {
             self.slot.clone(),
             self.expected_peak.saturating_sub(peak_bytes),
         );
+    }
+}
+
+#[cfg(test)]
+mod observer_tests {
+    use super::*;
+
+    #[derive(Default)]
+    struct Lines(Mutex<Vec<(LogLevel, String)>>);
+
+    impl Events for Lines {
+        fn committed(&self, _session: &str, _segments: &[Segment]) {}
+        fn changed(&self) {}
+        fn log(&self, level: LogLevel, text: &str) {
+            lock(&self.0).push((level, text.to_owned()));
+        }
+        fn problem(&self, _text: &str) {}
+    }
+
+    #[test]
+    fn an_engines_error_event_reaches_the_scheduler_log() {
+        let lines = Lines::default();
+        let headroom = Mutex::new(BTreeMap::new());
+        let mut obs = SlotObserver {
+            events: &lines,
+            who: "s: unit 0".into(),
+            headroom: &headroom,
+            slot: "gpu".into(),
+            expected_peak: 0,
+        };
+        obs.event(&Event::Error {
+            code: "out_of_memory".into(),
+            message: "the graphics driver refused 1 GiB".into(),
+            fatal: true,
+        });
+        obs.event(&Event::Heartbeat {
+            unit: 0,
+            phase: "compute".into(),
+        });
+        let got = lock(&lines.0).clone();
+        assert_eq!(got.len(), 1, "only the error is logged: {got:?}");
+        assert_eq!(got[0].0, LogLevel::Warn);
+        assert!(got[0].1.contains("out_of_memory"));
+        assert!(got[0].1.contains("refused 1 GiB"));
     }
 }

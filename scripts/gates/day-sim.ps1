@@ -220,12 +220,14 @@ try {
     $nightPlanned = $null
     $nightSkipped = $null
     $lastProgress = Get-Date
+    $lastLine = ''
     $progress = New-Object System.Collections.Generic.List[string]
     try {
       $emu = Start-Emulated 'day' 100
       while (-not $emu.HasExited) {
         $ref = [ref]$lines
         foreach ($l in (Read-NewLines $queueLog $ref)) {
+          $lastLine = $l
           if ($l -match 'DAY: started "(.+?)" in') {
             $title = $Matches[1]
             if (-not $startedTitles.ContainsKey($title)) {
@@ -272,7 +274,7 @@ try {
 
         if (((Get-Date) - $lastProgress).TotalSeconds -ge 120) {
           $lastProgress = Get-Date
-          $tail = @(Get-Content -LiteralPath $queueLog -Tail 1 -ErrorAction SilentlyContinue)
+          $tail = @($lastLine)
           Write-Host "$(Get-Date -Format 'HH:mm:ss') running $([int]((Get-Date) - $started).TotalMinutes) min; sessions started $($startedTitles.Count); last log: $($tail -join ' ')"
         }
         Start-Sleep -Milliseconds 1000

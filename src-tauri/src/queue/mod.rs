@@ -240,6 +240,22 @@ pub struct Queue {
 /// What the commands reach through Tauri's managed state.
 pub struct QueueState(pub Arc<Queue>);
 
+/// The folder of the session that was stopped, from what the recorder's snapshot says. Stop clears the snapshot's
+/// `session` (found by the day-simulation smoke: reading only that field never saw a Stop), so the folder comes from
+/// `last_stop`, which stays until the next Stop. It is not a stop while the same folder is recording again (a session
+/// resumed after recovery).
+pub fn stopped_dir(
+    recording: bool,
+    current: Option<&str>,
+    last_stop: Option<&str>,
+) -> Option<String> {
+    let dir = last_stop?;
+    if recording && current == Some(dir) {
+        return None;
+    }
+    Some(dir.to_owned())
+}
+
 /// The languages a job decodes: `en` stays, Hindi and Urdu become the one language of the organiser's script
 /// (Devanagari `hi`, Nastaliq `ur`).
 pub fn job_languages(expected: &[String], script: Option<&str>) -> Vec<String> {
@@ -548,11 +564,15 @@ impl Queue {
     /// The folder of the session whose recording has just ended (Stop was pressed), if one is open here.
     fn stopped_session_dir(&self) -> Option<String> {
         let st = self.app.state::<AppState>();
-        if st.recording.load(Ordering::SeqCst) {
-            return None;
-        }
+        let recording = st.recording.load(Ordering::SeqCst);
         let snap = lock(&st.snapshot);
-        snap.session.as_ref().map(|s| s.dir.clone())
+        stopped_dir(
+            recording,
+            snap.session.as_ref().map(|s| s.dir.as_str()),
+            snap.last_stop
+                .as_ref()
+                .map(|l| l.recorder.session_dir.as_str()),
+        )
     }
 
     /// Sessions in the recordings folder with unfinished jobs (the app was closed or crashed): they continue
@@ -1160,6 +1180,28 @@ pub(crate) fn report_json(app: &AppHandle) -> serde_json::Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_stop_is_seen_after_the_recorder_cleared_the_snapshots_session() {
+        // What Stop leaves in the snapshot: no session, `last_stop` with the folder. (Before the fix the queue read
+        // only `session`, so no Stop was ever seen and no session got its final cut.)
+        assert_eq!(
+            stopped_dir(false, None, Some("D:\\rec\\a")),
+            Some("D:\\rec\\a".to_owned())
+        );
+        // The next session is already recording: the earlier stop is still reported.
+        assert_eq!(
+            stopped_dir(true, Some("D:\\rec\\b"), Some("D:\\rec\\a")),
+            Some("D:\\rec\\a".to_owned())
+        );
+        // No stop yet.
+        assert_eq!(stopped_dir(true, Some("D:\\rec\\a"), None), None);
+        // The same folder is recording again (resumed after recovery): not a stop.
+        assert_eq!(
+            stopped_dir(true, Some("D:\\rec\\a"), Some("D:\\rec\\a")),
+            None
+        );
+    }
 
     #[test]
     fn hindi_and_urdu_become_one_language_in_the_organisers_script() {
