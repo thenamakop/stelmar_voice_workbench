@@ -45,7 +45,8 @@ def mib(b) -> str:
 
 
 def find_sessions(rec: Path) -> list[Path]:
-    return sorted({p.parent for p in rec.rglob("parts.json")})
+    # import-source/ holds the copies the script made for import_session; the imported session is the one beside it.
+    return sorted({p.parent for p in rec.rglob("parts.json") if "import-source" not in p.parts})
 
 
 def sql(db: Path, q: str, args=()) -> list[tuple]:
@@ -188,6 +189,10 @@ def main() -> int:
             except Exception:
                 pass
         P(f"  {name}: Stop at {stopped}; segments committed before Stop: {len(before)} of {len(segs)}")
+    planned = [l for l in qlog if "unit(s) planned after part" in l]
+    P(f"  units planned while the session was still recording: {len(planned)}")
+    for l in planned:
+        P(f"    {l}")
     done_lines = [l for l in qlog if re.search(r"unit \d+ of post-\d done", l)]
     P(f"  units done: {len(done_lines)}")
     for l in done_lines:

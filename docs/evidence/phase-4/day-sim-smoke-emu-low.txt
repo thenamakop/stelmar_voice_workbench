@@ -1,0 +1,223 @@
+﻿date: 2026-11-15 01:11 (IST on the Legion)
+command: powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\gates\day-sim.ps1 -Smoke -Profile emu-low
+machine: Legion, emulation profile emu-low; the gate build target\gate\stelmar-voice-workbench.exe, WB_GATE_DAY_PLAN; NOT A GATE (a smoke run of the queue paths)
+source: 4738085
+build: stelmar-voice-workbench.exe sha256 9241996d2af3a6af946331c9dbe9fa767e5d620cd9238edca662f9840ac5ab91
+run folder: D:\STELMAR-Gate\day-sim\smoke-emu-low-20261115-002645
+DAY-SIMULATION SMOKE (not a gate)
+run folder: smoke-emu-low-20261115-002645
+profile in force: {'config': '{"index":0,"kind":"gpu"}', 'process_while_recording': True, 'tier': 'C', 'cpu_threads': 2}
+app exit code: 0, scheduler clock offset 34391 s (the first session maps to 10:00 IST), parts of 120 s, night pass time box 8 min
+profile reads by the scheduler: 1633, slowest 230532 us (the profile in use is read at every scheduling decision, no cache)
+configuration the queue worked in: Gpu { index: 0 }; forced hybrid: False
+
+Script notes (progress):
+  00:26:51 player 1 started for Smoke English (371.03 s)
+  00:33:58 player 2 started for Smoke Hindi (395.206 s)
+  00:34:39 killed engine pid 24564 wb-engine-vulkan-x86_64-pc-windows-msvc.exe after 20 s
+  00:41:29 player 3 started for Smoke Mixed (467.515 s)
+  00:49:42 all sessions recorded
+  01:01:53 10:35	night pass planned for 2 session(s): about 0.3 h, ready by 10:50 IST
+  01:09:53 night pass time box of 8 min reached: stopping
+
+Sessions found under rec/:
+  smoke-english  title 'Smoke English'  parts 4  sample rates [48000]  channels [2]  audio 397.4 s
+  smoke-hindi  title 'Smoke Hindi'  parts 4  sample rates [48000]  channels [2]  audio 421.5 s
+  smoke-mixed  title 'Smoke Mixed'  parts 5  sample rates [48000]  channels [2]  audio 493.6 s
+  smoke-english-copy  title 'Smoke English'  parts 4  sample rates [48000]  channels [2]  audio 397.4 s
+
+== smoke-english (Smoke English)
+  job 1 rolling post-1 state done cursor 397380 ms, started 1794717401694, finished 1794717779928, error None
+    languages ["en","hi"], models {"*":"large-v3-turbo-q5_0","en":"large-v3-turbo-q5_0","hi":"large-v3-turbo-q5_0"}
+    unit 0: 0.0 s to 246.7 s (246.7 s), state committed, device gpu, attempts cpu 0 gpu 0, seam None, last error None
+    unit 1: 246.7 s to 397.4 s (150.7 s), state committed, device gpu, attempts cpu 0 gpu 0, seam None, last error None
+  part 1: 11 pauses (from wb-engine chunks)
+  part 2: 9 pauses (from wb-engine chunks)
+  part 3: 9 pauses (from wb-engine chunks)
+  part 4: 1 pauses (from wb-engine chunks)
+  post-1.jsonl: 33 segments, overlaps 0, duplicate starts 0, last end 369.0 s of 397.4 s, speech 235.9 s, languages {'en': 33}, mixed 0, devices ['gpu'], models ['large-v3-turbo-q5_0']
+    first segment committed at 2026-11-15T00:38:04.6447194+05:30
+
+== smoke-hindi (Smoke Hindi)
+  job 1 rolling post-1 state done cursor 421500 ms, started 1794717984656, finished 1794718472597, error None
+    languages ["en","hi"], models {"*":"large-v3-turbo-q5_0","en":"large-v3-turbo-q5_0","hi":"large-v3-turbo-q5_0"}
+    unit 0: 0.0 s to 272.7 s (272.7 s), state committed, device gpu, attempts cpu 0 gpu 0, seam None, last error None
+    unit 1: 272.7 s to 421.5 s (148.8 s), state committed, device gpu, attempts cpu 0 gpu 0, seam None, last error None
+  job 2 night post-2 state running cursor 0 ms, started 1794719104005, finished None, error None
+    languages ["en","hi"], models {"*":"large-v3-q5_0","en":"large-v3-turbo-q5_0","hi":"large-v3-q5_0"}
+    unit 0: 0.0 s to 272.7 s (272.7 s), state running, device gpu, attempts cpu 0 gpu 0, seam None, last error None
+    unit 1: 272.7 s to 421.5 s (148.8 s), state pending, device None, attempts cpu 0 gpu 0, seam None, last error None
+  part 1: 8 pauses (from wb-engine chunks)
+  part 2: 7 pauses (from wb-engine chunks)
+  part 3: 7 pauses (from wb-engine chunks)
+  part 4: 2 pauses (from wb-engine chunks)
+  post-1.jsonl: 43 segments, overlaps 0, duplicate starts 0, last end 391.9 s of 421.5 s, speech 302.3 s, languages {'hi': 43}, mixed 0, devices ['gpu'], models ['large-v3-turbo-q5_0']
+    first segment committed at 2026-11-15T00:48:50.6880107+05:30
+
+== smoke-mixed (Smoke Mixed)
+  job 1 rolling post-1 state done cursor 493610 ms, started 1794718577445, finished 1794719092865, error None
+    languages ["en","hi"], models {"*":"large-v3-turbo-q5_0","en":"large-v3-turbo-q5_0","hi":"large-v3-turbo-q5_0"}
+    unit 0: 0.0 s to 315.9 s (315.9 s), state committed, device gpu, attempts cpu 0 gpu 0, seam None, last error None
+    unit 1: 315.9 s to 493.6 s (177.7 s), state committed, device gpu, attempts cpu 0 gpu 0, seam None, last error None
+  job 2 night post-2 state queued cursor 0 ms, started None, finished None, error None
+    languages ["en","hi"], models {"*":"large-v3-q5_0","en":"large-v3-turbo-q5_0","hi":"large-v3-q5_0"}
+    unit 0: 0.0 s to 315.9 s (315.9 s), state pending, device None, attempts cpu 0 gpu 0, seam None, last error None
+    unit 1: 315.9 s to 493.6 s (177.7 s), state pending, device None, attempts cpu 0 gpu 0, seam None, last error None
+  part 1: 9 pauses (from wb-engine chunks)
+  part 2: 5 pauses (from wb-engine chunks)
+  part 3: 9 pauses (from wb-engine chunks)
+  part 4: 9 pauses (from wb-engine chunks)
+  part 5: 1 pauses (from wb-engine chunks)
+  post-1.jsonl: 45 segments, overlaps 0, duplicate starts 0, last end 465.2 s of 493.6 s, speech 338.4 s, languages {'en': 24, 'hi': 21}, mixed 1, devices ['gpu'], models ['large-v3-turbo-q5_0']
+    first segment committed at 2026-11-15T00:58:57.5049671+05:30
+
+== smoke-english-copy (Smoke English)
+  job 1 rolling post-1 state done cursor 397380 ms, started 1794717780118, finished 1794718577297, error None
+    languages ["en","hi"], models {"*":"large-v3-turbo-q5_0","en":"large-v3-turbo-q5_0","hi":"large-v3-turbo-q5_0"}
+    unit 0: 0.0 s to 246.7 s (246.7 s), state committed, device gpu, attempts cpu 0 gpu 0, seam None, last error None
+    unit 1: 246.7 s to 397.4 s (150.7 s), state committed, device gpu, attempts cpu 0 gpu 0, seam None, last error None
+  part 1: 11 pauses (from wb-engine chunks)
+  part 2: 9 pauses (from wb-engine chunks)
+  part 3: 9 pauses (from wb-engine chunks)
+  part 4: 1 pauses (from wb-engine chunks)
+  post-1.jsonl: 33 segments, overlaps 0, duplicate starts 0, last end 369.0 s of 397.4 s, speech 235.9 s, languages {'en': 33}, mixed 0, devices ['gpu'], models ['large-v3-turbo-q5_0']
+    first segment committed at 2026-11-15T00:43:13.438983+05:30
+
+PATH 1  wb-engine chunks on a real recorder part (48 kHz)
+  part sample rates: [48000]; parts with pauses found: 17 of 17
+  VERDICT: PASS (pauses found for 17 parts; failures: 0)
+
+PATH 2  the real batch engine through the queue (rolling pass, Stop, the rest cut)
+  smoke-english: Stop at 2026-11-15T00:33:28.4471723+05:30; segments committed before Stop: 0 of 33
+  smoke-hindi: Stop at 2026-11-15T00:40:59.5704535+05:30; segments committed before Stop: 0 of 43
+  smoke-mixed: Stop at 2026-11-15T00:49:42.7236423+05:30; segments committed before Stop: 0 of 45
+  smoke-english-copy: Stop at 2026-11-15T00:33:28.4471723+05:30; segments committed before Stop: 0 of 33
+  units planned while the session was still recording: 1
+    10:22	smoke-mixed: 1 unit(s) planned after part 4
+  units done: 8
+    10:11	smoke-english: unit 0 of post-1 done in 225.5 s on gpu (1 restart(s), engine peak 1531 MiB against limit 3051 MiB)
+    10:12	smoke-english: unit 1 of post-1 done in 103.8 s on gpu (0 restart(s), engine peak 1525 MiB against limit 3051 MiB)
+    10:16	smoke-english-copy: unit 0 of post-1 done in 204.0 s on gpu (0 restart(s), engine peak 1531 MiB against limit 3051 MiB)
+    10:22	smoke-hindi: unit 0 of post-1 done in 336.7 s on gpu (0 restart(s), engine peak 1540 MiB against limit 3051 MiB)
+    10:24	smoke-hindi: unit 1 of post-1 done in 150.5 s on gpu (0 restart(s), engine peak 1529 MiB against limit 3051 MiB)
+    10:26	smoke-english-copy: unit 1 of post-1 done in 104.2 s on gpu (0 restart(s), engine peak 1525 MiB against limit 3051 MiB)
+    10:32	smoke-mixed: unit 0 of post-1 done in 350.8 s on gpu (0 restart(s), engine peak 1557 MiB against limit 3051 MiB)
+    10:34	smoke-mixed: unit 1 of post-1 done in 163.9 s on gpu (0 restart(s), engine peak 1531 MiB against limit 3051 MiB)
+
+ENGINE MEMORY (peak against the limit the gate granted; the smoke fails above 70%)
+  worst peak/limit over all units: 51.0%  -> PASS
+  memory-limit deaths logged: 0
+
+PATH 3  import_session of a copy of a finished session
+  action queue_pause on Smoke English at 2026-11-15T00:33:34.5840802+05:30: ok 
+  action queue_resume on Smoke English at 2026-11-15T00:34:18.662567+05:30: ok 
+  action import_session on Smoke English at 2026-11-15T00:35:29.1054801+05:30: ok imported as smoke-english-copy
+  action lock_language on Smoke Mixed at 2026-11-15T00:44:19.0360655+05:30: ok lang Some("hi") at audio 170120 ms
+  action lock_language on Smoke Mixed at 2026-11-15T00:45:19.1532125+05:30: ok lang None at audio 230220 ms
+  original 33 segments, imported copy 33 segments, text similarity 1.000
+  VERDICT: PASS
+
+PATH 4  set_language_lock: a lock inside a unit reaches that unit's lang_log
+  smoke-mixed: language-log.jsonl = [{'audio_ms': 170120, 'lang': 'hi', 'at': '2026-11-15T00:44:19.0338176+05:30'}, {'audio_ms': 230220, 'lang': None, 'at': '2026-11-15T00:45:19.1499349+05:30'}]
+    post-1-unit-0000/batch-request-0.json: unit None..None lang_log [{'audio_ms': 170120, 'lang': 'hi'}, {'audio_ms': 230220, 'lang': None}]
+    post-1-unit-0001/batch-request-0.json: unit None..None lang_log [{'audio_ms': 315935, 'lang': None}]
+
+PATH 5  queue_pause and queue_resume
+  10:00	paused: processing while recording is not cleared on this computer
+  10:00	gpu: waiting, not processing: processing while recording is not cleared on this computer
+  10:00	resumed (was: processing while recording is not cleared on this computer)
+  10:00	gpu: processing may continue
+  10:06	stopping 1 engine(s): the operator paused the queue
+  10:06	the operator paused processing
+  10:06	paused: paused by the operator
+  10:06	gpu: waiting, not processing: paused by the operator
+  10:07	the operator resumed processing
+  10:07	resumed (was: paused by the operator)
+  10:07	gpu: processing may continue
+
+PATH 6  one engine killed from outside, then resumed
+  script: {'At': '00:34:39', 'Pid': 24564, 'Name': 'wb-engine-vulkan-x86_64-pc-windows-msvc.exe', 'AgeS': 20.1, 'Exit': 0}
+  ﻿00:34	SMOKE: killed engine pid 24564 (wb-engine-vulkan-x86_64-pc-windows-msvc.exe) after 20 s, taskkill exit 0
+  10:07	smoke-english: unit 0 of post-1 job 1 on gpu: Died { exit: Some(1), restart: 1, committed_until_ms: 0 }
+  10:11	smoke-english: unit 0 of post-1 done in 225.5 s on gpu (1 restart(s), engine peak 1531 MiB against limit 3051 MiB)
+  10:12	smoke-english: unit 1 of post-1 done in 103.8 s on gpu (0 restart(s), engine peak 1525 MiB against limit 3051 MiB)
+  10:16	smoke-english-copy: unit 0 of post-1 done in 204.0 s on gpu (0 restart(s), engine peak 1531 MiB against limit 3051 MiB)
+  10:22	smoke-hindi: unit 0 of post-1 done in 336.7 s on gpu (0 restart(s), engine peak 1540 MiB against limit 3051 MiB)
+  10:24	smoke-hindi: unit 1 of post-1 done in 150.5 s on gpu (0 restart(s), engine peak 1529 MiB against limit 3051 MiB)
+  10:26	smoke-english-copy: unit 1 of post-1 done in 104.2 s on gpu (0 restart(s), engine peak 1525 MiB against limit 3051 MiB)
+  10:32	smoke-mixed: unit 0 of post-1 done in 350.8 s on gpu (0 restart(s), engine peak 1557 MiB against limit 3051 MiB)
+  10:34	smoke-mixed: unit 1 of post-1 done in 163.9 s on gpu (0 restart(s), engine peak 1531 MiB against limit 3051 MiB)
+
+PATH 7  a short night pass
+  10:35	night pass planned for 2 session(s): about 0.3 h, ready by 10:50 IST
+
+Scheduler log (every line, IST time first):
+  10:00	gpu engine slot started (configuration Gpu { index: 0 }, 2 thread(s))
+  10:00	DAY: started "Smoke English" in D:\STELMAR-Gate\day-sim\smoke-emu-low-20261115-002645\rec\2026-11-15\smoke-english
+  10:00	paused: processing while recording is not cleared on this computer
+  10:00	gpu: waiting, not processing: processing while recording is not cleared on this computer
+  10:00	resumed (was: processing while recording is not cleared on this computer)
+  10:00	gpu: processing may continue
+  10:02	smoke-english: pauses of part 1 found (11 pauses, 1 fallback cuts) in 1.5 s; engine peak 103 MiB against limit 2048 MiB (assumed peak)
+  10:04	smoke-english: pauses of part 2 found (9 pauses, 2 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1127 MiB (measured peak)
+  10:06	smoke-english: pauses of part 3 found (9 pauses, 2 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:06	DAY: stopped "Smoke English"
+  10:06	smoke-english: pauses of part 4 found (1 pauses, 0 fallback cuts) in 0.4 s; engine peak 90 MiB against limit 1128 MiB (measured peak)
+  10:06	smoke-english: session closed, 2 final unit(s) planned
+  10:06	stopping 1 engine(s): the operator paused the queue
+  10:06	the operator paused processing
+  10:06	ACTION queue_pause on "Smoke English" -> ok
+  10:06	paused: paused by the operator
+  10:06	gpu: waiting, not processing: paused by the operator
+  10:07	DAY: started "Smoke Hindi" in D:\STELMAR-Gate\day-sim\smoke-emu-low-20261115-002645\rec\2026-11-15\smoke-hindi
+  10:07	the operator resumed processing
+  10:07	ACTION queue_resume on "Smoke English" -> ok
+  10:07	resumed (was: paused by the operator)
+  10:07	gpu: processing may continue
+  10:07	smoke-english: unit 0 of post-1 job 1 on gpu: Died { exit: Some(1), restart: 1, committed_until_ms: 0 }
+  10:08	ACTION import_session on "Smoke English" -> ok (imported as smoke-english-copy)
+  10:08	smoke-english-copy: pauses of part 1 found (11 pauses, 1 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:08	smoke-english-copy: pauses of part 2 found (9 pauses, 2 fallback cuts) in 1.0 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:08	smoke-english-copy: pauses of part 3 found (9 pauses, 2 fallback cuts) in 1.2 s; engine peak 103 MiB against limit 1128 MiB (measured peak)
+  10:08	smoke-english-copy: pauses of part 4 found (1 pauses, 0 fallback cuts) in 0.4 s; engine peak 90 MiB against limit 1128 MiB (measured peak)
+  10:08	smoke-english-copy: session closed, 2 final unit(s) planned
+  10:09	smoke-hindi: pauses of part 1 found (8 pauses, 4 fallback cuts) in 1.3 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:11	smoke-hindi: pauses of part 2 found (7 pauses, 6 fallback cuts) in 1.4 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:11	smoke-english: unit 0 of post-1 done in 225.5 s on gpu (1 restart(s), engine peak 1531 MiB against limit 3051 MiB)
+  10:12	smoke-english: unit 1 of post-1 done in 103.8 s on gpu (0 restart(s), engine peak 1525 MiB against limit 3051 MiB)
+  10:12	smoke-english: post-1 transcript complete
+  10:13	smoke-hindi: pauses of part 3 found (7 pauses, 6 fallback cuts) in 1.3 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:14	DAY: stopped "Smoke Hindi"
+  10:14	smoke-hindi: pauses of part 4 found (2 pauses, 2 fallback cuts) in 0.7 s; engine peak 91 MiB against limit 1128 MiB (measured peak)
+  10:14	smoke-hindi: session closed, 2 final unit(s) planned
+  10:14	DAY: started "Smoke Mixed" in D:\STELMAR-Gate\day-sim\smoke-emu-low-20261115-002645\rec\2026-11-15\smoke-mixed
+  10:16	smoke-english-copy: unit 0 of post-1 done in 204.0 s on gpu (0 restart(s), engine peak 1531 MiB against limit 3051 MiB)
+  10:16	smoke-mixed: pauses of part 1 found (9 pauses, 3 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:17	ACTION lock_language on "Smoke Mixed" -> ok (lang Some("hi") at audio 170120 ms)
+  10:18	ACTION lock_language on "Smoke Mixed" -> ok (lang None at audio 230220 ms)
+  10:18	smoke-mixed: pauses of part 2 found (5 pauses, 5 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:20	smoke-hindi: unit 0 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 11 (110975 to 124065 ms) failed a guard (LowCoverage; compression ratio 0.80, 43 characters, 8.8 s of speech); retrying without previous-text context
+  10:20	smoke-hindi: unit 0 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 11: rescued by step a (decoded again without previous-text context at temperature 0.4)
+  10:20	smoke-mixed: pauses of part 3 found (9 pauses, 1 fallback cuts) in 1.0 s; engine peak 103 MiB against limit 1128 MiB (measured peak)
+  10:22	smoke-hindi: unit 0 of post-1 done in 336.7 s on gpu (0 restart(s), engine peak 1540 MiB against limit 3051 MiB)
+  10:22	smoke-mixed: pauses of part 4 found (9 pauses, 4 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:22	smoke-mixed: 1 unit(s) planned after part 4
+  10:22	DAY: stopped "Smoke Mixed"
+  10:22	DAY: every session of the plan was recorded; waiting for the stop file
+  10:22	smoke-mixed: pauses of part 5 found (1 pauses, 0 fallback cuts) in 0.2 s; engine peak 89 MiB against limit 1128 MiB (measured peak)
+  10:22	smoke-mixed: session closed, 1 final unit(s) planned
+  10:24	smoke-hindi: unit 1 of post-1 done in 150.5 s on gpu (0 restart(s), engine peak 1529 MiB against limit 3051 MiB)
+  10:24	smoke-hindi: post-1 transcript complete
+  10:26	smoke-english-copy: unit 1 of post-1 done in 104.2 s on gpu (0 restart(s), engine peak 1525 MiB against limit 3051 MiB)
+  10:26	smoke-english-copy: post-1 transcript complete
+  10:30	smoke-mixed: unit 0 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 20 (215580 to 230050 ms) failed a guard (TokenLimit; compression ratio 2.37, 161 characters, 14.3 s of speech); retrying without previous-text context
+  10:31	smoke-mixed: unit 0 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 20: first half (215580 to 220724 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  10:31	smoke-mixed: unit 0 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 20: rescued by step b (cut at 220724 ms, each half decoded without context)
+  10:31	smoke-mixed: unit 0 of post-1 job 1 on gpu: engine warning chunk_unclear: chunk 20 (215580 to 220724 ms) could not be decoded cleanly after the retries (Loop); emitted as unclear with no text
+  10:32	smoke-mixed: unit 0 of post-1 done in 350.8 s on gpu (0 restart(s), engine peak 1557 MiB against limit 3051 MiB)
+  10:34	smoke-mixed: unit 1 of post-1 done in 163.9 s on gpu (0 restart(s), engine peak 1531 MiB against limit 3051 MiB)
+  10:34	smoke-mixed: post-1 transcript complete
+  10:35	night pass planned for 2 session(s): about 0.3 h, ready by 10:50 IST
+  10:41	smoke-hindi: unit 0 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 16 (162230 to 168050 ms) failed a guard (Loop; compression ratio 2.78, 111 characters, 4.8 s of speech); retrying without previous-text context
+  10:41	smoke-hindi: unit 0 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 16: rescued by step a (decoded again without previous-text context at temperature 0.4)
+  10:43	DAY: report written; exiting
