@@ -19,7 +19,7 @@ use wb_supervisor::{Cancel, Observer, Policy, Priority};
 use super::profile::ProfileView;
 
 /// The id of the Silero VAD model in `models/manifest.json`.
-pub const VAD_ID: &str = "silero-vad";
+pub const VAD_ID: &str = "silero-v6.2.0";
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(PoisonError::into_inner)
@@ -259,6 +259,7 @@ impl UnitExecutor for AppExecutor {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     /// Row 102: the app's engines get a scrubbed environment in an installed (release) build, and keep `WB_EMULATE`
@@ -276,6 +277,20 @@ mod tests {
         #[cfg(not(any(debug_assertions, feature = "gate-hooks")))]
         assert!(policy.scrub_env, "an installed build must scrub WB_*");
         assert_eq!(policy.priority, Priority::BelowNormal);
+    }
+
+    /// The VAD model every unit asks for must be in the committed manifest (a wrong id would fail every unit).
+    #[test]
+    fn the_vad_model_id_is_in_the_committed_manifest() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("models")
+            .join("manifest.json");
+        let manifest = Manifest::load(&path).unwrap();
+        assert!(
+            manifest.find(VAD_ID).is_ok(),
+            "{VAD_ID} is not in models/manifest.json"
+        );
     }
 
     #[test]
