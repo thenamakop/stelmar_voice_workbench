@@ -41,6 +41,11 @@ param(
   # Also record the same input with a raw WASAPI capture (wb-testbench capture-wasapi) and judge the app
   # against both references (scripts\lib\RefVerdict.psm1).
   [switch]$SecondReference,
+  # A script that runs engines beside the recorder for the whole recording (scripts\lib\beside-load.ps1 in
+  # the gate pack: a live engine and a batch engine). It gets -Config, -StopFile and -OutDir, is stopped
+  # when the player ends, and its beside\result.json is judged. The gate pack passes it.
+  [string]$BesideScript = '',
+  [string]$BesideConfig = '',
   [double]$Minutes = 0,
   [string]$Machine = 'Legion',
   [string]$WorkRoot = 'D:\STELMAR-Gate',
@@ -257,7 +262,7 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
     $inner += @('-Stress', '-Testbench', (Q $Testbench), '-GpuName', (Q $GpuName), '-StressStopFile', (Q $stressStop), '-StressReport', (Q (Join-Path $run 'stress.json')))
   }
   $emuArgs = @('--profile', $Profile, '--log', (Q (Join-Path $run 'emulate.log')), '--', 'powershell.exe') + $inner
-  $emu = $null; $refProc = $null; $ref2Proc = $null; $play = $null; $hostStress = $null; $sampler = $null; $samplerCsv = $null
+  $emu = $null; $refProc = $null; $ref2Proc = $null; $play = $null; $hostStress = $null; $sampler = $null; $samplerCsv = $null; $beside = $null; $besideStop = $null
   $machineState = @(Get-WbMachineStateLines)
   $finished = $false
   # Whatever happens below, nothing started here may outlive the body (see the finally block).
@@ -304,6 +309,14 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
   $ref2Stop = Join-Path $run 'STOP-REF2'
   if ($SecondReference) {
     $ref2Proc = Start-Process -FilePath $Testbench -ArgumentList @('capture-wasapi', '--device', (Q $capName), '--dir', (Q $ref2Dir), '--stop-file', (Q $ref2Stop), '--go-file', (Q $goFile), '--report', (Q (Join-Path $run 'reference2.json'))) -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $run 'reference2.out') -RedirectStandardError (Join-Path $run 'reference2.err')
+  }
+  # Engines beside the recorder (live-batch-safety, bg-decode-info): started once the recording runs.
+  $beside = $null
+  $besideStop = Join-Path $run 'STOP-BESIDE'
+  if ($BesideScript) {
+    New-Item -ItemType Directory -Force -Path (Join-Path $run 'beside') | Out-Null
+    $beside = Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') -ArgumentList @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', (Q $BesideScript), '-Config', (Q $BesideConfig), '-StopFile', (Q $besideStop), '-OutDir', (Q (Join-Path $run 'beside'))) -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $run 'beside.out') -RedirectStandardError (Join-Path $run 'beside.err')
+    $progress.Add("$(Get-Date -Format 'HH:mm:ss') engines beside the recorder started: $BesideScript")
   }
   Start-Sleep -Seconds 1
   $play = Start-Process -FilePath $Testbench -ArgumentList @('play', '--device', (Q $playName), '--file', (Q $source), '--go-file', (Q $goFile), '--report', (Q (Join-Path $run 'play.json'))) -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $run 'play.out') -RedirectStandardError (Join-Path $run 'play.err')
@@ -382,6 +395,7 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
   }
   Start-Sleep -Seconds 2
   $lastStatus = Read-Json $env:WB_GATE_STATUS_FILE
+  if ($beside) { Set-Content -LiteralPath $besideStop -Value 'stop'; [void]$beside.WaitForExit(180000) }
   Set-Content -LiteralPath $refStop -Value 'stop'
   [void]$refProc.WaitForExit(120000)
   if ($ref2Proc) { Set-Content -LiteralPath $ref2Stop -Value 'stop'; [void]$ref2Proc.WaitForExit(120000) }
@@ -434,6 +448,7 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
     CacheNote = $cacheNote; BootTime = $bootTime; UptimeMin = $uptimeMin; FastStartup = $fastStartup; ModelsDisk = $modelsDisk; RecDisk = $recDisk
     CableRig = $cableRig; CableTest = $cableTest; CableSeen = $cableSeen; CablePollProblems = @(ConvertTo-WbArray $pollProblems)
     MachineState = $machineState; SamplerCsv = $samplerCsv; StressPriority = @($stressPriority)
+    Beside = (Read-Json (Join-Path $run 'beside\result.json'));
     Compare2 = $compare2; CompareRefs = $compareRefs; Compare2Error = $compare2Error; Reference2 = (Read-Json (Join-Path $run 'reference2.json')); RefAnalysis2 = (Read-Json (Join-Path $run 'reference2-analysis.json')); Ref2AnalysisError = $ref2AnalysisErr
   }
   Stop-WbSampler -Process $sampler
@@ -443,7 +458,7 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
     # stress, so a crash leaves no orphan holding the runner's pipes. On the normal path they have
     # already stopped and this does nothing.
     if (-not $finished) {
-      $left = @(Stop-WbRigLeftovers -Process @($emu, $play, $refProc, $ref2Proc, $hostStress, $sampler) -StopFile @($stopFile, $refStop, $ref2Stop, $stressStop) -GraceSeconds 45)
+      $left = @(Stop-WbRigLeftovers -Process @($emu, $play, $refProc, $ref2Proc, $hostStress, $sampler, $beside) -StopFile @($stopFile, $refStop, $ref2Stop, $stressStop, $besideStop) -GraceSeconds 45)
       foreach ($l in $left) { Write-Host "cleanup after an error: $l" }
     }
   }
@@ -547,6 +562,7 @@ $hashNote = $(if ($Gate -eq 'hashing' -and -not $afterReboot) { '; warm cache, n
 # the detectors are not the recording.
 $skippedPct = $(if ((Test-WbHasProperty $rec 'detector_skipped_ms') -and [double]$rec.audio_ms -gt 0) { 100.0 * [double]$rec.detector_skipped_ms / [double]$rec.audio_ms } else { 0.0 })
 $coverageNote = $(if ($skippedPct -gt 1.0) { ('; detector coverage {0:n1}% (the time budget skipped more than 1% of the audio): the live detector table is not conclusive for this run' -f (100.0 - $skippedPct)) } else { '' })
+if ($BesideScript) { $checks['the engines beside the recorder ran for the whole recording and reported (beside\result.json)'] = [bool]($r.Beside -and $r.Beside.ok) }
 $checks['every part decodes in Media Foundation'] = [bool]$r.Decode.all_playable
 $checks['mirror SHA-256 equals the originals'] = [bool]$stopped.mirror.all_match
 $checks['player had no underruns (source played cleanly)'] = ([int64]$r.Play.underrun_callbacks -eq 0)
@@ -641,6 +657,11 @@ if ($Gate -eq 'hashing') {
   $lines += ("  recording interval, from session.json: {0} to {1} (epoch ms); model files hashed: {2}; bytes {3}; hashing inside the recording {4:n1} s" -f $recStartMs, $recEndMs, $hashFiles.Count, $hashBytes, $hashOverlapS)
   $lines += '  file | bytes | start (ms after the recording began) | took ms | MB/s | result | background | memory priority'
   foreach ($h in $hashFiles) { $lines += ("  {0} | {1} | {2:n0} | {3} | {4} | {5} | {6} | {7}" -f $h.File, $h.Bytes, ($h.StartMs - $recStartMs), $h.TookMs, $h.MbPerS, $h.Result, $h.Background, $h.MemoryPriority) }
+}
+if ($BesideScript) {
+  $lines += ''
+  $lines += 'engines beside the recorder (live engine and batch engine, started by the gate pack):'
+  if ($r.Beside -and $r.Beside.lines) { foreach ($bl in @($r.Beside.lines)) { $lines += "  $bl" } } else { $lines += '  no result was written by the beside script (see beside.err in the run folder)' }
 }
 $lines += ("  priorities: recorder thread {0}, capture thread {1}; ring buffer {2} s, highest fill {3:n2}%" -f $r.LastStatus.recorder.priority, $r.LastStatus.recorder.capture_priority, $r.LastStatus.recorder.ring_seconds, $r.LastStatus.recorder.ring_max_fill_pct)
 $lines += ("  recorder thread CPU: {0:n2} s over {1:n0} s = {2:n3}% of one core" -f ($rec.recorder_cpu_ms / 1000.0), $wall, $recCpuPctCore)

@@ -32,6 +32,23 @@ Check 'a rate above 0.6 of the warm rate does not count and says the cache was w
 Check 'no warm rate means it cannot be called cold' (-not (Test-PackColdRun -ColdMBs 100 -WarmMBs $null).Counts)
 Check 'no cold rate means it cannot be called cold' (-not (Test-PackColdRun -ColdMBs $null -WarmMBs 250).Counts)
 
+function Run([string]$Tag, [string]$Kind, [string]$Status, $Rate, [bool]$Purged = $true) { [pscustomobject]@{ Tag = $Tag; Kind = $Kind; Status = $Status; Rate = $Rate; Purged = $Purged; Shared = 0; AppOnly = 0 } }
+$warmRuns = @((Run 'w6' 'warm' 'PASS' 250), (Run 'w7' 'warm' 'PASS' 260), (Run 'w8' 'warm' 'PASS' 240))
+$coldRuns = @((Run 'c2' 'purged' 'PASS' 100), (Run 'c3' 'purged' 'PASS' 120), (Run 'c4' 'purged' 'PASS' 140), (Run 'c5' 'purged' 'PASS' 90))
+$v = Get-PackHashingVerdict -Runs (@($coldRuns) + @($warmRuns))
+Check 'four purged runs at most 0.6 of the median warm rate (250) all count: PASS' ($v.Status -eq 'PASS' -and $v.ColdCount -eq 4 -and [math]::Abs($v.WarmRate - 250) -lt 0.01)
+$mix = @($coldRuns[0], (Run 'c3' 'purged' 'PASS' 240), $coldRuns[2], $coldRuns[3]) + @($warmRuns)
+$v = Get-PackHashingVerdict -Runs $mix
+Check 'a purged run read at warm speed does not count, so the cold claim is INFO with the count' ($v.Status -eq 'INFO' -and $v.ColdCount -eq 3 -and $v.Headline -match 'only 3 of the 4')
+$v = Get-PackHashingVerdict -Runs (@($coldRuns[0], (Run 'c3' 'purged' 'PASS' 100 $false)) + @($warmRuns)) -NeedCold 1
+Check 'a purge that did not happen never counts as cold' ($v.ColdCount -eq 1 -and ($v.Rows | Where-Object { $_.Tag -eq 'c3' }).Note -match 'could not be emptied')
+$v = Get-PackHashingVerdict -Runs (@($coldRuns[0], (Run 'w9' 'warm' 'FAIL' 250)) + @($warmRuns))
+Check 'any failing run fails the gate' ($v.Status -eq 'FAIL' -and $v.Headline -match 'w9')
+$v = Get-PackHashingVerdict -Runs (@($coldRuns[0], (Run 'w9' 'warm' 'INVALID' $null)) + @($warmRuns))
+Check 'an invalid run, with none failing, makes the gate invalid' ($v.Status -eq 'INVALID')
+$v = Get-PackHashingVerdict -Runs @($coldRuns[0]) -NeedCold 1
+Check 'without any warm run no purged run can be called cold' ($v.ColdCount -eq 0 -and $v.Status -eq 'INFO')
+
 $tmp = Join-Path ([IO.Path]::GetTempPath()) ('wb-hash-' + [guid]::NewGuid().ToString('N') + '.bin')
 try {
   $bytes = New-Object byte[] (40MB)

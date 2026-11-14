@@ -64,6 +64,51 @@ function Test-PackColdRun {
   [pscustomobject]@{ Counts = $false; Ratio = $ratio; Reason = ('the app read the models at {0:n0} MB/s, {1:n2} times the warm rate of {2:n0} MB/s (limit {3:n1}): the file cache was warm, so this run does not count as cold' -f $ColdMBs, $ratio, $WarmMBs, $Factor) }
 }
 
+# Pure. The verdict of the hashing runs 2 to 10. -Runs: objects with Kind (purged or warm), Purged (the
+# standby list was really emptied before it), Status (PASS, FAIL, INVALID, PENDING), Rate (the app's own
+# hash rate in MB/s, or $null), Shared and AppOnly (break counts). -NeedCold: how many purged runs must
+# count as cold (4; 1 in a quick run). Warm rate = median of the warm runs' rates. A purged run counts as
+# cold only if its rate is at most 0.6 times that (Test-PackColdRun). FAIL if any run failed; INVALID if
+# any run was invalid and none failed; PASS if every run passed and enough purged runs counted as cold;
+# otherwise INFO (the recorder survived, but the cold-cache claim is not made).
+function Get-PackHashingVerdict {
+  [CmdletBinding()]
+  param([Parameter(Mandatory = $true)] $Runs, [int]$NeedCold = 4, [double]$Factor = 0.6)
+  $all = @($Runs)
+  $warmRates = @($all | Where-Object { $_.Kind -eq 'warm' -and $null -ne $_.Rate -and $_.Status -eq 'PASS' } | ForEach-Object { [double]$_.Rate } | Sort-Object)
+  $warm = $null
+  if ($warmRates.Count -gt 0) {
+    $m = [int][math]::Floor($warmRates.Count / 2)
+    $warm = $(if ($warmRates.Count % 2 -eq 1) { $warmRates[$m] } else { ($warmRates[$m - 1] + $warmRates[$m]) / 2.0 })
+  }
+  $rows = New-Object System.Collections.Generic.List[object]
+  $cold = 0
+  foreach ($r in $all) {
+    $counts = $false
+    $why = ''
+    if ($r.Kind -eq 'purged') {
+      if (-not $r.Purged) { $why = 'the file cache could not be emptied (administrator rights are needed), so this run is not cold' }
+      elseif ($r.Status -ne 'PASS') { $why = "the run did not pass ($($r.Status))" }
+      else {
+        $t = Test-PackColdRun -ColdMBs $r.Rate -WarmMBs $warm -Factor $Factor
+        $counts = [bool]$t.Counts
+        $why = [string]$t.Reason
+      }
+      if ($counts) { $cold++ }
+    }
+    $rows.Add([pscustomobject]@{ Tag = $r.Tag; Kind = $r.Kind; Status = $r.Status; Rate = $r.Rate; CountsAsCold = $counts; Note = $why; Shared = $r.Shared; AppOnly = $r.AppOnly })
+  }
+  $failed = @($all | Where-Object { $_.Status -eq 'FAIL' })
+  $invalid = @($all | Where-Object { $_.Status -in 'INVALID', 'PENDING' })
+  $status = 'PASS'
+  $head = ''
+  if ($failed.Count -gt 0) { $status = 'FAIL'; $head = ('{0} of {1} hashing runs failed ({2})' -f $failed.Count, $all.Count, (@($failed | ForEach-Object { $_.Tag }) -join ', ')) }
+  elseif ($invalid.Count -gt 0) { $status = 'INVALID'; $head = ('{0} of {1} hashing runs gave no verdict ({2}); repeat the gate' -f $invalid.Count, $all.Count, (@($invalid | ForEach-Object { $_.Tag }) -join ', ')) }
+  elseif ($cold -lt $NeedCold) { $status = 'INFO'; $head = ('every run kept the recorder clean, but only {0} of the {1} purged runs counted as cold (warm rate {2})' -f $cold, $NeedCold, $(if ($null -ne $warm) { ('{0:n0} MB/s' -f $warm) } else { 'not measured' })) }
+  else { $head = ('{0} runs passed; {1} purged runs counted as cold (at most {2} of the warm rate of {3:n0} MB/s)' -f $all.Count, $cold, $Factor, $warm) }
+  [pscustomobject]@{ Status = $status; Headline = $head; ColdCount = $cold; WarmRate = $warm; Rows = @($rows.ToArray()) }
+}
+
 # Reads -Bytes from the end of a file in 1 MB blocks and returns MB/s. Used on a file the app is about to
 # hash, so it is the disk's own speed when the cache is cold (after a restart or a purge). Logged only.
 function Measure-PackReadRate {
@@ -144,4 +189,4 @@ function Clear-PackStandbyList {
   try { return ([PackStandby]::Purge() -eq 0) } catch { return $false }
 }
 
-Export-ModuleMember -Function ConvertFrom-PackHashEvidence, ConvertFrom-PackHashLines, Get-PackHashRate, Test-PackColdRun, Measure-PackReadRate, Measure-PackWarmHashRate, Clear-PackStandbyList
+Export-ModuleMember -Function Get-PackHashingVerdict, ConvertFrom-PackHashEvidence, ConvertFrom-PackHashLines, Get-PackHashRate, Test-PackColdRun, Measure-PackReadRate, Measure-PackWarmHashRate, Clear-PackStandbyList

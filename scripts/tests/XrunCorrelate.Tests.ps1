@@ -72,8 +72,20 @@ $g = Get-Content -LiteralPath (Join-Path $here '..\gates\recorder-gate.ps1') -Ra
 Check 'recorder-gate.ps1 has -Sample and -DiagnosticNote' ($g -match '\[switch\]\$Sample' -and $g -match '\[string\]\$DiagnosticNote')
 Check 'a diagnostic run says DIAGNOSTIC, NOT A VERDICT in the evidence' ($g -match 'verdict: DIAGNOSTIC, NOT A VERDICT')
 Check 'a diagnostic run never exits with the gate''s FAIL code' ($g -match 'if \(\$DiagnosticNote\) \{ exit 0 \}')
-Check 'the sampler is stopped by the cleanup after an error too' ($g -match 'Stop-WbRigLeftovers -Process @\(\$emu, \$play, \$refProc, (\$ref2Proc, )?\$hostStress, \$sampler\)')
+Check 'the sampler is stopped by the cleanup after an error too' ($g -match 'Stop-WbRigLeftovers -Process @\(\$emu, \$play, \$refProc, (\$ref2Proc, )?\$hostStress, \$sampler(, \$beside)?\)')
 Check 'machine state (uptime, power plan, mains) is written for every run' ($g -match 'Get-WbMachineStateLines' -and $g -match 'MachineState')
+Check 'recorder-gate.ps1 takes -BesideScript and -BesideConfig and stops the beside process in its cleanup' ($g -match '\[string\]\$BesideScript' -and $g -match '\[string\]\$BesideConfig' -and $g -match '\$beside')
+
+# The beside-load script and the pack gates that use it.
+$lib = Join-Path $here '..\lib'
+$bl = Get-Content -LiteralPath (Join-Path $lib 'beside-load.ps1') -Raw
+Check 'beside-load.ps1 starts a live and a batch engine below the recorder and writes result.json' ($bl -match 'result\.json' -and $bl -match 'live' -and $bl -match 'batch' -and $bl -match 'BelowNormal')
+$rg = Get-Content -LiteralPath (Join-Path $lib 'RecorderGates.psm1') -Raw
+Check 'Invoke-PackRecorderGate has -Beside and -RunTag, and counts shared and app-only breaks' ($rg -match '\[hashtable\]\$Beside' -and $rg -match '\[string\]\$RunTag' -and $rg -match 'app_only_breaks')
+foreach ($id in 'hashing-2-10', 'live-batch-safety', 'bg-decode-info') {
+  $s = Get-Content -LiteralPath (Join-Path $here "..\gate-pack\gates\$id.ps1") -Raw
+  Check "$id.ps1 uses the gate contract and the beside or hashing helpers" ($s -match "Invoke-PackGateBody -Ctx \`$ctx -Id '$id'" -and $s -match 'Invoke-PackRecorderGate')
+}
 
 if ($fails) { Write-Host "$fails failed"; exit 1 }
 Write-Host 'XrunCorrelate tests passed'

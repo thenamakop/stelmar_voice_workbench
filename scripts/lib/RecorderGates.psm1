@@ -127,7 +127,12 @@ function Invoke-PackRecorderGate {
     [int]$FullKills = 5,
     [int]$QuickKills = 2,
     [switch]$Thermal,
-    [string]$Threshold = ''
+    [string]$Threshold = '',
+    # Engines beside the recorder: a hashtable merged into the config of scripts\lib\beside-load.ps1
+    # (mode, batch_device, batch_variant, ...). $null = nothing beside the recorder.
+    [hashtable]$Beside = $null,
+    # Keeps the evidence of a repeated gate apart: hashing-<profile>-<tag>.txt, <id>-<tag>-additions.txt.
+    [string]$RunTag = ''
   )
   $quick = [bool]$Ctx.quick
   $gdir = [string]$Ctx.gate_dir
@@ -144,6 +149,16 @@ function Invoke-PackRecorderGate {
     $args1 += @('-Gate', $Gate)
     if ($minutes -gt 0) { $args1 += @('-Minutes', ($minutes.ToString([Globalization.CultureInfo]::InvariantCulture))) }
   }
+  if ($Beside) {
+    $bc = [ordered]@{
+      mode = 'live-batch'; engines_dir = $paths.Engines; models_dir = $paths.Models; clip = (Join-Path $paths.BenchClips 'bench-en.wav')
+      live_variant = 'avx2'; batch_variant = 'avx2'; batch_device = 'cpu'; batch_threads = 2; live_threads = 2; model = 'medium'; lang = 'en'
+    }
+    foreach ($k in @($Beside.Keys)) { $bc[$k] = $Beside[$k] }
+    $bcFile = Join-Path $gdir ("beside-config$RunTag.json")
+    [IO.File]::WriteAllText($bcFile, ($bc | ConvertTo-Json -Depth 4), (New-Object Text.UTF8Encoding($false)))
+    $args1 += @('-BesideScript', (ConvertTo-PackArg (Join-Path $paths.Lib 'beside-load.ps1')), '-BesideConfig', (ConvertTo-PackArg $bcFile))
+  }
   $th = $null
   if ($Thermal) { $th = Start-PackThermal -OutCsv (Join-Path $gdir 'thermal.csv') }
   $startedAt = Get-Date
@@ -154,6 +169,11 @@ function Invoke-PackRecorderGate {
     if ($th) { $thermalRes = Stop-PackThermal -Handle $th }
   }
   if ($e.TimedOut) { return (New-PackResult -Id $Id -Status 'INVALID' -Headline "the $Gate gate did not finish in time" -Evidence @($e.Log) -Quick $quick) }
+  if ($RunTag -and $e.Evidence) {
+    $tagged = Join-Path (Split-Path -Parent $e.Evidence) ("$Gate-$([string]$Ctx.profile)-$RunTag.txt")
+    Copy-Item -LiteralPath $e.Evidence -Destination $tagged -Force
+    $e.Evidence = $tagged
+  }
   $evLines = @()
   if ($e.Evidence) { $evLines = @(Get-Content -LiteralPath $e.Evidence -Encoding UTF8) }
   # A refusal before the run (rig, overlay tools, RAM) is reported by the gate's crash evidence; pass its reason on.
@@ -187,17 +207,45 @@ function Invoke-PackRecorderGate {
     $status = 'INVALID'
     $notes += 'the laptop ran on battery during this run; repeat it on mains power'
   }
-  $addFile = Join-Path $gdir ("$Id-additions.txt")
+  $addFile = Join-Path $gdir ($(if ($RunTag) { "$Id-$RunTag-additions.txt" } else { "$Id-additions.txt" }))
   Set-Content -LiteralPath $addFile -Value @($extra) -Encoding UTF8
   $head = $(if ($out.VerdictLine) { $out.VerdictLine -replace '^verdict:\s*', '' } else { $status })
   if ($rigKind -eq 'vb-cable-fallback') { $head = "$head [VB-CABLE fallback: does not close the hardware-interface rows]" }
-  $measured = [ordered]@{ rig = $rigKind; minutes = $minutes; exit_code = $e.ExitCode; run_dir = $runDir }
+  # Unmatched stretches of the app's recording: shared when the reference capture has them too (the source
+  # chain broke), app-only when it has not (the recorder's own).
+  $sharedBreaks = @($evLines | Where-Object { $_ -match 'unmatched stretch:.*also in the reference capture: True' }).Count
+  $appOnlyBreaks = @($evLines | Where-Object { $_ -match 'unmatched stretch:.*also in the reference capture: False' }).Count
+  $measured = [ordered]@{ rig = $rigKind; minutes = $minutes; exit_code = $e.ExitCode; run_dir = $runDir; shared_breaks = $sharedBreaks; app_only_breaks = $appOnlyBreaks }
   if ($thermalRes -and $thermalRes.Summary.Usable) {
     $measured['thermal'] = [ordered]@{ clock_drop_pct = $thermalRes.Summary.ClockDropPct; ac_lost = $thermalRes.Summary.AcLost; event37 = $thermalRes.Event37; limit_below_100 = $thermalRes.Summary.LimitBelow100 }
   }
   if ($det) { $measured['detectors'] = $det.Rates }
   $evid = @($e.Evidence, $addFile) | Where-Object { $_ }
-  New-PackResult -Id $Id -Status $status -Headline $head -Measured $measured -Threshold $Threshold -Rig (Get-PackRigLabel -Rig ([pscustomobject]@{ Kind = $(if ($rigKind -eq 'loopback') { 'loopback' } else { 'vb-cable' }); Fallback = ($rigKind -eq 'vb-cable-fallback'); Instance = '' })) -Evidence @($evid) -Notes $notes -Quick $quick
+  New-PackResult -Id $Id -Status $status -Headline $head -Measured $measured -Threshold $Threshold -Rig (Get-PackRigLabel -Rig ([pscustomobject]@{ Kind = $(if ($rigKind -eq 'loopback') { 'loopback' } else { 'vb-cable' }); Fallback = ($rigKind -eq 'vb-cable-fallback'); Instance = '' })) -Evidence @($evid) -Notes $notes -Quick $quick -SharedBreaks $sharedBreaks
 }
 
-Export-ModuleMember -Function Get-PackRecorderOutcome, Get-PackRunDirFromEvidence, Get-PackRigKindFromEvidence, Get-PackCompareOffsetMs, Get-PackScanFindings, Get-PackRunDetectors, Invoke-PackRecorderGate
+# The device the batch engine runs on beside the recorder: the integrated graphics adapter when the
+# vulkan engine lists one (as the app's profile would use it), else the CPU. Returns the keys for the
+# -Beside table of Invoke-PackRecorderGate.
+function Get-PackBesideDevice {
+  [CmdletBinding()]
+  param([Parameter(Mandatory = $true)] $Ctx)
+  $paths = Get-PackPaths -Ctx $Ctx
+  $cpu = @{ batch_variant = 'avx2'; batch_device = 'cpu'; batch_threads = 2; device_note = 'CPU (avx2), 2 threads' }
+  $vk = Join-Path $paths.Engines 'wb-engine-vulkan-x86_64-pc-windows-msvc.exe'
+  if (-not (Test-Path -LiteralPath $vk) -or [string]$Ctx.profile -ne 'laptop') { return $cpu }
+  try {
+    $r = Invoke-PackNative -FilePath $vk -ArgumentList @('info') -TimeoutSeconds 60
+    foreach ($l in @($r.Output)) {
+      if ($l -notmatch '^\{') { continue }
+      $j = $l | ConvertFrom-Json
+      if ($j.PSObject.Properties['event'] -and $j.event -eq 'info') {
+        $d = @($j.devices | Where-Object { [string]$_.backend -match 'Vulkan' -and [string]$_.kind -match 'integrated|igpu' } | Select-Object -First 1)
+        if ($d.Count -gt 0) { return @{ batch_variant = 'vulkan'; batch_device = ('gpu:{0}' -f [int]$d[0].index); batch_threads = 2; device_note = ('integrated graphics, vulkan device {0} ({1}), 2 threads' -f $d[0].index, $d[0].description) } }
+      }
+    }
+  } catch { }
+  $cpu
+}
+
+Export-ModuleMember -Function Get-PackBesideDevice, Get-PackRecorderOutcome, Get-PackRunDirFromEvidence, Get-PackRigKindFromEvidence, Get-PackCompareOffsetMs, Get-PackScanFindings, Get-PackRunDetectors, Invoke-PackRecorderGate
