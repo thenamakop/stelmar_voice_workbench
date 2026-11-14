@@ -57,5 +57,19 @@ Check 'an app error is INVALID (the run is repeated)' ($v.Status -eq 'INVALID' -
 $v = Get-QuickCheckVerdict -Report $report -Capability (New-Cap) -Cells @()
 Check 'missing per-cell times are said plainly and do not fail the verdict' ($v.Status -eq 'PASS' -and (($v.Lines -join "`n") -match 'no engine cell was seen'))
 
+# Quick against full: the same rolling cells, flagged above 10 percent, deciding cells marked.
+function New-MCap([double]$HiTurbo, [double]$EnSmall, [double]$Excerpt) {
+  ('{"check":{"excerpt_seconds":' + $Excerpt + '},"decision":{"languages":{"hi":{"rolling":{"model":"turbo"}},"en":{"rolling":{"model":"small"}}}},"measurements":[' +
+    '{"model":"turbo","lang":"hi","mode":"rolling","config":{"kind":"gpu","index":0},"rtf":' + $HiTurbo + '},' +
+    '{"model":"small","lang":"en","mode":"rolling","config":{"kind":"cpu"},"rtf":' + $EnSmall + '},' +
+    '{"model":"small","lang":"en","mode":"near_live","config":{"kind":"cpu"},"rtf":0.2}]}') | ConvertFrom-Json
+}
+$cmp = Get-QuickFullComparison -Quick (New-MCap 0.80 0.30 30) -Full (New-MCap 0.70 0.31 60)
+Check 'two rolling cells are compared; the near-live cell is not' ($cmp.Compared -eq 2)
+Check 'a 14 percent difference on the first-choice Hindi cell is flagged and DECIDING' ($cmp.Flagged -eq 1 -and $cmp.DecidingFlagged -eq 1 -and (($cmp.Lines -join "`n") -match 'FLAG DECIDING'))
+Check 'a 3 percent difference is not flagged' (@($cmp.Rows | Where-Object { $_.Cell -match 'small' -and $_.Flag }).Count -eq 0)
+$cmp = Get-QuickFullComparison -Quick $null -Full (New-MCap 0.7 0.3 60)
+Check 'a missing run is said plainly' ($cmp.Compared -eq 0 -and $cmp.Lines[0] -match 'not compared')
+
 if ($fails) { Write-Host "$fails failed"; exit 1 }
 Write-Host 'QuickCheck tests passed'

@@ -169,4 +169,58 @@ function Get-QuickCheckVerdict {
   }
 }
 
-Export-ModuleMember -Function Get-QuickCheckVerdict
+# Pure. The quick check (short excerpts) against the full check (whole bench clips) on the same rolling
+# cells: the relative difference of the real-time factors, flagged above 10 percent, and marked DECIDING
+# where the cell is the first-choice rolling model of a language. Inputs are the two capability.json
+# objects. Returns Rows, Flagged, DecidingFlagged, Compared and Lines.
+function Get-QuickFullComparison {
+  [CmdletBinding()]
+  param($Quick, $Full, [double]$Flag = 0.10)
+  $lines = New-Object System.Collections.Generic.List[string]
+  $rows = New-Object System.Collections.Generic.List[object]
+  $empty = [pscustomobject]@{ Rows = @(); Flagged = 0; DecidingFlagged = 0; Compared = 0; Lines = @('not compared: one of the two runs is missing') }
+  if ($null -eq $Quick -or $null -eq $Full) { return $empty }
+  $key = {
+    param($m)
+    $c = Get-QProp $m 'config'
+    $kind = [string](Get-QProp $c 'kind')
+    $idx = Get-QProp $c 'index' (Get-QProp $c 'gpu')
+    $cfg = $(if ($kind -eq 'gpu' -or $kind -eq 'hybrid') { "${kind}:$idx" } else { $kind })
+    '{0}|{1}|{2}|{3}' -f (Get-QProp $m 'model'), (Get-QProp $m 'lang'), (Get-QProp $m 'mode'), $cfg
+  }
+  $deciding = @{}
+  foreach ($cap in @($Quick, $Full)) {
+    $langs = Get-QProp (Get-QProp $cap 'decision') 'languages'
+    if ($null -eq $langs) { continue }
+    foreach ($l in $langs.PSObject.Properties) {
+      $r = Get-QProp $l.Value 'rolling'
+      if ($null -ne $r) { $deciding[('{0}|{1}' -f (Get-QProp $r 'model'), $l.Name)] = $true }
+    }
+  }
+  $qmap = @{}
+  foreach ($m in @(Get-QProp $Quick 'measurements' @())) { $qmap[(& $key $m)] = $m }
+  $flagged = 0
+  $decFlagged = 0
+  $compared = 0
+  $lines.Add(('quick check excerpt {0} s; full check excerpt {1} s; flag above {2}%' -f (Format-QNumber (Get-QProp (Get-QProp $Quick 'check') 'excerpt_seconds') '0'), (Format-QNumber (Get-QProp (Get-QProp $Full 'check') 'excerpt_seconds') '0'), (Format-QNumber (100 * $Flag) '0')))
+  foreach ($m in @(Get-QProp $Full 'measurements' @())) {
+    if ((Get-QProp $m 'mode') -ne 'rolling') { continue }
+    $q = $qmap[(& $key $m)]
+    if ($null -eq $q) { continue }
+    $qr = Get-QProp $q 'rtf'
+    $fr = Get-QProp $m 'rtf'
+    if ($null -eq $qr -or $null -eq $fr -or [double]$fr -le 0) { continue }
+    $compared++
+    $diff = [double]$qr / [double]$fr - 1.0
+    $isFlag = ([math]::Abs($diff) -gt $Flag)
+    $isDec = $deciding.ContainsKey(('{0}|{1}' -f (Get-QProp $m 'model'), (Get-QProp $m 'lang')))
+    $mark = ''
+    if ($isFlag) { $flagged++; $mark = '  FLAG'; if ($isDec) { $decFlagged++; $mark += ' DECIDING' } }
+    $rows.Add([pscustomobject]@{ Cell = (& $key $m); QuickRtf = [double]$qr; FullRtf = [double]$fr; Diff = $diff; Flag = $isFlag; Deciding = $isDec })
+    $lines.Add(('  {0}  quick {1}  full {2}  {3}%{4}' -f (& $key $m), (Format-QNumber $qr '0.000'), (Format-QNumber $fr '0.000'), (Format-QNumber (100 * $diff) '+0.0;-0.0'), $mark))
+  }
+  $lines.Add(('cells compared {0}; flagged {1}; flagged and deciding {2}' -f $compared, $flagged, $decFlagged))
+  [pscustomobject]@{ Rows = @($rows.ToArray()); Flagged = $flagged; DecidingFlagged = $decFlagged; Compared = $compared; Lines = @($lines.ToArray()) }
+}
+
+Export-ModuleMember -Function Get-QuickCheckVerdict, Get-QuickFullComparison
