@@ -97,10 +97,13 @@ pub struct SpawnSpec {
     pub stderr_log: PathBuf,
     /// Extra environment variables.
     pub env: Vec<(String, String)>,
-    /// Remove every `WB_*` variable from the child's environment (inherited ones and `env` entries alike).
+    /// Remove every `WB_*` variable and the GPU-selection variables (`GGML_VK_VISIBLE_DEVICES`,
+    /// `CUDA_VISIBLE_DEVICES`) from the child's environment (inherited ones and `env` entries alike).
     /// Release builds of the app turn this on: a stray `WB_EMULATE*`, `WB_ENGINES_DIR` or `WB_MODELS_DIR` in
     /// an operator's environment must not change what an engine believes about the machine or where it
-    /// looks for models. Gate and debug builds leave it off because they pass those variables on purpose.
+    /// looks for models, and a stray device filter must not change which graphics card an engine sees (the
+    /// device always goes in the request as an explicit index). Gate and debug builds leave it off because
+    /// they pass these variables on purpose (emulation hides cards with them).
     pub scrub_env: bool,
 }
 
@@ -110,6 +113,18 @@ pub fn is_wb_variable(name: &str) -> bool {
     name.as_bytes()
         .get(..3)
         .is_some_and(|p| p.eq_ignore_ascii_case(b"WB_"))
+}
+
+/// True for the variables that change which GPUs an engine can see.
+pub fn is_device_variable(name: &str) -> bool {
+    ["GGML_VK_VISIBLE_DEVICES", "CUDA_VISIBLE_DEVICES"]
+        .iter()
+        .any(|v| name.eq_ignore_ascii_case(v))
+}
+
+/// Variables a release build keeps out of an engine's environment.
+fn is_scrubbed_variable(name: &str) -> bool {
+    is_wb_variable(name) || is_device_variable(name)
 }
 
 /// One line the engine wrote to stdout.
@@ -158,13 +173,13 @@ impl EngineProcess {
             .stderr(Stdio::from(stderr));
         if spec.scrub_env {
             for (k, _) in std::env::vars_os() {
-                if k.to_str().is_some_and(is_wb_variable) {
+                if k.to_str().is_some_and(is_scrubbed_variable) {
                     cmd.env_remove(&k);
                 }
             }
         }
         for (k, v) in &spec.env {
-            if spec.scrub_env && is_wb_variable(k) {
+            if spec.scrub_env && is_scrubbed_variable(k) {
                 continue;
             }
             cmd.env(k, v);

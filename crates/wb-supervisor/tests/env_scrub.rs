@@ -1,4 +1,5 @@
-//! A release-config supervisor (`scrub_env` on) starts an engine whose environment holds no `WB_*` variable,
+//! A release-config supervisor (`scrub_env` on) starts an engine whose environment holds no `WB_*` variable
+//! and no GPU-selection variable (`GGML_VK_VISIBLE_DEVICES`, `CUDA_VISIBLE_DEVICES`),
 //! although the supervisor's own environment has `WB_EMULATE` (and `WB_ENGINES_DIR`, `WB_MODELS_DIR`) and the
 //! caller listed one in `SpawnSpec::env`. The control (`scrub_env` off, as debug and gate builds run) passes
 //! them on. The child is `cmd /c set`, which prints its environment to stderr (the engine log file).
@@ -41,7 +42,12 @@ fn env_dump_of_child(scrub: bool, tag: &str) -> String {
 
 fn wb_lines(dump: &str) -> Vec<&str> {
     dump.lines()
-        .filter(|l| l.to_ascii_uppercase().starts_with("WB_"))
+        .filter(|l| {
+            let up = l.to_ascii_uppercase();
+            up.starts_with("WB_")
+                || up.starts_with("GGML_VK_VISIBLE_DEVICES=")
+                || up.starts_with("CUDA_VISIBLE_DEVICES=")
+        })
         .collect()
 }
 
@@ -75,6 +81,8 @@ fn a_release_config_supervisor_gives_its_child_no_wb_variables() {
             "WB_ENGINES_DIR",
             "WB_MODELS_DIR",
             "WB_FROM_SPEC",
+            "GGML_VK_VISIBLE_DEVICES",
+            "CUDA_VISIBLE_DEVICES",
         ] {
             assert!(
                 names.iter().any(|n| n == want),
@@ -92,6 +100,8 @@ fn a_release_config_supervisor_gives_its_child_no_wb_variables() {
         ])
         .env(INNER, "1")
         .env("WB_EMULATE", "emu-low")
+        .env("GGML_VK_VISIBLE_DEVICES", "1")
+        .env("CUDA_VISIBLE_DEVICES", "0")
         .env("WB_ENGINES_DIR", "D:\\somewhere\\engines")
         .env("WB_MODELS_DIR", "D:\\somewhere\\models")
         .output()
