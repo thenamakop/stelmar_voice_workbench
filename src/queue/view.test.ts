@@ -7,7 +7,8 @@ import {
   jobProgress,
   languageBadge,
   mergeSegments,
-  modelsText,
+  modelPairs,
+  readyText,
   partProgress,
   rollingJob,
   rowKind,
@@ -35,7 +36,18 @@ describe("names", () => {
     expect(sessionName("D:\\rec\\2027-02-08\\hall__x\\")).toBe("hall__x");
   });
   it("lists the models of a job by language", () => {
-    expect(modelsText(running)).toBe("English: small · Hindi: turbo-q5_0");
+    expect(modelPairs(running)).toEqual([
+      ["English", "small"],
+      ["Hindi", "turbo-q5_0"],
+    ]);
+  });
+});
+
+describe("the ready time", () => {
+  it("names the zone once", () => {
+    expect(readyText("All transcripts ready by 19:40")).toBe("All transcripts ready by 19:40 IST");
+    expect(readyText("All transcripts ready by 19:40 IST")).toBe("All transcripts ready by 19:40 IST");
+    expect(readyText("Nothing is waiting to be transcribed")).toBe("Nothing is waiting to be transcribed");
   });
 });
 
@@ -95,6 +107,11 @@ describe("rows", () => {
     expect(languageBadge(mixed)).toBe("HI·EN");
     expect(languageBadge(ur)).toBe("UR");
     expect([rowKind(en), rowKind(hi), rowKind(mixed), rowKind(ur)]).toEqual(["en", "hi", "mixed", "ur"]);
+  });
+  it("keeps an Urdu segment with English words in Urdu, not Hindi", () => {
+    const seg = { lang: "ur", mixed: true };
+    expect(languageBadge(seg)).toBe("UR·EN");
+    expect(rowKind(seg)).toBe("mixed-ur");
   });
   it("keeps rows in audio order with one row per start", () => {
     const [a, b, c] = SEGMENTS as [QueueSegment, QueueSegment, QueueSegment];

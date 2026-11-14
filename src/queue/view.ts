@@ -36,12 +36,14 @@ export const STATE_BADGE: Record<JobStateName, [BadgeTone, string]> = {
   parked: ["danger", "Needs attention"],
 };
 
-/** "English: small · Hindi: turbo-q5_0", in the language order of the job. */
-export function modelsText(job: QueueJob): string {
-  const parts = Object.entries(job.models_by_lang).map(
-    ([lang, id]) => `${LANGUAGE_NAMES[lang] ?? lang}: ${id}`,
-  );
-  return parts.length > 0 ? parts.join(" · ") : "No model chosen";
+/** Each language of a job with its model id, in the job's order: [["English", "small"], ["Hindi", "turbo-q5_0"]]. */
+export function modelPairs(job: QueueJob): [string, string][] {
+  return Object.entries(job.models_by_lang).map(([lang, id]) => [LANGUAGE_NAMES[lang] ?? lang, id]);
+}
+
+/** The app's "ready by" sentence always names the zone: the engine's text gives the clock time in IST only. */
+export function readyText(text: string): string {
+  return /ready by \d{1,2}:\d{2}$/.test(text) ? `${text} IST` : text;
 }
 
 /** How much of a job is committed, 0 to 1 (a job with no audio yet has none). */
@@ -110,15 +112,15 @@ export function partProgress(part: PartRecord, job: QueueJob | null, firstOpen: 
 
 /** Badge text for a segment's language: HI·EN when the segment holds both. */
 export function languageBadge(seg: Pick<QueueSegment, "lang" | "mixed">): string {
-  if (seg.mixed) return "HI·EN";
+  if (seg.mixed) return seg.lang === "ur" ? "UR·EN" : "HI·EN";
   return seg.lang.toUpperCase();
 }
 
 /** The font and direction a segment is shown in. */
-export type RowKind = "en" | "hi" | "ur" | "mixed";
+export type RowKind = "en" | "hi" | "ur" | "mixed" | "mixed-ur";
 
 export function rowKind(seg: Pick<QueueSegment, "lang" | "mixed">): RowKind {
-  if (seg.mixed) return "mixed";
+  if (seg.mixed) return seg.lang === "ur" ? "mixed-ur" : "mixed";
   if (seg.lang === "hi" || seg.lang === "ur") return seg.lang;
   return "en";
 }

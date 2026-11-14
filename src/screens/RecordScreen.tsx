@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
 import { Badge, Button, Icon, IconButton, ProgressBar, Select, Switch, Tabs, Tag } from "../ds";
 import type { BadgeTone } from "../ds";
 import { px } from "../ds/units";
@@ -14,6 +14,7 @@ import {
   partProgress,
   percent,
   rollingJob,
+  readyText,
   rowKind,
   sessionName,
 } from "../queue/view";
@@ -29,7 +30,7 @@ import { NoEngineBanner, useRegistry } from "./RegistrySections";
 // segments of the session's rolling pass, each with its language Badge. While no session is open, the rows
 // are sample text that shows the English, Hindi, mixed and Urdu fonts.
 
-type Lang = "en" | "hi" | "ur" | "mixed";
+type Lang = "en" | "hi" | "ur" | "mixed" | "mixed-ur";
 
 const SAMPLE_ROWS: { time: string; badge: string; lang: Lang; text: string }[] = [
   {
@@ -78,16 +79,17 @@ function rowText(lang: Lang, text: string): ReactNode {
         </div>
       );
     case "ur":
+    case "mixed-ur":
       return (
         <div
           lang="ur"
-          dir="rtl"
+          dir={lang === "mixed-ur" ? "auto" : "rtl"}
           style={{
             ...base,
             fontFamily: "var(--font-urdu)",
             fontSize: 19,
             lineHeight: "var(--lh-urdu)",
-            textAlign: "right",
+            textAlign: lang === "mixed-ur" ? "start" : "right",
           }}
         >
           {text}
@@ -271,6 +273,7 @@ function PartsStrip({ snapshot, job }: { snapshot: Snapshot; job: QueueJob | nul
   const shown = tiles.slice(-5);
   return (
     <div
+      role="group"
       aria-label="Parts"
       style={{
         display: "grid",
@@ -466,6 +469,7 @@ export function RecordScreen({ hasProfile, recorder, capability, queue }: Record
           <>
             {recording && stateBadge(rec)}
             <span
+              role="timer"
               aria-label="Recorded time"
               style={{
                 fontFamily: "var(--font-mono)",
@@ -549,14 +553,26 @@ export function RecordScreen({ hasProfile, recorder, capability, queue }: Record
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 {LOCK_LANGUAGES.map(([code, name]) => {
                   const expected = (session?.expected_languages ?? ["en", "hi"]).includes(code);
+                  const operable = recording && expected;
                   return (
                     <Tag
                       key={code}
                       selected={lock === null ? expected : lock === code}
-                      role="button"
-                      aria-label={recording ? `Lock to ${name}` : name}
-                      aria-pressed={lock === code}
-                      onClick={recording && expected ? () => lockTo(code) : undefined}
+                      {...(operable
+                        ? {
+                            role: "button",
+                            tabIndex: 0,
+                            "aria-label": `Lock to ${name}`,
+                            "aria-pressed": lock === code,
+                            onKeyDown: (e: ReactKeyboardEvent<HTMLSpanElement>) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                lockTo(code);
+                              }
+                            },
+                          }
+                        : {})}
+                      onClick={operable ? () => lockTo(code) : undefined}
                     >
                       {name}
                     </Tag>
@@ -675,9 +691,9 @@ export function RecordScreen({ hasProfile, recorder, capability, queue }: Record
                   session.backup_root
                     ? "Recording to this machine in 10-minute parts, copied to the backup folder as they are written."
                     : "Recording to this machine in 10-minute parts. No backup folder is set."
-                } Each closed part is transcribed in the background. ${queue.snapshot?.ready_text ?? ""}`.trim()
+                } Each closed part is transcribed in the background. ${readyText(queue.snapshot?.ready_text ?? "")}`.trim()
               : shownName
-                ? `Session stopped. ${queue.snapshot?.ready_text ?? "The transcript fills in as the queue works."}`
+                ? `Session stopped. ${queue.snapshot ? readyText(queue.snapshot.ready_text) : "The transcript fills in as the queue works."}`
                 : "No session is open. The lines below are sample text that checks the English, Hindi, mixed and Urdu fonts."}
           </Note>
         </div>

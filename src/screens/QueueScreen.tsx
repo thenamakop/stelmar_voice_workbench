@@ -8,7 +8,8 @@ import {
   LANGUAGE_NAMES,
   STATE_BADGE,
   jobProgress,
-  modelsText,
+  modelPairs,
+  readyText,
   openJobs,
   percent,
   ramText,
@@ -53,11 +54,16 @@ function JobCard({
   const left = minutesLeft(job, speed);
   const waiting = job.state === "queued" || job.state === "running";
   return (
-    <Card padding={px(16, 20)} style={{ marginBottom: 12 }} aria-label={`Job ${sessionLabel(job.session)}`}>
+    <Card
+      padding={px(16, 20)}
+      style={{ marginBottom: 12 }}
+      role="group"
+      aria-label={`Job ${sessionLabel(job.session)}`}
+    >
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <div
           style={{
-            fontSize: 16,
+            fontSize: "var(--fs-body)",
             lineHeight: px(24),
             fontWeight: "var(--fw-semibold)",
             color: "var(--ink-900)",
@@ -69,46 +75,50 @@ function JobCard({
         <Badge tone={tone} dot={job.state === "running"}>
           {label}
         </Badge>
-        <span style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-          {job.state === "paused" ? (
-            <Button size="sm" variant="secondary" iconLeft="play" onClick={() => void queue.resume(job.id)}>
-              Resume
-            </Button>
-          ) : (
+        {job.state !== "done" && (
+          <span style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+            {job.state === "paused" ? (
+              <Button size="sm" variant="secondary" iconLeft="play" onClick={() => void queue.resume(job.id)}>
+                Resume
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="secondary"
+                iconLeft="pause"
+                disabled={job.state === "parked"}
+                title={job.state === "parked" ? "Needs attention: see the message below" : undefined}
+                onClick={() => void queue.pause(job.id)}
+              >
+                Pause
+              </Button>
+            )}
             <Button
               size="sm"
               variant="secondary"
-              iconLeft="pause"
-              disabled={job.state === "done" || job.state === "parked"}
-              onClick={() => void queue.pause(job.id)}
+              iconLeft="arrow-up"
+              disabled={!waiting}
+              onClick={() => void queue.moveUp(job.id)}
             >
-              Pause
+              Move Up
             </Button>
-          )}
-          <Button
-            size="sm"
-            variant="secondary"
-            iconLeft="arrow-up"
-            disabled={!waiting}
-            onClick={() => void queue.moveUp(job.id)}
-          >
-            Move Up
-          </Button>
-          <Button
-            size="sm"
-            variant="secondary"
-            iconLeft="replace"
-            disabled={job.state === "done"}
-            onClick={() => onChange(job)}
-          >
-            Change Model
-          </Button>
-        </span>
+            <Button size="sm" variant="secondary" iconLeft="replace" onClick={() => onChange(job)}>
+              Change Model
+            </Button>
+          </span>
+        )}
       </div>
       <div
         style={{ fontSize: 13, lineHeight: "var(--lh-small)", color: "var(--text-secondary)", marginTop: 4 }}
       >
-        {modelsText(job)}
+        {modelPairs(job).map(([lang, id], k) => (
+          <span key={lang}>
+            {k > 0 ? " · " : ""}
+            {lang}:{" "}
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-caption)" }}>{id}</span>
+          </span>
+        ))}
+        {modelPairs(job).length === 0 && "No model chosen"}
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 12 }}>
         <ProgressBar
@@ -116,9 +126,7 @@ function JobCard({
           label={`${sessionLabel(job.session)} transcription`}
           style={{ flex: 1, maxWidth: 520 }}
         />
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--ink-900)", minWidth: 40 }}>
-          {percent(fraction)}
-        </span>
+        <span style={{ fontSize: 13, color: "var(--ink-900)", minWidth: 40 }}>{percent(fraction)}</span>
         <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>
           {job.units_committed} of {job.units_total} unit{job.units_total === 1 ? "" : "s"}
           {job.units_running > 0 ? ` · ${job.units_running} running` : ""}
@@ -297,7 +305,9 @@ export function QueueScreen({ queue, capability }: QueueScreenProps) {
         title="Queue"
         meta={
           <>
-            <span>{snap ? snap.ready_text : "Rolling and night passes run here at low priority"}</span>
+            <span>
+              {snap ? readyText(snap.ready_text) : "Rolling and night passes run here at low priority"}
+            </span>
             {sched?.paused && <Badge tone="warning">Paused</Badge>}
           </>
         }
@@ -339,9 +349,8 @@ export function QueueScreen({ queue, capability }: QueueScreenProps) {
                     decision?.config
                       ? String(Math.max(1, decision.config.cpu_threads - (sched?.fewer_threads ?? 0)))
                       : "Not chosen yet",
-                    { mono: true },
                   ],
-                  ["Free memory", sched ? ramText(sched.free_ram_bytes) : "Not read yet", { mono: true }],
+                  ["Free memory", sched ? ramText(sched.free_ram_bytes) : "Not read yet"],
                 ]}
               />
               {sched?.paused && (
@@ -375,9 +384,8 @@ export function QueueScreen({ queue, capability }: QueueScreenProps) {
                     <div
                       key={i}
                       style={{
-                        fontFamily: "var(--font-mono)",
-                        fontSize: 11,
-                        lineHeight: px(16),
+                        fontSize: "var(--fs-caption)",
+                        lineHeight: "var(--lh-caption)",
                         color: "var(--text-secondary)",
                         overflowWrap: "anywhere",
                       }}
@@ -394,16 +402,13 @@ export function QueueScreen({ queue, capability }: QueueScreenProps) {
         }
       >
         {queue.unavailable && !snap && (
-          <Card
-            variant="muted"
-            style={{ display: "flex", gap: 16, alignItems: "flex-start", maxWidth: 720, marginTop: 8 }}
-          >
+          <Card variant="muted" style={{ display: "flex", gap: 16, alignItems: "flex-start", maxWidth: 720 }}>
             <Icon name="info" size={24} color="var(--ink-600)" />
             <div>
               <div
                 style={{
-                  fontSize: 17,
-                  lineHeight: px(26),
+                  fontSize: "var(--fs-h4)",
+                  lineHeight: "var(--lh-h4)",
                   fontWeight: "var(--fw-semibold)",
                   color: "var(--ink-900)",
                 }}
@@ -415,16 +420,13 @@ export function QueueScreen({ queue, capability }: QueueScreenProps) {
           </Card>
         )}
         {!queue.unavailable && jobs.length === 0 && (
-          <Card
-            variant="muted"
-            style={{ display: "flex", gap: 16, alignItems: "flex-start", maxWidth: 720, marginTop: 8 }}
-          >
+          <Card variant="muted" style={{ display: "flex", gap: 16, alignItems: "flex-start", maxWidth: 720 }}>
             <Icon name="list-checks" size={24} color="var(--ink-600)" />
             <div>
               <div
                 style={{
-                  fontSize: 17,
-                  lineHeight: px(26),
+                  fontSize: "var(--fs-h4)",
+                  lineHeight: "var(--lh-h4)",
                   fontWeight: "var(--fw-semibold)",
                   color: "var(--ink-900)",
                 }}
@@ -443,7 +445,9 @@ export function QueueScreen({ queue, capability }: QueueScreenProps) {
         ))}
         {done.length > 0 && (
           <>
-            <div style={{ fontSize: 12, color: "var(--text-muted)", margin: px(8, 0, 8) }}>Finished</div>
+            <div style={{ fontSize: "var(--fs-caption)", color: "var(--text-muted)", margin: px(8, 0, 8) }}>
+              Finished
+            </div>
             {done.map((j) => (
               <JobCard key={j.id} job={j} queue={queue} onChange={setChanging} speed={speedOf(j)} />
             ))}

@@ -27,9 +27,9 @@ test("Queue screen with a busy day (screenshot)", async ({ page }) => {
   await page.goto(`/e2e/index.html?${CAP}&queue=busy`);
   await page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: "Queue" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Queue" })).toBeVisible();
-  const card = page.getByLabel("Job Parallel Track Sessions I");
+  const card = page.getByRole("group", { name: "Job Parallel Track Sessions I" });
   await expect(card.getByText("Running", { exact: true })).toBeVisible();
-  await expect(page.getByText("All transcripts ready by 19:40")).toBeVisible();
+  await expect(page.getByText("All transcripts ready by 19:40 IST")).toBeVisible();
   await fontsReady(page);
   await page.screenshot({ path: `${SHOTS}/queue-busy.png` });
   expect(remote).toEqual([]);

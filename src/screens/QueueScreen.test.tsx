@@ -22,20 +22,24 @@ describe("Queue screen", () => {
 
   it("shows a row for each job with its models, progress and the ready time", async () => {
     await openQueue({ queue: "busy" });
-    const card = await screen.findByLabelText("Job Parallel Track Sessions I");
+    const card = await screen.findByRole("group", { name: "Job Parallel Track Sessions I" });
     expect(within(card).getByText("Running")).toBeTruthy();
-    expect(within(card).getByText("English: small · Hindi: turbo-q5_0")).toBeTruthy();
+    expect(within(card).getByText("small").tagName).toBe("SPAN");
+    expect(within(card).getByText("turbo-q5_0")).toBeTruthy();
     expect(within(card).getByRole("progressbar").getAttribute("aria-valuenow")).toBe("55");
     expect(within(card).getByText(/5 of 9 units · 1 running/)).toBeTruthy();
-    expect(screen.getByText("All transcripts ready by 19:40")).toBeTruthy();
+    expect(screen.getByText("All transcripts ready by 19:40 IST")).toBeTruthy();
     expect(screen.getByText("Night pass")).toBeTruthy();
     expect(screen.getByText("Finished")).toBeTruthy();
+    // A finished job offers no dead controls.
+    const finished = screen.getAllByRole("group", { name: "Job Inaugural Session" }).at(-1) as HTMLElement;
+    expect(within(finished).queryByRole("button")).toBeNull();
   });
 
   it("sends the job's own id with Pause and Move Up", async () => {
     const calls: string[] = [];
     await openQueue({ queue: "busy", calls });
-    const card = await screen.findByLabelText("Job Parallel Track Sessions I");
+    const card = await screen.findByRole("group", { name: "Job Parallel Track Sessions I" });
     fireEvent.click(within(card).getByRole("button", { name: /Pause/ }));
     fireEvent.click(within(card).getByRole("button", { name: /Move Up/ }));
     await waitFor(() => expect(calls).toContain("queue_pause"));
@@ -67,7 +71,7 @@ describe("Queue screen", () => {
   it("changes the model for the units not yet transcribed", async () => {
     const calls: string[] = [];
     await openQueue({ queue: "busy", calls });
-    const card = await screen.findByLabelText("Job Parallel Track Sessions I");
+    const card = await screen.findByRole("group", { name: "Job Parallel Track Sessions I" });
     fireEvent.click(within(card).getByRole("button", { name: /Change Model/ }));
     expect(await screen.findByText("Applies to the units not yet transcribed")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
