@@ -79,6 +79,9 @@ pub trait Observer {
     fn event(&mut self, _e: &Event) {}
     /// A failure or restart the operator should hear about.
     fn notice(&mut self, _n: &Notice) {}
+    /// The engine's peak commit so far, about every 2 seconds while it runs (for the scheduler's memory rules:
+    /// what a running engine may still grow by is its measured peak minus this).
+    fn memory(&mut self, _peak_bytes: u64) {}
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -254,7 +257,14 @@ pub fn run_batch_with(
         // committed: an engine killed anywhere inside a chunk loses nothing that was committed and the whole
         // chunk is decoded again. Segments are shown (observer) only after they are committed.
         let mut pending: Vec<wb_protocol::SegmentEvent> = Vec::new();
+        let mut last_memory = Instant::now();
         loop {
+            if last_memory.elapsed() >= Duration::from_secs(2) {
+                last_memory = Instant::now();
+                if let Some(peak) = engine.peak_memory_bytes() {
+                    observer.memory(peak);
+                }
+            }
             if cancel.is_cancelled() {
                 engine.kill();
                 return Err(RunError::Cancelled {

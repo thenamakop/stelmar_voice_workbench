@@ -22,6 +22,7 @@ use wb_supervisor::{Cancel, Committer, Observer, RunReport};
 struct Gate {
     paused: Mutex<Option<String>>,
     refuse_starts: Mutex<Option<String>>,
+    requests: Mutex<Vec<StartRequest>>,
 }
 
 impl Gate {
@@ -29,6 +30,7 @@ impl Gate {
         Arc::new(Self {
             paused: Mutex::new(None),
             refuse_starts: Mutex::new(None),
+            requests: Mutex::new(Vec::new()),
         })
     }
     fn set_paused(&self, why: Option<&str>) {
@@ -40,7 +42,8 @@ impl StartGate for Gate {
     fn paused(&self) -> Option<String> {
         self.paused.lock().unwrap().clone()
     }
-    fn check(&self, _r: &StartRequest) -> Result<Grant, Wait> {
+    fn check(&self, r: &StartRequest) -> Result<Grant, Wait> {
+        self.requests.lock().unwrap().push(r.clone());
         if let Some(reason) = self.paused() {
             return Err(Wait { reason });
         }
@@ -78,6 +81,8 @@ impl Events for Log {
 struct Fake {
     runs: AtomicU32,
     hold: AtomicBool,
+    /// Set once a held engine has reported its peak so far.
+    reported: AtomicBool,
 }
 
 fn ev(unit: u32, start: u64, end: u64) -> SegmentEvent {
@@ -113,10 +118,13 @@ impl UnitExecutor for Fake {
         claim: &Claim,
         _grant: Grant,
         cancel: &Cancel,
-        _observer: &mut dyn Observer,
+        observer: &mut dyn Observer,
     ) -> UnitEnd {
         self.runs.fetch_add(1, Ordering::SeqCst);
         if self.hold.load(Ordering::SeqCst) {
+            // The engine has reached 700 MiB of its expected 1 GiB.
+            observer.memory(700 << 20);
+            self.reported.store(true, Ordering::SeqCst);
             while !cancel.is_cancelled() {
                 std::thread::sleep(Duration::from_millis(10));
             }
@@ -180,6 +188,7 @@ fn rig(name: &str, hold: bool) -> Rig {
     let fake = Arc::new(Fake {
         runs: AtomicU32::new(0),
         hold: AtomicBool::new(hold),
+        reported: AtomicBool::new(false),
     });
     let manager = Manager::new(
         gate.clone(),
@@ -365,6 +374,66 @@ fn the_pause_finder_does_not_start_while_the_gate_refuses_and_the_reason_is_logg
             .any(|p| p.contains("could not find the pauses of part 1")),
         "{:?}",
         r.log.problems.lock().unwrap()
+    );
+    r.manager.stop();
+}
+
+/// Two engines at once (a hybrid): the second must leave room for what the first may still grow by, which is its
+/// measured peak minus what it has reached (AGENTS.md memory rules).
+#[test]
+fn the_second_engine_of_a_hybrid_counts_what_the_first_may_still_grow_by() {
+    let r = rig("hybrid", true);
+    {
+        // 11.7 minutes of audio with a pause at 5 minutes: two units.
+        let mut q = r.handle.queue.lock().unwrap();
+        let pauses = PartPauses {
+            pauses: vec![wb_queue::units::Pause {
+                start_ms: 298_000,
+                end_ms: 302_000,
+            }],
+            fallback: vec![],
+        };
+        q.add_part(1, 0, 700_000, 48_000, &pauses).unwrap();
+        q.plan_units(r.job, true).unwrap();
+        assert!(
+            q.units(r.job).unwrap().len() >= 2,
+            "{:?}",
+            q.units(r.job).unwrap()
+        );
+    }
+    let _cpu = r
+        .manager
+        .start_slot(Slot {
+            name: "cpu".into(),
+            device: Device::Cpu,
+        })
+        .unwrap();
+    wait_until("the first engine to report its memory", 5, || {
+        r.fake.reported.load(Ordering::SeqCst)
+    });
+    let _gpu = r
+        .manager
+        .start_slot(Slot {
+            name: "gpu".into(),
+            device: Device::Gpu,
+        })
+        .unwrap();
+    wait_until("the second engine to ask the gate", 5, || {
+        r.gate
+            .requests
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|q| q.what.contains("on gpu"))
+    });
+    let reqs = r.gate.requests.lock().unwrap().clone();
+    let first = reqs.iter().find(|q| q.what.contains("on cpu")).unwrap();
+    let second = reqs.iter().find(|q| q.what.contains("on gpu")).unwrap();
+    assert_eq!(first.other_headroom_bytes, 0, "nothing else was running");
+    assert_eq!(
+        second.other_headroom_bytes,
+        (1 << 30) - (700 << 20),
+        "the first engine may still grow by its expected peak minus the 700 MiB it has reached"
     );
     r.manager.stop();
 }

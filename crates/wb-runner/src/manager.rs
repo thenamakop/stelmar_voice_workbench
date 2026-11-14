@@ -8,7 +8,7 @@
 //! overrun) the manager cancels the running engines: their staged files resume them when the rules allow it.
 //! The recorder is never touched: nothing in here shares a lock with it.
 
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
@@ -104,6 +104,9 @@ pub struct Manager {
     /// Slots turned off for this run after a fatal failure of their device.
     disabled: Mutex<Vec<Device>>,
     other_device: Mutex<bool>,
+    /// What each running engine may still grow by (its measured peak minus what it has reached): the engine that
+    /// starts next must leave room for it (AGENTS.md memory rules for two engines at once).
+    headroom: Mutex<BTreeMap<String, u64>>,
 }
 
 impl Manager {
@@ -127,6 +130,7 @@ impl Manager {
             plan_tx: Mutex::new(None),
             disabled: Mutex::new(Vec::new()),
             other_device: Mutex::new(false),
+            headroom: Mutex::new(BTreeMap::new()),
         })
     }
 
@@ -406,6 +410,15 @@ impl Manager {
             .spawn(move || me.slot_loop(&slot))
     }
 
+    /// What the other running engines may still grow by, for the engine of `slot` that is about to start.
+    fn other_headroom(&self, slot: &str) -> u64 {
+        lock(&self.headroom)
+            .iter()
+            .filter(|(n, _)| n.as_str() != slot)
+            .map(|(_, v)| *v)
+            .sum()
+    }
+
     fn claim_any(&self, device: Device) -> Option<(Arc<SessionHandle>, Claim)> {
         let sessions = self.sessions();
         let mut best: Option<(usize, (u8, i64))> = None;
@@ -465,7 +478,7 @@ impl Manager {
                 what: what.clone(),
                 peak_commit_bytes: peak,
                 gpu_local_bytes: gpu_local,
-                other_headroom_bytes: 0,
+                other_headroom_bytes: self.other_headroom(&slot.name),
             };
             let name = session.name.clone();
             let mut on_gate = |e: GateEvent| self.log_gate(&name, &e);
@@ -481,13 +494,19 @@ impl Manager {
                 let _ = lock(&session.queue).release(&claim);
                 continue;
             };
+            // Until its own peak is read, a running engine may still grow by all of its expected peak.
+            lock(&self.headroom).insert(slot.name.clone(), peak.saturating_add(gpu_local));
             self.events.changed();
             let started = Instant::now();
             let mut obs = SlotObserver {
                 events: self.events.as_ref(),
                 who: format!("{}: {what}", session.name),
+                headroom: &self.headroom,
+                slot: slot.name.clone(),
+                expected_peak: peak.saturating_add(gpu_local),
             };
             let end = self.executor.run(&claim, grant, &cancel, &mut obs);
+            lock(&self.headroom).remove(&slot.name);
             lock(&self.running).retain(|(n, _)| n != &slot.name);
             self.finish_unit(&session, &claim, slot, end, started.elapsed(), grant);
             self.events.changed();
@@ -608,6 +627,9 @@ fn fmt_bytes(b: Option<u64>) -> String {
 struct SlotObserver<'a> {
     events: &'a dyn Events,
     who: String,
+    headroom: &'a Mutex<BTreeMap<String, u64>>,
+    slot: String,
+    expected_peak: u64,
 }
 
 impl Observer for SlotObserver<'_> {
@@ -619,5 +641,12 @@ impl Observer for SlotObserver<'_> {
             _ => LogLevel::Info,
         };
         self.events.log(level, &format!("{}: {notice:?}", self.who));
+    }
+
+    fn memory(&mut self, peak_bytes: u64) {
+        lock(self.headroom).insert(
+            self.slot.clone(),
+            self.expected_peak.saturating_sub(peak_bytes),
+        );
     }
 }
