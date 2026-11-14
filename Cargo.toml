@@ -39,6 +39,7 @@ wb-engine-core = { path = "crates/wb-engine-core" }
 wb-machine = { path = "crates/wb-machine" }
 wb-models = { path = "crates/wb-models" }
 wb-protocol = { path = "crates/wb-protocol" }
+wb-queue = { path = "crates/wb-queue" }
 wb-recorder = { path = "crates/wb-recorder" }
 wb-supervisor = { path = "crates/wb-supervisor" }
 # Same version as Tauri 2.11 uses, so the app links one copy. Features are chosen per crate; never

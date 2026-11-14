@@ -4604,6 +4604,7 @@ dependencies = [
  "thiserror 2.0.21",
  "tracing",
  "wb-protocol",
+ "wb-queue",
  "windows 0.61.3",
 ]
 
