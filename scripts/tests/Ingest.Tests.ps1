@@ -148,6 +148,32 @@ try {
   try { $e = $zf.GetEntry('summary.json'); $s = New-Object IO.StreamReader($e.Open()); $txt = $s.ReadToEnd(); $s.Dispose(); $e.Delete(); $ne = $zf.CreateEntry('summary.json'); $w = New-Object IO.StreamWriter($ne.Open()); $w.Write($txt); $w.Dispose(); $e2 = $zf.GetEntry('work/gates/soak/gate.log'); $e2.Delete(); $n2 = $zf.CreateEntry('work/gates/soak/gate.log'); $w2 = New-Object IO.StreamWriter($n2.Open()); $w2.Write('tampered'); $w2.Dispose() } finally { $zf.Dispose() }
   $ib = Ingest @('-Zip', $bad)
   Check 'a zip whose file no longer matches its manifest is refused' ($ib.Code -ne 0 -and $ib.Text -match 'does not match its ZIP-MANIFEST')
+
+# --- reporters: findings lower a status, never raise one ---
+$sum = '{"gates":[{"id":"quick-check","status":"PASS","headline":"ok"},{"id":"speed-table-igpu","status":"INFO","headline":"cells"},{"id":"soak","status":"PASS","headline":"fine"},{"id":"hashing-1","status":"INVALID","headline":"x"}]}' | ConvertFrom-Json
+$find = '{"quick-check":["hybrid choice INCONSISTENT"],"speed-table-igpu":["median differs"],"hashing-1":["something"]}' | ConvertFrom-Json
+$out = @(Set-IngestReporterFindings -Summary $sum -Findings $find)
+Check 'a PASS with a reporter finding becomes FAIL and says why' (@($sum.gates | Where-Object { $_.id -eq 'quick-check' })[0].status -eq 'FAIL' -and @($sum.gates | Where-Object { $_.id -eq 'quick-check' })[0].headline -match 'INCONSISTENT')
+Check 'an INFO with a finding becomes INVALID' (@($sum.gates | Where-Object { $_.id -eq 'speed-table-igpu' })[0].status -eq 'INVALID')
+Check 'a gate without a finding is untouched, and an INVALID one is never raised' (@($sum.gates | Where-Object { $_.id -eq 'soak' })[0].status -eq 'PASS' -and @($sum.gates | Where-Object { $_.id -eq 'hashing-1' })[0].status -eq 'INVALID')
+Check 'no findings change nothing' (@(Set-IngestReporterFindings -Summary $sum -Findings $null).Count -eq 0)
+
+$py = Find-IngestPython -Repo $repo
+if (-not $py) { Write-Host 'skip  pack_reports.py (the evaluation Python was not found)' }
+else {
+  $w = Join-Path $tmp 'rep-work'
+  New-Item -ItemType Directory -Force -Path (Join-Path $w 'gates\speed-table-igpu') | Out-Null
+  $recs = @(
+    '{"status":"ok","model":"small","clip":"bench-en.wav","mode":"rolling","threads":4,"variant":"vulkan","device_name":"Intel UHD","rtf_median":0.5,"rtf_runs":[0.4,0.5,0.6]}',
+    '{"status":"ok","model":"medium","clip":"bench-en.wav","mode":"rolling","threads":4,"variant":"vulkan","device_name":"Intel UHD","rtf_median":0.9,"rtf_runs":[1.2,1.3,1.4]}')
+  [IO.File]::WriteAllText((Join-Path $w 'gates\speed-table-igpu\results.jsonl'), (($recs -join "`n") + "`n"), (New-Object Text.UTF8Encoding($false)))
+  $ro = Join-Path $tmp 'rep-out'
+  $r = Invoke-PackNative -FilePath $py -ArgumentList @('-X', 'utf8', (Join-Path $repo 'scripts\gates\pack_reports.py'), $w, $ro) -TimeoutSeconds 120
+  $cj = Read-PackJson -Path (Join-Path $ro 'consistency.json')
+  Check 'the speed-table reporter runs and writes its files' ($r.ExitCode -eq 0 -and (Test-Path (Join-Path $ro 'speed-table-igpu.txt')) -and (Test-Path (Join-Path $ro 'quick-vs-full.txt')))
+  Check 'a recorded median that is not the median of its runs is a finding; a correct one is not' ($cj -and @($cj.'speed-table-igpu').Count -eq 1 -and (@($cj.'speed-table-igpu')[0]) -match 'medium')
+  Check 'a gate that did not run is "not run", not a finding' (((Get-Content -LiteralPath (Join-Path $ro 'speed-table-cpu.txt') -Raw) -match 'not run') -and -not $cj.PSObject.Properties['speed-table-cpu'])
+}
 } finally { Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue }
 if ($fails) { Write-Host "$fails failed"; exit 1 }
 Write-Host 'Ingest tests passed'

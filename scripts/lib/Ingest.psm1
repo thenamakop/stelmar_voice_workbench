@@ -23,6 +23,7 @@
 
 Set-StrictMode -Version 2
 
+Import-Module (Join-Path $PSScriptRoot 'PackNative.psm1')
 $script:Marker = ' ;; gate pack: '
 
 function ConvertTo-IngestRedacted {
@@ -271,4 +272,48 @@ function Update-IngestMachines {
   [pscustomobject]@{ Lines = $out; Changed = $changed }
 }
 
-Export-ModuleMember -Function Get-IngestTableMap, ConvertTo-IngestRedacted, Get-IngestRequiredRoles, Read-IngestAnnotations, Get-IngestStatusCell, Update-IngestGatesLines, Update-IngestRunsBlock, Update-IngestMachines
+# Pure. The reporters' consistency findings (gate id -> problems) lowered onto the gates of a summary:
+# PASS becomes FAIL and INFO becomes INVALID, with the first problem added to the headline. Nothing is
+# ever raised. Returns the lines to print; the gate objects are changed in place.
+function Set-IngestReporterFindings {
+  [CmdletBinding()]
+  param([Parameter(Mandatory = $true)] $Summary, $Findings)
+  $out = New-Object System.Collections.Generic.List[string]
+  if ($null -eq $Findings) { return @() }
+  foreach ($p in $Findings.PSObject.Properties) {
+    $problems = @($p.Value)
+    if ($problems.Count -eq 0) { continue }
+    foreach ($g in @($Summary.gates | Where-Object { [string]$_.id -eq $p.Name })) {
+      $was = [string]$g.status
+      $now = $was
+      if ($was -eq 'PASS') { $now = 'FAIL' } elseif ($was -eq 'INFO') { $now = 'INVALID' }
+      if ($now -ne $was) {
+        $g.status = $now
+        $g.headline = ('{0}; the ingest reporter found: {1}' -f [string]$g.headline, [string]$problems[0])
+        $out.Add(('  reporter: {0} {1} -> {2}: {3}' -f $p.Name, $was, $now, [string]$problems[0]))
+      } else {
+        $out.Add(('  reporter: {0} stays {1}; findings: {2}' -f $p.Name, $was, ($problems -join ' | ')))
+      }
+    }
+  }
+  @($out.ToArray())
+}
+
+# Where the evaluation environment's Python is: this checkout, the environment variable WB_EVAL_PYTHON,
+# or the main checkout of this repository when this is a worktree. '' when none exists.
+function Find-IngestPython {
+  [CmdletBinding()]
+  param([Parameter(Mandatory = $true)] [string]$Repo)
+  $c = New-Object System.Collections.Generic.List[string]
+  $c.Add((Join-Path $Repo 'eval\.venv\Scripts\python.exe'))
+  if ($env:WB_EVAL_PYTHON) { $c.Add($env:WB_EVAL_PYTHON) }
+  try {
+    $g = Invoke-PackNative -FilePath 'git' -ArgumentList @('-C', $Repo, 'rev-parse', '--path-format=absolute', '--git-common-dir') -TimeoutSeconds 30
+    $common = @($g.Output | Select-Object -First 1)[0]
+    if ($common) { $c.Add((Join-Path (Split-Path -Parent ([string]$common)) 'eval\.venv\Scripts\python.exe')) }
+  } catch { }
+  foreach ($p in $c) { if ($p -and (Test-Path -LiteralPath $p)) { return $p } }
+  ''
+}
+
+Export-ModuleMember -Function Set-IngestReporterFindings, Find-IngestPython, Get-IngestTableMap, ConvertTo-IngestRedacted, Get-IngestRequiredRoles, Read-IngestAnnotations, Get-IngestStatusCell, Update-IngestGatesLines, Update-IngestRunsBlock, Update-IngestMachines

@@ -36,6 +36,7 @@ if (-not $GatesMd) { $GatesMd = Join-Path $Repo 'docs\GATES.md' }
 if (-not $EvidenceRoot) { $EvidenceRoot = Join-Path $Repo 'docs\evidence' }
 Import-Module (Join-Path $Repo 'scripts\lib\Ingest.psm1') -Force
 Import-Module (Join-Path $Repo 'scripts\lib\PackCore.psm1') -Force
+Import-Module (Join-Path $Repo 'scripts\lib\PackNative.psm1') -Force
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 function Fail([string]$m) { Write-Host "ingest-gate-results: $m" -ForegroundColor Red; exit 1 }
@@ -73,6 +74,24 @@ try {
   $counts = @($summary.gates | Group-Object status | ForEach-Object { "$($_.Count) $($_.Name)" }) -join ', '
   Write-Host ("gates: {0}; waiting {1}; not in this pack {2}" -f $counts, @($summary.pending).Count, @($summary.not_in_pack).Count)
 
+  # ---- 2b. The Python reporters (system_check_report.py and the speed-table recomputation) ----
+  # They read the raw reports of the zip and write evidence files; a consistency problem lowers a PASS to
+  # FAIL or an INFO to INVALID before the rows are written. They never raise a status.
+  $py = Find-IngestPython -Repo $Repo
+  $repOut = Join-Path $tmp 'reports-out'
+  if (-not $py) {
+    Write-Host 'reporters not run: the evaluation environment (eval\.venv) was not found; the statuses are the laptop''s own' -ForegroundColor Yellow
+  } else {
+    $rp = Invoke-PackNative -FilePath $py -ArgumentList @('-X', 'utf8', (Join-Path $Repo 'scripts\gates\pack_reports.py'), (Join-Path $tmp 'work'), $repOut) -TimeoutSeconds 600
+    if ($rp.ExitCode -ne 0) {
+      Write-Host ('reporters failed (exit {0}): {1}' -f $rp.ExitCode, ((@($rp.Error) + @($rp.Output)) -join ' ')) -ForegroundColor Yellow
+    } else {
+      Write-Host ($rp.Output -join ' ')
+      $find = Read-PackJson -Path (Join-Path $repOut 'consistency.json')
+      foreach ($l in @(Set-IngestReporterFindings -Summary $summary -Findings $find)) { Write-Host $l -ForegroundColor Yellow }
+    }
+  }
+
   # ---- 2. Evidence ----
   $textExt = '.txt', '.json', '.log', '.csv', '.md', '.jsonl', '.out', '.err'
   $copied = 0
@@ -89,6 +108,10 @@ try {
       $copied++
     }
     Copy-Item -LiteralPath (Join-Path $tmp 'summary.json') -Destination (Join-Path $evDir 'summary.json') -Force
+    if (Test-Path -LiteralPath $repOut) {
+      New-Item -ItemType Directory -Force -Path (Join-Path $evDir 'reports') | Out-Null
+      foreach ($f in @(Get-ChildItem -LiteralPath $repOut -File)) { [IO.File]::WriteAllText((Join-Path (Join-Path $evDir 'reports') $f.Name), ((@(ConvertTo-IngestRedacted -Line @(Get-Content -LiteralPath $f.FullName -Encoding UTF8)) -join "`r`n") + "`r`n"), (New-Object Text.UTF8Encoding($false))) }
+    }
     # A short reading of the summary, written by this script.
     $txt = New-Object System.Collections.Generic.List[string]
     $txt.Add("Gate pack run: $Role laptop, machine $($summary.machine), created $($summary.created)")
