@@ -177,8 +177,8 @@ function Invoke-PackRecorderGate {
   $evLines = @()
   if ($e.Evidence) { $evLines = @(Get-Content -LiteralPath $e.Evidence -Encoding UTF8) }
   # A refusal before the run (rig, overlay tools, RAM) is reported by the gate's crash evidence; pass its reason on.
-  $reason = @($evLines | Where-Object { $_ -match '^(RIG REFUSED|Overlay tools|Only [0-9.]+ GB|An engine build)' } | Select-Object -First 1)
-  if ($reason.Count -eq 0) { $reason = @($evLines | Where-Object { $_ -match 'the \w+ gate stopped on an error: (RIG REFUSED|RIG SELF-TEST|Overlay tools|Only [0-9.]+ GB|An engine build)' } | Select-Object -First 1) }
+  $reason = @($evLines | Where-Object { $_ -cmatch '^(RIG REFUSED|RIG SELF-TEST FAILED|Overlay tools are running|Only [0-9.]+ GB|An engine build)' } | Select-Object -First 1)
+  if ($reason.Count -eq 0) { $reason = @($evLines | Where-Object { $_ -cmatch 'the \w+ gate stopped on an error: (RIG REFUSED|RIG SELF-TEST FAILED|Overlay tools are running|Only [0-9.]+ GB|An engine build)' } | Select-Object -First 1) }
   if ($reason.Count -gt 0 -and $e.ExitCode -ne 0) {
     $msg = [string]$reason[0]
     if ($msg -match 'stopped on an error: (.+)$') { $msg = $Matches[1] }
