@@ -239,6 +239,13 @@ pub fn capture(
     })
 }
 
+/// Whether the raw WASAPI capture loop ends: the stop file is there, whether or not the last wait
+/// brought a packet.
+#[cfg(any(windows, test))]
+fn capture_should_end(stop_requested: bool) -> bool {
+    stop_requested
+}
+
 /// The same capture as [`capture`], but through raw WASAPI (shared mode, event driven) instead of
 /// cpal, so a fault that both the app and the cpal reference share still shows up against a third,
 /// independent path. Same output layout; a DATA_DISCONTINUITY packet counts as an xrun.
@@ -295,9 +302,14 @@ pub fn capture_wasapi(
                     result = Err(anyhow!("the reference writer thread stopped"));
                     break;
                 }
+                // A virtual cable keeps delivering (silent) packets after the player has stopped, so
+                // the stop file must end the loop even when a packet arrived.
+                if capture_should_end(stop) {
+                    break;
+                }
             }
             Ok(None) => {
-                if stop {
+                if capture_should_end(stop) {
                     break;
                 }
             }
@@ -339,6 +351,12 @@ pub fn capture_wasapi(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_wasapi_capture_ends_on_the_stop_file_even_while_packets_keep_arriving() {
+        assert!(capture_should_end(true));
+        assert!(!capture_should_end(false));
+    }
 
     #[test]
     fn each_xrun_is_logged_with_its_callback_count_audio_time_and_wall_clock() {
