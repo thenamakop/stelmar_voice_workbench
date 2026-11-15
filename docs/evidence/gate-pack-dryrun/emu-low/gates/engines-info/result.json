@@ -59,6 +59,11 @@
                                   },
                      "cpu":  "Intel(R) Core(TM) i9-14900HX",
                      "avx512f":  false,
+                     "avx512_applicable":  false,
+                     "avx512_features_present":  [
+
+                                                 ],
+                     "avx512_engine_message":  "This engine build (avx512) needs CPU features this computer does not have: avx512f, avx512cd, avx512vl, avx512dq, avx512bw. Use the avx2 build, or run the system check, which picks a build that fits.",
                      "gpus":  [
                                   {
                                       "name":  "NVIDIA GeForce RTX 4070 Laptop GPU",
@@ -86,5 +91,5 @@
               ],
     "quick":  true,
     "not_at_full_length":  false,
-    "finished":  "2026-11-15T06:54:36.6252237+05:30"
+    "finished":  "2026-11-15T11:52:02.5035526+05:30"
 }

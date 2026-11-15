@@ -74,7 +74,7 @@ whisper_vad_segments_from_samples: detecting speech timestamps in 960000 samples
 whisper_vad_detect_speech_no_reset: detecting speech in 960000 samples
 whisper_vad_detect_speech_no_reset: n_chunks: 1875
 whisper_vad_detect_speech_no_reset: props size: 1875
-whisper_vad_detect_speech_no_reset: vad time = 504.17 ms processing 960000 samples
+whisper_vad_detect_speech_no_reset: vad time = 719.23 ms processing 960000 samples
 whisper_vad_segments_from_probs: detecting speech timestamps using 1875 probabilities
 whisper_vad_segments_from_probs: Merged 2 adjacent segments, now have 10 segments
 whisper_vad_segments_from_probs: Final speech segments after filtering: 10
@@ -92,7 +92,7 @@ whisper_vad_segments_from_samples: detecting speech timestamps in 960000 samples
 whisper_vad_detect_speech_no_reset: detecting speech in 960000 samples
 whisper_vad_detect_speech_no_reset: n_chunks: 1875
 whisper_vad_detect_speech_no_reset: props size: 1875
-whisper_vad_detect_speech_no_reset: vad time = 968.95 ms processing 960000 samples
+whisper_vad_detect_speech_no_reset: vad time = 1294.91 ms processing 960000 samples
 whisper_vad_segments_from_probs: detecting speech timestamps using 1875 probabilities
 whisper_vad_segments_from_probs: Merged 2 adjacent segments, now have 10 segments
 whisper_vad_segments_from_probs: Final speech segments after filtering: 10

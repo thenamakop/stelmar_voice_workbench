@@ -1,14 +1,14 @@
 {
     "id":  "quick-check",
     "status":  "PASS",
-    "headline":  "the quick check took 415 s (bar 480 s); recorder safety run passed; tier C",
+    "headline":  "the quick check took 414 s (bar 480 s); recorder safety run passed; tier C",
     "measured":  {
-                     "check_seconds":  414.627332,
+                     "check_seconds":  413.9901309,
                      "bar_seconds":  480,
                      "partial":  true,
                      "cells":  9,
-                     "cells_total_seconds":  528.7,
-                     "longest_cell_seconds":  120.1,
+                     "cells_total_seconds":  529.2,
+                     "longest_cell_seconds":  120.5,
                      "tier":  "C",
                      "gpu_hindi_slower_than_1_5":  false
                  },
@@ -26,5 +26,5 @@
               ],
     "quick":  true,
     "not_at_full_length":  false,
-    "finished":  "2026-11-15T07:02:10.3087152+05:30"
+    "finished":  "2026-11-15T11:59:28.7064065+05:30"
 }

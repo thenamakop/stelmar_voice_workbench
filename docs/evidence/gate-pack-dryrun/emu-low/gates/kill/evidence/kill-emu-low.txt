@@ -1,0 +1,148 @@
+source: gate pack built from commit 9b4ada057be99e255d84623e0349afe55c3503c6 on 2026-11-15T11:51:11.4646267+05:30; every file's SHA-256 is in PACK-MANIFEST.json
+build: stelmar-voice-workbench.exe sha256 bdb4a4b0dae41842885458c89f1d0a2010e868716c8910418406a7496dc5361d (built 2026-11-15 01:14)
+build: wb-testbench.exe sha256 404a43ae920cc0065a365c4b3f9ad255c9f5ef46b04d1211eca2c2c4191e3927 (built 2026-11-15 11:48)
+build: wb-emulate.exe sha256 5f48927b76c53eedc3535afbf5c01fc6488caa18e077e24d5c2a3a243faf74a5 (built 2026-11-15 01:18)
+gate: phase1-kill-emu-low
+started: 2026-11-15 12:28:26 +05:30
+machine: LENOVO-83DF-b8384c
+emulation profile: emu-low
+overlay tools closed: yes (RTSS.exe, MSIAfterburner.exe and LatMon.exe not running when the gate started)
+overlay tools at the end: none running
+engine builds: none running when the gate started (D:\Projects\stelmar-build.lock absent; no cargo.exe, rustc.exe, cl.exe, link.exe, cmake.exe, ninja.exe, nvcc.exe, glslc.exe, MSBuild.exe, cicc.exe, ptxas.exe, fatbinary.exe, nvlink.exe process)
+engine builds at the end: none running
+Track B paused: D:\Projects\stelmar-gate.lock held for the whole run (removed in a finally block)
+Track B busy lock: D:\Projects\stelmar-eval-busy.lock absent at start
+free RAM: 18.6 GB at start (needs 7 GB), 18.6 GB at end
+parts: 30 s for this test (WB_GATE_PART_SECONDS), so kills can be aimed at rollovers; not covered here: kills during Pause or while the input is lost
+app build: target\gate\stelmar-voice-workbench.exe (cargo profile gate, features gate-hooks + custom-protocol)
+verdict: PASS (PROVISIONAL: emulated)
+
+checks:
+  [x] audio lost at each kill <= 1000 ms (max 0 ms)
+  [x] every part played before repair, after each kill
+  [x] every part decodes in Media Foundation at the end
+  [x] restart offered Resume after every kill (2 of 2)
+  [x] parts.json equals a rebuild from the part files
+  [x] only the restarts break the audio (2 forward jumps for 2 kills)
+  [x] fidelity: each run of the app equals the reference capture sample for sample, one fixed offset per run (3 runs, differing frames 0, reference audio without an app recording 0 frames)
+  [x] no other program played into the cable
+  [x] reference capture ran cleanly
+  [x] zero ring-buffer overruns and dropped samples (final run, and before every kill)
+  [x] driver xruns: at most one per run, within 2 s of the stream start, zero loss or duplication around it (total 3, excused 3)
+  [x] mirror SHA-256 equals the originals at Stop
+
+recording rule (9 Nov 2026): fidelity decides PASS or FAIL; upstream breaks are reported; a run with limits exceeded is INVALID (docs/PLAN.md section 12)
+fidelity: app compared with the reference capture over 11,613,280 frames (241.9 s) in 3 run(s) of the app; differing frames 0; reference audio the app has no recording of 0 frame(s); audio only the app has 0 frame(s); restart gaps 311360 frame(s)
+  reference audio after the app's last frame: 58080 frame(s), not judged (this gate stops the app before the player, by design)
+  run 1: app frames 0 to 5749248, one fixed offset -175680 frames (found by a stretch of the app); compared 5749248, differing 0, largest difference 0
+  run 2: app frames 5749248 to 10115200, one fixed offset -332352 frames (found by a stretch of the app); compared 4365952, differing 0, largest difference 0
+  run 3: app frames 10115200 to 11613280, one fixed offset -487040 frames (found by a stretch of the app); compared 1498080, differing 0, largest difference 0
+upstream breaks (between the source and the reference capture; reported, not gated): 1 in 4.2 minutes of audio, 0 counted toward the limit of 1 (breaks in the first 3 s of playback are not counted)
+  at source 0.028 s, 12:29:15.935 IST: repeat 10.8 ms, skipped 0.0 ms, unmatched 72.0 ms; no reference xrun logged; late player callbacks within 500 ms: 0
+player callbacks: longest gap 12.4 ms against a 100 ms output buffer; late callbacks (a gap longer than the buffer) 0
+validity: valid (limits: a late player callback within 500 ms of a break, more than 250 ms unmatched in a break, more than max(1, floor(minutes / 10)) counted breaks, a missing, misaligned or incomplete reference, or an upstream break without late-callback data)
+
+loss per kill (method: kill time minus that run's first-sample time, minus the audio that run left on disk after repair):
+  kill 1 (-500 ms from a rollover; landed 29,776 ms into a part): first sample 12:29:19.583, killed 12:31:19.174: 119,590 ms of wall time, 119,776 ms recorded, lost -186 ms; from the source signal -179 ms; parts playable before repair: True
+  kill 2 (500 ms from a rollover; landed 957 ms into a part): first sample 12:31:22.616, killed 12:32:53.349: 90,733 ms of wall time, 90,957 ms recorded, lost -224 ms; from the source signal -226 ms; parts playable before repair: True
+
+parts after each kill, before repair (Media Foundation decode):
+  kill 1: audio/part-0001.wav header 30000 ms decoded 30000 ms; audio/part-0002.wav header 30000 ms decoded 30000 ms; audio/part-0003.wav header 30000 ms decoded 30000 ms; audio/part-0004.wav header 29520 ms decoded 29520 ms
+  kill 2: audio/part-0001.wav header 30000 ms decoded 30000 ms; audio/part-0002.wav header 30000 ms decoded 30000 ms; audio/part-0003.wav header 30000 ms decoded 30000 ms; audio/part-0004.wav header 29776 ms decoded 29776 ms; audio/part-0005.wav header 30000 ms decoded 30000 ms; audio/part-0006.wav header 30000 ms decoded 30000 ms; audio/part-0007.wav header 30000 ms decoded 30000 ms; audio/part-0008.wav header 360 ms decoded 360 ms
+
+final: 10 parts, 241.9 s of audio, mirror 14 files equal True (mirror on the same machine, separate drive pending)
+driver xruns (rule: one per run within 2 s of the stream start, reported not gated, only with zero loss and duplication): total 3; excused at audio-time offsets 0, 0, 0 ms; problems: none
+parts.json check: {"equal":true,"in_parts_json":10,"rebuilt":10,"differences":[]}
+  rig: the player endpoint 'Speakers (2- VB-Audio Virtual Cable)' and the capture endpoint 'CABLE Output (2- VB-Audio Virtual Cable)' both belong to VB-CABLE instance ROOT\MEDIA\0003 (paired by device instance, not by name); the app and the reference capture record 'CABLE Output (2- VB-Audio Virtual Cable)'
+  rig self-test before the gate: a known 6 s signal played into 'Speakers (2- VB-Audio Virtual Cable)' was found on 'CABLE Output (2- VB-Audio Virtual Cable)' 0.08 s after the capture started; lowest block correlation 1.000; level RMS 4,729 (-16.8 dBFS); the check took 9.3 s
+  rig note: 6 stale VB-CABLE endpoint entries (not present or disabled) are ignored: they are not usable devices
+  rig note: VB-CABLE driver devices that are not working (no endpoints, ignored): ROOT\MEDIA\0001 [Error], ROOT\MEDIA\0002 [Error]
+two references (the app against the cpal capture and against a raw WASAPI capture of the same input): PASS - the app equals both independent references sample for sample
+  app against the cpal reference: equal
+  app against the WASAPI reference: equal
+  cpal reference against the WASAPI reference: equal
+capture margin per run of the app:
+  2026-11-15T12:29:19.5809381+05:30 capture_buffer audio_ms=0 requested 1000 ms, granted 1000.0 ms (48000 frames), engine period 10.0 ms
+  2026-11-15T12:29:19.5839016+05:30 audio_started audio_ms=0
+  2026-11-15T12:31:22.6240296+05:30 capture_buffer audio_ms=119776 requested 1000 ms, granted 1000.0 ms (48000 frames), engine period 10.0 ms
+  2026-11-15T12:31:22.6169053+05:30 audio_started audio_ms=119776
+  2026-11-15T12:32:56.8047739+05:30 capture_buffer audio_ms=210733 requested 1000 ms, granted 1000.0 ms (48000 frames), engine period 10.0 ms
+  2026-11-15T12:32:56.7987033+05:30 audio_started audio_ms=210733
+  2026-11-15T12:33:28.0152338+05:30 closed audio_ms=241943 overrun_samples=0 xruns=1 dropped_samples=0 recorder_restarts=0 recorder_cpu_ms=218 detector_over_budget_blocks=0 detector_skipped_ms=0 detector_max_block_us=81 detectors_disabled=0 capture_buffer_granted_ms=1000.0 capture_max_callback_gap_ms=12.0 capture_margin_ms=988.0 capture_gaps_ge_50ms=0 capture_gaps_ge_100ms=0 capture_gaps_ge_250ms=0 capture_gaps_ge_500ms=0 capture_callback_period_ms=10.00
+  final run: longest gap between capture callbacks 12.0 ms; device buffer granted 1000.0 ms; margin 987.987 ms; position breaks 0
+  rig placement (player and reference capture pinned to performance cores outside the job, HIGH priority class; masks read back from the running processes):
+    job (the app inside the emulation job): pid 30084, mask 0xf0000 (logical processors 16-19); CPU set none (all processors the affinity mask allows)
+    player: pid 30964, mask 0xc000 (logical processors 14-15), priority class High; CPU set none (all processors the affinity mask allows); the player itself reports 0xc000 at stream start
+    reference capture: pid 15204, mask 0x3000 (logical processors 12-13), priority class High; CPU set none (all processors the affinity mask allows); the reference capture itself reports 0x3000 at stream start
+    overlap: none (checked on the planned masks before anything started, and on the masks read back from the running processes)
+live detector check (not gated in Phase 2; any miss or false alarm stops the run sequence for a decision before the speed tables):
+  rule: a shared upstream break is matched when a repeated_block or zero_gap event of the app's session.json lies within +-50 ms of the break's span in the app's audio time (the span runs from the break's source position, mapped through the app analysis, to the end of its unmatched stretch); an event with no shared break is a false alarm
+  shared upstream breaks found by the harness: 1; matched 0; missed 0; before the app began recording 1; events with no shared break (false alarms) 0; lead-in events (before the first source sample that reached the recording) 0
+    break at source 0.028 s, app audio -3,551.5 to -3,479.5 ms: BEFORE THE APP BEGAN RECORDING: the break is in the source before the first recorded sample, so no recorder could see it (not counted as a miss)
+  app counters after the PositionCheck fix: not available (the report is from a build before Phase 2)
+  (position counters are per run of the app; the force-killed runs have no report, so none are given here)
+  player late callbacks: 0 (a gap between render callbacks longer than the 100 ms output buffer); longest gap between callbacks 12.4 ms; gaps of 20 ms or more: 0, 30 ms or more: 0, 50 ms or more: 0
+    app-only break (not in the reference capture) at source 123.355 s: no late player callback within 500 ms of it; the longest callback gap in the whole run was 12.4 ms, so the player never ran its output buffer dry
+    app-only break (not in the reference capture) at source 217.577 s: no late player callback within 500 ms of it; the longest callback gap in the whole run was 12.4 ms, so the player never ran its output buffer dry
+cable interference: none
+  cable session: System Sounds (Windows) (pid 0) on 'CABLE In 16 Ch (2- VB-Audio Virtual Cable)': playing in 0 of 157 polls, first seen 12:29:20, last 12:32:38; Windows System Sounds entry, silent
+  cable session: System Sounds (Windows) (pid 0) on 'Speakers (2- VB-Audio Virtual Cable)': playing in 0 of 157 polls, first seen 12:29:20, last 12:32:38; Windows System Sounds entry, silent
+  cable session: wb-testbench (pid 30964, D:\STELMAR-Gate\pack\target\release\wb-testbench.exe) on 'Speakers (2- VB-Audio Virtual Cable)': playing in 157 of 157 polls, first seen 12:29:20, last 12:32:38; the gate player
+default playback device: not the cable (checked at start)
+  reference xruns: 0 (no per-xrun list: an earlier reference capture)
+reference capture: 1 breaks; in the app recording: restarts and own 2, shared with the reference (upstream, see the upstream breaks section) 0, start-up repeats within the old allowance 0
+
+discontinuities against the source (each should be one restart):
+  {"at_ms":119776.0,"source_ms":123355.47916666667,"part":5,"source_jump_frames":156672,"source_jump_ms":3264.0}
+  {"at_ms":210733.33333333334,"source_ms":217576.8125,"part":9,"source_jump_frames":154688,"source_jump_ms":3222.6666666666665}
+
+progress:
+  12:29:20 rig pinned: job 0xf0000, player 0xc000, reference capture 0x3000, no overlap
+  12:29:20 run 0 recording in D:\STELMAR-Gate\dryrun-work\audio\kill-emu-low-20261115-122914\rec\2026-11-15\gate-kill-20261115-122914
+  12:31:19.174 kill 1 after 89 s: taskkill /F /PID 30084: SUCCESS: The process with PID 30084 has been terminated. (last status: part 4, overrun samples 0)
+  12:31:23 run 1 resumed: part 5, audio 120.7 s
+  12:32:53.349 kill 2 after 76 s: taskkill /F /PID 17524: SUCCESS: The process with PID 17524 has been terminated. (last status: part 8, overrun samples 0)
+  12:32:57 run 2 resumed: part 9, audio 211.7 s
+
+session events:
+  2026-11-15T12:29:19.5140955+05:30 audio_ms=0 opened 
+  2026-11-15T12:29:19.5809381+05:30 audio_ms=0 capture_buffer requested 1000 ms, granted 1000.0 ms (48000 frames), engine period 10.0 ms
+  2026-11-15T12:29:19.5839016+05:30 audio_ms=0 audio_started CABLE Output (2- VB-Audio Virtual Cable) 48000 Hz 2 ch
+  2026-11-15T12:29:19.5962983+05:30 audio_ms=0 gap cause=xrun n=1 callback=0 frames=0 audio_ms=0 qpc=563887073021 qpc_hz=10000000
+  2026-11-15T12:29:20.5390661+05:30 audio_ms=960 gap overrun_samples+0 xruns+1 dropped_samples+0 (totals 0, 1, 0)
+  2026-11-15T12:31:22.2493675+05:30 audio_ms=119776 recovered parts=4 headers_repaired=1 empty_removed=0 quarantined=
+  2026-11-15T12:31:22.5337078+05:30 audio_ms=119776 resumed_after_crash 
+  2026-11-15T12:31:22.6240296+05:30 audio_ms=119776 capture_buffer requested 1000 ms, granted 1000.0 ms (48000 frames), engine period 10.0 ms
+  2026-11-15T12:31:22.6169053+05:30 audio_ms=119776 audio_started CABLE Output (2- VB-Audio Virtual Cable) 48000 Hz 2 ch
+  2026-11-15T12:31:22.6292437+05:30 audio_ms=119776 gap cause=xrun n=1 callback=0 frames=0 audio_ms=119776 qpc=565117472954 qpc_hz=10000000
+  2026-11-15T12:31:23.556257+05:30 audio_ms=120716 gap overrun_samples+0 xruns+1 dropped_samples+0 (totals 0, 1, 0)
+  2026-11-15T12:32:56.4773305+05:30 audio_ms=210733 recovered parts=8 headers_repaired=1 empty_removed=0 quarantined=
+  2026-11-15T12:32:56.7294746+05:30 audio_ms=210733 resumed_after_crash 
+  2026-11-15T12:32:56.8047739+05:30 audio_ms=210733 capture_buffer requested 1000 ms, granted 1000.0 ms (48000 frames), engine period 10.0 ms
+  2026-11-15T12:32:56.7987033+05:30 audio_ms=210733 audio_started CABLE Output (2- VB-Audio Virtual Cable) 48000 Hz 2 ch
+  2026-11-15T12:32:56.8115964+05:30 audio_ms=210733 gap cause=xrun n=1 callback=0 frames=0 audio_ms=210733 qpc=566059279068 qpc_hz=10000000
+  2026-11-15T12:32:57.7554528+05:30 audio_ms=211693 gap overrun_samples+0 xruns+1 dropped_samples+0 (totals 0, 1, 0)
+  2026-11-15T12:33:28.0152338+05:30 audio_ms=241943 closed overrun_samples=0 xruns=1 dropped_samples=0 recorder_restarts=0 recorder_cpu_ms=218 detector_over_budget_blocks=0 detector_skipped_ms=0 detector_max_block_us=81 detectors_disabled=0 capture_buffer_granted_ms=1000.0 capture_max_callback_gap_ms=12.0 capture_margin_ms=988.0 capture_gaps_ge_50ms=0 capture_gaps_ge_100ms=0 capture_gaps_ge_250ms=0 capture_gaps_ge_500ms=0 capture_callback_period_ms=10.00
+
+app log for this run (recovery, session, warnings):
+  2026-11-15T06:59:19.088091Z  INFO main app started version="0.1.0" pid=30084 gate_hooks=true
+  2026-11-15T06:59:19.090506Z  WARN main gate hooks active (development build, gate-hooks feature)
+  2026-11-15T06:59:19.579697Z  INFO        wb-gate session recording dir="D:\\STELMAR-Gate\\dryrun-work\\audio\\kill-emu-low-20261115-122914\\rec\\2026-11-15\\gate-kill-20261115-122914" device="CABLE Output (2- VB-Audio Virtual Cable)" rate=48000 channels=2 resumed=false
+  2026-11-15T06:59:19.579732Z  WARN        wb-gate gate: session started dir="D:\\STELMAR-Gate\\dryrun-work\\audio\\kill-emu-low-20261115-122914\\rec\\2026-11-15\\gate-kill-20261115-122914"
+  2026-11-15T06:59:20.538741Z  WARN      wb-events Audio was lost: overrun_samples+0 xruns+1 dropped_samples+0 (totals 0, 1, 0) source="recorder"
+  2026-11-15T07:01:22.218130Z  INFO main app started version="0.1.0" pid=17524 gate_hooks=true
+  2026-11-15T07:01:22.220054Z  WARN main gate hooks active (development build, gate-hooks feature)
+  2026-11-15T07:01:22.250978Z  WARN wb-recovery-scan recovery: session left open by a crash; offering Resume or Close dir="D:\\STELMAR-Gate\\dryrun-work\\audio\\kill-emu-low-20261115-122914\\rec\\2026-11-15\\gate-kill-20261115-122914" parts=4 audio_ms=119776
+  2026-11-15T07:01:22.320979Z  WARN          wb-gate gate: recovery offered sessions=1 action="resume"
+  2026-11-15T07:01:22.616175Z  INFO          wb-gate session recording dir="D:\\STELMAR-Gate\\dryrun-work\\audio\\kill-emu-low-20261115-122914\\rec\\2026-11-15\\gate-kill-20261115-122914" device="CABLE Output (2- VB-Audio Virtual Cable)" rate=48000 channels=2 resumed=true
+  2026-11-15T07:01:23.555889Z  WARN        wb-events Audio was lost: overrun_samples+0 xruns+1 dropped_samples+0 (totals 0, 1, 0) source="recorder"
+  2026-11-15T07:02:56.405678Z  INFO main app started version="0.1.0" pid=12068 gate_hooks=true
+  2026-11-15T07:02:56.407934Z  WARN main gate hooks active (development build, gate-hooks feature)
+  2026-11-15T07:02:56.479817Z  WARN wb-recovery-scan recovery: session left open by a crash; offering Resume or Close dir="D:\\STELMAR-Gate\\dryrun-work\\audio\\kill-emu-low-20261115-122914\\rec\\2026-11-15\\gate-kill-20261115-122914" parts=8 audio_ms=210733
+  2026-11-15T07:02:56.508533Z  WARN          wb-gate gate: recovery offered sessions=1 action="resume"
+  2026-11-15T07:02:56.799851Z  INFO          wb-gate session recording dir="D:\\STELMAR-Gate\\dryrun-work\\audio\\kill-emu-low-20261115-122914\\rec\\2026-11-15\\gate-kill-20261115-122914" device="CABLE Output (2- VB-Audio Virtual Cable)" rate=48000 channels=2 resumed=true
+  2026-11-15T07:02:57.755260Z  WARN        wb-events Audio was lost: overrun_samples+0 xruns+1 dropped_samples+0 (totals 0, 1, 0) source="recorder"
+  2026-11-15T07:03:28.178141Z  INFO          wb-gate session stopped dir=D:\STELMAR-Gate\dryrun-work\audio\kill-emu-low-20261115-122914\rec\2026-11-15\gate-kill-20261115-122914 parts=10 audio_ms=241943 overrun_samples=0 xruns=1 mirror_all_match=true
+  2026-11-15T07:03:28.180170Z  WARN          wb-gate gate: stop file seen; session stopped; exiting
+
+audio and reports: D:\STELMAR-Gate\dryrun-work\audio\kill-emu-low-20261115-122914 (not in the repository)

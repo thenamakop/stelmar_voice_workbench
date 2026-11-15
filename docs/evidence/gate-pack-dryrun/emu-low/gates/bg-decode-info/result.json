@@ -1,0 +1,31 @@
+{
+    "id":  "bg-decode-info",
+    "status":  "INFO",
+    "headline":  "shared upstream breaks over 5 minutes: 0 without a background decode, 0 with one (CPU (avx2), model large-v3-turbo-q5_0 (the quick check\u0027s rolling model for English); batch 2 threads, live 2 threads); breaks only in the app: 0 and 0",
+    "measured":  {
+                     "minutes":  5,
+                     "shared_without":  0,
+                     "shared_with":  0,
+                     "app_only_without":  0,
+                     "app_only_with":  0,
+                     "rig":  "vb-cable",
+                     "batch_device":  "CPU (avx2), model large-v3-turbo-q5_0 (the quick check\u0027s rolling model for English); batch 2 threads, live 2 threads"
+                 },
+    "threshold":  "information only: shared upstream breaks with and without a background decode; a break the app shows alone is a recorder finding",
+    "rig":  "VB-CABLE",
+    "rig_detail":  "",
+    "shared_breaks":  0,
+    "evidence":  [
+                     "D:\\STELMAR-Gate\\dryrun-work\\gates\\bg-decode-info\\evidence\\soak-emu-low-without-decode.txt",
+                     "D:\\STELMAR-Gate\\dryrun-work\\gates\\bg-decode-info\\bg-decode-info-without-decode-additions.txt",
+                     "D:\\STELMAR-Gate\\dryrun-work\\gates\\bg-decode-info\\evidence\\soak-emu-low-with-decode.txt",
+                     "D:\\STELMAR-Gate\\dryrun-work\\gates\\bg-decode-info\\bg-decode-info-with-decode-additions.txt",
+                     "D:\\STELMAR-Gate\\dryrun-work\\gates\\bg-decode-info\\bg-decode-info-summary.txt"
+                 ],
+    "notes":  [
+
+              ],
+    "quick":  true,
+    "not_at_full_length":  false,
+    "finished":  "2026-11-15T12:52:50.9975176+05:30"
+}

@@ -7,7 +7,7 @@ information only: Phase 2 sets no speed bar. Every row names its adapter and dri
 
 == vulkan on Intel(R) RaptorLake-S Mobile Graphics Controller (device 0, driver 32.0.101.7092), 2 CPU threads
 model | clip | mode | threads | RTF median (runs) | warm-up RTF | load s | peak working set GiB | peak commit GiB | GPU local / shared GiB | segments | truncated chunks
-small | bench-en.wav | rolling | 2 | 0.147 (0.147) | 0.152 | 0.6 | 0.95 | 1.42 | 0.82/0.00 | 5 | 0
+small | bench-en.wav | rolling | 2 | 0.150 (0.150) | 0.156 | 0.7 | 0.95 | 1.42 | 0.82/0.00 | 5 | 0
 
 cells: 1 (ok 1, does not fit 0, failed 0, single-run 0)
 The Hinglish model is large-v3 sized; its code-switched row uses bench-codeswitch.wav (English and Hindi utterances alternating), the others the single-language clips.

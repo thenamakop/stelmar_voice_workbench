@@ -7,7 +7,7 @@ information only: Phase 2 sets no speed bar. Every row names its adapter and dri
 
 == CPU avx2, 3 threads
 model | clip | mode | threads | RTF median (runs) | warm-up RTF | load s | peak working set GiB | peak commit GiB | GPU local / shared GiB | segments | truncated chunks
-small | bench-en.wav | rolling | 3 | 1.083 (1.083) | 1.079 | 0.5 | 0.77 | 1.32 | n/a | 5 | 0
+small | bench-en.wav | rolling | 3 | 1.087 (1.087) | 1.086 | 0.6 | 0.77 | 1.32 | n/a | 5 | 0
 
 cells: 1 (ok 1, does not fit 0, failed 0, single-run 0)
 The Hinglish model is large-v3 sized; its code-switched row uses bench-codeswitch.wav (English and Hindi utterances alternating), the others the single-language clips.

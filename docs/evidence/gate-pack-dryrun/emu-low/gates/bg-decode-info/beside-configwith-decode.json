@@ -1,0 +1,13 @@
+{
+    "mode":  "batch",
+    "engines_dir":  "D:\\STELMAR-Gate\\pack\\src-tauri\\binaries",
+    "models_dir":  "D:\\STELMAR-Gate\\pack\\models",
+    "clip":  "D:\\STELMAR-Gate\\pack\\resources\\bench\\bench-en.wav",
+    "live_variant":  "avx2",
+    "batch_variant":  "avx2",
+    "batch_device":  "cpu",
+    "batch_threads":  2,
+    "live_threads":  2,
+    "model":  "large-v3-turbo-q5_0",
+    "lang":  "en"
+}

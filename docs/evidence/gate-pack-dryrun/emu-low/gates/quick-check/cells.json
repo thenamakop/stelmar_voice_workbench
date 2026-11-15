@@ -1,9 +1,9 @@
 [
     {
-        "pid":  10300,
-        "command":  "info",
-        "started":  "2026-11-15T01:25:13.5745916Z",
-        "seconds":  1.24,
+        "pid":  27500,
+        "command":  "",
+        "started":  "2026-11-15T06:22:32.0958313Z",
+        "seconds":  0.43,
         "model":  "",
         "lang":  "",
         "device":  "",
@@ -12,10 +12,10 @@
         "clip":  ""
     },
     {
-        "pid":  4376,
+        "pid":  2692,
         "command":  "info",
-        "started":  "2026-11-15T01:25:13.5786779Z",
-        "seconds":  1.19,
+        "started":  "2026-11-15T06:22:32.1044639Z",
+        "seconds":  0.39,
         "model":  "",
         "lang":  "",
         "device":  "",
@@ -24,10 +24,22 @@
         "clip":  ""
     },
     {
-        "pid":  8872,
+        "pid":  27328,
+        "command":  "",
+        "started":  "2026-11-15T06:22:32.4935444Z",
+        "seconds":  0.43,
+        "model":  "",
+        "lang":  "",
+        "device":  "",
+        "threads":  null,
+        "mode":  "",
+        "clip":  ""
+    },
+    {
+        "pid":  29520,
         "command":  "bench",
-        "started":  "2026-11-15T01:25:15.3091855Z",
-        "seconds":  5.95,
+        "started":  "2026-11-15T06:22:33.3387997Z",
+        "seconds":  6.28,
         "model":  "small",
         "lang":  "en",
         "device":  "gpu",
@@ -36,10 +48,10 @@
         "clip":  "excerpt-bench-en-0-10.wav"
     },
     {
-        "pid":  7028,
+        "pid":  4340,
         "command":  "bench",
-        "started":  "2026-11-15T01:25:21.9854251Z",
-        "seconds":  30.5,
+        "started":  "2026-11-15T06:22:40.3852137Z",
+        "seconds":  30.83,
         "model":  "large-v3-turbo-q5_0",
         "lang":  "en",
         "device":  "gpu",
@@ -48,10 +60,10 @@
         "clip":  "excerpt-bench-en-0-30.wav"
     },
     {
-        "pid":  13636,
+        "pid":  30808,
         "command":  "bench",
-        "started":  "2026-11-15T01:25:52.4845184Z",
-        "seconds":  84.5,
+        "started":  "2026-11-15T06:23:11.2162763Z",
+        "seconds":  84.53,
         "model":  "large-v3-turbo-q5_0",
         "lang":  "hi",
         "device":  "gpu",
@@ -60,10 +72,10 @@
         "clip":  "excerpt-bench-hi-0-60.wav"
     },
     {
-        "pid":  15744,
+        "pid":  12452,
         "command":  "bench",
-        "started":  "2026-11-15T01:27:16.9807804Z",
-        "seconds":  81.15,
+        "started":  "2026-11-15T06:24:35.7509448Z",
+        "seconds":  80.85,
         "model":  "large-v3-turbo-q5_0",
         "lang":  "ur",
         "device":  "gpu",
@@ -72,10 +84,10 @@
         "clip":  "excerpt-bench-ur-0-60.wav"
     },
     {
-        "pid":  24724,
+        "pid":  29088,
         "command":  "bench",
-        "started":  "2026-11-15T01:28:38.5471393Z",
-        "seconds":  52.5,
+        "started":  "2026-11-15T06:25:56.9997560Z",
+        "seconds":  51.52,
         "model":  "large-v3-turbo-q5_0",
         "lang":  "hi",
         "device":  "gpu",
@@ -84,10 +96,10 @@
         "clip":  "excerpt-bench-hi-0-30.wav"
     },
     {
-        "pid":  12396,
+        "pid":  26188,
         "command":  "bench",
-        "started":  "2026-11-15T01:29:31.0469999Z",
-        "seconds":  120.06,
+        "started":  "2026-11-15T06:26:48.5177500Z",
+        "seconds":  120.53,
         "model":  "large-v3-turbo-q5_0",
         "lang":  "hi",
         "device":  "cpu",
@@ -96,10 +108,10 @@
         "clip":  "excerpt-bench-hi-30-10.wav"
     },
     {
-        "pid":  1360,
+        "pid":  27148,
         "command":  "bench",
-        "started":  "2026-11-15T01:29:34.1672105Z",
-        "seconds":  51.69,
+        "started":  "2026-11-15T06:26:51.5391642Z",
+        "seconds":  51.96,
         "model":  "large-v3-turbo-q5_0",
         "lang":  "hi",
         "device":  "gpu",
@@ -108,10 +120,10 @@
         "clip":  "excerpt-bench-hi-0-30.wav"
     },
     {
-        "pid":  4756,
+        "pid":  30168,
         "command":  "bench",
-        "started":  "2026-11-15T01:30:25.8595608Z",
-        "seconds":  50.88,
+        "started":  "2026-11-15T06:27:43.4940196Z",
+        "seconds":  51.18,
         "model":  "large-v3-turbo-q5_0",
         "lang":  "hi",
         "device":  "gpu",
@@ -120,10 +132,10 @@
         "clip":  "excerpt-bench-hi-0-30.wav"
     },
     {
-        "pid":  8884,
+        "pid":  22772,
         "command":  "bench",
-        "started":  "2026-11-15T01:31:16.7374182Z",
-        "seconds":  51.44,
+        "started":  "2026-11-15T06:28:34.6787114Z",
+        "seconds":  51.51,
         "model":  "large-v3-turbo-q5_0",
         "lang":  "hi",
         "device":  "gpu",

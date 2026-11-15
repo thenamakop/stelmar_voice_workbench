@@ -1,0 +1,53 @@
+{
+    "id":  "soak",
+    "status":  "PASS",
+    "headline":  "PASS (PROVISIONAL: emulated)",
+    "measured":  {
+                     "rig":  "vb-cable",
+                     "minutes":  10,
+                     "exit_code":  0,
+                     "run_dir":  "D:\\STELMAR-Gate\\dryrun-work\\audio\\soak-emu-low-20261115-120138",
+                     "shared_breaks":  1,
+                     "app_only_breaks":  0,
+                     "thermal":  {
+                                     "clock_drop_pct":  0,
+                                     "ac_lost":  false,
+                                     "event37":  0,
+                                     "limit_below_100":  137
+                                 },
+                     "detectors":  {
+                                       "zero_gap":  {
+                                                        "Firings":  1,
+                                                        "Matched":  1,
+                                                        "MatchedBoth":  1,
+                                                        "FalseAlarms":  0,
+                                                        "RealMissed":  0,
+                                                        "ReferenceFindings":  1,
+                                                        "PerHour":  5.9696542575242519
+                                                    },
+                                       "repeated_block":  {
+                                                              "Firings":  0,
+                                                              "Matched":  0,
+                                                              "MatchedBoth":  0,
+                                                              "FalseAlarms":  0,
+                                                              "RealMissed":  0,
+                                                              "ReferenceFindings":  0,
+                                                              "PerHour":  0
+                                                          }
+                                   }
+                 },
+    "threshold":  "equals both references; duration within 1 s; zero overruns, xruns, dropped samples; recorder CPU under 5%; on mains throughout",
+    "rig":  "VB-CABLE",
+    "rig_detail":  "",
+    "shared_breaks":  1,
+    "evidence":  [
+                     "D:\\STELMAR-Gate\\dryrun-work\\gates\\soak\\evidence\\soak-emu-low.txt",
+                     "D:\\STELMAR-Gate\\dryrun-work\\gates\\soak\\soak-additions.txt"
+                 ],
+    "notes":  [
+
+              ],
+    "quick":  true,
+    "not_at_full_length":  false,
+    "finished":  "2026-11-15T12:12:21.9190266+05:30"
+}

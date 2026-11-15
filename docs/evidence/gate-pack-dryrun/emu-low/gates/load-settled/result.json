@@ -1,0 +1,53 @@
+{
+    "id":  "load-settled",
+    "status":  "PASS",
+    "headline":  "PASS (PROVISIONAL: emulated)",
+    "measured":  {
+                     "rig":  "vb-cable",
+                     "minutes":  5,
+                     "exit_code":  0,
+                     "run_dir":  "D:\\STELMAR-Gate\\dryrun-work\\audio\\load-emu-low-20261115-121339",
+                     "shared_breaks":  0,
+                     "app_only_breaks":  0,
+                     "thermal":  {
+                                     "clock_drop_pct":  0,
+                                     "ac_lost":  false,
+                                     "event37":  0,
+                                     "limit_below_100":  72
+                                 },
+                     "detectors":  {
+                                       "zero_gap":  {
+                                                        "Firings":  0,
+                                                        "Matched":  0,
+                                                        "MatchedBoth":  0,
+                                                        "FalseAlarms":  0,
+                                                        "RealMissed":  0,
+                                                        "ReferenceFindings":  0,
+                                                        "PerHour":  0
+                                                    },
+                                       "repeated_block":  {
+                                                              "Firings":  0,
+                                                              "Matched":  0,
+                                                              "MatchedBoth":  0,
+                                                              "FalseAlarms":  0,
+                                                              "RealMissed":  0,
+                                                              "ReferenceFindings":  0,
+                                                              "PerHour":  0
+                                                          }
+                                   }
+                 },
+    "threshold":  "as load-cold, on a settled idle laptop",
+    "rig":  "VB-CABLE",
+    "rig_detail":  "",
+    "shared_breaks":  0,
+    "evidence":  [
+                     "D:\\STELMAR-Gate\\dryrun-work\\gates\\load-settled\\evidence\\load-emu-low.txt",
+                     "D:\\STELMAR-Gate\\dryrun-work\\gates\\load-settled\\load-settled-additions.txt"
+                 ],
+    "notes":  [
+
+              ],
+    "quick":  true,
+    "not_at_full_length":  false,
+    "finished":  "2026-11-15T12:18:57.3116945+05:30"
+}

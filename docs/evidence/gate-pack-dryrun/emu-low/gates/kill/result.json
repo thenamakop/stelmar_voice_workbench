@@ -1,0 +1,47 @@
+{
+    "id":  "kill",
+    "status":  "PASS",
+    "headline":  "PASS (PROVISIONAL: emulated)",
+    "measured":  {
+                     "rig":  "vb-cable",
+                     "minutes":  0,
+                     "exit_code":  0,
+                     "run_dir":  "D:\\STELMAR-Gate\\dryrun-work\\audio\\kill-emu-low-20261115-122914",
+                     "shared_breaks":  0,
+                     "app_only_breaks":  0,
+                     "detectors":  {
+                                       "zero_gap":  {
+                                                        "Firings":  0,
+                                                        "Matched":  0,
+                                                        "MatchedBoth":  0,
+                                                        "FalseAlarms":  0,
+                                                        "RealMissed":  1,
+                                                        "ReferenceFindings":  1,
+                                                        "PerHour":  0
+                                                    },
+                                       "repeated_block":  {
+                                                              "Firings":  0,
+                                                              "Matched":  0,
+                                                              "MatchedBoth":  0,
+                                                              "FalseAlarms":  0,
+                                                              "RealMissed":  0,
+                                                              "ReferenceFindings":  0,
+                                                              "PerHour":  0
+                                                          }
+                                   }
+                 },
+    "threshold":  "at most 1 s lost per kill; every part plays before repair; restart offers Resume; each run equals both references; zero overruns; capture margin of every run printed",
+    "rig":  "VB-CABLE",
+    "rig_detail":  "",
+    "shared_breaks":  0,
+    "evidence":  [
+                     "D:\\STELMAR-Gate\\dryrun-work\\gates\\kill\\evidence\\kill-emu-low.txt",
+                     "D:\\STELMAR-Gate\\dryrun-work\\gates\\kill\\kill-additions.txt"
+                 ],
+    "notes":  [
+
+              ],
+    "quick":  true,
+    "not_at_full_length":  false,
+    "finished":  "2026-11-15T12:33:58.5148283+05:30"
+}

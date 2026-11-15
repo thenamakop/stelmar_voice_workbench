@@ -1,0 +1,13 @@
+
+gate pack additions:
+  rig: vb-cable
+  thermal: 137 samples over 11 min; first and last window 4 min each
+  thermal: CPU clock median 1,877 MHz at the start, 1,877 MHz at the end, lowest 1,762 MHz (change 0.0%)
+  thermal: processor performance median 120% at the start, 137% at the end, lowest 83%
+  thermal: performance limit below 100% in 137 of 137 samples
+  thermal: Windows event 37 (Kernel-Processor-Power, the processor ran below its maximum): 0 during the run
+  power: on mains power in every sample
+  thermal note: Windows reported a performance limit below 100% in 137 of 137 samples
+  thermal note: thermal-zone temperature: not exposed by Windows on this machine
+  detector zero_gap: fired 1 time(s) (5.97 per hour); matched by a reference 1, by both 1; false alarms 0; real dropouts the detector missed 0; rig vb-cable; machine LENOVO-83DF-b8384c
+  detector repeated_block: fired 0 time(s) (0.00 per hour); matched by a reference 0, by both 0; false alarms 0; real dropouts the detector missed 0; rig vb-cable; machine LENOVO-83DF-b8384c

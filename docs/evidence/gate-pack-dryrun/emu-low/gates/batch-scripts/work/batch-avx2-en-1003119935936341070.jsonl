@@ -1,6 +1,6 @@
-{"event":"ready","device":{"kind":"cpu"},"device_name":"CPU","threads":4,"models":["medium"],"load_s":1.6220781}
+{"event":"ready","device":{"kind":"cpu"},"device_name":"CPU","threads":4,"models":["medium"],"load_s":1.7332028}
 {"event":"segment","unit":0,"chunk":0,"start_ms":860,"end_ms":9030,"text":"However, due to the slow communication channels, styles in the West could lag behind by 25 to 30 years.","lang":"en","lang_prob":1.0,"mixed":false,"dir":"ltr","avg_logprob":-0.051773246,"no_speech_prob":0.000019289359,"compression_ratio":1.1839081,"model":"medium","decoded_both_ways":false,"detection":[{"lang":"en","prob":1.0}],"flags":[],"truncated":false}
 {"event":"progress","unit":0,"committed_until_ms":9030,"unit_end_ms":10560}
-{"event":"stats","unit":0,"chunks":1,"audio_ms":10560,"decode_s":34.2771297,"rtf":3.2459403219696967,"peak_working_set_bytes":2200178688,"detections":0,"both_ways":0}
+{"event":"stats","unit":0,"chunks":1,"audio_ms":10560,"decode_s":34.9146965,"rtf":3.3063159659090906,"peak_working_set_bytes":2199941120,"detections":0,"both_ways":0}
 {"event":"progress","unit":0,"committed_until_ms":10560,"unit_end_ms":10560}
-{"event":"done","segments":1,"chunks":1,"audio_ms":10560,"truncated_chunks":0,"elapsed_s":35.9092308,"retried_chunks":0,"unclear_chunks":0,"low_coverage_chunks":0}
+{"event":"done","segments":1,"chunks":1,"audio_ms":10560,"truncated_chunks":0,"elapsed_s":36.656704,"retried_chunks":0,"unclear_chunks":0,"low_coverage_chunks":0}

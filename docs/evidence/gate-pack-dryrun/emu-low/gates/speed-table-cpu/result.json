@@ -1,11 +1,11 @@
 {
     "id":  "speed-table-cpu",
     "status":  "INFO",
-    "headline":  "1 of 1 cells measured; slowest RTF 1.083; information only",
+    "headline":  "1 of 1 cells measured; slowest RTF 1.087; information only",
     "measured":  {
                      "cells_planned":  1,
                      "cells_ok":  1,
-                     "slowest_rtf":  1.0832434199999998,
+                     "slowest_rtf":  1.0870690766666666,
                      "adapters":  [
 
                                   ]
@@ -23,5 +23,5 @@
               ],
     "quick":  true,
     "not_at_full_length":  false,
-    "finished":  "2026-11-15T07:05:53.9947876+05:30"
+    "finished":  "2026-11-15T12:55:25.6160550+05:30"
 }

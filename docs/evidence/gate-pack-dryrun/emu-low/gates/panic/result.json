@@ -1,0 +1,47 @@
+{
+    "id":  "panic",
+    "status":  "PASS",
+    "headline":  "PASS (PROVISIONAL: emulated)",
+    "measured":  {
+                     "rig":  "vb-cable",
+                     "minutes":  3,
+                     "exit_code":  0,
+                     "run_dir":  "D:\\STELMAR-Gate\\dryrun-work\\audio\\panic-emu-low-20261115-122007",
+                     "shared_breaks":  1,
+                     "app_only_breaks":  0,
+                     "detectors":  {
+                                       "zero_gap":  {
+                                                        "Firings":  1,
+                                                        "Matched":  1,
+                                                        "MatchedBoth":  1,
+                                                        "FalseAlarms":  0,
+                                                        "RealMissed":  0,
+                                                        "ReferenceFindings":  1,
+                                                        "PerHour":  19.672131147540984
+                                                    },
+                                       "repeated_block":  {
+                                                              "Firings":  0,
+                                                              "Matched":  0,
+                                                              "MatchedBoth":  0,
+                                                              "FalseAlarms":  0,
+                                                              "RealMissed":  0,
+                                                              "ReferenceFindings":  0,
+                                                              "PerHour":  0
+                                                          }
+                                   }
+                 },
+    "threshold":  "zero samples lost; recorder restarts once; equals both references",
+    "rig":  "VB-CABLE",
+    "rig_detail":  "",
+    "shared_breaks":  1,
+    "evidence":  [
+                     "D:\\STELMAR-Gate\\dryrun-work\\gates\\panic\\evidence\\panic-emu-low.txt",
+                     "D:\\STELMAR-Gate\\dryrun-work\\gates\\panic\\panic-additions.txt"
+                 ],
+    "notes":  [
+
+              ],
+    "quick":  true,
+    "not_at_full_length":  false,
+    "finished":  "2026-11-15T12:23:43.6779711+05:30"
+}

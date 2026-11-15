@@ -75,7 +75,7 @@ whisper_vad_detect_speech_no_reset: detecting speech in 195840 samples
 whisper_vad_detect_speech_no_reset: n_chunks: 383
 whisper_vad_detect_speech_no_reset: props size: 383
 whisper_vad_detect_speech_no_reset: chunk_len: 256 < n_window: 512
-whisper_vad_detect_speech_no_reset: vad time = 160.35 ms processing 195840 samples
+whisper_vad_detect_speech_no_reset: vad time = 173.43 ms processing 195840 samples
 whisper_vad_segments_from_probs: detecting speech timestamps using 383 probabilities
 whisper_vad_segments_from_probs: Final speech segments after filtering: 1
 whisper_vad_segments_from_probs: VAD segment 0: start = 0.55, end = 11.84 (duration: 11.29)
