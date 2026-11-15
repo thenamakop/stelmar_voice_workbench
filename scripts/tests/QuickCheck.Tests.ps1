@@ -57,12 +57,17 @@ $rep2 = ('{"mode":"quick","error":{"message":"boom"},"stopped":null}' | ConvertF
 $v = Get-QuickCheckVerdict -Report $rep2 -Capability (New-Cap) -Cells $cells
 Check 'an app error is INVALID (the run is repeated)' ($v.Status -eq 'INVALID' -and $v.Headline -match 'boom')
 
+$hcap = New-Cap
+$hcap | Add-Member -NotePropertyName hybrid -NotePropertyValue @([pscustomobject]@{ lang = 'hi'; gpu = 0; cpu_threads = 2; gpu_rtf_concurrent = 0.9; cpu_rtf_concurrent = 1.8; gpu_alone_rtf = 0.7; method = 'm' })
+$v = Get-QuickCheckVerdict -Report $report -Capability $hcap -Cells $cells
+Check 'the graphics-alone run of the hybrid test and the budget left are reported' ((($v.Lines -join "`n") -match 'graphics engine alone RTF 0.700') -and (($v.Lines -join "`n") -match 'remained'))
+
 $v = Get-QuickCheckVerdict -Report $report -Capability (New-Cap) -Cells @()
 Check 'missing per-cell times are said plainly and do not fail the verdict' ($v.Status -eq 'PASS' -and (($v.Lines -join "`n") -match 'no engine cell was seen'))
 
 # Quick against full: the same rolling cells, flagged above 10 percent, deciding cells marked.
 function New-MCap([double]$HiTurbo, [double]$EnSmall, [double]$Excerpt) {
-  ('{"check":{"excerpt_seconds":' + $Excerpt + '},"decision":{"languages":{"hi":{"rolling":{"model":"turbo"}},"en":{"rolling":{"model":"small"}}}},"measurements":[' +
+  ('{"check":{"excerpt_seconds":' + $Excerpt + '},"decision":{"config":{"config":{"kind":"gpu","index":0}},"languages":{"hi":{"rolling":{"model":"turbo"}},"en":{"rolling":{"model":"small"}}}},"measurements":[' +
     '{"model":"turbo","lang":"hi","mode":"rolling","config":{"kind":"gpu","index":0},"rtf":' + $HiTurbo + '},' +
     '{"model":"small","lang":"en","mode":"rolling","config":{"kind":"cpu"},"rtf":' + $EnSmall + '},' +
     '{"model":"small","lang":"en","mode":"near_live","config":{"kind":"cpu"},"rtf":0.2}]}') | ConvertFrom-Json
@@ -70,6 +75,12 @@ function New-MCap([double]$HiTurbo, [double]$EnSmall, [double]$Excerpt) {
 $cmp = Get-QuickFullComparison -Quick (New-MCap 0.80 0.30 30) -Full (New-MCap 0.70 0.31 60)
 Check 'two rolling cells are compared; the near-live cell is not' ($cmp.Compared -eq 2)
 Check 'a 14 percent difference on the first-choice Hindi cell is flagged and DECIDING' ($cmp.Flagged -eq 1 -and $cmp.DecidingFlagged -eq 1 -and (($cmp.Lines -join "`n") -match 'FLAG DECIDING'))
+Check 'the comparison shows the excerpt lengths of both checks' (($cmp.Lines -join "`n") -match 'excerpt')
+# The same model on another configuration than the one the check chose is flagged but not deciding.
+$qo = New-MCap 0.80 0.30 30; $fo = New-MCap 0.70 0.31 60
+$qo.decision.config.config.kind = 'cpu'; $fo.decision.config.config.kind = 'cpu'
+$cmp2 = Get-QuickFullComparison -Quick $qo -Full $fo
+Check 'a flagged cell that is not on the chosen configuration is not DECIDING' ($cmp2.Flagged -eq 1 -and $cmp2.DecidingFlagged -eq 0)
 Check 'a 3 percent difference is not flagged' (@($cmp.Rows | Where-Object { $_.Cell -match 'small' -and $_.Flag }).Count -eq 0)
 $cmp = Get-QuickFullComparison -Quick $null -Full (New-MCap 0.7 0.3 60)
 Check 'a missing run is said plainly' ($cmp.Compared -eq 0 -and $cmp.Lines[0] -match 'not compared')

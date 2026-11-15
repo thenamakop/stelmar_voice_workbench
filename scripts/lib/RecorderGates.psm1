@@ -56,6 +56,26 @@ function Get-PackCompareOffsetMs {
   1000.0 * [double]$seg[0].offset_frames / $Rate
 }
 
+# Pure. Moves detector findings from a reference's clock to the app's: each finding gets the offset of the
+# aligned segment of compare.json that covers it (a long run has a new offset after every unmatched stretch);
+# one outside every segment gets the first segment's offset (the app has nothing there to match).
+function Get-PackAppTimeFindings {
+  param($Findings, $Compare, [double]$Rate = 48000)
+  $first = Get-PackCompareOffsetMs -Compare $Compare -Rate $Rate
+  $firstMs = $(if ($null -ne $first) { [double]$first } else { 0.0 })
+  $segs = @()
+  if ($null -ne $Compare -and $null -ne $Compare.PSObject.Properties['segments']) {
+    $segs = @($Compare.segments | Where-Object { $_.PSObject.Properties['offset_frames'] -and $null -ne $_.offset_frames -and $_.PSObject.Properties['reference_end_frame'] -and ($_.PSObject.Properties['aligned'] -eq $null -or [bool]$_.aligned) })
+  }
+  @($Findings | ForEach-Object {
+      $t = [double]$_.AudioMs
+      $fr = $t * $Rate / 1000.0
+      $s = @($segs | Where-Object { $fr -ge [double]$_.reference_start_frame -and $fr -lt [double]$_.reference_end_frame } | Select-Object -First 1)
+      $off = $(if ($s.Count -gt 0) { 1000.0 * [double]$s[0].offset_frames / $Rate } else { $firstMs })
+      [pscustomobject]@{ Kind = $_.Kind; AudioMs = $t + $off }
+    })
+}
+
 # Pure. Detector findings (Kind, AudioMs) from a scan-repeats report.
 function Get-PackScanFindings {
   param($Scan, [string]$Kind)
@@ -69,7 +89,12 @@ function Get-PackScanFindings {
 # Detector summary of one run: firings from session.log against both references. Returns Lines and Rates.
 function Get-PackRunDetectors {
   [CmdletBinding()]
-  param([Parameter(Mandatory = $true)] [string]$RunDir, [Parameter(Mandatory = $true)] [string]$Testbench, [string]$Conditions = '')
+  param(
+    [Parameter(Mandatory = $true)] [string]$RunDir, [Parameter(Mandatory = $true)] [string]$Testbench, [string]$Conditions = '',
+    # Scripted windows (StartMs, EndMs on the source clock) and the app clock minus the source clock: firings and
+    # reference findings inside them are left out of the rates (the digital zeros of a mute are not a dropout) and counted apart.
+    $ExcludeWindows = @(), [double]$WindowOffsetMs = 0
+  )
   $lines = New-Object System.Collections.Generic.List[string]
   $rates = [ordered]@{}
   $log = @(Get-ChildItem -LiteralPath (Join-Path $RunDir 'rec') -Recurse -Filter 'session.log' -ErrorAction SilentlyContinue | Select-Object -First 1)
@@ -95,18 +120,26 @@ function Get-PackRunDetectors {
     foreach ($n in 'audio_ms', 'total_audio_ms') { if ($m.PSObject.Properties[$n]) { $audioMs = [double]$m.$n; break } }
   }
   if ($audioMs -le 0 -and $cp -and $cp.PSObject.Properties['audio_seconds']) { $audioMs = 1000.0 * [double]$cp.audio_seconds }
-  $offA = Get-PackCompareOffsetMs -Compare (Read-PackJson -Path (Join-Path $RunDir 'compare.json')) -Rate $rate
-  $offW = Get-PackCompareOffsetMs -Compare (Read-PackJson -Path (Join-Path $RunDir 'compare2.json')) -Rate $rate
+  $cmpA = Read-PackJson -Path (Join-Path $RunDir 'compare.json')
+  $cmpW = Read-PackJson -Path (Join-Path $RunDir 'compare2.json')
+  $offA = Get-PackCompareOffsetMs -Compare $cmpA -Rate $rate
+  $offW = Get-PackCompareOffsetMs -Compare $cmpW -Rate $rate
+  $inWin = { param($t) @($ExcludeWindows | Where-Object { $t -ge ([double]$_.StartMs + $WindowOffsetMs) -and $t -le ([double]$_.EndMs + $WindowOffsetMs) }).Count -gt 0 }
   foreach ($kind in 'zero_gap', 'repeated_block') {
     $f = @($firings | Where-Object { $_.Kind -eq $kind })
-    $c = @(Get-PackScanFindings -Scan $cp -Kind $kind)
-    $w = @(Get-PackScanFindings -Scan $wa -Kind $kind)
-    # App time = reference time + offset (compare.json: app frame = reference frame + offset_frames);
-    # an unknown offset is treated as 0 and said so below.
-    $oc = $(if ($null -ne $offA) { $offA } else { 0.0 })
-    $ow = $(if ($null -ne $offW) { $offW } else { 0.0 })
-    $ra = Get-PackDetectorRates -Firings $f -CpalFindings $c -WasapiFindings $w -OffsetCpalMs $oc -OffsetWasapiMs $ow -AudioMs $audioMs
+    # App time = reference time + the offset of the segment of compare.json that covers it (app frame = reference
+    # frame + offset_frames); an unknown offset is treated as 0 and said so below.
+    $c = @(Get-PackAppTimeFindings -Findings @(Get-PackScanFindings -Scan $cp -Kind $kind) -Compare $cmpA -Rate $rate)
+    $w = @(Get-PackAppTimeFindings -Findings @(Get-PackScanFindings -Scan $wa -Kind $kind) -Compare $cmpW -Rate $rate)
+    $fWin = @($f | Where-Object { & $inWin ([double]$_.AudioMs) })
+    if ($ExcludeWindows.Count -gt 0) {
+      $f = @($f | Where-Object { -not (& $inWin ([double]$_.AudioMs)) })
+      $c = @($c | Where-Object { -not (& $inWin ([double]$_.AudioMs)) })
+      $w = @($w | Where-Object { -not (& $inWin ([double]$_.AudioMs)) })
+    }
+    $ra = Get-PackDetectorRates -Firings $f -CpalFindings $c -WasapiFindings $w -AudioMs $audioMs
     $rates[$kind] = $ra
+    if ($ExcludeWindows.Count -gt 0) { $lines.Add(('  detector {0}: {1} firing(s) inside the scripted windows are left out of the rates (see the per-window lines)' -f $kind, $fWin.Count)) }
     $lines.Add(('  detector ' + (Get-PackDetectorLine -Kind $kind -Rates $ra -Conditions $Conditions)))
   }
   if ($null -eq $offA -or $null -eq $offW) { $lines.Add('  detector note: a reference offset was not available, so firings are matched without it (times may not line up)') }
@@ -294,4 +327,4 @@ function Get-PackBesideDevice {
   $cpu
 }
 
-Export-ModuleMember -Function Get-PackMachineThreads, Get-PackBesideProduction, Get-PackBesideDevice, Get-PackRecorderOutcome, Get-PackRunDirFromEvidence, Get-PackRigKindFromEvidence, Get-PackCompareOffsetMs, Get-PackScanFindings, Get-PackRunDetectors, Invoke-PackRecorderGate
+Export-ModuleMember -Function Get-PackAppTimeFindings, Get-PackMachineThreads, Get-PackBesideProduction, Get-PackBesideDevice, Get-PackRecorderOutcome, Get-PackRunDirFromEvidence, Get-PackRigKindFromEvidence, Get-PackCompareOffsetMs, Get-PackScanFindings, Get-PackRunDetectors, Invoke-PackRecorderGate

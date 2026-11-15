@@ -183,14 +183,14 @@ Invoke-PackGateBody -Ctx $ctx -Id 'mic-run' -ResultFile $ResultFile -Body {
   $status = $rv.Verdict
   $why = $rv.Reason
   if ($overruns -gt 0) { $status = 'FAIL'; $why = ("the recorder counted {0} overrun samples; {1}" -f $overruns, $rv.Reason) }
-  $det = $null
-  try { $det = Get-PackRunDetectors -RunDir $run -Testbench $paths.Testbench -Conditions ("built-in microphone '{0}'; machine {1}" -f $micName, $ctx.machine) } catch { }
   $firings = @()
   $logf = @(Get-ChildItem -LiteralPath $rec -Recurse -Filter 'session.log' -ErrorAction SilentlyContinue | Select-Object -First 1)
   if ($logf.Count -gt 0) { $firings = @(ConvertFrom-PackSessionLog -Lines @(Get-Content -LiteralPath $logf[0].FullName -Encoding UTF8)) }
   $offA = Get-PackCompareOffsetMs -Compare (Read-RunJson (Join-Path $run 'compare.json'))
   # The app clock minus the source clock: the reference capture starts with the source (the go file), so its offset is the app's.
   $offset = $(if ($null -ne $offA) { [double]$offA } else { 0.0 })
+  $det = $null
+  try { $det = Get-PackRunDetectors -RunDir $run -Testbench $paths.Testbench -Conditions ("built-in microphone '{0}'; machine {1}" -f $micName, $ctx.machine) -ExcludeWindows $windows -WindowOffsetMs $offset } catch { }
   $treat = @(Get-PackWindowTreatment -Firings $firings -Windows $windows -OffsetMs $offset)
   $inputInfo = ''
   try { $inputInfo = ('{0} Hz, {1} channel(s), {2}' -f $mic.sample_rate, $mic.channels, $mic.sample_format) } catch { }

@@ -32,5 +32,11 @@ Check 'repeated blocks come from blocks' (@(Get-PackScanFindings -Scan $scan -Ki
 Check 'zero gaps come from zero_gaps' (@(Get-PackScanFindings -Scan $scan -Kind zero_gap).Count -eq 2)
 Check 'no scan gives nothing' (@(Get-PackScanFindings -Scan $null -Kind zero_gap).Count -eq 0)
 
+# A long run has a new offset after every unmatched stretch: each finding takes the offset of the segment that covers it.
+$cmp = '{"segments":[{"aligned":true,"offset_frames":48000,"reference_start_frame":0,"reference_end_frame":480000},{"aligned":true,"offset_frames":96000,"reference_start_frame":480000,"reference_end_frame":960000}]}' | ConvertFrom-Json
+$mapped = @(Get-PackAppTimeFindings -Findings @([pscustomobject]@{ Kind = 'zero_gap'; AudioMs = 1000 }, [pscustomobject]@{ Kind = 'zero_gap'; AudioMs = 15000 }, [pscustomobject]@{ Kind = 'zero_gap'; AudioMs = 25000 }) -Compare $cmp -Rate 48000)
+Check 'findings take the offset of the segment that covers them (1 s after the first, 2 s after the second, the first for one outside both)' ($mapped[0].AudioMs -eq 2000 -and $mapped[1].AudioMs -eq 17000 -and $mapped[2].AudioMs -eq 26000)
+Check 'no compare report: findings keep their time' ((@(Get-PackAppTimeFindings -Findings @([pscustomobject]@{ Kind = 'zero_gap'; AudioMs = 500 }) -Compare $null))[0].AudioMs -eq 500)
+
 if ($fails) { Write-Host "$fails failed"; exit 1 }
 Write-Host 'RecorderGates tests passed'

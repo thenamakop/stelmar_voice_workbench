@@ -153,6 +153,17 @@ function Get-QuickCheckVerdict {
     $lines.Add(("cells together: {0} s{1}; longest cell: {2} s" -f (Format-QNumber $cellTotal '0'), $share, (Format-QNumber $longest '0')))
   } else { $lines.Add('no engine cell was seen: the per-cell times are missing (the process watcher saw nothing)') }
 
+  # The hybrid test: the graphics engine alone on the excerpt of its half of the test, then both engines together.
+  if ($null -ne $Capability) {
+    $hyb = @(Get-QProp $Capability 'hybrid' @() | Where-Object { $null -ne $_ })
+    foreach ($h in $hyb) {
+      $galone = Get-QProp $h 'gpu_alone_rtf'
+      $lines.Add(('hybrid test ({0}, graphics adapter {1}, {2} CPU threads): graphics engine alone RTF {3}; together: graphics {4}, CPU {5}' -f (Get-QProp $h 'lang'), (Get-QProp $h 'gpu'), (Get-QProp $h 'cpu_threads'), $(if ($null -ne $galone) { Format-QNumber $galone '0.000' } else { 'not measured' }), (Format-QNumber (Get-QProp $h 'gpu_rtf_concurrent') '0.000'), (Format-QNumber (Get-QProp $h 'cpu_rtf_concurrent') '0.000')))
+    }
+    if ($hyb.Count -eq 0) { $lines.Add('hybrid test: none recorded (the configuration chosen has no CPU-plus-graphics test)') }
+    if ($null -ne $duration) { $lines.Add(('the whole check took {0} s; {1} s of the {2} s bar remained' -f (Format-QNumber $duration '0'), (Format-QNumber ([math]::Max(0.0, [double]$BarSeconds - [double]$duration)) '0'), (Format-QNumber $BarSeconds '0'))) }
+  }
+
   $status = 'PASS'
   $headline = ''
   if ($invalid.Count -gt 0) { $status = 'INVALID'; $headline = ($invalid -join '; ') }
@@ -189,13 +200,22 @@ function Get-QuickFullComparison {
     $cfg = $(if ($kind -eq 'gpu' -or $kind -eq 'hybrid') { "${kind}:$idx" } else { $kind })
     '{0}|{1}|{2}|{3}' -f (Get-QProp $m 'model'), (Get-QProp $m 'lang'), (Get-QProp $m 'mode'), $cfg
   }
+  $cfgOf = {
+    param($c)
+    $kind = [string](Get-QProp $c 'kind')
+    $idx = Get-QProp $c 'index' (Get-QProp $c 'gpu')
+    $(if ($kind -eq 'gpu' -or $kind -eq 'hybrid') { "${kind}:$idx" } else { $kind })
+  }
+  # DECIDING: the first-choice rolling model of a language on the configuration the check chose, not the same model elsewhere.
   $deciding = @{}
   foreach ($cap in @($Quick, $Full)) {
-    $langs = Get-QProp (Get-QProp $cap 'decision') 'languages'
+    $dec = Get-QProp $cap 'decision'
+    $chosen = & $cfgOf (Get-QProp (Get-QProp $dec 'config') 'config')
+    $langs = Get-QProp $dec 'languages'
     if ($null -eq $langs) { continue }
     foreach ($l in $langs.PSObject.Properties) {
       $r = Get-QProp $l.Value 'rolling'
-      if ($null -ne $r) { $deciding[('{0}|{1}' -f (Get-QProp $r 'model'), $l.Name)] = $true }
+      if ($null -ne $r) { $deciding[('{0}|{1}|{2}' -f (Get-QProp $r 'model'), $l.Name, $chosen)] = $true }
     }
   }
   $qmap = @{}
@@ -214,11 +234,13 @@ function Get-QuickFullComparison {
     $compared++
     $diff = [double]$qr / [double]$fr - 1.0
     $isFlag = ([math]::Abs($diff) -gt $Flag)
-    $isDec = $deciding.ContainsKey(('{0}|{1}' -f (Get-QProp $m 'model'), (Get-QProp $m 'lang')))
+    $isDec = $deciding.ContainsKey(('{0}|{1}|{2}' -f (Get-QProp $m 'model'), (Get-QProp $m 'lang'), (& $cfgOf (Get-QProp $m 'config'))))
+    $qClip = Format-QNumber (Get-QProp $q 'clip_seconds') '0'
+    $fClip = Format-QNumber (Get-QProp $m 'clip_seconds') '0'
     $mark = ''
     if ($isFlag) { $flagged++; $mark = '  FLAG'; if ($isDec) { $decFlagged++; $mark += ' DECIDING' } }
     $rows.Add([pscustomobject]@{ Cell = (& $key $m); QuickRtf = [double]$qr; FullRtf = [double]$fr; Diff = $diff; Flag = $isFlag; Deciding = $isDec })
-    $lines.Add(('  {0}  quick {1}  full {2}  {3}%{4}' -f (& $key $m), (Format-QNumber $qr '0.000'), (Format-QNumber $fr '0.000'), (Format-QNumber (100 * $diff) '+0.0;-0.0'), $mark))
+    $lines.Add(('  {0}  quick {1} ({2} s excerpt)  full {3} ({4} s excerpt)  {5}%{6}' -f (& $key $m), (Format-QNumber $qr '0.000'), $qClip, (Format-QNumber $fr '0.000'), $fClip, (Format-QNumber (100 * $diff) '+0.0;-0.0'), $mark))
   }
   $lines.Add(('cells compared {0}; flagged {1}; flagged and deciding {2}' -f $compared, $flagged, $decFlagged))
   [pscustomobject]@{ Rows = @($rows.ToArray()); Flagged = $flagged; DecidingFlagged = $decFlagged; Compared = $compared; Lines = @($lines.ToArray()) }
