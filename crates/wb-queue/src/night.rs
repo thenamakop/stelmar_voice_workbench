@@ -111,6 +111,63 @@ pub fn plan(start_ms: u64, sessions: &[SessionAudio], night_rtf: &BTreeMap<Strin
     }
 }
 
+/// Days from 1970-01-01 to a civil date (proleptic Gregorian; Howard Hinnant's algorithm).
+fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = if y >= 0 { y } else { y - 399 } / 400;
+    let yoe = y - era * 400;
+    let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146_097 + doe - 719_468
+}
+
+/// The epoch time (ms) of an IST date `YYYY-MM-DD` and time `HH:MM`; None when either does not parse.
+fn ist_epoch_ms(date: &str, time: &str) -> Option<u64> {
+    let mut d = date.split('-').map(|x| x.parse::<i64>().ok());
+    let (y, m, day) = (d.next()??, d.next()??, d.next()??);
+    if d.next().is_some() || !(1..=12).contains(&m) || !(1..=31).contains(&day) {
+        return None;
+    }
+    let mut t = time.split(':').map(|x| x.parse::<u64>().ok());
+    let (h, min) = (t.next()??, t.next()??);
+    if t.next().is_some() || h > 23 || min > 59 {
+        return None;
+    }
+    let local = u64::try_from(days_from_civil(y, m, day)).ok()? * DAY_MS + (h * 60 + min) * 60_000;
+    local.checked_sub(IST_OFFSET_MS)
+}
+
+#[derive(serde::Deserialize)]
+struct Programme {
+    sessions: Vec<ProgrammeSession>,
+}
+
+#[derive(serde::Deserialize)]
+struct ProgrammeSession {
+    date: String,
+    end: String,
+    #[serde(default)]
+    transcribe: bool,
+}
+
+/// The end of the programme's last session of the IST day that contains `reference_ms`, counting only the
+/// sessions the programme marks for transcription (docs/programme.json). `reference_ms` is the end of a
+/// session that was recorded, so a night pass after midnight still belongs to the day that just ended.
+/// None when the programme does not parse or has no such session that day (a rehearsal, another date):
+/// the caller then goes by the recorded sessions alone.
+pub fn programme_day_end_ms(programme_json: &str, reference_ms: u64) -> Option<u64> {
+    let programme: Programme = serde_json::from_str(programme_json).ok()?;
+    let local = reference_ms.checked_add(IST_OFFSET_MS)?;
+    let day_start = local - local % DAY_MS - IST_OFFSET_MS;
+    programme
+        .sessions
+        .iter()
+        .filter(|s| s.transcribe)
+        .filter_map(|s| ist_epoch_ms(&s.date, &s.end))
+        .filter(|end| *end > day_start && *end <= day_start + DAY_MS)
+        .max()
+}
+
 /// May the night pass start now? Nothing is recording, every rolling job of the day is done, and the last
 /// session ended at least 30 minutes ago.
 pub fn may_start(
@@ -144,6 +201,49 @@ mod tests {
                 ("hi".to_owned(), hi_min * 60_000),
             ]),
         }
+    }
+
+    const PROGRAMME: &str = r#"{"sessions":[
+        {"date":"2027-02-08","end":"10:00","transcribe":false},
+        {"date":"2027-02-08","end":"11:30","transcribe":true},
+        {"date":"2027-02-08","end":"18:15","transcribe":true},
+        {"date":"2027-02-08","end":"19:30","transcribe":false},
+        {"date":"2027-02-09","end":"13:00","transcribe":true}]}"#;
+
+    #[test]
+    fn the_night_waits_for_the_programmes_last_transcribed_session_of_the_day() {
+        // The day's last session to transcribe ends 18:15; a networking item after it does not count.
+        let end = programme_day_end_ms(PROGRAMME, at(11, 30)).unwrap();
+        assert_eq!(end, at(18, 15));
+        // The pass may not start before 18:45 even though the recorded sessions ended at 11:30.
+        assert!(!may_start(at(12, 5), false, false, end.max(at(11, 30))));
+        assert!(!may_start(at(18, 44), false, false, end));
+        assert!(may_start(at(18, 45), false, false, end));
+    }
+
+    #[test]
+    fn the_reference_is_the_end_of_the_last_recorded_session_so_its_own_day_counts() {
+        // A reference at 09:00 the next day is that next IST day: its own programme is used.
+        assert_eq!(programme_day_end_ms(PROGRAMME, at(24 + 9, 0)), Some(at(24 + 13, 0)));
+        // The reference is the end of the last recorded session, so a night pass at 01:00 still uses its day.
+        assert_eq!(programme_day_end_ms(PROGRAMME, at(18, 15)), Some(at(18, 15)));
+    }
+
+    #[test]
+    fn a_day_the_programme_does_not_know_falls_back_to_the_recorded_sessions() {
+        assert_eq!(programme_day_end_ms(PROGRAMME, at(24 * 40, 10)), None);
+        assert_eq!(programme_day_end_ms("not json", at(11, 30)), None);
+        assert_eq!(programme_day_end_ms(r#"{"sessions":[]}"#, at(11, 30)), None);
+        // A date or time that does not parse is ignored, not guessed.
+        let odd = r#"{"sessions":[{"date":"2027-13-40","end":"25:99","transcribe":true}]}"#;
+        assert_eq!(programme_day_end_ms(odd, at(11, 30)), None);
+    }
+
+    #[test]
+    fn the_shipped_programme_parses_and_has_a_last_session_on_each_day() {
+        let shipped = include_str!("../../../docs/programme.json");
+        let end = programme_day_end_ms(shipped, at(11, 30)).expect("day 1 has sessions to transcribe");
+        assert!(end > at(11, 30) && end <= at(24, 0));
     }
 
     #[test]

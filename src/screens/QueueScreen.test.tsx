@@ -26,6 +26,7 @@ describe("Queue screen", () => {
     expect(within(card).getByText("Running")).toBeTruthy();
     expect(within(card).getByText("small").tagName).toBe("SPAN");
     expect(within(card).getByText("turbo-q5_0")).toBeTruthy();
+    expect(within(card).getByText(/Graphics · 2 threads · 1 running · 5 done/)).toBeTruthy();
     expect(within(card).getByRole("progressbar").getAttribute("aria-valuenow")).toBe("55");
     expect(within(card).getByText(/5 of 9 units · 1 running/)).toBeTruthy();
     expect(screen.getByText("All transcripts ready by 19:40 IST")).toBeTruthy();

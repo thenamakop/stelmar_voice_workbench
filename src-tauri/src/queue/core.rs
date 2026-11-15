@@ -357,6 +357,47 @@ mod tests {
     }
 
     #[test]
+    fn a_session_started_before_the_engine_scan_ends_keeps_its_job_and_is_processed_once_it_ends() {
+        // Before the engine scan has finished the app has no fingerprint, so the saved profile is read as
+        // `unidentified`: safe defaults (no processing while recording), models and configuration as measured.
+        let saved = wb_capability::parse_capability(include_str!(
+            "../../../crates/wb-capability/fixtures/tier-g.json"
+        ))
+        .unwrap();
+        let mut identified = ProfileView::from_capability(&saved, vec![]);
+        identified.process_while_recording = true;
+        let unidentified = ProfileView::from_capability(
+            &wb_capability::safe_defaults(&saved, "this computer has not been identified yet"),
+            vec!["this computer has not been identified yet".into()],
+        );
+        assert!(!unidentified.process_while_recording);
+
+        // The session's rolling job is made from what the unidentified profile says: the same models and the
+        // same engine configuration as the identified one, so nothing about the job waits for the scan.
+        let langs = ["en".to_owned()];
+        assert!(!unidentified.rolling_models(&langs).is_empty());
+        assert_eq!(
+            unidentified.rolling_models(&langs),
+            identified.rolling_models(&langs)
+        );
+        assert_eq!(unidentified.config, identified.config);
+
+        // The session is recording and the profile is still unidentified: the rules hold the queue back ...
+        let fake = Fake::new(Some(unidentified));
+        fake.recording.store(true, Ordering::SeqCst);
+        let (_core, g) = gate(&fake);
+        assert!(g.paused().unwrap().contains("while recording"));
+        assert!(g.check(&req(GIB)).is_err());
+
+        // ... and when the scan finishes and the profile is identified, the very next decision lets the job
+        // run, with no evaluate call in between and the session still recording: processing the profile allows
+        // is not lost for the rest of the session.
+        *lock(&fake.profile) = Some(identified);
+        assert!(g.paused().is_none());
+        assert!(g.check(&req(GIB)).is_ok());
+    }
+
+    #[test]
     fn free_memory_under_two_gigabytes_pauses_and_it_resumes_above_three() {
         let mut p = tier_g();
         p.process_while_recording = true;

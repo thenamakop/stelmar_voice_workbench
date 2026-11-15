@@ -45,6 +45,8 @@ fn plock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 const MONITOR_STEP: Duration = Duration::from_secs(2);
 const PARTS_RECHECK: Duration = Duration::from_secs(5);
 const NIGHT_CHECK: Duration = Duration::from_secs(30);
+/// The STELMAR 2027 programme, built into the app (the night pass waits for the last session of the day).
+const PROGRAMME_JSON: &str = include_str!("../../../docs/programme.json");
 
 // ------------------------------------------------------------------------------------------------ the clock
 
@@ -114,6 +116,8 @@ struct AppReadings {
     /// The slowest and the number of profile reads (the profile is read at every scheduling decision, not cached).
     profile_reads: std::sync::atomic::AtomicU64,
     profile_read_max_us: std::sync::atomic::AtomicU64,
+    /// The sum of all reads, for the mean (microseconds).
+    profile_read_total_us: std::sync::atomic::AtomicU64,
 }
 
 impl Readings for AppReadings {
@@ -160,6 +164,7 @@ impl Readings for AppReadings {
         let us = u64::try_from(t.elapsed().as_micros()).unwrap_or(u64::MAX);
         self.profile_reads.fetch_add(1, Ordering::Relaxed);
         self.profile_read_max_us.fetch_max(us, Ordering::Relaxed);
+        self.profile_read_total_us.fetch_add(us, Ordering::Relaxed);
         v
     }
 }
@@ -461,6 +466,7 @@ pub fn init(app: &AppHandle, feed: Arc<Feed>, parts_rx: Receiver<PartRecord>) {
         free: Mutex::new(None),
         profile_reads: std::sync::atomic::AtomicU64::new(0),
         profile_read_max_us: std::sync::atomic::AtomicU64::new(0),
+        profile_read_total_us: std::sync::atomic::AtomicU64::new(0),
     });
     let core = Arc::new(Core::new(readings.clone()));
     let open: Arc<Mutex<Vec<OpenSession>>> = Arc::new(Mutex::new(Vec::new()));
@@ -645,8 +651,8 @@ impl Queue {
     /// The night pass (decision D6): once every rolling job of the day is done, nothing is recording and the last
     /// session ended at least 30 minutes ago, each session with audio in a language that has a night model gets a
     /// `post-2` job, if the estimate for all of them fits before 08:00 IST. Otherwise the pass is skipped and the
-    /// reason is logged. The programme's last session of the day is not consulted yet: a gap of 30 minutes between
-    /// two sessions starts the pass early (it yields to the rolling pass of the next session).
+    /// reason is logged. It starts 30 minutes after the programme's last session to transcribe on the day (or after
+    /// the last recorded session, when the programme does not list that day).
     fn night_step(&self) {
         use wb_queue::night::{self, Plan, SessionAudio};
         let Some(profile) = self.profile() else {
@@ -689,6 +695,12 @@ impl Queue {
                 Some(JobState::Parked) | None => {}
                 Some(_) => rolling_pending = true,
             }
+        }
+        // The pass waits for the programme's last session to transcribe on the day of the last recorded session,
+        // not only for the sessions that happened to be recorded (a 30-minute gap between two sessions must not
+        // start it early). A day the programme does not list (a rehearsal) goes by the recorded sessions alone.
+        if let Some(day_end) = night::programme_day_end_ms(PROGRAMME_JSON, last_end) {
+            last_end = last_end.max(day_end);
         }
         if candidates.is_empty()
             || !night::may_start(
@@ -818,6 +830,17 @@ pub fn on_session_started(app: &AppHandle, dir: &str, expected: &[String], scrip
 
 // ------------------------------------------------------------------------------------------------ commands
 
+/// One engine device working on a job: how many of its units run now or are committed, and the processor
+/// threads its engine gets (a graphics engine takes at most 2; the scheduler lowers them after a second dropout).
+#[derive(Debug, Clone, Serialize)]
+pub struct JobDeviceRow {
+    /// "cpu" or "gpu".
+    pub device: String,
+    pub threads: u32,
+    pub units_running: usize,
+    pub units_committed: usize,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct JobRow {
     pub id: i64,
@@ -835,6 +858,8 @@ pub struct JobRow {
     pub remaining_audio_ms: u64,
     pub error: Option<String>,
     pub position: i64,
+    /// The devices the saved profile's configuration puts to work, with each one's share of this job.
+    pub devices: Vec<JobDeviceRow>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -855,6 +880,37 @@ pub struct QueueSnapshot {
     pub ready_text: String,
 }
 
+/// The devices of the configuration with their threads and this job's units on each. The thread rule is the
+/// executor's: the profile's processor threads less the scheduler's reduction (at least 1), and a graphics
+/// engine takes at most 2.
+fn job_devices(profile: &ProfileView, fewer: u32, units: &[wb_queue::store::Unit]) -> Vec<JobDeviceRow> {
+    let Some(config) = profile.config else {
+        return Vec::new();
+    };
+    let (cpu, gpu) = match config {
+        DeviceConfig::Cpu => (true, false),
+        DeviceConfig::Gpu { .. } => (false, true),
+        DeviceConfig::Hybrid { .. } => (true, true),
+    };
+    let base = profile.cpu_threads.max(1).saturating_sub(fewer).max(1);
+    let count = |device: Device, state: UnitState| {
+        units
+            .iter()
+            .filter(|u| u.device == Some(device) && u.state == state)
+            .count()
+    };
+    [(cpu, "cpu", Device::Cpu, base), (gpu, "gpu", Device::Gpu, base.min(2))]
+        .into_iter()
+        .filter(|(wanted, ..)| *wanted)
+        .map(|(_, name, device, threads)| JobDeviceRow {
+            device: name.to_owned(),
+            threads,
+            units_running: count(device, UnitState::Running),
+            units_committed: count(device, UnitState::Committed),
+        })
+        .collect()
+}
+
 fn state_name(s: JobState) -> &'static str {
     match s {
         JobState::Queued => "queued",
@@ -871,6 +927,7 @@ impl Queue {
         let mut seconds = Vec::new();
         let open = plock(&self.open);
         let profile = self.profile();
+        let verdict = self.core.verdict();
         for s in open.iter() {
             let q = plock(&s.handle.queue);
             let Ok(jobs) = q.jobs() else { continue };
@@ -903,6 +960,10 @@ impl Queue {
                     });
                     seconds.push(remaining as f64 / 1000.0 * rtf);
                 }
+                let devices = profile
+                    .as_ref()
+                    .map(|p| job_devices(p, verdict.fewer_threads, &units))
+                    .unwrap_or_default();
                 rows.push(JobRow {
                     id: j.id,
                     session: j.session.clone(),
@@ -919,10 +980,10 @@ impl Queue {
                     remaining_audio_ms: remaining,
                     error: j.error.clone(),
                     position: j.position,
+                    devices,
                 });
             }
         }
-        let verdict = self.core.verdict();
         QueueSnapshot {
             jobs: rows,
             scheduler: SchedulerRow {
@@ -1174,12 +1235,76 @@ pub(crate) fn report_json(app: &AppHandle) -> serde_json::Value {
         "forced_hybrid": gate_hooks::force_hybrid(),
         "profile_reads": q.readings.profile_reads.load(Ordering::Relaxed),
         "profile_read_max_us": q.readings.profile_read_max_us.load(Ordering::Relaxed),
+        "profile_read_total_us": q.readings.profile_read_total_us.load(Ordering::Relaxed),
+        "profile_read_mean_us": q
+            .readings
+            .profile_read_total_us
+            .load(Ordering::Relaxed)
+            .checked_div(q.readings.profile_reads.load(Ordering::Relaxed)),
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn unit(idx: u32, device: Option<Device>, state: UnitState) -> wb_queue::store::Unit {
+        wb_queue::store::Unit {
+            id: i64::from(idx),
+            job: 1,
+            idx,
+            start_ms: u64::from(idx) * 300_000,
+            end_ms: u64::from(idx + 1) * 300_000,
+            state,
+            device,
+            cpu_attempts: 0,
+            gpu_attempts: 0,
+            last_error: None,
+            seam: None,
+        }
+    }
+
+    fn profile_of(json: &str) -> ProfileView {
+        ProfileView::from_capability(&wb_capability::parse_capability(json).unwrap(), vec![])
+    }
+
+    #[test]
+    fn a_job_shows_the_devices_of_the_configuration_with_their_threads_and_units() {
+        let hybrid = profile_of(include_str!(
+            "../../../crates/wb-capability/fixtures/tier-c-mid-hybrid.json"
+        ));
+        let units = [
+            unit(0, Some(Device::Gpu), UnitState::Committed),
+            unit(1, Some(Device::Cpu), UnitState::Running),
+            unit(2, Some(Device::Gpu), UnitState::Committed),
+            unit(3, None, UnitState::Pending),
+        ];
+        let rows = job_devices(&hybrid, 0, &units);
+        assert_eq!(
+            rows.iter().map(|r| r.device.as_str()).collect::<Vec<_>>(),
+            ["cpu", "gpu"]
+        );
+        assert_eq!(rows[0].threads, hybrid.cpu_threads.max(1));
+        assert!(rows[1].threads <= 2, "a graphics engine takes at most 2 threads");
+        assert_eq!((rows[0].units_running, rows[0].units_committed), (1, 0));
+        assert_eq!((rows[1].units_running, rows[1].units_committed), (0, 2));
+        // The scheduler's reduction lowers the threads by one, never below one.
+        let fewer = job_devices(&hybrid, 1, &units);
+        assert_eq!(fewer[0].threads, hybrid.cpu_threads.max(1).saturating_sub(1).max(1));
+        assert_eq!(job_devices(&hybrid, 99, &units)[0].threads, 1);
+    }
+
+    #[test]
+    fn a_processor_only_profile_has_one_device_row_and_no_profile_none() {
+        let cpu = profile_of(include_str!(
+            "../../../crates/wb-capability/fixtures/tier-c-cpu-only.json"
+        ));
+        let rows = job_devices(&cpu, 0, &[]);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].device, "cpu");
+        let none = profile_of(include_str!("../../../crates/wb-capability/fixtures/tier-r.json"));
+        assert!(job_devices(&none, 0, &[]).is_empty(), "tier R has no configuration");
+    }
 
     #[test]
     fn a_stop_is_seen_after_the_recorder_cleared_the_snapshots_session() {

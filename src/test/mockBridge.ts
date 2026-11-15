@@ -171,6 +171,7 @@ function job(over: Partial<QueueJob> & Pick<QueueJob, "id" | "session" | "kind" 
     remaining_audio_ms: 0,
     error: null,
     position: over.id,
+    devices: [{ device: "gpu", threads: 2, units_running: 0, units_committed: 0 }],
     ...over,
   };
 }
@@ -196,6 +197,10 @@ export const QUEUE_JOBS: QueueJob[] = [
     units_total: 9,
     units_committed: 5,
     units_running: 1,
+    devices: [
+      { device: "gpu", threads: 2, units_running: 1, units_committed: 5 },
+      { device: "cpu", threads: 2, units_running: 0, units_committed: 0 },
+    ],
     audio_ms: 2_715_000,
     remaining_audio_ms: 1_215_000,
     position: 1,
@@ -235,9 +240,9 @@ export function queueSnapshot(kind: MockQueue): QueueSnapshot {
         j.state === "running" ? { ...j, state: "paused" as const, units_running: 0 } : j,
       ),
       scheduler: { ...scheduler, paused: "the operator paused the queue", operator_paused: true },
-      ready_text: "All transcripts ready by 19:40",
+      ready_text: "All transcripts ready by 19:40 IST",
     };
-  return { jobs: QUEUE_JOBS, scheduler, ready_text: "All transcripts ready by 19:40" };
+  return { jobs: QUEUE_JOBS, scheduler, ready_text: "All transcripts ready by 19:40 IST" };
 }
 
 /** Rows the rolling pass has committed for the open session: English, Hindi, mixed and Urdu. */

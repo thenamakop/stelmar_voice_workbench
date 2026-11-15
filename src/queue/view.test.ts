@@ -4,11 +4,11 @@ import { QUEUE_JOBS, SEGMENTS, queueSnapshot } from "../test/mockBridge";
 import {
   behindMs,
   behindText,
+  deviceLines,
   jobProgress,
   languageBadge,
   mergeSegments,
   modelPairs,
-  readyText,
   partProgress,
   rollingJob,
   rowKind,
@@ -43,11 +43,16 @@ describe("names", () => {
   });
 });
 
-describe("the ready time", () => {
-  it("names the zone once", () => {
-    expect(readyText("All transcripts ready by 19:40")).toBe("All transcripts ready by 19:40 IST");
-    expect(readyText("All transcripts ready by 19:40 IST")).toBe("All transcripts ready by 19:40 IST");
-    expect(readyText("Nothing is waiting to be transcribed")).toBe("Nothing is waiting to be transcribed");
+describe("devices of a job", () => {
+  it("says which devices work on a job, with their threads and units", () => {
+    expect(deviceLines(running)).toEqual([
+      "Graphics · 2 threads · 1 running · 5 done",
+      "Processor · 2 threads",
+    ]);
+    expect(deviceLines({ ...running, devices: [] })).toEqual([]);
+    expect(
+      deviceLines({ ...running, devices: [{ device: "cpu", threads: 1, units_running: 0, units_committed: 0 }] }),
+    ).toEqual(["Processor · 1 thread"]);
   });
 });
 

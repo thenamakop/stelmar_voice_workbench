@@ -41,9 +41,14 @@ export function modelPairs(job: QueueJob): [string, string][] {
   return Object.entries(job.models_by_lang).map(([lang, id]) => [LANGUAGE_NAMES[lang] ?? lang, id]);
 }
 
-/** The app's "ready by" sentence always names the zone: the engine's text gives the clock time in IST only. */
-export function readyText(text: string): string {
-  return /ready by \d{1,2}:\d{2}$/.test(text) ? `${text} IST` : text;
+/** "Processor · 2 threads · 1 running · 3 done": one line per device a job runs on. */
+export function deviceLines(job: QueueJob): string[] {
+  return job.devices.map((d) => {
+    const bits = [d.device === "gpu" ? "Graphics" : "Processor", `${d.threads} thread${d.threads === 1 ? "" : "s"}`];
+    if (d.units_running > 0) bits.push(`${d.units_running} running`);
+    if (d.units_committed > 0) bits.push(`${d.units_committed} done`);
+    return bits.join(" · ");
+  });
 }
 
 /** How much of a job is committed, 0 to 1 (a job with no audio yet has none). */

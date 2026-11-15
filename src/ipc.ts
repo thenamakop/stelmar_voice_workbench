@@ -483,6 +483,14 @@ export const sessionPlan = (english: boolean, hindiUrdu: boolean, script: HindiU
 export type JobKind = "rolling" | "night" | "translate" | "import";
 export type JobStateName = "queued" | "running" | "paused" | "done" | "parked";
 
+/** One engine device working on a job: the threads its engine gets and how many of the job's units it has. */
+export interface QueueJobDevice {
+  device: "cpu" | "gpu";
+  threads: number;
+  units_running: number;
+  units_committed: number;
+}
+
 export interface QueueJob {
   id: number;
   /** The session's folder name. */
@@ -501,6 +509,8 @@ export interface QueueJob {
   remaining_audio_ms: number;
   error: string | null;
   position: number;
+  /** The devices the saved profile's configuration puts to work (empty when none is chosen). */
+  devices: QueueJobDevice[];
 }
 
 export interface QueueScheduler {

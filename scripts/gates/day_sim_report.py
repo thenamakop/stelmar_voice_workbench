@@ -91,7 +91,7 @@ def main() -> int:
     P(f"profile in force: {notes.get('profile')}")
     P(f"app exit code: {notes.get('emu_exit')}, scheduler clock offset {notes.get('clock_offset_s')} s (the first session maps to 10:00 IST), parts of {notes.get('part_seconds')} s, night pass time box {notes.get('night_minutes')} min")
     q = report.get("queue", {})
-    P(f"profile reads by the scheduler: {q.get('profile_reads')}, slowest {q.get('profile_read_max_us')} us (the profile in use is read at every scheduling decision, no cache)")
+    P(f"profile reads by the scheduler: {q.get('profile_reads')}, mean {q.get('profile_read_mean_us')} us, slowest {q.get('profile_read_max_us')} us (the profile in use is read at every scheduling decision, no cache)")
     P(f"configuration the queue worked in: {q.get('configuration')}; forced hybrid: {report.get('forced_hybrid')}")
     P("")
     P("Script notes (progress):")

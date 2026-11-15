@@ -1,5 +1,5 @@
 //! Estimates (Phase 4 step 8): per job and per day, from the measured throughput of the configuration and the
-//! remaining audio ("All transcripts ready by 19:40"). Times shown to people are IST.
+//! remaining audio ("All transcripts ready by 19:40 IST"). Times shown to people are IST.
 
 use std::collections::BTreeMap;
 
@@ -82,13 +82,13 @@ pub fn format_ist_hhmm(epoch_ms: u64) -> String {
     format!("{:02}:{:02}", local / 3_600_000, local / 60_000 % 60)
 }
 
-/// "All transcripts ready by 19:40", or the words for a queue with nothing to do.
+/// "All transcripts ready by 19:40 IST", or the words for a queue with nothing to do.
 pub fn ready_text(now_ms: u64, job_seconds: &[f64]) -> String {
     if job_seconds.iter().all(|s| !(s.is_finite() && *s > 0.0)) {
         return "Nothing is waiting to be transcribed".to_owned();
     }
     format!(
-        "All transcripts ready by {}",
+        "All transcripts ready by {} IST",
         format_ist_hhmm(day_ready_ms(now_ms, job_seconds))
     )
 }
@@ -145,7 +145,7 @@ mod tests {
         );
         assert_eq!(
             ready_text(noon_utc, &[3_600.0]),
-            "All transcripts ready by 18:30"
+            "All transcripts ready by 18:30 IST"
         );
         assert_eq!(
             ready_text(noon_utc, &[0.0]),

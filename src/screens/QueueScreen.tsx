@@ -8,8 +8,8 @@ import {
   LANGUAGE_NAMES,
   STATE_BADGE,
   jobProgress,
+  deviceLines,
   modelPairs,
-  readyText,
   openJobs,
   percent,
   ramText,
@@ -120,6 +120,13 @@ function JobCard({
         ))}
         {modelPairs(job).length === 0 && "No model chosen"}
       </div>
+      {deviceLines(job).length > 0 && (
+        <div
+          style={{ fontSize: 13, lineHeight: "var(--lh-small)", color: "var(--text-secondary)", marginTop: 2 }}
+        >
+          {deviceLines(job).join("  ·  ")}
+        </div>
+      )}
       <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 12 }}>
         <ProgressBar
           value={fraction}
@@ -306,7 +313,7 @@ export function QueueScreen({ queue, capability }: QueueScreenProps) {
         meta={
           <>
             <span>
-              {snap ? readyText(snap.ready_text) : "Rolling and night passes run here at low priority"}
+              {snap ? snap.ready_text : "Rolling and night passes run here at low priority"}
             </span>
             {sched?.paused && <Badge tone="warning">Paused</Badge>}
           </>
