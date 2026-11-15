@@ -81,6 +81,42 @@ function Write-PackLog {
   }
 }
 $script:PackLogFile = $null
+
+# Prints a boxed message to the console (and to a log file when one is given). It lives in this module so
+# every caller can reach it: a script block run by Invoke-PackGateProcess cannot see functions defined in
+# run-gates.ps1.
+function Write-PackBanner {
+  param([string[]]$Lines, [string]$Colour = 'Yellow', [string]$LogFile = '')
+  $w = 78
+  Write-Host ''
+  Write-Host ('=' * $w) -ForegroundColor $Colour
+  foreach ($l in $Lines) { Write-Host $l -ForegroundColor $Colour }
+  Write-Host ('=' * $w) -ForegroundColor $Colour
+  if ($LogFile) {
+    foreach ($l in $Lines) { Add-Content -LiteralPath $LogFile -Value $l -Encoding UTF8 -ErrorAction SilentlyContinue }
+  }
+}
+
+# The OnTick handler of a gate that may ask the person something: when the gate has written PROMPT.txt
+# in its folder, shows it in a banner, asks for Enter (or a short answer) and writes ANSWER.txt. -Read is
+# the console read (a test passes its own).
+function New-PackPromptHandler {
+  param([Parameter(Mandatory = $true)][string]$GateId, [Parameter(Mandatory = $true)][string]$GateDir, [string]$LogFile = '', [scriptblock]$Read = $null)
+  $reader = $Read
+  if (-not $reader) { $reader = { param($prompt) Read-Host $prompt } }
+  {
+    param($proc)
+    $pf = Join-Path $GateDir 'PROMPT.txt'
+    if (Test-Path -LiteralPath $pf) {
+      $msg = (Get-Content -LiteralPath $pf -Raw -Encoding UTF8)
+      Remove-Item -LiteralPath $pf -Force
+      Write-PackBanner -Lines (@("$GateId needs you:") + @($msg -split "`r?`n" | ForEach-Object { '  ' + $_ })) -Colour 'Cyan' -LogFile $LogFile
+      $ans = & $reader 'Press Enter when done (or type a short answer)'
+      Set-Content -LiteralPath (Join-Path $GateDir 'ANSWER.txt') -Value $(if ($ans) { $ans } else { 'ok' }) -Encoding UTF8
+    }
+  }.GetNewClosure()
+}
+
 function Set-PackLogFile { param([string]$Path) $script:PackLogFile = $Path }
 
 # ---- The registry --------------------------------------------------------------------------------
@@ -832,4 +868,4 @@ function Format-PackGateLine {
   ('{0,-8} {1,-24}{2}{3} {4}' -f $Status, $Id, $m, $r, $Headline).TrimEnd()
 }
 
-Export-ModuleMember -Function Get-PackProp, ConvertTo-PackHashtable, Read-PackJson, Write-PackJson, Write-PackLog, Set-PackLogFile, Get-PackManifestProblems, Read-PackManifest, Get-PackLedgerRows, Test-PackLedgerMatches, Get-PackBootInfo, Select-PackNextGate, New-PackState, Get-PackStatePath, Read-PackState, Save-PackState, Set-PackGateStatus, Get-PackGateState, New-PackResult, Write-PackResult, Get-PackEvidenceVerdict, ConvertTo-PackStatus, Test-PackAdmin, Get-PackMainsPower, Test-PackIdle, Get-PackBlockingPrograms, ConvertTo-PackArg, Invoke-PackGateProcess, Invoke-PackUnblock, Test-PackLaunchable, Register-PackResume, Unregister-PackResume, Test-PackResumeRegistered, Get-PackChangesPath, Add-PackChange, Invoke-PackCleanup, Get-PackStillChanged, Get-PackMachineName, New-PackSummary, Get-PackCollectFiles, New-PackZip, Format-PackMinutes, Format-PackGateLine
+Export-ModuleMember -Function Get-PackProp, ConvertTo-PackHashtable, Read-PackJson, Write-PackJson, Write-PackLog, Set-PackLogFile, Get-PackManifestProblems, Read-PackManifest, Get-PackLedgerRows, Test-PackLedgerMatches, Get-PackBootInfo, Select-PackNextGate, New-PackState, Get-PackStatePath, Read-PackState, Save-PackState, Set-PackGateStatus, Get-PackGateState, New-PackResult, Write-PackResult, Get-PackEvidenceVerdict, ConvertTo-PackStatus, Test-PackAdmin, Get-PackMainsPower, Test-PackIdle, Get-PackBlockingPrograms, ConvertTo-PackArg, Invoke-PackGateProcess, Invoke-PackUnblock, Test-PackLaunchable, Register-PackResume, Unregister-PackResume, Test-PackResumeRegistered, Get-PackChangesPath, Add-PackChange, Invoke-PackCleanup, Get-PackStillChanged, Get-PackMachineName, New-PackSummary, Get-PackCollectFiles, New-PackZip, Format-PackMinutes, Format-PackGateLine, Write-PackBanner, New-PackPromptHandler

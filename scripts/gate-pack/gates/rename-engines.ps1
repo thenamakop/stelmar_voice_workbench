@@ -17,6 +17,9 @@ Invoke-PackGateBody -Ctx $ctx -Id 'rename-engines' -ResultFile $ResultFile -Body
   $gdir = [string]$ctx.gate_dir
   $scratch = Join-Path $gdir 'scratch'
   $a = @(Get-PackLegacyCommon -Ctx $ctx) + @('-RigPrefer', [string]$ctx.rig_prefer, '-SecondReference', '-Minutes', '3', '-Scratch', (ConvertTo-PackArg $scratch))
+  if (-not $ctx.unattended) {
+    $null = Request-PackPrompt -Ctx $ctx -Message ("RENAMED-ENGINES TEST (about 12 minutes)`r`nThe pack opens the app twice and looks at its window, so the desktop must stay unlocked and untouched.`r`nDo not use the keyboard or the mouse and do not lock the screen until the next line says this gate has finished.`r`nLeave the charger connected. Press Enter to start.")
+  }
   $e = Invoke-PackLegacyGate -Ctx $ctx -Script 'rename-engines.ps1' -Arguments $a -EvidenceName ("rename-engines-$([string]$ctx.profile).txt") -TimeoutMinutes 40
   if ($e.TimedOut) { return (New-PackResult -Id 'rename-engines' -Status 'INVALID' -Headline 'the renamed-engines gate did not finish in time' -Evidence @($e.Log) -Quick $quick) }
   $ev = @()

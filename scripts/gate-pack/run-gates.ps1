@@ -81,12 +81,7 @@ if (-not (Test-Path -LiteralPath $runnerScript)) { $runnerScript = $MyInvocation
 
 function Say([string]$m) { Write-PackLog $m }
 function Banner([string[]]$Lines, [string]$Colour = 'Yellow') {
-  $w = 78
-  Write-Host ''
-  Write-Host ('=' * $w) -ForegroundColor $Colour
-  foreach ($l in $Lines) { Write-Host $l -ForegroundColor $Colour }
-  Write-Host ('=' * $w) -ForegroundColor $Colour
-  foreach ($l in $Lines) { Add-Content -LiteralPath (Join-Path $WorkDir 'runner.log') -Value $l -Encoding UTF8 -ErrorAction SilentlyContinue }
+  Write-PackBanner -Lines $Lines -Colour $Colour -LogFile (Join-Path $WorkDir 'runner.log')
 }
 
 # ---- -Cleanup ------------------------------------------------------------------------------------
@@ -284,17 +279,7 @@ function Invoke-OneGate($g) {
   $timeout = [int]([math]::Max(30, $est * 2.5 + 30))
   Say ("START {0} {1}: {2} (about {3})" -f $g.priority, $id, $g.title, (Format-PackMinutes $est))
   $began = Get-Date
-  $onTick = {
-    param($proc)
-    $pf = Join-Path $gdir 'PROMPT.txt'
-    if (Test-Path -LiteralPath $pf) {
-      $msg = (Get-Content -LiteralPath $pf -Raw -Encoding UTF8)
-      Remove-Item -LiteralPath $pf -Force
-      Banner (@("$id needs you:") + @($msg -split "`r?`n" | ForEach-Object { '  ' + $_ })) 'Cyan'
-      $ans = Read-Host 'Press Enter when done (or type a short answer)'
-      Set-Content -LiteralPath (Join-Path $gdir 'ANSWER.txt') -Value $(if ($ans) { $ans } else { 'ok' }) -Encoding UTF8
-    }
-  }.GetNewClosure()
+  $onTick = New-PackPromptHandler -GateId $id -GateDir $gdir -LogFile (Join-Path $WorkDir 'runner.log')
   $run = Invoke-PackGateProcess -ScriptPath (Join-Path $gpDir ([string]$g.script -replace '/', '\')) -CtxFile $ctxFile -ResultFile $resultFile -LogFile (Join-Path $gdir 'gate.out.log') -TimeoutMinutes $timeout -OnTick $onTick
   # A gate that was stopped (timeout) or crashed can leave its lock behind. Remove it only when its owner
   # is a process that is no longer alive and the gate itself wrote it; never a lock of a living process.
