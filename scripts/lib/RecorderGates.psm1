@@ -172,6 +172,7 @@ function Invoke-PackRecorderGate {
   $paths = Get-PackPaths -Ctx $Ctx
   foreach ($f in @($paths.GateExe, $paths.Testbench)) { if (-not (Test-Path -LiteralPath $f)) { throw "the pack is missing $f (run run-gates.ps1 -Verify)" } }
   $minutes = $(if ($quick -and $QuickMinutes -gt 0) { $QuickMinutes } else { $FullMinutes })
+  Assert-PackFreeDisk -Path ([string]$Ctx.work_dir) -NeedGB (Get-PackDiskNeedGB -Minutes $(if ($Gate -eq 'kill') { 20 } else { $minutes })) -What "the $Gate recordings"
   $script1 = 'recorder-gate.ps1'
   $args1 = @(Get-PackLegacyCommon -Ctx $Ctx) + @('-RigPrefer', [string]$Ctx.rig_prefer, '-SecondReference')
   if ($Gate -eq 'kill') {

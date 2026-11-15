@@ -283,7 +283,7 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
   while ($true) {
     $st = Read-Json $env:WB_GATE_STATUS_FILE
     if ($st -and $st.recorder -and $st.recorder.state -eq 'recording') { break }
-    if ($emu.HasExited) { throw "The job ended before recording started (exit $($emu.ExitCode)); see $logFile" }
+    if ($emu.HasExited) { $why = ''; try { $rp = Read-Json $env:WB_GATE_REPORT; if ($rp -and $rp.error) { $why = " The app said: $($rp.error)" } } catch { }; throw "The job ended before recording started (exit $($emu.ExitCode));$why see $logFile" }
     if ((Get-Date) -gt $deadline) { throw 'Recording did not start within 120 s' }
     Start-Sleep -Milliseconds 500
   }

@@ -53,9 +53,7 @@ Invoke-PackGateBody -Ctx $ctx -Id 'mic-run' -ResultFile $ResultFile -Body {
   if (-not $speaker) { throw 'RIG REFUSED: Windows has no default playback device (speakers) for the microphone test' }
   if ($speaker -match 'CABLE|VB-Audio|Virtual') { throw "RIG REFUSED: the default playback device is a virtual cable ($speaker); set the laptop's speakers as the default and run again" }
   $micName = [string]$mic.name
-  $free2 = (Get-PSDrive -Name (Split-Path -Qualifier ([string]$ctx.work_dir)).TrimEnd(':') -ErrorAction SilentlyContinue).Free
-  $needGB = $(if ($quick) { 2.0 } else { 7.0 })
-  if ($null -ne $free2 -and ($free2 / 1GB) -lt $needGB) { throw ('Only {0:n1} GB of disk space free on the pack drive; {1:n0} GB are needed for the microphone recordings' -f ($free2 / 1GB), $needGB) }
+  Assert-PackFreeDisk -Path ([string]$ctx.work_dir) -NeedGB (Get-PackDiskNeedGB -Minutes ($plan.Seconds / 60.0)) -What 'the microphone recordings'
 
   $minutes = [math]::Round($plan.Seconds / 60.0)
   $answer = Request-PackPrompt -Ctx $ctx -TimeoutMinutes 60 -Message ("MICROPHONE TEST ($minutes minutes)`r`nThis test plays speech ALOUD from this laptop's speakers and records it with the built-in microphone ($micName).`r`nThe room must be quiet. Do not talk, do not move the laptop, leave the charger connected.`r`nThe speaker volume is set to a moderate level and put back at the end. Press Enter to start.")
@@ -112,7 +110,7 @@ Invoke-PackGateBody -Ctx $ctx -Id 'mic-run' -ResultFile $ResultFile -Body {
     while ($true) {
       $st = Read-RunJson (Join-Path $run 'status.json')
       if ($st -and $st.recorder -and $st.recorder.state -eq 'recording') { break }
-      if ($app.HasExited) { throw "the app ended before recording started (exit $($app.ExitCode))" }
+      if ($app.HasExited) { $why = Get-PackAppReportError (Join-Path $run 'stop-report.json'); throw ("the app ended before recording started (exit $($app.ExitCode))" + $(if ($why) { ": the app said: $why" } else { '' })) }
       if ((Get-Date) -gt $deadline) { throw 'recording did not start within 120 s' }
       Start-Sleep -Milliseconds 500
     }

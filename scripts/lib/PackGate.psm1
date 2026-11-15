@@ -97,8 +97,41 @@ function Complete-PackGate {
 # free memory; the gate is not counted as tried) or INVALID (a fault in the run).
 function Get-PackErrorStatus {
   param([string]$Message)
-  if ($Message -match '^(RIG REFUSED|RIG SELF-TEST FAILED|Overlay tools are running|Only [0-9.,]+ GB of RAM free|An engine build is running)') { return 'PENDING' }
+  if ($Message -match '^(RIG REFUSED|RIG SELF-TEST FAILED|Overlay tools are running|Only [0-9.,]+ GB of RAM free|Not enough free disk space|An engine build is running)') { return 'PENDING' }
   'INVALID'
+}
+
+# What the app wrote as the reason it did not start or stopped (the "error" of its stop report), or ''.
+function Get-PackAppReportError {
+  param([string]$ReportPath)
+  try {
+    if ($ReportPath -and (Test-Path -LiteralPath $ReportPath)) {
+      $j = Get-Content -LiteralPath $ReportPath -Raw -Encoding UTF8 | ConvertFrom-Json
+      $e = $j.PSObject.Properties['error']
+      if ($e -and $e.Value) { return [string]$e.Value }
+    }
+  } catch { }
+  ''
+}
+
+# Pure. The free disk space a recorder gate needs on the work drive: the app refuses to start a session
+# under 5 GB free, plus about 0.05 GB per minute for the app's, both references' and the source recordings.
+function Get-PackDiskNeedGB {
+  param([double]$Minutes = 0)
+  [math]::Round(5.5 + 0.05 * [math]::Max(0.0, $Minutes), 1)
+}
+
+# Throws a PENDING message (Get-PackErrorStatus) when the drive of Path has less than NeedGB free.
+function Assert-PackFreeDisk {
+  param([Parameter(Mandatory = $true)] [string]$Path, [Parameter(Mandatory = $true)] [double]$NeedGB, [string]$What = 'the recordings', [Nullable[double]]$FreeBytes = $null)
+  $freeB = $FreeBytes
+  if ($null -eq $freeB) {
+    try { $q = Split-Path -Qualifier $Path; $freeB = [double](Get-PSDrive -Name $q.TrimEnd(':') -ErrorAction Stop).Free } catch { return }
+  }
+  $freeGB = [double]$freeB / 1GB
+  if ($freeGB -lt $NeedGB) {
+    throw ('Not enough free disk space: only {0:n1} GB free on {1}, {2:n1} GB needed for {3} (the app also refuses to start a session under 5 GB free). Delete files you no longer need (old pack copies, earlier work folders) and run again.' -f $freeGB, (Split-Path -Qualifier $Path), $NeedGB, $What)
+  }
 }
 
 # Runs a gate's body and always writes a result: what the body returns, or INVALID / PENDING with the
@@ -163,4 +196,4 @@ function Get-PackLegacyCommon {
   $a
 }
 
-Export-ModuleMember -Function Read-PackCtx, Get-PackPaths, Initialize-PackGate, Write-PackGateLog, Request-PackPrompt, Complete-PackGate, Get-PackErrorStatus, Invoke-PackGateBody, Invoke-PackLegacyGate, Get-PackLegacyCommon
+Export-ModuleMember -Function Read-PackCtx, Get-PackPaths, Initialize-PackGate, Write-PackGateLog, Request-PackPrompt, Complete-PackGate, Get-PackErrorStatus, Get-PackAppReportError, Get-PackDiskNeedGB, Assert-PackFreeDisk, Invoke-PackGateBody, Invoke-PackLegacyGate, Get-PackLegacyCommon
