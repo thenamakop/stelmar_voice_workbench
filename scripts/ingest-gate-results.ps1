@@ -98,6 +98,8 @@ try {
   if (-not $Preview) {
     New-Item -ItemType Directory -Force -Path $evDir | Out-Null
     foreach ($f in @(Get-ChildItem -LiteralPath (Join-Path $tmp 'work') -Recurse -File -ErrorAction SilentlyContinue)) {
+      # Programs, libraries and audio are never evidence (an older zip may carry engine copies).
+      if (@('.exe', '.dll', '.pdb', '.sys', '.wav', '.bin') -contains $f.Extension.ToLowerInvariant()) { continue }
       $rel = $f.FullName.Substring((Join-Path $tmp 'work').Length).TrimStart('\')
       $to = Join-Path $evDir $rel
       New-Item -ItemType Directory -Force -Path (Split-Path -Parent $to) | Out-Null

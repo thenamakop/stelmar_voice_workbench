@@ -767,10 +767,10 @@ function New-PackSummary {
 # work folder; never audio (a recording, a source file, a mirror), a model or a very large file.
 function Get-PackCollectFiles {
   param([Parameter(Mandatory = $true)] [string]$WorkDir, [long]$MaxBytes = 64MB)
-  $skipDirs = '\\(audio|source|backup|mirror|rec|reference|reference-wasapi|mic-keep|models)(\\|$)'
+  $skipDirs = '\\(audio|source|backup|mirror|rec|reference|reference-wasapi|mic-keep|models|engine-[a-z0-9]+|engines|bin)(\\|$)'
   @(Get-ChildItem -LiteralPath $WorkDir -Recurse -File -Force -ErrorAction SilentlyContinue | Where-Object {
       $rel = $_.FullName.Substring($WorkDir.Length)
-      $_.Length -le $MaxBytes -and $_.Extension -notmatch '^\.(wav|bin|zip|tmp|lock)$' -and $rel -notmatch $skipDirs
+      $_.Length -le $MaxBytes -and $_.Extension -notmatch '^\.(wav|bin|zip|tmp|lock|exe|dll|pdb|sys)$' -and $rel -notmatch $skipDirs
     })
 }
 
