@@ -1,0 +1,30 @@
+{
+    "id":  "quick-check",
+    "status":  "PASS",
+    "headline":  "the quick check took 415 s (bar 480 s); recorder safety run passed; tier C",
+    "measured":  {
+                     "check_seconds":  414.627332,
+                     "bar_seconds":  480,
+                     "partial":  true,
+                     "cells":  9,
+                     "cells_total_seconds":  528.7,
+                     "longest_cell_seconds":  120.1,
+                     "tier":  "C",
+                     "gpu_hindi_slower_than_1_5":  false
+                 },
+    "threshold":  "quick check ends within 480 s; recorder safety run passed; no app error; capability.json kept",
+    "rig":  "",
+    "rig_detail":  "",
+    "shared_breaks":  null,
+    "evidence":  [
+                     "D:\\STELMAR-Gate\\dryrun-work\\gates\\quick-check\\quick-check.txt",
+                     "D:\\STELMAR-Gate\\dryrun-work\\gates\\quick-check\\capability.json",
+                     "D:\\STELMAR-Gate\\dryrun-work\\gates\\quick-check\\cells.json"
+                 ],
+    "notes":  [
+
+              ],
+    "quick":  true,
+    "not_at_full_length":  false,
+    "finished":  "2026-11-15T07:02:10.3087152+05:30"
+}

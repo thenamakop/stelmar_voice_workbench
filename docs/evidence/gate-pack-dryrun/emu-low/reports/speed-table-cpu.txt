@@ -1,0 +1,7 @@
+Speed table, cpu part, recomputed from results.jsonl (no audio, no text)
+cells: 1; ok 1; other 0
+devices named by the engine: avx2: CPU (driver versions are in the evidence of the gate itself)
+model | clip | mode | threads | recorded median | recomputed median | runs | note
+small | bench-en.wav | rolling | 3 | 1.083 | 1.083 | 1 | 
+slowest cells: small bench-en.wav 1.08
+consistency: recorded medians equal the medians of the timed runs

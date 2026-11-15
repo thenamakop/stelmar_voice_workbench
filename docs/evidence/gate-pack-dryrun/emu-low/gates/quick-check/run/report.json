@@ -1,0 +1,347 @@
+{
+  "error": null,
+  "mode": "quick",
+  "start_during_check": null,
+  "started_at": "2026-11-15T06:55:13.2004175+05:30",
+  "stopped": null,
+  "view": {
+    "capability": {
+      "app_version": "0.1.0",
+      "check": {
+        "bar_s": 480.0,
+        "duration_s": 414.627332,
+        "excerpt_seconds": 30.0,
+        "kind": "quick",
+        "partial": true,
+        "started_at": "2026-11-15T06:55:13.2057533+05:30"
+      },
+      "created_at": "2026-11-15T06:55:13.2057533+05:30",
+      "decision": {
+        "bars": {
+          "headroom_factor": 0.75,
+          "live_standin_rtf": 0.1875,
+          "near_live_rtf": 0.26249999999999996,
+          "rolling_rtf": 0.75
+        },
+        "config": {
+          "config": {
+            "index": 0,
+            "kind": "gpu"
+          },
+          "cpu_threads": 2,
+          "label": "Intel(R) UHD Graphics (Vulkan)",
+          "recorder_safety_passed": true,
+          "why": "The graphics card measured fastest for the rolling models."
+        },
+        "dual_decode_en_hi": false,
+        "hinglish": {
+          "ok": false,
+          "rtf": null,
+          "source": "unmeasured"
+        },
+        "languages": {
+          "en": {
+            "live": {
+              "hard_reasons": [
+                "Not measured: no validated near-live model for English."
+              ],
+              "kind": null,
+              "model": null,
+              "offered": false,
+              "rtf": null,
+              "soft_reasons": []
+            },
+            "night": null,
+            "night_note": "No night pass for this language: the large model was not clearly more accurate than the rolling model, so the rolling result stands.",
+            "rolling": {
+              "k_max": 1,
+              "lags": false,
+              "meets_bar": true,
+              "model": "large-v3-turbo-q5_0",
+              "quality_unverified": false,
+              "ready_after_stop_min": 4.725448333333333,
+              "rtf": 0.4725448333333333
+            }
+          },
+          "hi": {
+            "live": {
+              "hard_reasons": [
+                "No near-live model is listed for Hindi (Devanagari)."
+              ],
+              "kind": null,
+              "model": null,
+              "offered": false,
+              "rtf": null,
+              "soft_reasons": []
+            },
+            "night": null,
+            "night_note": "The night model is measured by the full check.",
+            "rolling": {
+              "k_max": 1,
+              "lags": false,
+              "meets_bar": true,
+              "model": "large-v3-turbo-q5_0",
+              "quality_unverified": false,
+              "ready_after_stop_min": 6.8641072666666645,
+              "rtf": 0.6864107266666667
+            }
+          },
+          "ur": {
+            "live": {
+              "hard_reasons": [
+                "Urdu live text is never offered on a machine without a working graphics card (no small Urdu model is good enough)."
+              ],
+              "kind": null,
+              "model": null,
+              "offered": false,
+              "rtf": null,
+              "soft_reasons": []
+            },
+            "night": null,
+            "night_note": "No night pass for this language: the large model was not clearly more accurate than the rolling model, so the rolling result stands.",
+            "rolling": {
+              "k_max": 1,
+              "lags": false,
+              "meets_bar": true,
+              "model": "large-v3-turbo-q5_0",
+              "quality_unverified": false,
+              "ready_after_stop_min": 6.513156783333329,
+              "rtf": 0.6513156783333333
+            }
+          }
+        },
+        "partial": true,
+        "pause_on_battery": true,
+        "process_while_recording": true,
+        "provisional": true,
+        "record_only_reason": null,
+        "tier": "C",
+        "tier_reasons": [
+          "Rolling transcription works; live text is not offered on this machine."
+        ],
+        "verdict": [
+          "Record + post-process. Live text is off by default and not offered on this machine.",
+          "Transcribing runs on Intel(R) UHD Graphics (Vulkan).",
+          "English: large-v3-turbo-q5_0, about 5 minutes after Stop.",
+          "Hindi (Devanagari): large-v3-turbo-q5_0, about 7 minutes after Stop.",
+          "Urdu (Nastaliq): large-v3-turbo-q5_0, about 7 minutes after Stop.",
+          "The code-switching (Hinglish) model is too slow to run on every chunk here.",
+          "Some measurements are still to come: this verdict is partial.",
+          "The model choice is provisional until the models have been checked for accuracy."
+        ]
+      },
+      "emulated": "emu-low",
+      "engines": [
+        {
+          "devices": [
+            "CPU"
+          ],
+          "info_ms": 95,
+          "reason": null,
+          "usable": true,
+          "variant": "avx2"
+        },
+        {
+          "devices": [],
+          "info_ms": 42,
+          "reason": "This engine build (avx512) needs CPU features this computer does not have: avx512f, avx512cd, avx512vl, avx512dq, avx512bw. Use the avx2 build, or run the system check, which picks a build that fits.",
+          "usable": false,
+          "variant": "avx512"
+        },
+        {
+          "devices": [
+            "Vulkan0",
+            "CPU"
+          ],
+          "info_ms": 1250,
+          "reason": null,
+          "usable": true,
+          "variant": "vulkan"
+        }
+      ],
+      "fingerprint": {
+        "app_version": "0.1.0",
+        "cpu_brand": "Intel64 Family 6 Model 183 Stepping 1, GenuineIntel",
+        "emulated": "emu-low",
+        "gpus": [
+          {
+            "driver": "32.0.101.7092",
+            "name": "Intel(R) UHD Graphics"
+          }
+        ],
+        "logical_processors": 4,
+        "manifest_hash": "7ab13575fa89b9d05a20eff551c9825b88a2c31a9305df3b9c50a0e8aa52e6eb",
+        "os": "Windows 11 Home Single Language 25H2 (build 26200)",
+        "physical_cores": 4,
+        "total_ram_gib": 16
+      },
+      "hardware": {
+        "audio_inputs": 4,
+        "available_ram_bytes": 11788046336,
+        "avx2": true,
+        "avx512": false,
+        "cpu_brand": "Intel64 Family 6 Model 183 Stepping 1, GenuineIntel",
+        "cpu_features": [
+          "sse4.2",
+          "avx",
+          "avx2",
+          "fma",
+          "f16c",
+          "bmi2"
+        ],
+        "disks": [
+          {
+            "free_bytes": 24490192896,
+            "path": "D:\\STELMAR-Gate\\dryrun-work\\gates\\quick-check\\run\\rec",
+            "role": "recordings"
+          }
+        ],
+        "gpus": [
+          {
+            "dedicated_bytes": 0,
+            "driver": "32.0.101.7092",
+            "index": 0,
+            "kind": "integrated",
+            "local_bytes": 17035096064,
+            "name": "Intel(R) UHD Graphics",
+            "shared_assumed": false,
+            "shared_bytes": 17035096064,
+            "vendor": "Intel",
+            "vulkan_usable": true
+          }
+        ],
+        "logical_processors": 4,
+        "on_mains_power": true,
+        "os": "Windows 11 Home Single Language 25H2 (build 26200)",
+        "physical_cores": 4,
+        "total_ram_bytes": 17179869184
+      },
+      "hybrid": null,
+      "injectors": [],
+      "measurements": [
+        {
+          "clip_seconds": 30.0,
+          "config": {
+            "index": 0,
+            "kind": "gpu"
+          },
+          "device_name": "Intel(R) RaptorLake-S Mobile Graphics Controller",
+          "engine_build": "vulkan",
+          "gpu_local_bytes": 942686208,
+          "lang": "en",
+          "live_standin": false,
+          "load_s": 0.6776577,
+          "method": "bench clip bench-en.wav, first 30 s, rolling settings, warm-up + 1 run(s), single run above RTF 2, 2 threads",
+          "mode": "rolling",
+          "model": "large-v3-turbo-q5_0",
+          "peak_commit_bytes": 1587437568,
+          "peak_working_set_bytes": 1086885888,
+          "rtf": 0.4725448333333333,
+          "threads": 2,
+          "truncated_chunks": 0,
+          "warmup_rtf": 0.47797381666666666
+        },
+        {
+          "clip_seconds": 60.0,
+          "config": {
+            "index": 0,
+            "kind": "gpu"
+          },
+          "device_name": "Intel(R) RaptorLake-S Mobile Graphics Controller",
+          "engine_build": "vulkan",
+          "gpu_local_bytes": 943529984,
+          "lang": "hi",
+          "live_standin": false,
+          "load_s": 0.7046978,
+          "method": "bench clip bench-hi.wav, first 60 s, rolling settings, warm-up + 1 run(s), single run above RTF 2, 2 threads",
+          "mode": "rolling",
+          "model": "large-v3-turbo-q5_0",
+          "peak_commit_bytes": 1599225856,
+          "peak_working_set_bytes": 1130721280,
+          "rtf": 0.6864107266666667,
+          "threads": 2,
+          "truncated_chunks": 0,
+          "warmup_rtf": 0.69058205
+        },
+        {
+          "clip_seconds": 60.0,
+          "config": {
+            "index": 0,
+            "kind": "gpu"
+          },
+          "device_name": "Intel(R) RaptorLake-S Mobile Graphics Controller",
+          "engine_build": "vulkan",
+          "gpu_local_bytes": 943517696,
+          "lang": "ur",
+          "live_standin": false,
+          "load_s": 0.763853,
+          "method": "bench clip bench-ur.wav, first 60 s, rolling settings, warm-up + 1 run(s), single run above RTF 2, 2 threads",
+          "mode": "rolling",
+          "model": "large-v3-turbo-q5_0",
+          "peak_commit_bytes": 1596719104,
+          "peak_working_set_bytes": 1112854528,
+          "rtf": 0.6513156783333333,
+          "threads": 2,
+          "truncated_chunks": 0,
+          "warmup_rtf": 0.6648398883333333
+        }
+      ],
+      "overrides": [],
+      "recorder_safety": [
+        {
+          "config": {
+            "gpu": 0,
+            "kind": "hybrid"
+          },
+          "driver_xruns": 0,
+          "duration_s": 209.6325197,
+          "overruns": 0,
+          "passed": true
+        },
+        {
+          "config": {
+            "index": 0,
+            "kind": "gpu"
+          },
+          "driver_xruns": 0,
+          "duration_s": 209.6325197,
+          "overruns": 0,
+          "passed": true
+        }
+      ],
+      "schema_version": 1,
+      "skipped": [
+        {
+          "reason": "predicted, not measured: large-v3-turbo-q5_0 Hindi (Devanagari): the processor engine (1 threads) did not finish a warm-up and one timed decode of 10 s of audio in 120 s beside the recorder test (RTF above about 6.0); the graphics adapter runs at 0.69, so the processor could add 11% at the most (the rule needs 15%); the hybrid configuration is not chosen",
+          "step": "hybrid test"
+        },
+        {
+          "reason": "not measured: no validated near-live model",
+          "step": "near-live speed on the processor (English)"
+        },
+        {
+          "reason": "left for the full check: the quick check aims to end by 360 s and 415 s had passed",
+          "step": "night model speed"
+        }
+      ]
+    },
+    "development": true,
+    "error": null,
+    "fingerprint_changes": [],
+    "fingerprint_id": "6068-81EA",
+    "running": false,
+    "saved_checks": [
+      {
+        "duration_s": 414.627332,
+        "file": "main",
+        "fingerprint_id": "6068-81EA",
+        "in_use": true,
+        "kind": "quick",
+        "partial": true,
+        "started_at": "2026-11-15T06:55:13.2057533+05:30",
+        "tier": "C"
+      }
+    ]
+  },
+  "wall_seconds": 414.8941627
+}

@@ -1,0 +1,81 @@
+wb-emulate: profile=emu-low
+wb-emulate: cores: class 0: 16 cores / 16 threads; class 1: 8 cores / 16 threads
+wb-emulate: affinity_mask=0xf0000 logical_processors=4 chosen=[16, 17, 18, 19] efficiency_classes=[0, 0, 0, 0]
+wb-emulate: job_memory_limit_bytes=11811160064
+wb-emulate: vulkan[0] Intel(R) RaptorLake-S Mobile Graphics Controller vendor=0x8086 integrated=true luid=0e3a010000000000 driver=Intel Corporation 101.7092
+wb-emulate: vulkan[1] NVIDIA GeForce RTX 4070 Laptop GPU vendor=0x10de integrated=false luid=7e5e010000000000 driver=NVIDIA 621.14
+wb-emulate: vulkan[2] Intel(R) RaptorLake-S Mobile Graphics Controller vendor=0x8086 integrated=true luid=034c020000000000 driver=Intel Corporation 101.7092
+wb-emulate: note: 2 Intel integrated Vulkan devices listed (different LUIDs or unknown: check the drivers); exposing only index 0
+wb-emulate: env WB_EMULATE=emu-low
+wb-emulate: env WB_EMULATE_REPORTED_RAM_BYTES=17179869184
+wb-emulate: env WB_EMULATE_JOB_MEMORY_BYTES=11811160064
+wb-emulate: env WB_EMULATE_LOGICAL_PROCESSORS=4
+wb-emulate: env CUDA_VISIBLE_DEVICES=-1
+wb-emulate: env GGML_VK_VISIBLE_DEVICES=0
+wb-emulate: command: D:\STELMAR-Gate\pack\src-tauri\binaries\wb-engine-vulkan-x86_64-pc-windows-msvc.exe batch --file D:\STELMAR-Gate\pack\data\batch-clips\ur\10032188829272002643.wav --models ur=medium --langs ur --out D:\STELMAR-Gate\dryrun-work\gates\batch-scripts\work\batch-vulkan-ur-10032188829272002643.jsonl --threads 4 --device gpu:0 --models-dir D:\STELMAR-Gate\pack\models
+ggml_vulkan: Found 1 Vulkan devices:
+ggml_vulkan: 0 = Intel(R) RaptorLake-S Mobile Graphics Controller (Intel Corporation) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 32 | shared memory: 32768 | int dot: 1 | matrix cores: none
+whisper_init_from_file_with_params_no_state: loading model from 'D:\STELMAR-Gate\pack\models\ggml-medium.bin'
+whisper_init_with_params_no_state: use gpu    = 1
+whisper_init_with_params_no_state: flash attn = 1
+whisper_init_with_params_no_state: gpu_device = 0
+whisper_init_with_params_no_state: dtw        = 0
+whisper_init_with_params_no_state: devices    = 2
+whisper_init_with_params_no_state: backends   = 2
+whisper_model_load: loading model
+whisper_model_load: n_vocab       = 51865
+whisper_model_load: n_audio_ctx   = 1500
+whisper_model_load: n_audio_state = 1024
+whisper_model_load: n_audio_head  = 16
+whisper_model_load: n_audio_layer = 24
+whisper_model_load: n_text_ctx    = 448
+whisper_model_load: n_text_state  = 1024
+whisper_model_load: n_text_head   = 16
+whisper_model_load: n_text_layer  = 24
+whisper_model_load: n_mels        = 80
+whisper_model_load: ftype         = 1
+whisper_model_load: qntvr         = 0
+whisper_model_load: type          = 4 (medium)
+whisper_model_load: adding 1608 extra tokens
+whisper_model_load: n_langs       = 99
+whisper_model_load:      Vulkan0 total size =  1533.14 MB
+whisper_model_load: model size    = 1533.14 MB
+whisper_backend_init_gpu: device 0: Vulkan0 (type: 2)
+whisper_backend_init_gpu: found GPU device 0: Vulkan0 (type: 2, cnt: 0)
+whisper_backend_init_gpu: using Vulkan0 backend
+whisper_init_state: kv self size  =   50.33 MB
+whisper_init_state: kv cross size =  150.99 MB
+whisper_init_state: kv pad  size  =    6.29 MB
+whisper_init_state: compute buffer (conv)   =   29.53 MB
+whisper_init_state: compute buffer (encode) =   44.60 MB
+whisper_init_state: compute buffer (cross)  =   38.45 MB
+whisper_init_state: compute buffer (decode) =   99.12 MB
+whisper_vad_init_from_file_with_params: loading VAD model from 'D:\STELMAR-Gate\pack\models\ggml-silero-v6.2.0.bin'
+whisper_vad_init_with_params: model type: silero-16k
+whisper_vad_init_with_params: model version: 6.2.0
+whisper_vad_init_with_params: n_encoder_layers = 4
+whisper_vad_init_with_params: encoder_in_channels[0] = 129
+whisper_vad_init_with_params: encoder_in_channels[1] = 128
+whisper_vad_init_with_params: encoder_in_channels[2] = 64
+whisper_vad_init_with_params: encoder_in_channels[3] = 64
+whisper_vad_init_with_params: encoder_out_channels[0] = 128
+whisper_vad_init_with_params: encoder_out_channels[1] = 64
+whisper_vad_init_with_params: encoder_out_channels[2] = 64
+whisper_vad_init_with_params: encoder_out_channels[3] = 128
+whisper_vad_init_with_params: lstm_input_size = 128
+whisper_vad_init_with_params: lstm_hidden_size = 128
+whisper_vad_init_with_params: final_conv_in = 128
+whisper_vad_init_with_params: final_conv_out = 1
+whisper_vad_init_with_params:          CPU total size =     0.88 MB
+whisper_vad_init_with_params: model size    =    0.88 MB
+whisper_backend_init_gpu: no GPU found
+whisper_vad_init_context: compute buffer (VAD)   =    1.60 MB
+whisper_vad_segments_from_samples: detecting speech timestamps in 195840 samples
+whisper_vad_detect_speech_no_reset: detecting speech in 195840 samples
+whisper_vad_detect_speech_no_reset: n_chunks: 383
+whisper_vad_detect_speech_no_reset: props size: 383
+whisper_vad_detect_speech_no_reset: chunk_len: 256 < n_window: 512
+whisper_vad_detect_speech_no_reset: vad time = 160.35 ms processing 195840 samples
+whisper_vad_segments_from_probs: detecting speech timestamps using 383 probabilities
+whisper_vad_segments_from_probs: Final speech segments after filtering: 1
+whisper_vad_segments_from_probs: VAD segment 0: start = 0.55, end = 11.84 (duration: 11.29)

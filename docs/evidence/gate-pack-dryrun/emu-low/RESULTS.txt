@@ -1,0 +1,22 @@
+Gate pack run: low laptop, machine LENOVO-83DF-b8384c, created 2026-11-15T01:41:32Z
+Pack commit a67c425e6b99e6050ab58d4b6d5eeb4679aadc67; EMULATED (emu-low), not a laptop; -Quick, not at full length
+PASS     engines-info         avx2 exit 0; avx512 exit 3; vulkan exit 0
+PASS     quick-check          the quick check took 415 s (bar 480 s); recorder safety run passed; tier C
+INFO     speed-table-igpu     1 of 1 cells measured; slowest RTF 0.147; information only
+INFO     speed-table-cpu      1 of 1 cells measured; slowest RTF 1.083; information only
+PASS     batch-scripts        6 runs on 2 device(s) (Intel(R) RaptorLake-S Mobile Graphics Controller), 0 problem(s)
+SKIPPED  full-check           skipped under -Quick
+WAITING  soak                 not run
+WAITING  load-cold            not run
+WAITING  load-settled         not run
+WAITING  panic                not run
+WAITING  webview              not run
+WAITING  kill                 not run
+WAITING  hashing-1            not run
+WAITING  network-off          needs a person at the keyboard (running unattended)
+WAITING  hashing-2-10         not run
+WAITING  live-batch-safety    not run
+WAITING  bg-decode-info       not run
+WAITING  rename-engines       needs a person at the keyboard (running unattended)
+WAITING  mic-run              needs a person at the keyboard (running unattended)
+NOT IN THIS PACK  supervisor-kill

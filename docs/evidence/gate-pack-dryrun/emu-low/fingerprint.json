@@ -1,0 +1,62 @@
+{
+    "machine":  "LENOVO-83DF-b8384c",
+    "maker":  "LENOVO",
+    "model":  "83DF",
+    "cpu":  "Intel(R) Core(TM) i9-14900HX",
+    "physical_cores":  24,
+    "logical_processors":  32,
+    "max_clock_mhz":  2200,
+    "avx2":  true,
+    "avx512f":  false,
+    "ram_gb":  31.7,
+    "windows":  "Microsoft Windows 11 Home Single Language build 26200",
+    "gpus":  [
+                 {
+                     "name":  "NVIDIA GeForce RTX 4070 Laptop GPU",
+                     "driver":  "32.0.16.2114",
+                     "driver_date":  "2026-10-27",
+                     "integrated":  false
+                 },
+                 {
+                     "name":  "Intel(R) UHD Graphics",
+                     "driver":  "32.0.101.7092",
+                     "driver_date":  "2026-09-03",
+                     "integrated":  true
+                 }
+             ],
+    "has_battery":  true,
+    "power_plan":  "(Balanced)",
+    "fast_startup":  1,
+    "audio_endpoints":  [
+                            "CABLE In 16 Ch (2- VB-Audio Virtual Cable)",
+                            "CABLE Output (2- VB-Audio Virtual Cable)",
+                            "Microphone (Steam Streaming Microphone)",
+                            "Microphone (tranScreen Audio)",
+                            "Microphone Array (Realtek(R) Audio)",
+                            "Speakers (2- VB-Audio Virtual Cable)",
+                            "Speakers (Realtek(R) Audio)",
+                            "Speakers (Steam Streaming Microphone)",
+                            "Speakers (Steam Streaming Speakers)",
+                            "Speakers (tranScreen Audio)"
+                        ],
+    "audio_effects_software":  [
+                                   "process IntelAudioService",
+                                   "process RtkAudUService64",
+                                   "service IntelAudioService",
+                                   "service RtkAudioUniversalService"
+                               ],
+    "work_disk":  {
+                      "Letter":  "D",
+                      "Disk":  1,
+                      "BusType":  "NVMe",
+                      "MediaType":  "SSD"
+                  },
+    "backup_disk":  {
+                        "Letter":  "C",
+                        "Disk":  0,
+                        "BusType":  "NVMe",
+                        "MediaType":  "SSD"
+                    },
+    "mirror_on_same_disk":  false,
+    "taken":  "2026-11-15T06:54:34.8150380+05:30"
+}

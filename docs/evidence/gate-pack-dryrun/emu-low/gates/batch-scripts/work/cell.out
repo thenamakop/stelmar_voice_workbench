@@ -1,0 +1,11 @@
+{"event":"hello","protocol":1,"engine_version":"0.1.0","variant":"vulkan","whisper_cpp":{"version":"v1.9.5","commit":"d1be6fde11ac6e0407606b4e42fe72d34add8037","tree_sha256":"e736b4c9a5be2bc0e9b294102e261fe69c2a439976652ff6107b0c361f8667fb"}}
+{"event":"ready","device":{"kind":"gpu","index":0},"device_name":"Intel(R) RaptorLake-S Mobile Graphics Controller","threads":4,"models":["medium"],"load_s":1.5699809}
+{"event":"heartbeat","unit":0,"phase":"compute"}
+{"event":"heartbeat","unit":0,"phase":"compute"}
+{"event":"heartbeat","unit":0,"phase":"compute"}
+{"event":"heartbeat","unit":0,"phase":"compute"}
+{"event":"segment","unit":0,"chunk":0,"start_ms":350,"end_ms":12040,"text":"ان کے دور میں خفیف تلوز ایزا مسئلہ نہیں تھا جیسا کہ وہ آج ہے ان کی سقونت ایسے شہروں یا حوزات میں ہے جہاں تک بہسانی پہنچا جا جا سکتا ہے بنسبت ان مقامات کے جو موڈرن زمانے میں تعمیر کیے گئے","lang":"ur","lang_prob":1.0,"mixed":false,"dir":"rtl","avg_logprob":-0.14090663,"no_speech_prob":0.000019274132,"compression_ratio":1.4090909,"model":"medium","decoded_both_ways":false,"detection":[{"lang":"ur","prob":1.0}],"flags":[],"truncated":false}
+{"event":"progress","unit":0,"committed_until_ms":12040,"unit_end_ms":12240}
+{"event":"stats","unit":0,"chunks":1,"audio_ms":12240,"decode_s":9.965520399999999,"rtf":0.8141765114379085,"peak_working_set_bytes":2440269824,"detections":0,"both_ways":0}
+{"event":"progress","unit":0,"committed_until_ms":12240,"unit_end_ms":12240}
+{"event":"done","segments":1,"chunks":1,"audio_ms":12240,"truncated_chunks":0,"elapsed_s":11.5439601,"retried_chunks":0,"unclear_chunks":0,"low_coverage_chunks":0}

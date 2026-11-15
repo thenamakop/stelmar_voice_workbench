@@ -1,0 +1,89 @@
+{
+    "pack_version":  1,
+    "role":  "low",
+    "profile":  "emu-low",
+    "quick":  true,
+    "created":  "2026-11-15T06:53:55.2559305+05:30",
+    "restart":  {
+                    "requested_at":  null,
+                    "boot_time_before":  null,
+                    "resumed_at":  null,
+                    "uptime_at_resume_min":  null
+                },
+    "gates":  {
+                  "full-check":  {
+                                     "attempts":  0,
+                                     "ended":  "2026-11-15T06:53:57.2317265+05:30",
+                                     "status":  "SKIPPED",
+                                     "reason":  "skipped under -Quick"
+                                 },
+                  "engines-info":  {
+                                       "attempts":  1,
+                                       "result_file":  "D:\\STELMAR-Gate\\dryrun-work\\gates\\engines-info\\result.json",
+                                       "status":  "PASS",
+                                       "started":  "2026-11-15T06:54:28.5544140+05:30",
+                                       "reason":  "avx2 exit 0; avx512 exit 3; vulkan exit 0",
+                                       "ended":  "2026-11-15T06:54:38.6895422+05:30",
+                                       "minutes":  0.2
+                                   },
+                  "quick-check":  {
+                                      "attempts":  1,
+                                      "result_file":  "D:\\STELMAR-Gate\\dryrun-work\\gates\\quick-check\\result.json",
+                                      "status":  "PASS",
+                                      "started":  "2026-11-15T06:55:11.1505125+05:30",
+                                      "reason":  "the quick check took 415 s (bar 480 s); recorder safety run passed; tier C",
+                                      "ended":  "2026-11-15T07:02:11.2102866+05:30",
+                                      "minutes":  7
+                                  },
+                  "speed-table-igpu":  {
+                                           "attempts":  1,
+                                           "result_file":  "D:\\STELMAR-Gate\\dryrun-work\\gates\\speed-table-igpu\\result.json",
+                                           "status":  "INFO",
+                                           "started":  "2026-11-15T07:02:43.8032019+05:30",
+                                           "reason":  "1 of 1 cells measured; slowest RTF 0.147; information only",
+                                           "ended":  "2026-11-15T07:03:07.9218511+05:30",
+                                           "minutes":  0.4
+                                       },
+                  "speed-table-cpu":  {
+                                          "attempts":  1,
+                                          "result_file":  "D:\\STELMAR-Gate\\dryrun-work\\gates\\speed-table-cpu\\result.json",
+                                          "status":  "INFO",
+                                          "started":  "2026-11-15T07:03:40.2703018+05:30",
+                                          "reason":  "1 of 1 cells measured; slowest RTF 1.083; information only",
+                                          "ended":  "2026-11-15T07:05:54.8091057+05:30",
+                                          "minutes":  2.2
+                                      },
+                  "batch-scripts":  {
+                                        "attempts":  1,
+                                        "result_file":  "D:\\STELMAR-Gate\\dryrun-work\\gates\\batch-scripts\\result.json",
+                                        "status":  "PASS",
+                                        "started":  "2026-11-15T07:06:27.0048386+05:30",
+                                        "reason":  "6 runs on 2 device(s) (Intel(R) RaptorLake-S Mobile Graphics Controller), 0 problem(s)",
+                                        "ended":  "2026-11-15T07:09:27.7726348+05:30",
+                                        "minutes":  3
+                                    },
+                  "network-off":  {
+                                      "attempts":  0,
+                                      "status":  "PENDING",
+                                      "reason":  "needs a person at the keyboard (running unattended)"
+                                  },
+                  "rename-engines":  {
+                                         "attempts":  0,
+                                         "status":  "PENDING",
+                                         "reason":  "needs a person at the keyboard (running unattended)"
+                                     },
+                  "mic-run":  {
+                                  "attempts":  0,
+                                  "status":  "PENDING",
+                                  "reason":  "needs a person at the keyboard (running unattended)"
+                              }
+              },
+    "order_used":  [
+                       "engines-info",
+                       "quick-check",
+                       "speed-table-igpu",
+                       "speed-table-cpu",
+                       "batch-scripts"
+                   ],
+    "backup_root":  "C:\\STELMAR-Gate-Backup"
+}

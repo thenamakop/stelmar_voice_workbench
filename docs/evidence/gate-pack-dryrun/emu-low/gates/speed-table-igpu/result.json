@@ -1,0 +1,36 @@
+{
+    "id":  "speed-table-igpu",
+    "status":  "INFO",
+    "headline":  "1 of 1 cells measured; slowest RTF 0.147; information only",
+    "measured":  {
+                     "cells_planned":  1,
+                     "cells_ok":  1,
+                     "slowest_rtf":  0.14730865499999998,
+                     "adapters":  [
+                                      {
+                                          "description":  "Intel(R) RaptorLake-S Mobile Graphics Controller",
+                                          "kind":  "igpu",
+                                          "driver":  "32.0.101.7092"
+                                      },
+                                      {
+                                          "description":  "Intel(R) Core(TM) i9-14900HX",
+                                          "kind":  "cpu",
+                                          "driver":  ""
+                                      }
+                                  ]
+                 },
+    "threshold":  "information: RTF, load time, memory and adapter driver per cell; no verdict",
+    "rig":  "",
+    "rig_detail":  "",
+    "shared_breaks":  null,
+    "evidence":  [
+                     "D:\\STELMAR-Gate\\dryrun-work\\gates\\speed-table-igpu\\speed-table-igpu.txt",
+                     "D:\\STELMAR-Gate\\dryrun-work\\gates\\speed-table-igpu\\results.jsonl"
+                 ],
+    "notes":  [
+
+              ],
+    "quick":  true,
+    "not_at_full_length":  false,
+    "finished":  "2026-11-15T07:03:07.8453548+05:30"
+}

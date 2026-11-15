@@ -1,0 +1,6 @@
+{"event":"ready","device":{"kind":"cpu"},"device_name":"CPU","threads":4,"models":["medium"],"load_s":1.6207285}
+{"event":"segment","unit":0,"chunk":0,"start_ms":350,"end_ms":12040,"text":"ان کے دور میں خفیف تلوز ایزا مسئلہ نہیں تھا جیسا کہ وہ آج ہے ان کی سقونت ایسے شہروں یا حوزات میں ہے جہاں تک بہسانی پہنچا جا جا سکتا ہے بنسبت ان مقامات کے جو موڈرن زمانے میں تعمیر کیے گئے","lang":"ur","lang_prob":1.0,"mixed":false,"dir":"rtl","avg_logprob":-0.14069372,"no_speech_prob":0.000019282958,"compression_ratio":1.4090909,"model":"medium","decoded_both_ways":false,"detection":[{"lang":"ur","prob":1.0}],"flags":[],"truncated":false}
+{"event":"progress","unit":0,"committed_until_ms":12040,"unit_end_ms":12240}
+{"event":"stats","unit":0,"chunks":1,"audio_ms":12240,"decode_s":48.641391,"rtf":3.973969861111111,"peak_working_set_bytes":2204045312,"detections":0,"both_ways":0}
+{"event":"progress","unit":0,"committed_until_ms":12240,"unit_end_ms":12240}
+{"event":"done","segments":1,"chunks":1,"audio_ms":12240,"truncated_chunks":0,"elapsed_s":50.2706061,"retried_chunks":0,"unclear_chunks":0,"low_coverage_chunks":0}

@@ -1,0 +1,27 @@
+{
+    "id":  "speed-table-cpu",
+    "status":  "INFO",
+    "headline":  "1 of 1 cells measured; slowest RTF 1.083; information only",
+    "measured":  {
+                     "cells_planned":  1,
+                     "cells_ok":  1,
+                     "slowest_rtf":  1.0832434199999998,
+                     "adapters":  [
+
+                                  ]
+                 },
+    "threshold":  "information: RTF, load time, memory and adapter driver per cell; no verdict",
+    "rig":  "",
+    "rig_detail":  "",
+    "shared_breaks":  null,
+    "evidence":  [
+                     "D:\\STELMAR-Gate\\dryrun-work\\gates\\speed-table-cpu\\speed-table-cpu.txt",
+                     "D:\\STELMAR-Gate\\dryrun-work\\gates\\speed-table-cpu\\results.jsonl"
+                 ],
+    "notes":  [
+
+              ],
+    "quick":  true,
+    "not_at_full_length":  false,
+    "finished":  "2026-11-15T07:05:53.9947876+05:30"
+}

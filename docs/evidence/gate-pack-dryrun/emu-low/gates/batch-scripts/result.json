@@ -1,0 +1,27 @@
+{
+    "id":  "batch-scripts",
+    "status":  "PASS",
+    "headline":  "6 runs on 2 device(s) (Intel(R) RaptorLake-S Mobile Graphics Controller), 0 problem(s)",
+    "measured":  {
+                     "runs":  6,
+                     "problems":  0,
+                     "devices":  [
+                                     "CPU (avx2)",
+                                     "Intel(R) RaptorLake-S Mobile Graphics Controller (vulkan device 0, driver 32.0.101.7092)"
+                                 ],
+                     "clips_per_language":  1
+                 },
+    "threshold":  "every run exits 0 with a done event and a segment; at least 90% of the letters in the language\u0027s script; no broken text",
+    "rig":  "",
+    "rig_detail":  "",
+    "shared_breaks":  null,
+    "evidence":  [
+                     "D:\\STELMAR-Gate\\dryrun-work\\gates\\batch-scripts\\batch-scripts.txt"
+                 ],
+    "notes":  [
+
+              ],
+    "quick":  true,
+    "not_at_full_length":  false,
+    "finished":  "2026-11-15T07:09:25.7184980+05:30"
+}
