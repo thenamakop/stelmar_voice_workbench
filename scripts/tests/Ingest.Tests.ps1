@@ -184,6 +184,13 @@ $cell = Get-IngestStatusCell -Base 'OPEN' -Results $res -Required @('low') -Kind
 Check 'an INFO result on a verdict row of the open items does not say PASS everywhere' ($cell -notmatch 'PASS everywhere' -and $cell -match 'RESULT IN, owner to read')
 $res = @{ low = [pscustomobject]@{ State = 'PASS'; Machine = 'M'; Date = '15 Nov 2026' } }
 Check 'a PASS result still closes a verdict row' ((Get-IngestStatusCell -Base 'PROVISIONAL' -Results $res -Required @('low') -Kind 'verdict' -Table 'gates') -match '^PASS \(gate pack\)')
+# A gate whose build the CPU refused (AVX-512) is NOT APPLICABLE for that row: never PASS.
+$na = @{ low = [pscustomobject]@{ State = 'NOT APPLICABLE'; Machine = 'M'; Date = '15 Nov 2026' }; mid = [pscustomobject]@{ State = 'NOT APPLICABLE'; Machine = 'M2'; Date = '15 Nov 2026' } }
+$cell = Get-IngestStatusCell -Base 'DEFERRED' -Results $na -Required @('low', 'mid') -Kind 'verdict' -Table 'gates'
+Check 'a row whose gate was not applicable on every laptop keeps its old status (never PASS)' ($cell -match '^DEFERRED' -and $cell -notmatch '^PASS' -and $cell -match 'NOT APPLICABLE')
+$na['mid'] = [pscustomobject]@{ State = 'PASS'; Machine = 'M2'; Date = '15 Nov 2026' }
+$cell = Get-IngestStatusCell -Base 'DEFERRED' -Results $na -Required @('low', 'mid') -Kind 'verdict' -Table 'gates'
+Check 'one laptop that ran the AVX-512 build and passed closes the row; the other says not applicable' ($cell -match '^PASS \(gate pack\)' -and $cell -match 'low NOT APPLICABLE')
 $ing = Get-Content -LiteralPath (Join-Path $here '..\lib\Ingest.psm1') -Raw
 Check 'a gate that ran with -Quick on a real laptop counts as INFO for the ledger, never as PASS' ($ing -match 'not_at_full_length' -and $ing -match '\$thisState = ''INFO''')
 if ($fails) { Write-Host "$fails failed"; exit 1 }

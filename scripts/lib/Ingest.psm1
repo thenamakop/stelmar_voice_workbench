@@ -81,14 +81,17 @@ function Get-IngestStatusCell {
   if ($Kind -eq 'info') {
     if ($was -match '^(?i)(OPEN|DEFERRED)') { $head = 'RESULT IN, owner to read [was: ' + $was + ']' }
   } elseif ($Table -eq 'open') {
+    $real = @($states | Where-Object { $_ -ne 'NOT APPLICABLE' })
     if ($states -contains 'FAIL') { $head = 'OPEN (gate pack FAIL, see the REOPENED row) [was: ' + $was + ']' }
-    elseif (($states -contains 'FALLBACK') -or $missing.Count -gt 0) { $head = $was }
-    elseif (@($states | Where-Object { $_ -ne 'PASS' }).Count -gt 0) { $head = 'RESULT IN, owner to read [was: ' + $was + ']' }
+    elseif (($states -contains 'FALLBACK') -or $missing.Count -gt 0 -or $real.Count -eq 0) { $head = $was }
+    elseif (@($real | Where-Object { $_ -ne 'PASS' }).Count -gt 0) { $head = 'RESULT IN, owner to read [was: ' + $was + ']' }
     else { $head = 'RESULT IN: PASS everywhere it is needed, owner to close [was: ' + $was + ']' }
   } else {
+    $real = @($states | Where-Object { $_ -ne 'NOT APPLICABLE' })
     if ($states -contains 'FAIL') { $head = 'FAIL (gate pack) [was: ' + $was + ']' }
     elseif ($states -contains 'FALLBACK') { $head = $was }
-    elseif ($missing.Count -eq 0 -and $states.Count -gt 0 -and @($states | Where-Object { $_ -ne 'PASS' }).Count -eq 0) { $head = 'PASS (gate pack) [was: ' + $was + ']' }
+    elseif ($missing.Count -eq 0 -and $states.Count -gt 0 -and $real.Count -eq 0) { $head = $was }
+    elseif ($missing.Count -eq 0 -and $real.Count -gt 0 -and @($real | Where-Object { $_ -ne 'PASS' }).Count -eq 0) { $head = 'PASS (gate pack) [was: ' + $was + ']' }
     elseif ($missing.Count -eq 0 -and $states.Count -gt 0) { $head = 'RESULT IN, owner to read [was: ' + $was + ']' }
   }
   if ($missing.Count -gt 0 -and $states.Count -gt 0 -and $Kind -ne 'info') { $tail += '; still to run: ' + ($missing -join ', ') }
@@ -164,7 +167,10 @@ function Update-IngestGatesLines {
       $needsHw = ($le.PSObject.Properties['needs_hardware_interface'] -and [bool]$le.needs_hardware_interface)
       $kind = [string]$le.kind
       $thisState = $st
-      if ($needsHw -and $fallback -and $st -ne 'FAIL') { $thisState = 'FALLBACK' }
+      $needsAvx = ($le.PSObject.Properties['needs_avx512'] -and [bool]$le.needs_avx512)
+      $avxNa = ($needsAvx -and $g.PSObject.Properties['measured'] -and $g.measured -and $g.measured.PSObject.Properties['avx512_applicable'] -and -not [bool]$g.measured.avx512_applicable)
+      if ($avxNa -and $st -ne 'FAIL') { $thisState = 'NOT APPLICABLE' }
+      elseif ($needsHw -and $fallback -and $st -ne 'FAIL') { $thisState = 'FALLBACK' }
       elseif ($kind -eq 'info' -and $st -eq 'PASS') { $thisState = 'INFO' }
       elseif ($st -eq 'PASS' -and (([bool]$Summary.quick) -or ($g.PSObject.Properties['quick'] -and [bool]$g.quick) -or ($g.PSObject.Properties['not_at_full_length'] -and [bool]$g.not_at_full_length))) { $thisState = 'INFO' }
       $cellIx = $(if ($tbl -eq 'gates') { 1 } else { 2 })

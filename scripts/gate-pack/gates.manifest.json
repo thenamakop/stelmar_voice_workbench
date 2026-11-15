@@ -14,7 +14,7 @@
         { "table": "gates", "match": "`wb-engine-avx2 info` succeeds from an engines-only folder", "kind": "verdict" },
         { "table": "gates", "match": "`wb-engine-avx512 info` exits with code 3", "kind": "verdict" },
         { "table": "gates", "match": "`wb-engine-vulkan info` lists the Intel UHD once", "kind": "verdict" },
-        { "table": "gates", "match": "Portable builds (`GGML_NATIVE=OFF`) run on a CPU other than", "kind": "verdict" },
+        { "table": "gates", "match": "Portable builds (`GGML_NATIVE=OFF`) run on a CPU other than", "kind": "verdict", "needs_avx512": true },
         { "table": "gates", "match": "Vulkan on the laptops' own integrated GPUs and drivers", "kind": "verdict" }
       ]
     },

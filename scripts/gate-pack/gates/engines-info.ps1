@@ -33,6 +33,8 @@ Invoke-PackGateBody -Ctx $ctx -Id 'engines-info' -ResultFile $ResultFile -Body {
   $failures = New-Object System.Collections.Generic.List[string]
   $measured = [ordered]@{}
   $root = Join-Path ([string]$ctx.work_dir) 'engines-only'
+  $cpuFeatures = @()
+  $avx512Message = ''
   $variants = @('avx2', 'avx512', 'vulkan')
   if ([bool]$ctx.quick) { $variants = @('avx2', 'avx512', 'vulkan') }
   foreach ($v in $variants) {
@@ -58,6 +60,8 @@ Invoke-PackGateBody -Ctx $ctx -Id 'engines-info' -ResultFile $ResultFile -Body {
     if ($hello) { $lines += "   whisper.cpp printed at runtime: $($hello.whisper_cpp.version) commit $($hello.whisper_cpp.commit) tree $($hello.whisper_cpp.tree_sha256)" }
     if ($err) { $lines += "   error event: $($err.code): $($err.message)" }
     foreach ($e in $res.Error) { if ("$e".Trim()) { $lines += "   stderr: $("$e".Trim())" } }
+    if ($info -and $info.PSObject.Properties['cpu'] -and $info.cpu -and $info.cpu.PSObject.Properties['features']) { $cpuFeatures = @($info.cpu.features | ForEach-Object { [string]$_ }) }
+    if ($v -eq 'avx512' -and $err) { $avx512Message = [string]$err.message }
     $devs = @()
     if ($info) {
       $lines += "   backends: $($info.backends -join ', '); logical processors allowed $($info.logical_processors_allowed); available RAM $([math]::Round($info.available_ram_bytes / 1GB, 1).ToString([Globalization.CultureInfo]::InvariantCulture)) GiB; raw device entries $($info.raw_device_count)"
@@ -103,10 +107,17 @@ Invoke-PackGateBody -Ctx $ctx -Id 'engines-info' -ResultFile $ResultFile -Body {
     $lines += ''
   }
   if ($fp.Contains('avx512_usable')) { Write-PackJson -Path (Join-Path ([string]$ctx.work_dir) 'fingerprint.json') -Value $fp }
+  # The AVX-512 build counts only where the engine ran it. When it refused, the row for it is NOT APPLICABLE on this CPU
+  # (never PASS): record which AVX-512 features the CPU has and what the engine said.
+  $avx512Have = @($cpuFeatures | Where-Object { $_ -match '^avx512' })
+  $avx512Applicable = ($measured.Contains('avx512') -and [int]$measured['avx512'].exit -eq 0)
+  if (-not $avx512Applicable) {
+    $lines += ('avx512 build: NOT APPLICABLE on this CPU (not a pass). AVX-512 features the CPU has: {0}. The engine said: {1}' -f $(if ($avx512Have.Count -gt 0) { $avx512Have -join ', ' } else { 'none' }), $(if ($avx512Message) { $avx512Message } else { 'no message' }))
+  }
   $lines += 'summary: ' + (($measured.Keys | ForEach-Object { "$_ exit $($measured[$_].exit)" }) -join '; ')
   $evidence = Join-Path ([string]$ctx.gate_dir) 'engines-info.txt'
   Write-WbEvidence -Path $evidence -Lines $lines -MachineLabel ([string]$ctx.machine)
   $status = $(if ($failures.Count -eq 0) { 'PASS' } else { 'FAIL' })
   $head = $(if ($failures.Count -eq 0) { ($measured.Keys | ForEach-Object { "$_ exit $($measured[$_].exit)" }) -join '; ' } else { $failures -join '; ' })
-  New-PackResult -Id 'engines-info' -Status $status -Headline $head -Measured ([ordered]@{ variants = $measured; cpu = $fp.cpu; avx512f = $fp.avx512f; gpus = $fp.gpus }) -Threshold 'avx2 exit 0; avx512 exit 0 only with AVX-512 else 3 with a message; vulkan exit 0 and each adapter once' -Evidence @($evidence) -Quick ([bool]$ctx.quick)
+  New-PackResult -Id 'engines-info' -Status $status -Headline $head -Measured ([ordered]@{ variants = $measured; cpu = $fp.cpu; avx512f = $fp.avx512f; avx512_applicable = $avx512Applicable; avx512_features_present = $avx512Have; avx512_engine_message = $avx512Message; gpus = $fp.gpus }) -Threshold 'avx2 exit 0; avx512 exit 0 only with AVX-512 else 3 with a message; vulkan exit 0 and each adapter once' -Evidence @($evidence) -Quick ([bool]$ctx.quick)
 }
