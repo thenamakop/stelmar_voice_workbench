@@ -58,6 +58,11 @@ Check 'run-gates.ps1 blocks sleep and screen-off with SetThreadExecutionState' (
 $pc = Get-Content -LiteralPath (Join-Path $here '..\lib\PackCore.psm1') -Raw
 Check 'the render volume is put back on the playback side of the endpoint' ($pc -match "'--flow', 'render', '--level'")
 
+Check 'the runner imports CableRig itself (the import inside LoopbackRig is private to that module), so the interface fact is not silently false' ($rg -match 'Import-Module \(Join-Path \$libDir ''CableRig.psm1''\)')
+Check 'the runner removes a stale gate lock only when its process is dead and the gate wrote it' ($rg -match 'stale lock of gate' -and $rg -match 'Get-Process -Id \(\[int\]\(\(\$lp\[0\]')
+$st = Get-Content -LiteralPath (Join-Path $here '..\lib\SpeedTable.psm1') -Raw
+Check 'under an emulation profile the speed tables take thread counts from the emulated processors, not the host fingerprint' ($st -match 'logical_processors_allowed' -and $st -match '-PhysicalCores \$physCores -LogicalProcessors \$logProcs')
+
 $sm = Get-Content -LiteralPath (Join-Path $here '..\gate-pack-native-smoke.ps1') -Raw
 Check 'the native smoke runs the laptop profile, writes no zip, never calls the ingest, and leaves the audible mic run out by default' ($sm -match "'-Profile', 'laptop'" -and $sm -match "'-NoZip'" -and $sm -notmatch 'ingest-gate-results' -and $sm -match 'if \(-not \$IncludeMic\) \{ \$skip.Add\(''mic-run''\)')
 Check 'the native smoke is ASCII only' (-not ($sm -cmatch '[^\x00-\x7F]'))

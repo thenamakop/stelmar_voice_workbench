@@ -234,7 +234,22 @@ function Invoke-SpeedTableGate {
       return (New-PackResult -Id $id -Status 'INVALID' -Headline 'the vulkan engine lists no graphics adapter on this laptop (check the graphics driver)' -Quick $quick)
     }
   }
-  $plan = @(Get-SpeedPlan -Part $Part -Devices $devices -PhysicalCores ([int]$fp.physical_cores) -LogicalProcessors ([int]$fp.logical_processors) -HasAvx512 ([bool]$fp.avx512f) -Quick $quick -Present $present)
+  $physCores = [int]$fp.physical_cores
+  $logProcs = [int]$fp.logical_processors
+  if ($profile -ne 'laptop') {
+    # Under wb-emulate the engine sees only the emulated processors. Thread counts from the host
+    # fingerprint (24 on the Legion) would spin 24 threads on 4 processors and never finish.
+    $probe = $(if ($engines.ContainsKey('avx2')) { $engines['avx2'] } else { $engines.Values | Select-Object -First 1 })
+    if ($probe) {
+      $r = Invoke-SpeedEngine -Exe $probe.Exe -ProcName $probe.Name -EngineArgs @('info') -TimeoutMin 5 -WorkDir $work -Emulate $paths.Emulate -Profile $profile
+      $pi = Read-SpeedEvents $r.Out | Where-Object { $_.event -eq 'info' } | Select-Object -First 1
+      if ($pi -and [int]$pi.logical_processors_allowed -ge 1) {
+        $logProcs = [int]$pi.logical_processors_allowed
+        $physCores = [math]::Min($physCores, $logProcs)
+      }
+    }
+  }
+  $plan = @(Get-SpeedPlan -Part $Part -Devices $devices -PhysicalCores $physCores -LogicalProcessors $logProcs -HasAvx512 ([bool]$fp.avx512f) -Quick $quick -Present $present)
   $plan = @($plan | Where-Object { $engines.ContainsKey($_.Variant) })
   if ($plan.Count -eq 0) { throw 'no cell can run: the engines or models of this part are not in the pack' }
   $resFile = Join-Path $gdir 'results.jsonl'

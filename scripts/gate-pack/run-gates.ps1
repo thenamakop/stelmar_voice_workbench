@@ -147,6 +147,7 @@ function Get-RunnerFacts {
   $iface = $false
   try {
     if (Test-Path -LiteralPath $testbench) {
+      Import-Module (Join-Path $libDir 'CableRig.psm1') -Force
       Import-Module (Join-Path $libDir 'LoopbackRig.psm1') -Force
       $dev = Get-PackTestbenchDevices -Testbench $testbench
       if ($isEmu) { $iface = (@(Get-WbCableEndpoints | Where-Object { $_.Active }).Count -gt 0) }
@@ -295,6 +296,20 @@ function Invoke-OneGate($g) {
     }
   }.GetNewClosure()
   $run = Invoke-PackGateProcess -ScriptPath (Join-Path $gpDir ([string]$g.script -replace '/', '\')) -CtxFile $ctxFile -ResultFile $resultFile -LogFile (Join-Path $gdir 'gate.out.log') -TimeoutMinutes $timeout -OnTick $onTick
+  # A gate that was stopped (timeout) or crashed can leave its lock behind. Remove it only when its owner
+  # is a process that is no longer alive and the gate itself wrote it; never a lock of a living process.
+  try {
+    $lockFile = Join-Path $LockDir 'stelmar-gate.lock'
+    if (Test-Path -LiteralPath $lockFile) {
+      $lt = @(Get-Content -LiteralPath $lockFile -ErrorAction Stop)
+      $lg = @($lt | Where-Object { $_ -match '^gate=' } | Select-Object -First 1)
+      $lp = @($lt | Where-Object { $_ -match '^pid=\d+' } | Select-Object -First 1)
+      if ($lg.Count -gt 0 -and $lp.Count -gt 0 -and ($lg[0] -split '=', 2)[1] -eq $id -and -not (Get-Process -Id ([int](($lp[0] -split '=')[1])) -ErrorAction SilentlyContinue)) {
+        Remove-Item -LiteralPath $lockFile -Force
+        Say "removed the stale lock of gate $id (its process had ended)"
+      }
+    }
+  } catch { Say ('could not check the gate lock: ' + $_.Exception.Message) }
   $minutes = [math]::Round(((Get-Date) - $began).TotalMinutes, 1)
   $res = Read-PackJson -Path $resultFile -AsHashtable
   $status = 'INVALID'; $reason = ''
