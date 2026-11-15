@@ -155,7 +155,7 @@ Invoke-PackGateBody -Ctx $ctx -Id 'mic-run' -ResultFile $ResultFile -Body {
   } finally {
     if (-not $finished) {
       $left = @(Stop-WbRigLeftovers -Process @($app, $play, $refProc, $ref2Proc) -StopFile @($stopFile, $refStop, $ref2Stop) -GraceSeconds 45)
-      foreach ($l in $left) { Write-PackGateLog -Ctx $ctx -Message "cleanup after an error: $l" }
+      foreach ($leftover in $left) { Write-PackGateLog -Ctx $ctx -Message "cleanup after an error: $leftover" }
     }
     # Put the microphone and the speakers back whatever happened.
     [void](Invoke-PackNative -FilePath $paths.Testbench -ArgumentList @('mute', '--device', $micName, '--flow', 'capture', '--state', $muteBefore))
@@ -195,24 +195,5 @@ Invoke-PackGateBody -Ctx $ctx -Id 'mic-run' -ResultFile $ResultFile -Body {
   $inputInfo = ''
   try { $inputInfo = ('{0} Hz, {1} channel(s), {2}' -f $mic.sample_rate, $mic.channels, $mic.sample_format) } catch { }
 
-  $ev = Join-Path $gdir 'mic-run.txt'
-  $L = New-Object System.Collections.Generic.List[string]
-  $L.Add('Microphone run (gate pack)')
-  $L.Add(('machine: {0}; profile: {1}; date: {2}; {3} minutes{4}' -f $ctx.machine, $profile, (Get-Date -Format 'yyyy-MM-dd HH:mm'), $minutes, $(if ($quick) { ' (QUICK: the full run is 120 minutes)' } else { '' })))
-  $L.Add(('microphone: {0}; format the recorder opens: {1}; speakers: {2}' -f $micName, $inputInfo, $speaker))
-  foreach ($c in $cond) { $L.Add("  $c") }
-  $L.Add(('windows (source clock): digital mute {0} s for {1} s; room silence {2} s for {3} s' -f $plan.MuteAtS, $plan.MuteForS, $plan.SilenceAtS, $plan.SilenceForS))
-  foreach ($w in $windowLog) { $L.Add(('  window log: {0} at {1} s ({2})' -f $w['event'], $w['elapsed_s'], $(if ($w['ok']) { 'done' } else { 'FAILED to change the mute' }))) }
-  $L.Add(('recorder: overrun samples {0}, xruns {1}' -f $overruns, $xruns))
-  foreach ($l in $rv.Lines) { $L.Add($l) }
-  $L.Add(('reference verdict: {0} ({1}): {2}' -f $rv.Verdict, $rv.Class, $rv.Reason))
-  if ($det) { foreach ($l in $det.Lines) { $L.Add($l) } }
-  $L.Add('what each detector did in each scripted window:')
-  foreach ($l in @(Get-PackWindowLines -Treatment $treat)) { $L.Add($l) }
-  $L.Add("audio and reports: $run (not in the repository; the known-speech recording stays on this laptop and is not in the zip)")
-  $L.Add("verdict: $status")
-  Set-Content -LiteralPath $ev -Value @($L) -Encoding UTF8
-  $measured = [ordered]@{ minutes = $minutes; microphone = $micName; overrun_samples = $overruns; xruns = $xruns; reference_class = $rv.Class; windows = @($treat | ForEach-Object { [ordered]@{ window = $_.Window; zero_gap = $_.zero_gap; repeated_block = $_.repeated_block } }) }
-  if ($det) { $measured['detectors'] = $det.Rates }
-  New-PackResult -Id 'mic-run' -Status $status -Headline ("{0} (microphone run, {1} minutes)" -f $why, $minutes) -Measured $measured -Threshold $thr -Rig ("built-in microphone: $micName") -Evidence @($ev, (Join-Path $gdir 'mic-windows.json')) -Notes @($cond.ToArray()) -Quick $quick
+  New-PackMicRunResult -Ctx $ctx -GateDir $gdir -Run $run -Profile $profile -Minutes $minutes -Quick $quick -MicName $micName -Speaker $speaker -InputInfo $inputInfo -Cond $cond.ToArray() -Plan $plan -WindowLog $windowLog.ToArray() -RefVerdict $rv -Detectors $det -Treatment @($treat) -Overruns $overruns -Xruns $xruns -Status $status -Why $why -Threshold $thr
 }

@@ -117,7 +117,18 @@ try {
     '$null = Request-PackPrompt -Ctx $ctx -TimeoutMinutes 1 -Message ("Switch the network OFF now:`r`n  - turn Wi-Fi off`r`nPress Enter when the network is off.")',
     '$r = New-PackResult -Id "ask" -Status "PASS" -Headline "asked" -Rig "fake rig" -Quick ([bool]$ctx.quick)',
     'Complete-PackGate -Ctx $ctx -Result $r -ResultFile $ResultFile')
-  $m = [ordered]@{ pack_version = 1; gates = @([ordered]@{ id = 'ask'; title = 'fake ask'; priority = 'P1'; order = 1; script = 'gates/ask.ps1'; group = 'any'; needs = @{}; interactive = $true; est_minutes = [ordered]@{ low = 1; mid = 1 }; depends_on = @(); ledger = @() }) }
+  # A second interactive gate that ends INVALID after its prompt: the person must not be asked again in the same run.
+  Set-Content -LiteralPath (Join-Path $pack 'scripts\gate-pack\gates\ask-bad.ps1') -Encoding ASCII -Value @(
+    'param([string]$CtxFile, [string]$ResultFile)',
+    '$lib = Join-Path $PSScriptRoot ''..\..\lib''',
+    'Import-Module (Join-Path $lib ''PackCore.psm1'') -Force; Import-Module (Join-Path $lib ''PackGate.psm1'') -Force',
+    '$ctx = Read-PackCtx -CtxFile $CtxFile; Initialize-PackGate -Ctx $ctx',
+    '$null = Request-PackPrompt -Ctx $ctx -TimeoutMinutes 1 -Message ("SECOND GATE asks once`r`nPress Enter.")',
+    '$r = New-PackResult -Id "ask-bad" -Status "INVALID" -Headline "invalid on purpose" -Quick ([bool]$ctx.quick)',
+    'Complete-PackGate -Ctx $ctx -Result $r -ResultFile $ResultFile')
+  $m = [ordered]@{ pack_version = 1; gates = @(
+    [ordered]@{ id = 'ask'; title = 'fake ask'; priority = 'P1'; order = 1; script = 'gates/ask.ps1'; group = 'any'; needs = @{}; interactive = $true; est_minutes = [ordered]@{ low = 1; mid = 1 }; depends_on = @(); ledger = @() },
+    [ordered]@{ id = 'ask-bad'; title = 'fake ask-bad'; priority = 'P1'; order = 2; script = 'gates/ask-bad.ps1'; group = 'any'; needs = @{}; interactive = $true; est_minutes = [ordered]@{ low = 1; mid = 1 }; depends_on = @(); ledger = @() }) }
   ($m | ConvertTo-Json -Depth 8) | Set-Content -LiteralPath (Join-Path $pack 'scripts\gate-pack\gates.manifest.json') -Encoding UTF8
   $factsFile = Join-Path $tmp2 'facts.json'
   Set-Content -LiteralPath $factsFile -Value '{"interface":true,"ac":true,"idle":true}' -Encoding ASCII
@@ -132,12 +143,13 @@ try {
     $hn = Split-Path -Leaf $h
     if (Test-Path -LiteralPath (Join-Path $tmp2 'work')) { Remove-Item -LiteralPath (Join-Path $tmp2 'work') -Recurse -Force }
     $eap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-    $out = @('' | & $h -NoProfile -ExecutionPolicy Bypass -Command $cmd 2>&1 | ForEach-Object { "$_" })
+    $out = @("`n`n`n`n`n" | & $h -NoProfile -ExecutionPolicy Bypass -Command $cmd 2>&1 | ForEach-Object { "$_" })
     $ErrorActionPreference = $eap
     $t = $out -join "`n"
     Check "$hn : the attended runner prints the needs-you banner of a gate that asks" ($t -match 'ask needs you:' -and $t -match 'Switch the network OFF now' -and $t -match 'Press Enter when the network is off')
     Check "$hn : the attended runner reports no unrecognized term" ($t -notmatch 'is not recognized')
     Check "$hn : the gate finished after the answer" ($t -match 'PASS\s+ask')
+    Check "$hn : an interactive gate that ends INVALID asks the person once, not once per try" (([regex]::Matches($t, 'ask-bad needs you:')).Count -eq 1 -and $t -match 'INVALID\s+ask-bad')
   }
 } finally { Remove-Item -LiteralPath $tmp2 -Recurse -Force -ErrorAction SilentlyContinue }
 

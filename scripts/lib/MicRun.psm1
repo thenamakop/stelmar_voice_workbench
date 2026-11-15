@@ -12,6 +12,7 @@
 #>
 
 Set-StrictMode -Version 2
+Import-Module (Join-Path $PSScriptRoot 'PackCore.psm1')
 
 # Pure. The schedule of one run, in seconds from the moment the source starts playing.
 # Full: 120 minutes, a 3-minute mute at 40:00 and a 3-minute room silence at 80:00.
@@ -96,4 +97,40 @@ function Get-PackWindowLines {
   @($lines.ToArray())
 }
 
-Export-ModuleMember -Function Get-PackMicPlan, Get-PackMicWindows, Select-PackMicDevice, Get-PackWindowTreatment, Get-PackWindowLines
+# The evidence file and the result of the microphone run, from what the run measured. Lives here (and not in the gate
+# script) so a test can run it with synthetic input: a mistake in this part is found after 15 minutes of recording
+# on the laptop otherwise (a loop variable `$l` once overwrote the list `$L`: PowerShell names ignore case).
+function New-PackMicRunResult {
+  [CmdletBinding()]
+  param(
+    [Parameter(Mandatory = $true)] $Ctx, [Parameter(Mandatory = $true)] [string]$GateDir, [Parameter(Mandatory = $true)] [string]$Run,
+    [Parameter(Mandatory = $true)] [string]$Profile, [Parameter(Mandatory = $true)] $Minutes, [Parameter(Mandatory = $true)] [bool]$Quick,
+    [Parameter(Mandatory = $true)] [string]$MicName, [string]$Speaker = '', [string]$InputInfo = '',
+    $Cond = @(), [Parameter(Mandatory = $true)] $Plan, $WindowLog = @(), [Parameter(Mandatory = $true)] $RefVerdict, $Detectors = $null,
+    $Treatment = @(), [int]$Overruns = 0, [int]$Xruns = 0, [Parameter(Mandatory = $true)] [string]$Status, [string]$Why = '', [string]$Threshold = ''
+  )
+  $rv = $RefVerdict
+  $ev = Join-Path $GateDir 'mic-run.txt'
+  $evLines = New-Object System.Collections.Generic.List[string]
+  $evLines.Add('Microphone run (gate pack)')
+  $evLines.Add(('machine: {0}; profile: {1}; date: {2}; {3} minutes{4}' -f $Ctx.machine, $Profile, (Get-Date -Format 'yyyy-MM-dd HH:mm'), $Minutes, $(if ($Quick) { ' (QUICK: the full run is 120 minutes)' } else { '' })))
+  $evLines.Add(('microphone: {0}; format the recorder opens: {1}; speakers: {2}' -f $MicName, $InputInfo, $Speaker))
+  foreach ($c in @($Cond)) { $evLines.Add("  $c") }
+  $evLines.Add(('windows (source clock): digital mute {0} s for {1} s; room silence {2} s for {3} s' -f $Plan.MuteAtS, $Plan.MuteForS, $Plan.SilenceAtS, $Plan.SilenceForS))
+  foreach ($w in @($WindowLog)) { $evLines.Add(('  window log: {0} at {1} s ({2})' -f $w['event'], $w['elapsed_s'], $(if ($w['ok']) { 'done' } else { 'FAILED to change the mute' }))) }
+  $evLines.Add(('recorder: overrun samples {0}, xruns {1}' -f $Overruns, $Xruns))
+  foreach ($rl in @($rv.Lines)) { $evLines.Add([string]$rl) }
+  $evLines.Add(('reference verdict: {0} ({1}): {2}' -f $rv.Verdict, $rv.Class, $rv.Reason))
+  if ($Detectors) { foreach ($dl in @($Detectors.Lines)) { $evLines.Add([string]$dl) } }
+  $evLines.Add('what each detector did in each scripted window:')
+  foreach ($wl in @(Get-PackWindowLines -Treatment @($Treatment))) { $evLines.Add([string]$wl) }
+  $evLines.Add("audio and reports: $Run (not in the repository; the known-speech recording stays on this laptop and is not in the zip)")
+  $evLines.Add("verdict: $Status")
+  Set-Content -LiteralPath $ev -Value @($evLines.ToArray()) -Encoding UTF8
+  $measured = [ordered]@{ minutes = $Minutes; microphone = $MicName; overrun_samples = $Overruns; xruns = $Xruns; reference_class = $rv.Class; windows = @(@($Treatment) | ForEach-Object { [ordered]@{ window = $_.Window; zero_gap = $_.zero_gap; repeated_block = $_.repeated_block } }) }
+  if ($Detectors) { $measured['detectors'] = $Detectors.Rates }
+  $notes = @(@($Cond) | ForEach-Object { [string]$_ })
+  New-PackResult -Id 'mic-run' -Status $Status -Headline ("{0} (microphone run, {1} minutes)" -f $Why, $Minutes) -Measured $measured -Threshold $Threshold -Rig ("built-in microphone: $MicName") -Evidence @($ev, (Join-Path $GateDir 'mic-windows.json')) -Notes $notes -Quick $Quick
+}
+
+Export-ModuleMember -Function Get-PackMicPlan, Get-PackMicWindows, Select-PackMicDevice, Get-PackWindowTreatment, Get-PackWindowLines, New-PackMicRunResult

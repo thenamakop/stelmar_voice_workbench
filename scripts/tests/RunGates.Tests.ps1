@@ -88,6 +88,22 @@ try {
   $st = State
   Check 'a crashed gate is INVALID and the reason says it ended without a result' ($st.gates.crash.status -eq 'INVALID' -and $st.gates.crash.reason -match 'without a result')
 
+  # 4a. An error thrown inside a gate's body is INVALID once and is not repeated in the same run (the next try
+  # would throw the same error); a plain INVALID result (section 3) is still tried up to three times.
+  Remove-Item -LiteralPath (Join-Path $tmp 'work') -Recurse -Force
+  Set-Content -LiteralPath (Join-Path $pack 'scripts\gate-pack\gates\thrower.ps1') -Encoding ASCII -Value @(
+    'param([string]$CtxFile, [string]$ResultFile)',
+    '$lib = Join-Path $PSScriptRoot ''..\..\lib''',
+    'Import-Module (Join-Path $lib ''PackCore.psm1'') -Force; Import-Module (Join-Path $lib ''PackGate.psm1'') -Force',
+    '$ctx = Read-PackCtx -CtxFile $CtxFile; Initialize-PackGate -Ctx $ctx',
+    'Invoke-PackGateBody -Ctx $ctx -Id ''thrower'' -ResultFile $ResultFile -Body { throw ''boom inside the body'' }')
+  New-Manifest @((G 'thrower' 'P1' 1))
+  $r5t = Run-Runner @()
+  $st = State
+  Check 'a gate that throws inside its body is INVALID after one try, with the error as the reason' ($st.gates.thrower.status -eq 'INVALID' -and $st.gates.thrower.attempts -eq 1 -and $st.gates.thrower.reason -match 'boom inside the body')
+  $r5u = Run-Runner @()
+  Check 'a later run tries it again (up to three tries in all)' ((State).gates.thrower.attempts -eq 2)
+
   # 4b. A comma list given with -File (-Only a,b / -Skip a,b) arrives as one string and is split.
   Remove-Item -LiteralPath (Join-Path $tmp 'work') -Recurse -Force
   New-FakeGate 'x1' 'PASS'; New-FakeGate 'x2' 'PASS'; New-FakeGate 'x3' 'PASS'

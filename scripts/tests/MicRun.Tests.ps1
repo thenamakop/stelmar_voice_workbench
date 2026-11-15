@@ -43,6 +43,33 @@ Check 'a firing that starts before a window and reaches into it counts for the w
 $lines = @(Get-PackWindowLines -Treatment (Get-PackWindowTreatment -Firings $f -Windows $win -OffsetMs 4000))
 Check 'the lines name each window and warn about firings in the scripted windows' (($lines -join "`n") -match 'digital mute' -and ($lines -join "`n") -match 'false alarms to read' -and ($lines -join "`n") -match 'outside both windows')
 
+# The part of the gate that builds the evidence file and the result runs only after 15 minutes of recording: it is
+# run here with synthetic input (a loop variable once overwrote the list it was adding to, and three real runs were lost).
+$repoRoot = (Resolve-Path (Join-Path $here '..\..')).Path
+Import-Module (Join-Path $repoRoot 'scripts\lib\PackCore.psm1') -Force
+$tmpMic = Join-Path ([IO.Path]::GetTempPath()) ('wb-micres-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Force -Path $tmpMic | Out-Null
+try {
+  $cond = New-Object System.Collections.Generic.List[string]
+  $cond.Add('audio software running: none'); $cond.Add('speaker volume set to 50 percent (put back at the end)')
+  $wlog = New-Object System.Collections.Generic.List[object]
+  $wlog.Add([ordered]@{ event = 'mute on'; ok = $true; elapsed_s = 300.4; at = 'x' }); $wlog.Add([ordered]@{ event = 'mute off'; ok = $false; elapsed_s = 360.2; at = 'x' })
+  $rvx = [pscustomobject]@{ Verdict = 'PASS'; Class = 'equal'; Reason = 'the app equals both references'; Lines = @('  app against the cpal reference: equal', '  app against the WASAPI reference: equal') }
+  $detx = [pscustomobject]@{ Lines = @('  detector zero_gap: fired 1 time(s)', '  detector repeated_block: fired 0 time(s)'); Rates = [ordered]@{ zero_gap = [ordered]@{ Firings = 1 } } }
+  $tr = @(Get-PackWindowTreatment -Firings $f -Windows $win -OffsetMs 4000)
+  $ctxx = [pscustomobject]@{ machine = 'TESTBOX' }
+  $res = New-PackMicRunResult -Ctx $ctxx -GateDir $tmpMic -Run 'D:\run' -Profile 'laptop' -Minutes 15 -Quick $true -MicName 'Microphone Array (Realtek(R) Audio)' -Speaker 'Speakers (Realtek(R) Audio)' -InputInfo '48000 Hz, 2 channel(s), f32' -Cond $cond.ToArray() -Plan $q -WindowLog $wlog.ToArray() -RefVerdict $rvx -Detectors $detx -Treatment $tr -Overruns 0 -Xruns 0 -Status 'PASS' -Why 'the app equals both references' -Threshold 'x'
+  $txt = Get-Content -LiteralPath (Join-Path $tmpMic 'mic-run.txt') -Raw -Encoding UTF8
+  Check 'the mic-run result is PASS with the evidence file written' ($res.status -eq 'PASS' -and $res.evidence.Count -eq 2 -and (Test-Path -LiteralPath (Join-Path $tmpMic 'mic-run.txt')))
+  Check 'the evidence file holds the conditions, window log, reference lines, detector lines, window lines and the verdict' ($txt -match 'audio software running' -and $txt -match 'window log: mute on at 300.4' -and $txt -match 'FAILED to change the mute' -and $txt -match 'app against the WASAPI reference: equal' -and $txt -match 'detector zero_gap: fired 1' -and $txt -match 'what each detector did in each scripted window' -and $txt -match 'digital mute' -and $txt -match 'verdict: PASS')
+  Check 'the result carries the notes, the windows and the detector rates' ($res.notes.Count -eq 2 -and @($res.measured.windows).Count -eq 3 -and $res.measured.detectors.zero_gap.Firings -eq 1 -and $res.measured.overrun_samples -eq 0)
+  $jf = Join-Path $tmpMic 'result.json'
+  Write-PackResult -Path $jf -Result $res
+  Check 'the result can be written as JSON' ((Get-Content -LiteralPath $jf -Raw | ConvertFrom-Json).id -eq 'mic-run')
+  $res2 = New-PackMicRunResult -Ctx $ctxx -GateDir $tmpMic -Run 'D:\run' -Profile 'laptop' -Minutes 15 -Quick $true -MicName 'mic' -Plan $q -RefVerdict $rvx -Treatment @() -Status 'FAIL' -Why 'x'
+  Check 'it also works with no detectors, no conditions, no window log and no treatment' ($res2.status -eq 'FAIL')
+} finally { Remove-Item -LiteralPath $tmpMic -Recurse -Force -ErrorAction SilentlyContinue }
+
 # The gate script: gate contract, never unattended or emulated, puts the mute and the volume back, uses both references.
 $g = Get-Content -LiteralPath (Join-Path $here '..\gate-pack\gates\mic-run.ps1') -Raw
 Check 'mic-run.ps1 uses the gate contract' ($g -match 'Invoke-PackGateBody -Ctx \$ctx -Id ''mic-run''')

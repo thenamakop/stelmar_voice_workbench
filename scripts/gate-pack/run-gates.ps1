@@ -308,6 +308,12 @@ function Invoke-OneGate($g) {
   $fields = @{ status = $status; ended = (Get-Date).ToString('o'); minutes = $minutes; reason = $reason }
   Set-PackGateStatus -State $state -Id $id -Fields $fields
   if ($status -eq 'PENDING') { [void]$deferred.Add($id); Set-PackGateStatus -State $state -Id $id -Fields @{ attempts = ($attempts - 1) } }
+  # An INVALID run is repeated (up to three tries) only when nothing says the next try would be the same: not after an
+  # error thrown by the gate's own code, and not for a gate that needs the person (a 15-minute audible test, a Wi-Fi switch).
+  if ($status -eq 'INVALID') {
+    $scriptError = [bool]($res -and $res['script_error'])
+    if ($scriptError -or [bool](Get-PackProp $g 'interactive' $false)) { [void]$deferred.Add($id) }
+  }
   Save-PackState -WorkDir $WorkDir -State $state
   $colour = switch ($status) { 'PASS' { 'Green' } 'FAIL' { 'Red' } 'INFO' { 'Cyan' } default { 'Yellow' } }
   Write-Host (Format-PackGateLine -Id $id -Status $status -Headline $reason -Rig $(if ($res) { [string]$res['rig'] } else { '' }) -Minutes $minutes) -ForegroundColor $colour

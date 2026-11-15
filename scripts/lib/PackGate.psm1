@@ -111,6 +111,10 @@ function Invoke-PackGateBody {
   } catch {
     $m = $_.Exception.Message
     $r = New-PackResult -Id $Id -Status (Get-PackErrorStatus $m) -Headline $m -Notes @([string]$_.ScriptStackTrace) -Quick ([bool]$Ctx.quick)
+    # An error thrown by the gate's own code is the same on every try: the runner does not repeat it in the same run.
+    if ($r['status'] -eq 'INVALID') { $r['script_error'] = $true }
+    # An error thrown by the gate's own code is the same on every try: the runner does not repeat it in the same run.
+    if ($r['status'] -eq 'INVALID') { $r['script_error'] = $true }
   }
   Complete-PackGate -Ctx $Ctx -Result $r -ResultFile $ResultFile
 }
