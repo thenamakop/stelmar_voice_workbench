@@ -227,11 +227,57 @@ function Invoke-PackRecorderGate {
 # The device the batch engine runs on beside the recorder: the integrated graphics adapter when the
 # vulkan engine lists one (as the app's profile would use it), else the CPU. Returns the keys for the
 # -Beside table of Invoke-PackRecorderGate.
+# The thread counts of the machine as the app sees them: physical and logical processors. Under an
+# emulation profile the engine reports the emulated processors in `info` (logical_processors_allowed).
+function Get-PackMachineThreads {
+  [CmdletBinding()]
+  param([Parameter(Mandatory = $true)] $Ctx)
+  $paths = Get-PackPaths -Ctx $Ctx
+  $fp = Read-PackJson -Path (Join-Path ([string]$Ctx.work_dir) 'fingerprint.json')
+  $phys = $(if ($fp) { [int]$fp.physical_cores } else { 4 })
+  $logi = $(if ($fp) { [int]$fp.logical_processors } else { 4 })
+  if ([string]$Ctx.profile -ne 'laptop' -and $paths.Emulate -and (Test-Path -LiteralPath $paths.Emulate)) {
+    try {
+      $ae = Join-Path $paths.Engines 'wb-engine-avx2-x86_64-pc-windows-msvc.exe'
+      $ri = Invoke-PackNative -FilePath $paths.Emulate -ArgumentList @('--profile', [string]$Ctx.profile, '--', $ae, 'info') -TimeoutSeconds 60
+      foreach ($l in @($ri.Output)) {
+        if ($l -notmatch '^\{') { continue }
+        $j = $l | ConvertFrom-Json
+        if ($j.PSObject.Properties['event'] -and $j.event -eq 'info' -and [int]$j.logical_processors_allowed -ge 1) { $logi = [int]$j.logical_processors_allowed; $phys = [math]::Min($phys, $logi) }
+      }
+    } catch { }
+  }
+  [pscustomobject]@{ Physical = [math]::Max(1, $phys); Logical = [math]::Max(1, $logi) }
+}
+
+# What runs beside the recorder, as the app would run it on this machine: the model, the device and the CPU
+# threads the quick check chose (capability.json); without one, the app's own counts (batch: physical cores
+# minus one, live: half the logical processors). Returns keys for the -Beside table.
+function Get-PackBesideProduction {
+  [CmdletBinding()]
+  param([Parameter(Mandatory = $true)] $Ctx)
+  $paths = Get-PackPaths -Ctx $Ctx
+  $t = Get-PackMachineThreads -Ctx $Ctx
+  $batch = [math]::Max(1, $t.Physical - 1)
+  $live = [math]::Max(1, [int][math]::Floor($t.Logical / 2))
+  $model = 'medium'
+  $note = 'model medium (no quick-check result on this laptop yet)'
+  $cap = Read-PackJson -Path (Join-Path ([string]$Ctx.work_dir) 'gates\quick-check\capability.json')
+  try {
+    $m = [string]$cap.decision.languages.en.rolling.model
+    if ($m -and (Test-Path -LiteralPath (Join-Path $paths.Models ('ggml-{0}.bin' -f $m)))) { $model = $m; $note = "model $m (the quick check's rolling model for English)" }
+    $ct = $cap.decision.config.cpu_threads
+    if ($null -ne $ct -and [int]$ct -ge 1 -and [string]$cap.decision.config.config.kind -eq 'gpu') { $batch = [int]$ct }
+  } catch { }
+  @{ model = $model; batch_threads = $batch; live_threads = $live; production_note = ('{0}; batch {1} threads, live {2} threads' -f $note, $batch, $live) }
+}
+
 function Get-PackBesideDevice {
   [CmdletBinding()]
   param([Parameter(Mandatory = $true)] $Ctx)
   $paths = Get-PackPaths -Ctx $Ctx
-  $cpu = @{ batch_variant = 'avx2'; batch_device = 'cpu'; batch_threads = 2; device_note = 'CPU (avx2), 2 threads' }
+  $prod = Get-PackBesideProduction -Ctx $Ctx
+  $cpu = @{ batch_variant = 'avx2'; batch_device = 'cpu'; batch_threads = $prod.batch_threads; live_threads = $prod.live_threads; model = $prod.model; device_note = ('CPU (avx2), {0}' -f $prod.production_note) }
   $vk = Join-Path $paths.Engines 'wb-engine-vulkan-x86_64-pc-windows-msvc.exe'
   if (-not (Test-Path -LiteralPath $vk) -or [string]$Ctx.profile -ne 'laptop') { return $cpu }
   try {
@@ -241,11 +287,11 @@ function Get-PackBesideDevice {
       $j = $l | ConvertFrom-Json
       if ($j.PSObject.Properties['event'] -and $j.event -eq 'info') {
         $d = @($j.devices | Where-Object { [string]$_.backend -match 'Vulkan' -and [string]$_.kind -match 'integrated|igpu' } | Select-Object -First 1)
-        if ($d.Count -gt 0) { return @{ batch_variant = 'vulkan'; batch_device = ('gpu:{0}' -f [int]$d[0].index); batch_threads = 2; device_note = ('integrated graphics, vulkan device {0} ({1}), 2 threads' -f $d[0].index, $d[0].description) } }
+        if ($d.Count -gt 0) { return @{ batch_variant = 'vulkan'; batch_device = ('gpu:{0}' -f [int]$d[0].index); batch_threads = $prod.batch_threads; live_threads = $prod.live_threads; model = $prod.model; device_note = ('integrated graphics, vulkan device {0} ({1}), {2}' -f $d[0].index, $d[0].description, $prod.production_note) } }
       }
     }
   } catch { }
   $cpu
 }
 
-Export-ModuleMember -Function Get-PackBesideDevice, Get-PackRecorderOutcome, Get-PackRunDirFromEvidence, Get-PackRigKindFromEvidence, Get-PackCompareOffsetMs, Get-PackScanFindings, Get-PackRunDetectors, Invoke-PackRecorderGate
+Export-ModuleMember -Function Get-PackMachineThreads, Get-PackBesideProduction, Get-PackBesideDevice, Get-PackRecorderOutcome, Get-PackRunDirFromEvidence, Get-PackRigKindFromEvidence, Get-PackCompareOffsetMs, Get-PackScanFindings, Get-PackRunDetectors, Invoke-PackRecorderGate

@@ -18,7 +18,7 @@ Invoke-PackGateBody -Ctx $ctx -Id 'bg-decode-info' -ResultFile $ResultFile -Body
   $thr = 'information only: shared upstream breaks with and without a background decode; a break the app shows alone is a recorder finding'
   $a = Invoke-PackRecorderGate -Ctx $ctx -Id 'bg-decode-info' -Gate 'soak' -FullMinutes 30 -QuickMinutes 5 -RunTag 'without-decode' -Threshold $thr
   if ($a['status'] -eq 'PENDING' -or $null -eq $a['measured']) { return $a }
-  $b = Invoke-PackRecorderGate -Ctx $ctx -Id 'bg-decode-info' -Gate 'soak' -FullMinutes 30 -QuickMinutes 5 -RunTag 'with-decode' -Beside @{ mode = 'batch'; batch_variant = $dev.batch_variant; batch_device = $dev.batch_device; batch_threads = $dev.batch_threads } -Threshold $thr
+  $b = Invoke-PackRecorderGate -Ctx $ctx -Id 'bg-decode-info' -Gate 'soak' -FullMinutes 30 -QuickMinutes 5 -RunTag 'with-decode' -Beside @{ mode = 'batch'; batch_variant = $dev.batch_variant; batch_device = $dev.batch_device; batch_threads = $dev.batch_threads; model = $dev.model } -Threshold $thr
   if ($b['status'] -eq 'PENDING' -or $null -eq $b['measured']) { return $b }
   $sa = [int]$a['measured']['shared_breaks']; $sb = [int]$b['measured']['shared_breaks']
   $oa = [int]$a['measured']['app_only_breaks']; $ob = [int]$b['measured']['app_only_breaks']

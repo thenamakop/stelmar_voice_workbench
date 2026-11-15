@@ -30,7 +30,14 @@ Invoke-PackGateBody -Ctx $ctx -Id 'batch-scripts' -ResultFile $ResultFile -Body 
     @{ Lang = 'hi'; Script = 'Devanagari'; Pattern = '[\u0900-\u097F]' },
     @{ Lang = 'ur'; Script = 'Arabic script'; Pattern = '[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]' })
   $threads = [math]::Max(2, [math]::Min(12, [int]([Environment]::ProcessorCount)))
-  if ($profile -eq 'emu-low') { $threads = 4 }
+  if ($profile -ne 'laptop') {
+    # Under wb-emulate the engine sees only the emulated processors: ask it (info), as the speed tables do.
+    try {
+      $ae = Join-Path $paths.Engines "wb-engine-avx2-$triple.exe"
+      $ri = Invoke-PackNative -FilePath $paths.Emulate -ArgumentList @('--profile', $profile, '--', $ae, 'info') -TimeoutSeconds 60
+      foreach ($l in @($ri.Output)) { if ($l -match '^\{') { $j = $l | ConvertFrom-Json; if ($j.PSObject.Properties['event'] -and $j.event -eq 'info' -and [int]$j.logical_processors_allowed -ge 1) { $threads = [int]$j.logical_processors_allowed } } }
+    } catch { if ($profile -eq 'emu-low') { $threads = 4 } }
+  }
   $devs = New-Object System.Collections.Generic.List[object]
   $devs.Add(@{ Name = 'CPU (avx2)'; Variant = 'avx2'; Arg = 'cpu' })
   $vk = Join-Path $paths.Engines "wb-engine-vulkan-$triple.exe"

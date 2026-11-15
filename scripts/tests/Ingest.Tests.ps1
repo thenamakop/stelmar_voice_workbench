@@ -89,7 +89,7 @@ try {
   Check 'the file keeps its CRLF line endings' ($t.Contains("`r`n") -and -not ($t -match "[^\r]\n"))
   Check 'the soak row names the laptop but stays provisional until the mid laptop has run' ($t -match 'Soak: 2 hours[^\r\n]*PASS \(PROVISIONAL\) ;; gate pack: low/soak PASS \(Acme-Book-14-aabbcc, 17 Nov 2026\); still to run: mid/soak')
   Check 'a DEFERRED info row becomes RESULT IN, owner to read' ($t -match 'Verdicts and tiers on the real laptops[^\r\n]*RESULT IN, owner to read \[was: DEFERRED')
-  Check 'a low-only verdict row closes with the old status kept' ($t -match 'Quick-check time on the real low-baseline laptop[^\r\n]*FAIL|PASS \(gate pack\) \[was: DEFERRED\]')
+  Check 'an INFO result on a low-only verdict row is not closed as PASS: the owner reads it, the old status is kept' ($t -match 'Quick-check time on the real low-baseline laptop[^\r\n]*RESULT IN, owner to read \[was: DEFERRED' -and $t -notmatch 'Quick-check time on the real low-baseline laptop[^\r\n]*PASS \(gate pack\)')
   Check 'an Open item is annotated, never closed by ingest of one laptop' ($t -match 'Re-run Phase 1 on both laptops[^\r\n]*\| OPEN ;; gate pack: low/soak PASS')
   Check 'the Machines row of the low laptop is filled in' ($t -match 'Low-baseline laptop \| Acme Book 14 \(Acme-Book-14-aabbcc\) \| Test CPU \(4 cores, 8 threads; AVX2 yes, AVX-512 no\) \| 15.8 GB \| Intel UHD \(driver 31.0.101.1\)')
   Check 'the run is listed in the Gate pack runs block' ($t -match '## Gate pack runs' -and $t -match '\| soak \| PASS \| low laptop, Acme-Book-14-aabbcc')
@@ -175,5 +175,16 @@ else {
   Check 'a gate that did not run is "not run", not a finding' (((Get-Content -LiteralPath (Join-Path $ro 'speed-table-cpu.txt') -Raw) -match 'not run') -and -not $cj.PSObject.Properties['speed-table-cpu'])
 }
 } finally { Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue }
+
+# A verdict row is closed only by PASS results (an INFO result must never turn into PASS).
+$res = @{ low = [pscustomobject]@{ State = 'INFO'; Machine = 'M'; Date = '15 Nov 2026' } }
+$cell = Get-IngestStatusCell -Base 'PROVISIONAL' -Results $res -Required @('low') -Kind 'verdict' -Table 'gates'
+Check 'an INFO result on a verdict row of the gates table does not become PASS' ($cell -notmatch '^PASS' -and $cell -match 'RESULT IN, owner to read')
+$cell = Get-IngestStatusCell -Base 'OPEN' -Results $res -Required @('low') -Kind 'verdict' -Table 'open'
+Check 'an INFO result on a verdict row of the open items does not say PASS everywhere' ($cell -notmatch 'PASS everywhere' -and $cell -match 'RESULT IN, owner to read')
+$res = @{ low = [pscustomobject]@{ State = 'PASS'; Machine = 'M'; Date = '15 Nov 2026' } }
+Check 'a PASS result still closes a verdict row' ((Get-IngestStatusCell -Base 'PROVISIONAL' -Results $res -Required @('low') -Kind 'verdict' -Table 'gates') -match '^PASS \(gate pack\)')
+$ing = Get-Content -LiteralPath (Join-Path $here '..\lib\Ingest.psm1') -Raw
+Check 'a gate that ran with -Quick on a real laptop counts as INFO for the ledger, never as PASS' ($ing -match 'not_at_full_length' -and $ing -match '\$thisState = ''INFO''')
 if ($fails) { Write-Host "$fails failed"; exit 1 }
 Write-Host 'Ingest tests passed'

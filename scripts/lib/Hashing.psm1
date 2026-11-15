@@ -4,9 +4,9 @@
   was really cold, a raw read of the disk, and (administrator only) emptying Windows' standby file cache.
 
   A purged run counts as cold only if the app read the models at no more than 0.6 times the rate it read
-  them at when the cache was warm on the same machine. A rate above that proves the cache was warm; a rate
-  below it is consistent with cold but is not proof (SHA-256 itself can be slower than the disk), and the
-  evidence says so.
+  them at when the cache was warm on the same machine. A higher rate cannot be shown to be cold (on a fast disk a
+  cold read is bound by SHA-256 and runs at about the warm rate), so it is not counted as cold; a rate
+  below the limit is consistent with cold but is not proof, and the evidence says so.
 
   Windows PowerShell 5.1, ASCII only.
 #>
@@ -61,7 +61,7 @@ function Test-PackColdRun {
   if ($ratio -le $Factor) {
     return [pscustomobject]@{ Counts = $true; Ratio = $ratio; Reason = ('the app read the models at {0:n0} MB/s, {1:n2} times the warm rate of {2:n0} MB/s (at most {3:n1}): consistent with a cold cache; this is not proof, because SHA-256 can itself be slower than the disk' -f $ColdMBs, $ratio, $WarmMBs, $Factor) }
   }
-  [pscustomobject]@{ Counts = $false; Ratio = $ratio; Reason = ('the app read the models at {0:n0} MB/s, {1:n2} times the warm rate of {2:n0} MB/s (limit {3:n1}): the file cache was warm, so this run does not count as cold' -f $ColdMBs, $ratio, $WarmMBs, $Factor) }
+  [pscustomobject]@{ Counts = $false; Ratio = $ratio; Reason = ('the app read the models at {0:n0} MB/s, {1:n2} times the warm rate of {2:n0} MB/s (limit {3:n1}): the read cannot be shown to be cold (on a fast disk it runs at about the warm rate), so this run does not count as cold' -f $ColdMBs, $ratio, $WarmMBs, $Factor) }
 }
 
 # Pure. The verdict of the hashing runs 2 to 10. -Runs: objects with Kind (purged or warm), Purged (the

@@ -46,5 +46,20 @@ try {
   Check 'emu-low: a missing wb-emulate is still reported' ($t -match 'Missing .*no-emu\.exe')
 } finally { Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue }
 
+# What runs beside the recorder follows the app: the quick check's model and CPU threads, else physical - 1 and logical / 2.
+Import-Module (Join-Path $here '..\lib\RecorderGates.psm1') -Force
+$bp = Join-Path ([IO.Path]::GetTempPath()) ('wb-beside-' + [guid]::NewGuid().ToString('N'))
+try {
+  New-Item -ItemType Directory -Force -Path (Join-Path $bp 'gates\quick-check'), (Join-Path $bp 'models') | Out-Null
+  '{"physical_cores":8,"logical_processors":16}' | Set-Content -LiteralPath (Join-Path $bp 'fingerprint.json')
+  $bctx = [pscustomobject]@{ pack_root = $bp; work_dir = $bp; profile = 'laptop' }
+  $r0 = Get-PackBesideProduction -Ctx $bctx
+  Check 'beside the recorder, without a quick check: batch physical minus 1, live half the logical, model medium' ($r0.batch_threads -eq 7 -and $r0.live_threads -eq 8 -and $r0.model -eq 'medium')
+  New-Item -ItemType File -Force -Path (Join-Path $bp 'models\ggml-large-v3-turbo-q5_0.bin') | Out-Null
+  '{"decision":{"config":{"config":{"kind":"gpu","index":0},"cpu_threads":2},"languages":{"en":{"rolling":{"model":"large-v3-turbo-q5_0"}}}}}' | Set-Content -LiteralPath (Join-Path $bp 'gates\quick-check\capability.json')
+  $r1 = Get-PackBesideProduction -Ctx $bctx
+  Check 'beside the recorder, with a quick check: its rolling model and its graphics-config CPU threads' ($r1.model -eq 'large-v3-turbo-q5_0' -and $r1.batch_threads -eq 2 -and $r1.live_threads -eq 8)
+} finally { Remove-Item -LiteralPath $bp -Recurse -Force -ErrorAction SilentlyContinue }
+
 if ($fails) { Write-Host "$fails failed"; exit 1 }
 Write-Host 'RecorderGateLaptop tests passed'

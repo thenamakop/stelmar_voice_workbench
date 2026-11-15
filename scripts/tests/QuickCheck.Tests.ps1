@@ -47,6 +47,9 @@ Check 'a failed recorder safety run is FAIL' ($v.Status -eq 'FAIL' -and $v.Headl
 $v = Get-QuickCheckVerdict -Report $report -Capability (New-Cap -HiRtf 2.1) -Cells $cells
 Check 'a graphics adapter slower than 1.5x on Hindi is flagged' ((($v.Lines -join "`n") -match 'slower than 1.5x real time: YES') -and $v.Numbers.gpu_hindi_slower_than_1_5 -eq $true)
 
+$v = Get-QuickCheckVerdict -Report $report -Capability (New-Cap -Duration 5692) -Cells $cells -BarSeconds 7200
+Check 'a full check of 5692 s passes against the 7200 s bar the caller passed, although capability.json says bar_s 480' ($v.Status -ne 'FAIL' -and (($v.Lines -join "`n") -match 'against the 7200 s bar'))
+
 $v = Get-QuickCheckVerdict -Report $null -Capability $null -Cells @()
 Check 'no report and no capability.json is INVALID, not FAIL' ($v.Status -eq 'INVALID')
 

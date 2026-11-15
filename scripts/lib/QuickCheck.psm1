@@ -75,7 +75,8 @@ function Get-QuickCheckVerdict {
       $duration = Get-QProp $check 'duration_s'
       $partial = Get-QProp $check 'partial'
       $bar = Get-QProp $check 'bar_s'
-      if ($null -ne $bar) { $BarSeconds = [double]$bar }
+      # The app writes bar_s 480 for both kinds of check; a bar the caller passed (the full check's 7200) wins.
+      if ($null -ne $bar -and -not $PSBoundParameters.ContainsKey('BarSeconds')) { $BarSeconds = [double]$bar }
     }
     if ($null -eq $duration) { $invalid.Add('capability.json has no check time') }
     if ($null -eq $decision) { $invalid.Add('capability.json has no decision') }

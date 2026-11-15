@@ -28,7 +28,7 @@ Check 'a rate at 0.48 of the warm rate counts as cold' ($c.Counts -and [math]::A
 $c = Test-PackColdRun -ColdMBs 150 -WarmMBs 250
 Check 'exactly 0.6 of the warm rate still counts' ($c.Counts)
 $c = Test-PackColdRun -ColdMBs 200 -WarmMBs 250
-Check 'a rate above 0.6 of the warm rate does not count and says the cache was warm' (-not $c.Counts -and $c.Reason -match 'cache was warm')
+Check 'a rate above 0.6 of the warm rate does not count and says it cannot be shown to be cold' (-not $c.Counts -and $c.Reason -match 'cannot be shown to be cold')
 Check 'no warm rate means it cannot be called cold' (-not (Test-PackColdRun -ColdMBs 100 -WarmMBs $null).Counts)
 Check 'no cold rate means it cannot be called cold' (-not (Test-PackColdRun -ColdMBs $null -WarmMBs 250).Counts)
 

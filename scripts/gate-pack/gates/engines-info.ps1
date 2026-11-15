@@ -74,7 +74,13 @@ Invoke-PackGateBody -Ctx $ctx -Id 'engines-info' -ResultFile $ResultFile -Body {
     switch ($v) {
       'avx2' { if ($res.ExitCode -ne 0) { $failures.Add("avx2 exited $($res.ExitCode), expected 0") } }
       'avx512' {
-        if ($fp.avx512f) { if ($res.ExitCode -ne 0) { $failures.Add("avx512 exited $($res.ExitCode) on a CPU with AVX-512, expected 0") } }
+        if ($res.ExitCode -eq 0) { $fp['avx512_usable'] = $true }
+        if ($fp.avx512f -and $res.ExitCode -eq 3) {
+          # Windows reports AVX-512F only; the engine also needs CD, VL, DQ and BW. A clean refusal is the engine doing its job.
+          if (-not ($err -and [string]$err.message)) { $failures.Add('avx512 exited 3 but printed no clear message') }
+          else { $lines += '   note: this CPU has AVX-512F but the avx512 engine refused it (it needs more AVX-512 features); the avx512 rows are left out'; $fp['avx512_usable'] = $false }
+        }
+        elseif ($fp.avx512f) { if ($res.ExitCode -ne 0) { $failures.Add("avx512 exited $($res.ExitCode) on a CPU with AVX-512, expected 0 or 3 with a message") } }
         else {
           if ($res.ExitCode -ne 3) { $failures.Add("avx512 exited $($res.ExitCode) on a CPU without AVX-512, expected 3") }
           elseif (-not ($err -and [string]$err.message)) { $failures.Add('avx512 exited 3 but printed no clear message') }
@@ -96,6 +102,7 @@ Invoke-PackGateBody -Ctx $ctx -Id 'engines-info' -ResultFile $ResultFile -Body {
     }
     $lines += ''
   }
+  if ($fp.Contains('avx512_usable')) { Write-PackJson -Path (Join-Path ([string]$ctx.work_dir) 'fingerprint.json') -Value $fp }
   $lines += 'summary: ' + (($measured.Keys | ForEach-Object { "$_ exit $($measured[$_].exit)" }) -join '; ')
   $evidence = Join-Path ([string]$ctx.gate_dir) 'engines-info.txt'
   Write-WbEvidence -Path $evidence -Lines $lines -MachineLabel ([string]$ctx.machine)

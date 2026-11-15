@@ -64,7 +64,7 @@ Invoke-PackGateBody -Ctx $ctx -Id 'hashing-2-10' -ResultFile $ResultFile -Body {
     $src = @($runs | Where-Object { $_.Tag -eq $row.Tag })[0]
     $lines.Add(('  {0} | {1} | {2} | {3} | {4} | {5} | {6} | {7} | {8}' -f $row.Tag, $row.Kind, $(if ($row.Kind -eq 'purged') { $src.Purged } else { 'n/a' }), $row.Status, $(if ($null -ne $row.Rate) { ('{0:n0}' -f $row.Rate) } else { 'n/a' }), $(if ($row.Kind -eq 'purged') { $row.CountsAsCold } else { 'n/a' }), $row.Shared, $row.AppOnly, $row.Note))
   }
-  $lines.Add('  caveat: a rate above 0.6 of the warm rate proves the cache was warm; a rate below it is consistent with a cold cache but is not proof, because SHA-256 can itself be slower than the disk')
+  $lines.Add('  caveat: a rate above 0.6 of the warm rate cannot be shown to be cold, so that run is not counted as cold; a rate below it is consistent with a cold cache but is not proof, because SHA-256 can itself be slower than the disk')
   $coldRows = @($v.Rows | Where-Object { $_.Kind -eq 'purged' })
   $sharedCold = ($coldRows | Measure-Object -Property Shared -Sum).Sum
   $warmRowsAll = @($v.Rows | Where-Object { $_.Kind -eq 'warm' })

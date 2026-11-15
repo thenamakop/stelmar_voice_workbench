@@ -14,10 +14,10 @@ Import-Module (Join-Path $lib 'RecorderGates.psm1') -Force
 
 Invoke-PackGateBody -Ctx $ctx -Id 'live-batch-safety' -ResultFile $ResultFile -Body {
   $dev = Get-PackBesideDevice -Ctx $ctx
-  $cfg = @{ mode = 'live-batch'; batch_variant = $dev.batch_variant; batch_device = $dev.batch_device; batch_threads = $dev.batch_threads }
+  $cfg = @{ mode = 'live-batch'; batch_variant = $dev.batch_variant; batch_device = $dev.batch_device; batch_threads = [math]::Max(1, [int][math]::Floor($dev.batch_threads / 2)); live_threads = $dev.live_threads; model = $dev.model }
   $r = Invoke-PackRecorderGate -Ctx $ctx -Id 'live-batch-safety' -Gate 'soak' -FullMinutes 15 -QuickMinutes 5 -Beside $cfg -Threshold 'zero overruns, xruns and dropped samples; recording equals both references while wb-engine live (voice detection only until Phase 7) and a batch engine run beside the recorder'
   if ($null -eq $r['measured']) { return $r }
-  $r['measured']['beside'] = [ordered]@{ live = 'wb-engine live, voice detection only, 2 threads, normal priority'; batch = ('wb-engine batch, model medium, {0}, below-normal priority' -f $dev.device_note) }
+  $r['measured']['beside'] = [ordered]@{ live = ('wb-engine live, voice detection only, {0} threads, normal priority' -f $dev.live_threads); batch = ('wb-engine batch, {0}, below-normal priority; the batch thread count is halved while a live session runs, as in the app' -f $dev.device_note) }
   $r['notes'] = @($r['notes']) + @('the live engine decodes nothing yet (Phase 7); run this gate again when decoding lands')
   $r['headline'] = ('{0} [beside the recorder: live engine (voice detection) and batch engine on {1}]' -f $r['headline'], $dev.device_note)
   $r

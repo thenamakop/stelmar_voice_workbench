@@ -83,11 +83,13 @@ function Get-IngestStatusCell {
   } elseif ($Table -eq 'open') {
     if ($states -contains 'FAIL') { $head = 'OPEN (gate pack FAIL, see the REOPENED row) [was: ' + $was + ']' }
     elseif (($states -contains 'FALLBACK') -or $missing.Count -gt 0) { $head = $was }
+    elseif (@($states | Where-Object { $_ -ne 'PASS' }).Count -gt 0) { $head = 'RESULT IN, owner to read [was: ' + $was + ']' }
     else { $head = 'RESULT IN: PASS everywhere it is needed, owner to close [was: ' + $was + ']' }
   } else {
     if ($states -contains 'FAIL') { $head = 'FAIL (gate pack) [was: ' + $was + ']' }
     elseif ($states -contains 'FALLBACK') { $head = $was }
-    elseif ($missing.Count -eq 0 -and $states.Count -gt 0) { $head = 'PASS (gate pack) [was: ' + $was + ']' }
+    elseif ($missing.Count -eq 0 -and $states.Count -gt 0 -and @($states | Where-Object { $_ -ne 'PASS' }).Count -eq 0) { $head = 'PASS (gate pack) [was: ' + $was + ']' }
+    elseif ($missing.Count -eq 0 -and $states.Count -gt 0) { $head = 'RESULT IN, owner to read [was: ' + $was + ']' }
   }
   if ($missing.Count -gt 0 -and $states.Count -gt 0 -and $Kind -ne 'info') { $tail += '; still to run: ' + ($missing -join ', ') }
   ($head + $tail)
@@ -164,6 +166,7 @@ function Update-IngestGatesLines {
       $thisState = $st
       if ($needsHw -and $fallback -and $st -ne 'FAIL') { $thisState = 'FALLBACK' }
       elseif ($kind -eq 'info' -and $st -eq 'PASS') { $thisState = 'INFO' }
+      elseif ($st -eq 'PASS' -and (([bool]$Summary.quick) -or ($g.PSObject.Properties['quick'] -and [bool]$g.quick) -or ($g.PSObject.Properties['not_at_full_length'] -and [bool]$g.not_at_full_length))) { $thisState = 'INFO' }
       $cellIx = $(if ($tbl -eq 'gates') { 1 } else { 2 })
       $hit = @()
       for ($i = 0; $i -lt $out.Count; $i++) {

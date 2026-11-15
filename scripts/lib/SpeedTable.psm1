@@ -74,7 +74,9 @@ function Get-SpeedPlan {
       }
     }
   } else {
-    $threadSets = @($PhysicalCores, $LogicalProcessors | Where-Object { $_ -ge 1 } | Select-Object -Unique)
+    # The app's own batch count is one less than the physical cores; the table also shows the physical and logical counts.
+    $appThreads = [math]::Max(1, $PhysicalCores - 1)
+    $threadSets = @($appThreads, $PhysicalCores, $LogicalProcessors | Where-Object { $_ -ge 1 } | Select-Object -Unique)
     if ($Quick) { $threadSets = @($threadSets | Select-Object -First 1) }
     $variants = @('avx2')
     if ($HasAvx512 -and -not $Quick) { $variants += 'avx512' }
@@ -249,7 +251,7 @@ function Invoke-SpeedTableGate {
       }
     }
   }
-  $plan = @(Get-SpeedPlan -Part $Part -Devices $devices -PhysicalCores $physCores -LogicalProcessors $logProcs -HasAvx512 ([bool]$fp.avx512f) -Quick $quick -Present $present)
+  $plan = @(Get-SpeedPlan -Part $Part -Devices $devices -PhysicalCores $physCores -LogicalProcessors $logProcs -HasAvx512 $(if ($fp.PSObject.Properties['avx512_usable']) { [bool]$fp.avx512_usable } else { [bool]$fp.avx512f }) -Quick $quick -Present $present)
   $plan = @($plan | Where-Object { $engines.ContainsKey($_.Variant) })
   if ($plan.Count -eq 0) { throw 'no cell can run: the engines or models of this part are not in the pack' }
   $resFile = Join-Path $gdir 'results.jsonl'
@@ -298,7 +300,7 @@ function Invoke-SpeedTableGate {
         $rec.whisper = "$($b.whisper_cpp.version) commit $($b.whisper_cpp.commit) tree $($b.whisper_cpp.tree_sha256)"; $rec.device_name = $b.device_name
       } else {
         $msg = $(if ($errEv) { "$($errEv.code): $($errEv.message)" } else { ($r.Err | Select-Object -Last 2) -join ' ' })
-        $rec.status = $(if ($r.TimedOut) { 'timeout' } elseif ($msg -match 'out of memory|alloc|bad_alloc|not enough memory|VK_ERROR_OUT_OF|memory') { 'does_not_fit' } else { "exit_$($r.Exit)" })
+        $rec.status = $(if ($r.TimedOut) { 'timeout' } elseif ($msg -match 'out of memory|bad_alloc|not enough memory|failed to allocate|VK_ERROR_OUT_OF|OutOfDeviceMemory|OutOfHostMemory') { 'does_not_fit' } else { "exit_$($r.Exit)" })
         $rec.error = $msg -replace '[\r\n]+', ' '
       }
       ($rec | ConvertTo-Json -Compress -Depth 5) | Add-Content -LiteralPath $resFile -Encoding ASCII
