@@ -66,6 +66,8 @@ Check 'under an emulation profile the speed tables take thread counts from the e
 $rgm = Get-Content -LiteralPath (Join-Path $here '..\lib\RecorderGates.psm1') -Raw
 Check 'a refusal in a recorder gate is found case-sensitively, so the evidence line "overlay tools closed: yes" is not taken for a refusal' ($rgm -match '-cmatch ''\^\(RIG REFUSED' -and $rgm -notmatch '-match ''\^\(RIG REFUSED')
 
+Check 'the runner marks the gates the manifest skips under -Quick as SKIPPED, unless they are named with -Only' ($rg -match 'skipped \$gid under -Quick' -and $rg -match 'Only -contains \$gid')
+
 $sm = Get-Content -LiteralPath (Join-Path $here '..\gate-pack-native-smoke.ps1') -Raw
 Check 'the native smoke runs the laptop profile, writes no zip, never calls the ingest, and leaves the audible mic run out by default' ($sm -match "'-Profile', 'laptop'" -and $sm -match "'-NoZip'" -and $sm -notmatch 'ingest-gate-results' -and $sm -match 'if \(-not \$IncludeMic\) \{ \$skip.Add\(''mic-run''\)')
 Check 'the native smoke is ASCII only' (-not ($sm -cmatch '[^\x00-\x7F]'))

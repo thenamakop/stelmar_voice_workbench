@@ -362,6 +362,22 @@ try {
   Say 'the laptop is kept awake while the pack runs (sleep and screen-off are blocked until it ends)'
 } catch { Say ('warning: could not block sleep: ' + $_.Exception.Message) }
 
+# ---- Gates the manifest skips under -Quick (a gate named with -Only still runs) ------------------
+if ($quickRun) {
+  foreach ($g in @($manifest.gates)) {
+    $gid = [string]$g.id
+    $qs = Get-PackProp $g 'quick' $null
+    if (-not ($qs -and (Get-PackProp $qs 'skipped' $false))) { continue }
+    if ($Only.Count -gt 0 -and $Only -contains $gid) { continue }
+    if ($inPack -notcontains $gid) { continue }
+    $gst = [string](Get-PackProp (Get-PackGateState -State $state -Id $gid) 'status' '')
+    if (@('PASS', 'FAIL', 'INFO', 'SKIPPED') -contains $gst) { continue }
+    Set-PackGateStatus -State $state -Id $gid -Fields @{ status = 'SKIPPED'; reason = ([string](Get-PackProp $qs 'note' 'skipped under -Quick')); ended = (Get-Date).ToString('o') }
+    Say ("skipped $gid under -Quick: " + [string](Get-PackProp $qs 'note' 'not part of the dry run'))
+  }
+  Save-PackState -WorkDir $WorkDir -State $state
+}
+
 # ---- The loop -------------------------------------------------------------------------------------
 $stopRequested = $false
 $restartsAsked = 0
