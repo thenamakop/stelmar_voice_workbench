@@ -79,6 +79,7 @@ Check 'recorder-gate.ps1 takes -BesideScript and -BesideConfig and stops the bes
 # The beside-load script and the pack gates that use it.
 $lib = Join-Path $here '..\lib'
 $bl = Get-Content -LiteralPath (Join-Path $lib 'beside-load.ps1') -Raw
+Check 'beside-load.ps1 tags the live request with its type (the protocol rejects one without)' ($bl -cmatch "type = 'live'")
 Check 'beside-load.ps1 starts a live and a batch engine below the recorder and writes result.json' ($bl -match 'result\.json' -and $bl -match 'live' -and $bl -match 'batch' -and $bl -match 'BelowNormal')
 $rg = Get-Content -LiteralPath (Join-Path $lib 'RecorderGates.psm1') -Raw
 Check 'Invoke-PackRecorderGate has -Beside and -RunTag, and counts shared and app-only breaks' ($rg -match '\[hashtable\]\$Beside' -and $rg -match '\[string\]\$RunTag' -and $rg -match 'app_only_breaks')

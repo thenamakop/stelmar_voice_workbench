@@ -48,7 +48,7 @@ try {
   if ([string]$cfg.mode -eq 'live-batch') {
     $exe = Get-Engine ([string]$cfg.live_variant)
     $vad = Join-Path ([string]$cfg.models_dir) 'ggml-silero-v6.2.0.bin'
-    $req = [ordered]@{ models_by_lang = @{}; vad_model = @{ id = 'silero-v6.2.0'; path = $vad }; languages = @('en'); device = @{ kind = 'cpu' }; threads = [int]$cfg.live_threads }
+    $req = [ordered]@{ type = 'live'; models_by_lang = @{}; vad_model = @{ id = 'silero-v6.2.0'; path = $vad }; languages = @('en'); device = @{ kind = 'cpu' }; threads = [int]$cfg.live_threads }
     $reqFile = Join-Path $OutDir 'live-request.json'
     [IO.File]::WriteAllText($reqFile, ($req | ConvertTo-Json -Depth 5), (New-Object Text.UTF8Encoding($false)))
     $psi = New-Object Diagnostics.ProcessStartInfo

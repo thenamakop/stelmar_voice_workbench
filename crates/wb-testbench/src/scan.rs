@@ -54,6 +54,10 @@ pub struct FoundGap {
 /// Parts at which a later run of the app starts (a restart after a kill): the first part whose
 /// start is at or after the audio time of each `audio_started` event after the first.
 fn run_start_parts(session: &Path, index: &parts::PartsIndex) -> Result<Vec<usize>> {
+    // A reference capture has parts.json but no session.json: it is one run from its first part.
+    if !session.join("session.json").exists() {
+        return Ok(vec![0]);
+    }
     let meta = wb_recorder::session::load_meta(session)?;
     let mut starts = vec![0usize];
     for e in meta
@@ -283,4 +287,35 @@ pub fn dump_frames(session: &Path, at_ms: f64, count: usize) -> Result<Vec<[i16;
         }
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use wb_recorder::parts::{AUDIO_DIR, PartsIndex};
+
+    #[test]
+    fn a_reference_capture_without_session_json_can_be_scanned() -> Result<()> {
+        let dir = std::env::temp_dir().join(format!("wb-scan-ref-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join(AUDIO_DIR))?;
+        let path = dir.join(AUDIO_DIR).join(parts::part_file_name(1));
+        let spec = hound::WavSpec {
+            channels: 2,
+            sample_rate: 48_000,
+            bits_per_sample: 16,
+            sample_format: hound::SampleFormat::Int,
+        };
+        let mut w = hound::WavWriter::create(&path, spec)?;
+        for i in 0..96_000i32 {
+            w.write_sample(((i * 37) % 2_000 - 1_000) as i16)?;
+        }
+        w.finalize()?;
+        let mut index = PartsIndex::new();
+        index.parts.push(parts::record_for_file(&dir, 1, 0)?);
+        parts::save(&dir, &index)?;
+        let report = scan(&dir)?;
+        assert_eq!(report.sample_rate, 48_000);
+        let _ = std::fs::remove_dir_all(&dir);
+        Ok(())
+    }
 }
