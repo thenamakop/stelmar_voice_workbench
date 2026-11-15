@@ -125,6 +125,12 @@ try {
   Check 'INVALID stops after three attempts' ($null -eq $r.Next)
   $r = Select-PackNextGate -Manifest $one -State (St @{ a = @{ status = 'interrupted'; attempts = 1 } }) -Facts $allFacts
   Check 'an interrupted gate (the laptop restarted under it) is repeated' ($r.Next.id -eq 'a')
+  $r = Select-PackNextGate -Manifest $one -State (St @{ a = @{ status = 'interrupted'; attempts = 3 } }) -Facts $allFacts
+  Check 'an interrupted gate that used its attempts is left alone in a plain run' ($null -eq $r.Next)
+  $r = Select-PackNextGate -Manifest $one -State (St @{ a = @{ status = 'interrupted'; attempts = 3 } }) -Facts $allFacts -Only @('a')
+  Check 'an interrupted gate named with -Only is run again, whatever its attempts' ($r.Next.id -eq 'a')
+  $r = Select-PackNextGate -Manifest $one -State (St @{ a = @{ status = 'INVALID'; attempts = 3 } }) -Facts $allFacts -Only @('a')
+  Check 'an INVALID gate that used its attempts is not looped by -Only' ($null -eq $r.Next)
   $two = M @((G 'a' 'P1' 1 'any'), (G 'b' 'P1' 2 'any'))
   $r = Select-PackNextGate -Manifest $two -State (New-PackState) -Facts $allFacts -Only @('b')
   Check '-Only picks the named gates' ($r.Next.id -eq 'b')
@@ -174,7 +180,19 @@ try {
   # ---- formatting ----
   Check 'minutes are written as hours and minutes' ((Format-PackMinutes 95) -match '1 ?h' -and (Format-PackMinutes 20) -match '20')
 } finally {
-  Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
+    # A line read with Get-Content carries PSPath, PSDrive ... : Windows PowerShell 5.1 ConvertTo-Json would walk
+  # them (minutes, then an error). Write-PackJson must write plain values and be quick.
+  $lineFile = Join-Path $tmp 'line.txt'
+  Set-Content -LiteralPath $lineFile -Value @('NETWORK-OFF RESULT: FAIL', 'other') -Encoding UTF8
+  $verdict = (@(Get-Content -LiteralPath $lineFile -Encoding UTF8 | Where-Object { $_ -match '^NETWORK-OFF RESULT' }) | Select-Object -Last 1)
+  $jf = Join-Path $tmp 'plain.json'
+  $t0 = Get-Date
+  Write-PackJson -Path $jf -Value ([ordered]@{ verdict = $verdict; list = @(); one = @('x'); none = $null; nested = [ordered]@{ lines = @($verdict, 'b') }; obj = [pscustomobject]@{ a = 1; b = $verdict }; n = 3; ok = $true })
+  $sec = ((Get-Date) - $t0).TotalSeconds
+  $back = Get-Content -LiteralPath $jf -Raw -Encoding UTF8 | ConvertFrom-Json
+  Check 'Write-PackJson writes a line read with Get-Content as a plain string, and quickly' ($back.verdict -eq 'NETWORK-OFF RESULT: FAIL' -and $sec -lt 5 -and (Get-Content -LiteralPath $jf -Raw) -notmatch 'PSPath|PSDrive|PSProvider')
+  Check 'Write-PackJson keeps empty and one-item arrays, nulls, nested objects, numbers and booleans' (@($back.list).Count -eq 0 -and $back.list -is [array] -and @($back.one).Count -eq 1 -and $back.one -is [array] -and $null -eq $back.none -and @($back.nested.lines).Count -eq 2 -and $back.obj.a -eq 1 -and $back.obj.b -eq 'NETWORK-OFF RESULT: FAIL' -and $back.n -eq 3 -and $back.ok -eq $true)
+Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
 }
 
 if ($fails) { Write-Host "$fails failed"; exit 1 }

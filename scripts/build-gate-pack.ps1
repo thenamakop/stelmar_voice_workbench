@@ -118,9 +118,10 @@ foreach ($f in @(Get-ChildItem -LiteralPath (Join-Path $repo 'resources\bench') 
   if ($f.Extension -eq '.wav') { $allowedWav.Add('resources/bench/' + $f.Name.ToLowerInvariant()) }
 }
 New-Item -ItemType Directory -Force -Path (Join-Path $Out 'data') | Out-Null
-$slice = New-PackWavSlice -Source (Join-Path $repo 'resources\bench\bench-en.wav') -Dest (Join-Path $Out 'data\net-clip-en.wav') -StartSeconds 6 -Seconds 6
+$netStart = Find-PackSpeechStart -Source (Join-Path $repo 'resources\bench\bench-en.wav') -Seconds 6
+$slice = New-PackWavSlice -Source (Join-Path $repo 'resources\bench\bench-en.wav') -Dest (Join-Path $Out 'data\net-clip-en.wav') -StartSeconds $netStart -Seconds 6
 $allowedWav.Add('data/net-clip-en.wav')
-([ordered]@{ source = 'resources/bench/bench-en.wav (public FLEURS English, CC BY 4.0)'; start_s = 6; duration_s = $slice.duration_s; rate = $slice.rate } | ConvertTo-Json) | Set-Content -LiteralPath (Join-Path $Out 'data\net-clip-en.json') -Encoding UTF8
+([ordered]@{ source = 'resources/bench/bench-en.wav (public FLEURS English, CC BY 4.0)'; start_s = $netStart; duration_s = $slice.duration_s; rate = $slice.rate } | ConvertTo-Json) | Set-Content -LiteralPath (Join-Path $Out 'data\net-clip-en.json') -Encoding UTF8
 # The batch-scripts gate: the first three clips per language of the Phase 2 clip list (public FLEURS test).
 if (-not $SkipModels) {
   $perSet = @{}

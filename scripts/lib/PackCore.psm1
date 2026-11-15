@@ -61,13 +61,39 @@ function Read-PackJson {
   $o
 }
 
+# A line read with Get-Content carries note properties (PSPath, PSDrive, PSProvider ...). Windows PowerShell 5.1
+# ConvertTo-Json then writes them as objects: it walks the whole drive and provider (minutes, then "Cannot
+# convert value to type System.String"). Every string, hashtable and object is rebuilt from plain values before
+# it is written, so no caller has to remember to cast.
+function ConvertTo-PackPlainValue {
+  param($Value)
+  if ($null -eq $Value) { return $null }
+  if ($Value -is [string]) { return [string]$Value }
+  if ($Value -is [System.Collections.IDictionary]) {
+    $o = [ordered]@{}
+    foreach ($k in @($Value.Keys)) { $o[[string]$k] = (ConvertTo-PackPlainValue $Value[$k]) }
+    return $o
+  }
+  if ($Value -is [System.Management.Automation.PSCustomObject]) {
+    $o = [ordered]@{}
+    foreach ($p in @($Value.PSObject.Properties)) { $o[[string]$p.Name] = (ConvertTo-PackPlainValue $p.Value) }
+    return $o
+  }
+  if ($Value -is [System.Collections.IEnumerable]) {
+    $items = New-Object System.Collections.Generic.List[object]
+    foreach ($i in $Value) { $items.Add((ConvertTo-PackPlainValue $i)) }
+    return , $items.ToArray()
+  }
+  $Value
+}
+
 # Written to a temporary file and moved, so a crash or a restart never leaves half a file.
 function Write-PackJson {
   param([Parameter(Mandatory = $true)] [string]$Path, [Parameter(Mandatory = $true)] $Value, [int]$Depth = 12)
   $dir = Split-Path -Parent $Path
   if ($dir -and -not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
   $tmp = "$Path.tmp"
-  $json = $Value | ConvertTo-Json -Depth $Depth
+  $json = (ConvertTo-PackPlainValue $Value) | ConvertTo-Json -Depth $Depth
   [System.IO.File]::WriteAllText($tmp, $json, (New-Object System.Text.UTF8Encoding($false)))
   Move-Item -LiteralPath $tmp -Destination $Path -Force
 }
@@ -281,7 +307,10 @@ function Select-PackNextGate {
     $attempts = [int](Get-PackProp $gs 'attempts' 0)
     $done = $false
     if ($script:DoneStatuses -contains $status) { $done = -not ($Retry -and $status -eq 'FAIL') }
-    if ($status -eq 'INVALID' -or $status -eq 'interrupted') { $done = ($attempts -ge $MaxAttempts -and -not $Retry) }
+    if ($status -eq 'INVALID') { $done = ($attempts -ge $MaxAttempts -and -not $Retry) }
+    # A gate the person stopped or that died (interrupted) is run again when they name it with -Only: asking for it by
+    # name is the answer to "try again", and an interrupted gate is not repeated within one run (it is no longer interrupted).
+    if ($status -eq 'interrupted') { $done = ($attempts -ge $MaxAttempts -and -not $Retry -and ($Only -notcontains $id)) }
     if ($done) { continue }
 
     $needs = Get-PackProp $g 'needs' $null

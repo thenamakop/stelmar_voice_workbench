@@ -79,7 +79,7 @@ Invoke-PackGateBody -Ctx $ctx -Id 'network-off' -ResultFile $ResultFile -Body {
   if ($avx512) { $args1 += '-Avx512Present' }
   $e = Invoke-PackLegacyGate -Ctx $ctx -Script 'network-off.ps1' -Arguments $args1 -EvidenceName 'x' -TimeoutMinutes 60
   $engineVerdict = ''
-  if (Test-Path -LiteralPath $engineOut) { $engineVerdict = (@(Get-Content -LiteralPath $engineOut -Encoding UTF8 | Where-Object { $_ -match '^NETWORK-OFF RESULT' }) | Select-Object -Last 1) }
+  if (Test-Path -LiteralPath $engineOut) { $engineVerdict = [string](@(Get-Content -LiteralPath $engineOut -Encoding UTF8 | Where-Object { $_ -match '^NETWORK-OFF RESULT' }) | Select-Object -Last 1) }
   if ($e.ExitCode -ne 0 -or $engineVerdict -notmatch 'PASS') {
     $problems.Add("engines with the network off: exit $($e.ExitCode); $engineVerdict")
   }

@@ -61,6 +61,48 @@ function New-PackWavSlice {
   [pscustomobject]@{ duration_s = [math]::Round($count / $frame / [double]$rate, 3); rate = $rate; channels = $channels; bits = $bits }
 }
 
+# The start (seconds) of the window of the given length that holds the most speech: the loudest 100 ms frames
+# (above 5% of the loudest frame) counted in every window, stepped by half a second. A fixed start can land in
+# a pause: the network-off gate needs a clip the engines really decode.
+function Find-PackSpeechStart {
+  [CmdletBinding()]
+  param([Parameter(Mandatory = $true)] [string]$Source, [double]$Seconds = 6, [double]$StepSeconds = 0.5)
+  $b = [System.IO.File]::ReadAllBytes($Source)
+  $pos = 12; $fmt = $null; $dataAt = -1; $dataLen = 0
+  while ($pos + 8 -le $b.Length) {
+    $id = [Text.Encoding]::ASCII.GetString($b, $pos, 4)
+    $len = [int][BitConverter]::ToUInt32($b, $pos + 4)
+    if ($id -eq 'fmt ') { $fmt = $pos + 8 }
+    if ($id -eq 'data') { $dataAt = $pos + 8; $dataLen = [math]::Min($len, $b.Length - $dataAt); break }
+    $pos += 8 + $len + ($len % 2)
+  }
+  if ($null -eq $fmt -or $dataAt -lt 0) { throw "$Source has no fmt or data chunk" }
+  $channels = [int][BitConverter]::ToUInt16($b, $fmt + 2)
+  $rate = [int][BitConverter]::ToUInt32($b, $fmt + 4)
+  $frameBytes = $channels * 2
+  $samplesPerFrame = [int]($rate / 10)
+  $nFrames = [int][math]::Floor(($dataLen / $frameBytes) / $samplesPerFrame)
+  $rms = New-Object double[] $nFrames
+  for ($f = 0; $f -lt $nFrames; $f++) {
+    $sum = 0.0
+    $base = $dataAt + $f * $samplesPerFrame * $frameBytes
+    for ($i = 0; $i -lt $samplesPerFrame; $i++) { $v = [double][BitConverter]::ToInt16($b, $base + $i * $frameBytes); $sum += $v * $v }
+    $rms[$f] = [math]::Sqrt($sum / $samplesPerFrame)
+  }
+  $max = 0.0; foreach ($x in $rms) { if ($x -gt $max) { $max = $x } }
+  if ($max -le 0) { return 0.0 }
+  $thr = 0.05 * $max
+  $winFrames = [int][math]::Round($Seconds * 10)
+  $best = 0.0; $bestScore = -1
+  $total = $nFrames / 10.0
+  for ($s = 0.0; $s + $Seconds -le $total + 1e-9; $s += $StepSeconds) {
+    $from = [int][math]::Round($s * 10); $score = 0
+    for ($f = $from; $f -lt $from + $winFrames -and $f -lt $nFrames; $f++) { if ($rms[$f] -gt $thr) { $score++ } }
+    if ($score -gt $bestScore) { $bestScore = $score; $best = $s }
+  }
+  $best
+}
+
 $script:SourceExt = @('.rs', '.py', '.ts', '.tsx', '.jsx', '.js', '.mjs', '.cjs', '.toml', '.c', '.cc', '.cpp', '.h', '.hpp', '.cs', '.java', '.go', '.lock', '.pdb', '.rlib', '.rmeta', '.obj', '.ipynb')
 $script:SourceNames = @('package.json', 'pnpm-lock.yaml', 'package-lock.json', 'yarn.lock', 'tsconfig.json', 'cargo.toml', 'cargo.lock', 'rust-toolchain.toml', '.gitignore', '.gitattributes')
 $script:ToolNames = @('cargo.exe', 'rustc.exe', 'rustup.exe', 'rustfmt.exe', 'clippy-driver.exe', 'node.exe', 'npm.cmd', 'npx.cmd', 'pnpm.cmd', 'pnpm.exe', 'python.exe', 'pythonw.exe', 'py.exe', 'pip.exe', 'git.exe', 'dumpbin.exe', 'cl.exe', 'link.exe', 'cmake.exe', 'ninja.exe', 'nvcc.exe', 'msbuild.exe', 'whisper-cli.exe', 'ffmpeg.exe', 'wb-emulate.exe', 'mock_engine.exe')
@@ -195,4 +237,4 @@ function Format-PackSizeReport {
   @($lines.ToArray())
 }
 
-Export-ModuleMember -Function New-PackWavSlice, Get-PackSecretPatternNames, Get-PackForbidden, Test-PackManifest, Test-PackExeStrings, Format-PackSizeReport
+Export-ModuleMember -Function New-PackWavSlice, Find-PackSpeechStart, Get-PackSecretPatternNames, Get-PackForbidden, Test-PackManifest, Test-PackExeStrings, Format-PackSizeReport

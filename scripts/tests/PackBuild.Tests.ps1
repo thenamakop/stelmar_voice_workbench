@@ -36,6 +36,25 @@ try {
   Set-Content -LiteralPath (Join-Path $tmp 'junk.wav') -Value 'not a wav' -Encoding ascii
   Check 'a file that is not a WAV is an error' (Throws { New-PackWavSlice -Source (Join-Path $tmp 'junk.wav') -Dest $dst })
 
+  # --- the window of most speech: 12 s at 16 kHz, silence except a loud tone from 6 s to 9 s ---
+  $n2 = $rate * 12
+  $d2 = New-Object byte[] ($n2 * 2)
+  for ($i = 6 * $rate; $i -lt 9 * $rate; $i++) { [BitConverter]::GetBytes([int16](8000 * [math]::Sin($i * 0.3))).CopyTo($d2, $i * 2) }
+  $h2 = $hdr.Clone()
+  [BitConverter]::GetBytes([uint32](36 + $d2.Length)).CopyTo($h2, 4); [BitConverter]::GetBytes([uint32]$d2.Length).CopyTo($h2, 40)
+  $src2 = Join-Path $tmp 'tone.wav'
+  [IO.File]::WriteAllBytes($src2, ($h2 + $d2))
+  $st = Find-PackSpeechStart -Source $src2 -Seconds 4
+  Check 'the speech window of 4 s starts so that it holds the 3 s tone (between 5 s and 6 s)' ($st -ge 5 -and $st -le 6)
+  $slice2 = New-PackWavSlice -Source $src2 -Dest (Join-Path $tmp 'tone-slice.wav') -StartSeconds $st -Seconds 4
+  Check 'the slice cut there is 4 s' ($slice2.duration_s -eq 4)
+  $d3 = New-Object byte[] ($rate * 4 * 2)
+  $h3 = $hdr.Clone()
+  [BitConverter]::GetBytes([uint32](36 + $d3.Length)).CopyTo($h3, 4); [BitConverter]::GetBytes([uint32]$d3.Length).CopyTo($h3, 40)
+  $src3 = Join-Path $tmp 'silence.wav'
+  [IO.File]::WriteAllBytes($src3, ($h3 + $d3))
+  Check 'a file with no sound gives start 0' ((Find-PackSpeechStart -Source $src3 -Seconds 3) -eq 0)
+
   # --- forbidden content ---
   $pack = Join-Path $tmp 'pack'
   New-Item -ItemType Directory -Force -Path (Join-Path $pack 'scripts\lib'), (Join-Path $pack 'resources\bench'), (Join-Path $pack 'target\release'), (Join-Path $pack 'work') | Out-Null
