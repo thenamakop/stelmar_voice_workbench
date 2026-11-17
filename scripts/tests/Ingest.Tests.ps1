@@ -18,7 +18,7 @@ Check 'a low-baseline-only row needs the low laptop' ((@(Get-IngestRequiredRoles
 Check 'a row naming both, or the Legion, needs both' ((@(Get-IngestRequiredRoles -MachineCell 'low-baseline and mid laptops')) -join ',' -eq 'low,mid' -and (@(Get-IngestRequiredRoles -MachineCell 'Legion, `emu-low`')) -join ',' -eq 'low,mid')
 Check 'a mid-only row needs the mid laptop' ((@(Get-IngestRequiredRoles -MachineCell 'mid laptop')) -join ',' -eq 'mid')
 $r = @(ConvertTo-IngestRedacted -Line @('path C:\Users\Someone\x\y.txt', 'HF_TOKEN=abc123', 'plain'))
-Check 'user paths and secret values are removed' ($r[0] -eq 'path %USERPROFILE%\x\y.txt' -and $r[1] -eq 'HF_TOKEN=<redacted>' -and $r[2] -eq 'plain')
+Check 'user paths and secret values are removed' ($r[0] -eq 'path C:\Users\<user>\x\y.txt' -and $r[1] -eq 'HF_TOKEN=<redacted>' -and $r[2] -eq 'plain')
 $cell = 'PASS (PROVISIONAL) [was: x] ;; gate pack: low/soak PASS (M1, 17 Nov 2026); mid/soak FAIL (M2, 18 Nov 2026)'
 $a = Read-IngestAnnotations -Cell $cell
 Check 'the annotations of a cell are read back' ($a.Base -eq 'PASS (PROVISIONAL) [was: x]' -and $a.Results['low/soak'].State -eq 'PASS' -and $a.Results['mid/soak'].Machine -eq 'M2')
@@ -97,7 +97,7 @@ try {
   Check 'the Machines row of the low laptop is filled in' ($t -match 'Low-baseline laptop \| Acme Book 14 \(Acme-Book-14-aabbcc\) \| Test CPU \(4 cores, 8 threads; AVX2 yes, AVX-512 no\) \| 15.8 GB \| Intel UHD \(driver 31.0.101.1\)')
   Check 'the run is listed in the Gate pack runs block' ($t -match '## Gate pack runs' -and $t -match '\| soak \| PASS \| low laptop, Acme-Book-14-aabbcc')
   $ev = Join-Path $tmp 'docs\evidence\gate-pack\Acme-Book-14-aabbcc\gates\soak\gate.log'
-  Check 'evidence is copied with user paths and secrets removed' ((Test-Path $ev) -and ((Get-Content -LiteralPath $ev -Raw) -match '%USERPROFILE%\\pack' -and (Get-Content -LiteralPath $ev -Raw) -match 'TOKEN=<redacted>'))
+  Check 'evidence is copied with user paths and secrets removed' ((Test-Path $ev) -and ((Get-Content -LiteralPath $ev -Raw) -match 'Users\\<user>\\pack' -and (Get-Content -LiteralPath $ev -Raw) -match 'TOKEN=<redacted>'))
   Check 'a renamed engine program or a dump is never copied into the evidence' (@(Get-ChildItem -LiteralPath (Join-Path $tmp 'docs\evidence') -Recurse -File | Where-Object { $_.Extension -in '.renamed', '.dmp', '.exe' }).Count -eq 0)
   Check 'RESULTS.txt is written by the script' (Test-Path (Join-Path $tmp 'docs\evidence\gate-pack\Acme-Book-14-aabbcc\RESULTS.txt'))
 

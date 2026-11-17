@@ -26,20 +26,31 @@ Set-StrictMode -Version 2
 Import-Module (Join-Path $PSScriptRoot 'PackNative.psm1')
 $script:Marker = ' ;; gate pack: '
 
-# What the repository (public) may keep of a laptop's logs. Removed on the way in: user profile paths, secret values,
-# private network addresses (home or office gateways and hosts), MAC addresses, Wi-Fi names, serial numbers and
-# machine GUIDs, a person's name in a device name ("Anna's AirPods"), and every string in -Extra (the laptop's computer
-# name and user name, which a laptop's pack or the person ingesting can name: -Redact on the ingest script, or an
-# identity.json at the root of the zip). Public servers (1.1.1.1, 8.8.8.8, a Microsoft address the app contacted) and
-# Windows' own constants (power-plan GUIDs, ROOT\MEDIA device ids of a virtual cable) are not personal and stay.
+# What the repository (public) may keep of a laptop's logs. Removed on the way in:
+#  * the folder name after Users in a profile path, as <user> (any drive letter, any case, either slash, a JSON-escaped
+#    path, a Git Bash /c/Users/... path): C:\Users\<user>\x;
+#  * default Windows computer names (DESKTOP-xxxxxxx, LAPTOP-xxxxxxx, WIN-xxxxxxxxxxx) and any -ComputerName given (the
+#    computer name a zip records, if it records one), as <host>; -UserName strings as <user>;
+#  * secret values, private network addresses (home or office gateways and hosts), MAC addresses, Wi-Fi names, serial
+#    numbers and machine GUIDs, a person's name in a device name ("Anna's AirPods"), and every string in -Extra.
+# The pseudonym of a machine (LENOVO-83DF-b8384c: maker, model code, 3 bytes of a hash), public servers (1.1.1.1, 8.8.8.8, a
+# Microsoft address the app contacted) and Windows' own constants (power-plan GUIDs, the ROOT\MEDIA device ids of a
+# virtual cable) are not personal and stay.
 function ConvertTo-IngestRedacted {
   [CmdletBinding()]
-  param([AllowEmptyString()] [string[]]$Line, [string[]]$Extra = @())
-  $extra = @($Extra | Where-Object { $_ -and $_.Trim().Length -ge 3 } | Sort-Object -Unique)
+  param([AllowEmptyString()] [string[]]$Line, [string[]]$Extra = @(), [string[]]$ComputerName = @(), [string[]]$UserName = @())
+  $keep = { param($a) @($a | Where-Object { $_ -and $_.Trim().Length -ge 3 } | ForEach-Object { $_.Trim() } | Sort-Object -Unique) }
+  $extra = & $keep $Extra
+  $hosts = & $keep $ComputerName
+  $users = & $keep $UserName
+  # <drive>:\Users\<name> in every spelling. The name may hold spaces ("Real Person") when a separator follows.
+  $userPath = '(?i)(?<pre>(?:[A-Z]:(?:\\){1,2}|[A-Z]:/|/[A-Z]/)Users(?:(?:\\){1,2}|/))(?:[^\\/"''<>|:*?\r\n()]+(?=\\|/)|[^\s\\/"''<>|:*?()]+)'
   foreach ($l in @($Line)) {
     $s = $l
-    $s = $s -replace '[A-Za-z]:(?:\\){1,2}Users(?:\\){1,2}[^\\"''<>|]+', '%USERPROFILE%'
+    $s = $s -replace $userPath, '${pre}<user>'
     $s = $s -replace '\b([A-Za-z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD))=\S*', '$1=<redacted>'
+    $s = $s -replace '(?i)\b(?:DESKTOP|LAPTOP)-[A-Z0-9]{6,10}\b', '<host>'
+    $s = $s -replace '(?i)\bWIN-[A-Z0-9]{11}\b', '<host>'
     # Private IPv4 (10/8, 172.16/12, 192.168/16, link-local 169.254/16); not a part of a longer dotted number (a driver or build version).
     $s = $s -replace '(?<![\d.])(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|169\.254\.\d{1,3}\.\d{1,3})(?![\d]|\.\d)', '<private-ip>'
     $s = $s -replace '(?i)\bfe80::[0-9a-f:%.\w]*', '<ipv6>'
@@ -47,8 +58,10 @@ function ConvertTo-IngestRedacted {
     $s = $s -replace '\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b', '<mac>'
     $s = $s -replace '(?i)\b(B?SSID)(\s*[:=]\s*)\S.*$', '$1$2<redacted>'
     $s = $s -replace '(?i)\b(serial ?number|SerialNo|IdentifyingNumber|MachineGuid|BIOS serial)(\s*[:=]\s*)\S+', '$1$2<redacted>'
-    $s = $s -replace "\b[A-Z][A-Za-z-]{1,20}['’]s(?=\s+(?:AirPods|Buds|Headphones|Headset|iPhone|Galaxy|Pixel|Watch|Speaker|Phone|Laptop|PC|Surface|Earbuds))", '<name>''s'
-    foreach ($x in $extra) { $s = $s -replace ('(?i)(?<![A-Za-z0-9])' + [regex]::Escape($x.Trim()) + '(?![A-Za-z0-9])'), '<redacted>' }
+    $s = $s -replace "\b[A-Z][A-Za-z-]{1,20}['\u2019]s(?=\s+(?:AirPods|Buds|Headphones|Headset|iPhone|Galaxy|Pixel|Watch|Speaker|Phone|Laptop|PC|Surface|Earbuds))", '<name>''s'
+    foreach ($x in $hosts) { $s = $s -replace ('(?i)(?<![A-Za-z0-9])' + [regex]::Escape($x) + '(?![A-Za-z0-9])'), '<host>' }
+    foreach ($x in $users) { $s = $s -replace ('(?i)(?<![A-Za-z0-9])' + [regex]::Escape($x) + '(?![A-Za-z0-9])'), '<user>' }
+    foreach ($x in $extra) { $s = $s -replace ('(?i)(?<![A-Za-z0-9])' + [regex]::Escape($x) + '(?![A-Za-z0-9])'), '<redacted>' }
     $s
   }
 }

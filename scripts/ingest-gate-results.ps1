@@ -67,15 +67,20 @@ try {
   if ($bad.Count -gt 0) { Fail ("the zip does not match its ZIP-MANIFEST.json:`n  " + ($bad -join "`n  ")) }
   $summary = Read-PackJson -Path (Join-Path $tmp 'summary.json')
   if ($null -eq $summary) { Fail 'the zip has no summary.json' }
-  # What to remove besides the always-removed kinds: -Redact, and the names in identity.json (never copied to the evidence).
+  # What to remove besides the always-removed kinds: -Redact; the computer name and user name the zip records, if it does
+  # (identity.json at the zip root, or computer_name / hostname in summary.json or its fingerprint); never copied.
   $extra = New-Object System.Collections.Generic.List[string]
+  $hostNames = New-Object System.Collections.Generic.List[string]
+  $userNames = New-Object System.Collections.Generic.List[string]
   foreach ($x in @($Redact | ForEach-Object { $_ -split ',' })) { if ($x.Trim()) { $extra.Add($x.Trim()) } }
   $idFile = Join-Path $tmp 'identity.json'
-  if (Test-Path -LiteralPath $idFile) {
-    $idj = Read-PackJson -Path $idFile
-    if ($idj) { foreach ($k in 'computername', 'username', 'userdomain') { if ($idj.PSObject.Properties[$k] -and [string]$idj.$k) { $extra.Add([string]$idj.$k) } } }
+  foreach ($src in @($(if (Test-Path -LiteralPath $idFile) { Read-PackJson -Path $idFile }), $summary, $summary.fingerprint)) {
+    if ($null -eq $src) { continue }
+    foreach ($k in 'computername', 'computer_name', 'hostname', 'host_name') { if ($src.PSObject.Properties[$k] -and [string]$src.$k) { $hostNames.Add([string]$src.$k) } }
+    foreach ($k in 'username', 'user_name', 'userdomain') { if ($src.PSObject.Properties[$k] -and [string]$src.$k) { $userNames.Add([string]$src.$k) } }
   }
   $extraArr = @($extra.ToArray())
+  $redactArgs = @{ Extra = $extraArr; ComputerName = @($hostNames.ToArray()); UserName = @($userNames.ToArray()) }
   if ([int]$summary.pack_version -ne 1) { Fail "pack_version $($summary.pack_version) is not understood by this script" }
   # Windows PowerShell turns ISO date strings into dates; one stable text keeps the run id the same.
   $summary.created = ([datetime]$summary.created).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ', [Globalization.CultureInfo]::InvariantCulture)
@@ -133,14 +138,14 @@ try {
       New-Item -ItemType Directory -Force -Path (Split-Path -Parent $to) | Out-Null
       if ($textExt -contains $f.Extension.ToLowerInvariant()) {
         $lines = @(Get-Content -LiteralPath $f.FullName -Encoding UTF8)
-        [IO.File]::WriteAllText($to, ((@(ConvertTo-IngestRedacted -Line $lines -Extra $extraArr) -join "`r`n") + "`r`n"), (New-Object Text.UTF8Encoding($false)))
+        [IO.File]::WriteAllText($to, ((@(ConvertTo-IngestRedacted -Line $lines @redactArgs) -join "`r`n") + "`r`n"), (New-Object Text.UTF8Encoding($false)))
       } else { Copy-Item -LiteralPath $f.FullName -Destination $to -Force }
       $copied++
     }
-    [IO.File]::WriteAllText((Join-Path $evDir 'summary.json'), ((@(ConvertTo-IngestRedacted -Line @(Get-Content -LiteralPath (Join-Path $tmp 'summary.json') -Encoding UTF8) -Extra $extraArr) -join "`r`n") + "`r`n"), (New-Object Text.UTF8Encoding($false)))
+    [IO.File]::WriteAllText((Join-Path $evDir 'summary.json'), ((@(ConvertTo-IngestRedacted -Line @(Get-Content -LiteralPath (Join-Path $tmp 'summary.json') -Encoding UTF8) @redactArgs) -join "`r`n") + "`r`n"), (New-Object Text.UTF8Encoding($false)))
     if (Test-Path -LiteralPath $repOut) {
       New-Item -ItemType Directory -Force -Path (Join-Path $evDir 'reports') | Out-Null
-      foreach ($f in @(Get-ChildItem -LiteralPath $repOut -File)) { [IO.File]::WriteAllText((Join-Path (Join-Path $evDir 'reports') $f.Name), ((@(ConvertTo-IngestRedacted -Line @(Get-Content -LiteralPath $f.FullName -Encoding UTF8) -Extra $extraArr) -join "`r`n") + "`r`n"), (New-Object Text.UTF8Encoding($false))) }
+      foreach ($f in @(Get-ChildItem -LiteralPath $repOut -File)) { [IO.File]::WriteAllText((Join-Path (Join-Path $evDir 'reports') $f.Name), ((@(ConvertTo-IngestRedacted -Line @(Get-Content -LiteralPath $f.FullName -Encoding UTF8) @redactArgs) -join "`r`n") + "`r`n"), (New-Object Text.UTF8Encoding($false))) }
     }
     # A short reading of the summary, written by this script.
     $txt = New-Object System.Collections.Generic.List[string]
@@ -150,13 +155,13 @@ try {
     foreach ($p in @($summary.pending)) { $txt.Add(('WAITING  {0,-20} {1}' -f $p.id, $p.reason)) }
     foreach ($p in @($summary.not_in_pack)) { $txt.Add(('NOT IN THIS PACK  {0}' -f $p.id)) }
     if (@($summary.still_changed).Count -gt 0) { $txt.Add('LEFT CHANGED ON THE LAPTOP:'); foreach ($s in @($summary.still_changed)) { $txt.Add("  $s") } }
-    [IO.File]::WriteAllText((Join-Path $evDir 'RESULTS.txt'), ((@(ConvertTo-IngestRedacted -Line @($txt.ToArray()) -Extra $extraArr) -join "`r`n") + "`r`n"), (New-Object Text.UTF8Encoding($false)))
+    [IO.File]::WriteAllText((Join-Path $evDir 'RESULTS.txt'), ((@(ConvertTo-IngestRedacted -Line @($txt.ToArray()) @redactArgs) -join "`r`n") + "`r`n"), (New-Object Text.UTF8Encoding($false)))
     Write-Host "evidence: $copied files to $evRel"
   } else { Write-Host "preview: evidence would go to $evRel" }
 
   # The words of the ledger rows come from the summary: the same removal.
-  foreach ($g in @($summary.gates)) { foreach ($k in 'headline', 'rig') { if ($g.PSObject.Properties[$k] -and $g.$k) { $g.$k = [string](@(ConvertTo-IngestRedacted -Line @([string]$g.$k) -Extra $extraArr)[0]) } } }
-  foreach ($p in @($summary.pending)) { if ($p.PSObject.Properties['reason'] -and $p.reason) { $p.reason = [string](@(ConvertTo-IngestRedacted -Line @([string]$p.reason) -Extra $extraArr)[0]) } }
+  foreach ($g in @($summary.gates)) { foreach ($k in 'headline', 'rig') { if ($g.PSObject.Properties[$k] -and $g.$k) { $g.$k = [string](@(ConvertTo-IngestRedacted -Line @([string]$g.$k) @redactArgs)[0]) } } }
+  foreach ($p in @($summary.pending)) { if ($p.PSObject.Properties['reason'] -and $p.reason) { $p.reason = [string](@(ConvertTo-IngestRedacted -Line @([string]$p.reason) @redactArgs)[0]) } }
 
   # ---- 3 and 4. docs\GATES.md ----
   $raw = [IO.File]::ReadAllText($GatesMd)
