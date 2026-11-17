@@ -1,0 +1,22 @@
+Gate pack run: low laptop, machine LENOVO-83DF-b8384c, created 2026-11-17T12:29:45Z
+Pack commit 6b68837b2fd1c1a7d4d0954276e5a25b44f2ee42; EMULATED (emu-low), not a laptop; -Quick, not at full length
+PASS     engines-info         avx2 exit 0; avx512 exit 3; vulkan exit 0
+PASS     hashing-1            PASS (PROVISIONAL: emulated)
+INFO     hashing-2-10         every run kept the recorder clean, but only 0 of the 1 purged runs counted as cold (warm rate 1,410 MB/s)
+SKIPPED  full-check           skipped under -Quick
+WAITING  quick-check          not run
+WAITING  speed-table-igpu     not run
+WAITING  soak                 not run
+WAITING  load-cold            not run
+WAITING  load-settled         not run
+WAITING  panic                not run
+WAITING  webview              not run
+WAITING  kill                 not run
+WAITING  network-off          not run
+WAITING  live-batch-safety    not run
+WAITING  bg-decode-info       not run
+WAITING  rename-engines       not run
+WAITING  speed-table-cpu      not run
+WAITING  batch-scripts        not run
+WAITING  mic-run              not run
+NOT IN THIS PACK  supervisor-kill

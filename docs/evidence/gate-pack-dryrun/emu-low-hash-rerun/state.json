@@ -1,0 +1,54 @@
+{
+    "pack_version":  1,
+    "role":  "low",
+    "profile":  "emu-low",
+    "quick":  true,
+    "created":  "2026-11-17T17:16:49.0810949+05:30",
+    "restart":  {
+                    "requested_at":  "2026-11-17T17:26:39.4011404+05:30",
+                    "boot_time_before":  "2026-11-17T13:44:50.4395553+05:30",
+                    "resumed_at":  "2026-11-17T17:28:30.1074893+05:30",
+                    "uptime_at_resume_min":  1.2
+                },
+    "gates":  {
+                  "full-check":  {
+                                     "attempts":  0,
+                                     "status":  "SKIPPED",
+                                     "reason":  "skipped under -Quick",
+                                     "ended":  "2026-11-17T17:21:43.9051124+05:30"
+                                 },
+                  "engines-info":  {
+                                       "attempts":  1,
+                                       "status":  "PASS",
+                                       "reason":  "avx2 exit 0; avx512 exit 3; vulkan exit 0",
+                                       "result_file":  "D:\\STELMAR-Gate\\dryrun-hash\\gates\\engines-info\\result.json",
+                                       "started":  "2026-11-17T17:22:18.0034375+05:30",
+                                       "minutes":  0.2,
+                                       "ended":  "2026-11-17T17:22:30.1555015+05:30"
+                                   },
+                  "hashing-1":  {
+                                    "attempts":  1,
+                                    "result_file":  "D:\\STELMAR-Gate\\dryrun-hash\\gates\\hashing-1\\result.json",
+                                    "status":  "PASS",
+                                    "started":  "2026-11-17T17:29:02.0780981+05:30",
+                                    "reason":  "PASS (PROVISIONAL: emulated)",
+                                    "ended":  "2026-11-17T17:34:47.8173409+05:30",
+                                    "minutes":  5.8
+                                },
+                  "hashing-2-10":  {
+                                       "attempts":  1,
+                                       "result_file":  "D:\\STELMAR-Gate\\dryrun-hash\\gates\\hashing-2-10\\result.json",
+                                       "status":  "INFO",
+                                       "started":  "2026-11-17T17:35:27.4815461+05:30",
+                                       "reason":  "every run kept the recorder clean, but only 0 of the 1 purged runs counted as cold (warm rate 1,410 MB/s)",
+                                       "ended":  "2026-11-17T17:59:05.9785585+05:30",
+                                       "minutes":  23.6
+                                   }
+              },
+    "order_used":  [
+                       "engines-info",
+                       "hashing-1",
+                       "hashing-2-10"
+                   ],
+    "backup_root":  "C:\\STELMAR-Gate-Backup"
+}

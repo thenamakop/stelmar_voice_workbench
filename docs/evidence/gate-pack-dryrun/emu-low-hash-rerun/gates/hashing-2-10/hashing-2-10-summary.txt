@@ -1,0 +1,9 @@
+hashing runs 2 to 10 (purged = the standby file cache was emptied before the run; counts as cold only at most 0.6 of the warm rate)
+  warm-cache rate of this laptop (median of the warm runs): 1,410 MB/s
+  run | kind | purge done | recorder verdict | app hash MB/s | counts as cold | shared breaks | app-only breaks | note
+  run2 | purged | True | PASS | 925 | False | 0 | 0 | the app read the models at 925 MB/s, 0.66 times the warm rate of 1,410 MB/s (limit 0.6): the read cannot be shown to be cold (on a fast disk it runs at about the warm rate), so this run does not count as cold
+  run3 | warm | n/a | PASS | 1,410 | n/a | 1 | 0 | 
+  extra1 | purged | True | PASS | 886 | False | 1 | 0 | the app read the models at 886 MB/s, 0.63 times the warm rate of 1,410 MB/s (limit 0.6): the read cannot be shown to be cold (on a fast disk it runs at about the warm rate), so this run does not count as cold
+  extra2 | purged | True | PASS | 910 | False | 1 | 0 | the app read the models at 910 MB/s, 0.65 times the warm rate of 1,410 MB/s (limit 0.6): the read cannot be shown to be cold (on a fast disk it runs at about the warm rate), so this run does not count as cold
+  caveat: a rate above 0.6 of the warm rate cannot be shown to be cold, so that run is not counted as cold; a rate below it is consistent with a cold cache but is not proof, because SHA-256 can itself be slower than the disk
+  shared upstream breaks: 2 in the purged runs, 1 in the warm runs

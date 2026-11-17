@@ -1,0 +1,2 @@
+Speed table, cpu part, recomputed from results.jsonl (no audio, no text)
+not run: no results.jsonl
