@@ -275,7 +275,7 @@ try {
         $stop = $false
         if ($nightPlanned -and ((Get-Date) - $nightPlanned).TotalMinutes -ge $NightMinutes) { $stop = $true; $progress.Add("$(Get-Date -Format 'HH:mm:ss') night pass time box of $NightMinutes min reached: stopping") }
         elseif ($nightSkipped -and ((Get-Date) - $nightSkipped).TotalSeconds -ge 30) { $stop = $true }
-        elseif ($allRecorded -and ((Get-Date) - $allRecorded).TotalMinutes -ge 40) { $stop = $true; $progress.Add("$(Get-Date -Format 'HH:mm:ss') no night decision within 40 min of the last session: stopping") }
+        elseif ($allRecorded -and -not $nightPlanned -and ((Get-Date) - $allRecorded).TotalMinutes -ge 40) { $stop = $true; $progress.Add("$(Get-Date -Format 'HH:mm:ss') no night decision within 40 min of the last session: stopping") }
         elseif ((Get-Date) -gt $hardLimit) { $stop = $true; $progress.Add("$(Get-Date -Format 'HH:mm:ss') hard limit of 100 min: stopping") }
         if ($stop -and -not (Test-Path -LiteralPath $stopFile)) { Set-Content -LiteralPath $stopFile -Value 'stop' -Encoding ascii }
 
