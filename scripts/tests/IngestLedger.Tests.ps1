@@ -51,6 +51,15 @@ $stSome = [pscustomobject]@{ gates = [pscustomobject]@{ a = [pscustomobject]@{ s
 Check 'a run with gates it never touched is scoped to the gates it ran or waited on' ((@(Get-IngestRunScope -Summary $sum -State $stSome) -join ',') -eq 'a,b,c')
 Check '-Scope overrides' ((@(Get-IngestRunScope -Summary $sum -State $stAll -Explicit 'x,y') -join ',') -eq 'x,y')
 
+# A gate that ran while disturbing programs were running says so in its ledger row; a gate without them says nothing about it.
+$sumD = [pscustomobject]@{ created = '2026-11-18T00:00:00Z'; emulated = 'emu-low'; machine = 'M'; source_commit = 'abcdef1234567'; quick = $true
+  gates = @([pscustomobject]@{ id = 'soak'; status = 'PASS'; headline = 'ok'; rig = ''; quick = $true; disturbing_programs = @('Steam', 'steamwebhelper') }, [pscustomobject]@{ id = 'panic'; status = 'PASS'; headline = 'ok'; rig = ''; quick = $true; disturbing_programs = @() })
+  pending = @(); not_in_pack = @() }
+$blk = @(Update-IngestRunsBlock -Lines @('## Gate pack runs') -Summary $sumD -Role 'low' -Date '18 Nov 2026' -EvidenceDir 'ev')
+$soakRow = @($blk | Where-Object { $_ -match '\| soak \|' })[0]; $panicRow = @($blk | Where-Object { $_ -match '\| panic \|' })[0]
+Check 'a row names the disturbing programs that were running during its gate' ($soakRow -match 'disturbing programs were running: Steam, steamwebhelper')
+Check 'a row of a gate with none says nothing about it' ($panicRow -notmatch 'disturbing')
+
 # ---------- the script on three zips ----------
 $tmp = Join-Path ([IO.Path]::GetTempPath()) ('wb-ingled-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Force -Path (Join-Path $tmp 'scripts') | Out-Null
