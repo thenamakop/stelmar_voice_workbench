@@ -140,13 +140,15 @@ impl Manager {
 
     /// Measured over promised: how much slower (above 1) or faster (below 1) this computer's finished units ran
     /// than the profile said (the median of the last few). `None` until a unit has finished from its start.
-    pub fn speed_factor(&self) -> Option<f64> {
-        lock(&self.speed).factor()
+    /// `multi_language` picks the kind of session: units of sessions with several languages (the engine detects the
+    /// language of every chunk) are compared only with each other.
+    pub fn speed_factor(&self, multi_language: bool) -> Option<f64> {
+        lock(&self.speed).factor_for(multi_language)
     }
 
-    /// How many finished units the speed factor rests on.
-    pub fn speed_units(&self) -> usize {
-        lock(&self.speed).units()
+    /// How many finished units of that kind the speed factor rests on.
+    pub fn speed_units(&self, multi_language: bool) -> usize {
+        lock(&self.speed).units_for(multi_language)
     }
 
     /// Adds a finished unit to the speed log. Only a unit that ran from its start in one engine process says
@@ -169,6 +171,7 @@ impl Manager {
             audio_ms: claim.unit.end_ms.saturating_sub(claim.unit.start_ms),
             took_s: took.as_secs_f64(),
             expected_rtf: expected,
+            multi_language: claim.job.languages.len() > 1,
         });
     }
 

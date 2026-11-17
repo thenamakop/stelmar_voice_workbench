@@ -186,8 +186,7 @@ impl UnitExecutor for AppExecutor {
         // English and a large model for Hindi), so their peaks add up (found by the second smoke: 73.6% of a limit
         // that was sized on the larger model alone).
         let (peak, local) = match claim.job.models_by_lang.as_object() {
-            Some(map) => profile
-                .memory_for_models(map.values().filter_map(|v| v.as_str()), gpu),
+            Some(map) => profile.memory_for_models(map.values().filter_map(|v| v.as_str()), gpu),
             None => (0, 0),
         };
         if peak == 0 {

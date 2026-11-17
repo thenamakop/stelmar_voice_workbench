@@ -299,7 +299,9 @@ mod tests {
         };
         println!(
             "hardware() in all  {:8.2} ms",
-            mean_ms(|| hardware(crate::machine::get(), &[], &roots).0.logical_processors)
+            mean_ms(|| hardware(crate::machine::get(), &[], &roots)
+                .0
+                .logical_processors)
         );
         let fixture = include_str!("../../../crates/wb-capability/fixtures/tier-g.json");
         println!(

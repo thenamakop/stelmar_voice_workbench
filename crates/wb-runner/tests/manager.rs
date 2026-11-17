@@ -547,9 +547,12 @@ fn timed_run(name: &str, prestaged: bool) -> Arc<Manager> {
 #[test]
 fn a_finished_unit_moves_the_speed_factor_to_what_it_took_over_what_the_profile_promised() {
     let manager = timed_run("speed-fresh", false);
-    assert_eq!(manager.speed_units(), 1);
+    // The session has two languages: its unit counts for sessions of that kind and not for one-language ones.
+    assert_eq!(manager.speed_units(true), 1);
+    assert_eq!(manager.speed_units(false), 0);
+    assert_eq!(manager.speed_factor(false), None);
     // 120 s of audio in at least 0.2 s against a promised 0.001 s per second (0.12 s): at least 1.6 times slower.
-    let f = manager.speed_factor().expect("a factor after one unit");
+    let f = manager.speed_factor(true).expect("a factor after one unit");
     assert!(f >= 1.6, "{f}");
     manager.stop();
 }
@@ -557,7 +560,7 @@ fn a_finished_unit_moves_the_speed_factor_to_what_it_took_over_what_the_profile_
 #[test]
 fn a_unit_that_resumed_from_its_staged_file_says_nothing_about_speed() {
     let manager = timed_run("speed-resumed", true);
-    assert_eq!(manager.speed_units(), 0);
-    assert_eq!(manager.speed_factor(), None);
+    assert_eq!(manager.speed_units(true), 0);
+    assert_eq!(manager.speed_factor(true), None);
     manager.stop();
 }

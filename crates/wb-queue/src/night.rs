@@ -224,9 +224,15 @@ mod tests {
     #[test]
     fn the_reference_is_the_end_of_the_last_recorded_session_so_its_own_day_counts() {
         // A reference at 09:00 the next day is that next IST day: its own programme is used.
-        assert_eq!(programme_day_end_ms(PROGRAMME, at(24 + 9, 0)), Some(at(24 + 13, 0)));
+        assert_eq!(
+            programme_day_end_ms(PROGRAMME, at(24 + 9, 0)),
+            Some(at(24 + 13, 0))
+        );
         // The reference is the end of the last recorded session, so a night pass at 01:00 still uses its day.
-        assert_eq!(programme_day_end_ms(PROGRAMME, at(18, 15)), Some(at(18, 15)));
+        assert_eq!(
+            programme_day_end_ms(PROGRAMME, at(18, 15)),
+            Some(at(18, 15))
+        );
     }
 
     #[test]
@@ -242,7 +248,8 @@ mod tests {
     #[test]
     fn the_shipped_programme_parses_and_has_a_last_session_on_each_day() {
         let shipped = include_str!("../../../docs/programme.json");
-        let end = programme_day_end_ms(shipped, at(11, 30)).expect("day 1 has sessions to transcribe");
+        let end =
+            programme_day_end_ms(shipped, at(11, 30)).expect("day 1 has sessions to transcribe");
         assert!(end > at(11, 30) && end <= at(24, 0));
     }
 

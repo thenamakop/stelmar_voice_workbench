@@ -377,6 +377,7 @@ impl Queue {
     /// Hands every closed part not yet seen to the planner, and, once Stop was seen, asks for the final cut.
     fn submit_parts(&self, stopped_dir: Option<&str>) {
         let mut open = plock(&self.open);
+        let mut just_stopped: Vec<String> = Vec::new();
         for s in open.iter_mut() {
             let index = wb_recorder::parts::load(&s.dir).ok();
             if let Some(index) = index {
@@ -391,6 +392,23 @@ impl Queue {
                 s.finished = true;
                 s.ended_ms = Some(clock_ms());
                 self.manager.session_finished(&s.handle, s.job);
+                just_stopped.push(s.name.clone());
+            }
+        }
+        drop(open);
+        // The first 'ready by' estimate after Stop, with what it rests on: the provisional detection allowance for
+        // a session with several languages until one of its units has finished (owner, 17 Nov 2026).
+        if !just_stopped.is_empty() {
+            let ready = self.snapshot().ready_text;
+            let basis = wb_queue::speed::basis_text(
+                self.manager.speed_factor(true),
+                self.manager.speed_units(true),
+                self.manager.speed_factor(false),
+                self.manager.speed_units(false),
+            );
+            for name in just_stopped {
+                self.core
+                    .push_log(format!("{name}: stopped. {ready} ({basis})"));
             }
         }
     }
@@ -734,12 +752,21 @@ impl Queue {
         }
         let langs: Vec<String> = languages.into_iter().collect();
         // The profile's night speeds, moved to what this computer's finished units showed (the profile alone
-        // promised 1.48 for a night unit that ran at 2.73 in the second smoke).
-        let factor = self.manager.speed_factor();
+        // promised 1.48 for a night unit that ran at 2.73 in the second smoke). Until a unit of a session with
+        // several languages has finished, such a session is planned with the provisional emu-low detection
+        // allowance (the profile's bench does no language detection). One session with several languages among
+        // the candidates puts the whole plan on the safe side (the speeds are per language, not per session).
+        let multi = candidates.iter().any(|&i| open[i].languages.len() > 1);
+        let measured = self.manager.speed_factor(multi);
+        let factor = wb_queue::speed::planning_factor(
+            measured,
+            wb_queue::speed::Pass::Night,
+            if multi { 2 } else { 1 },
+        );
         let rtf: std::collections::BTreeMap<String, f64> = profile
             .night_rtf(&langs)
             .into_iter()
-            .map(|(l, r)| (l, wb_queue::speed::scaled(r, factor)))
+            .map(|(l, r)| (l, wb_queue::speed::scaled(r, Some(factor))))
             .collect();
         match night::plan(now, &audio, &rtf) {
             Plan::Run {
@@ -765,12 +792,15 @@ impl Queue {
                         ));
                     }
                 }
-                let basis = match factor {
-                    Some(f) => format!(
+                let basis = match (measured, multi) {
+                    (Some(f), _) => format!(
                         "measured speed: {f:.2} times the profile's, from {} finished unit(s)",
-                        self.manager.speed_units()
+                        self.manager.speed_units(multi)
                     ),
-                    None => "the profile's speed: no unit has finished yet".to_owned(),
+                    (None, true) => format!(
+                        "provisional emu-low detection allowance x{factor:.2}: no unit of a session with several languages has finished"
+                    ),
+                    (None, false) => "the profile's speed: no unit has finished yet".to_owned(),
                 };
                 self.core.push_log(format!(
                     "night pass planned for {} session(s): about {:.1} h, ready by {} IST ({basis})",
@@ -888,7 +918,11 @@ pub struct QueueSnapshot {
 /// The devices of the configuration with their threads and this job's units on each. The thread rule is the
 /// executor's: the profile's processor threads less the scheduler's reduction (at least 1), and a graphics
 /// engine takes at most 2.
-fn job_devices(profile: &ProfileView, fewer: u32, units: &[wb_queue::store::Unit]) -> Vec<JobDeviceRow> {
+fn job_devices(
+    profile: &ProfileView,
+    fewer: u32,
+    units: &[wb_queue::store::Unit],
+) -> Vec<JobDeviceRow> {
     let Some(config) = profile.config else {
         return Vec::new();
     };
@@ -904,23 +938,23 @@ fn job_devices(profile: &ProfileView, fewer: u32, units: &[wb_queue::store::Unit
             .filter(|u| u.device == Some(device) && u.state == state)
             .count()
     };
-    [(cpu, "cpu", Device::Cpu, base), (gpu, "gpu", Device::Gpu, base.min(2))]
-        .into_iter()
-        .filter(|(wanted, ..)| *wanted)
-        .map(|(_, name, device, threads)| JobDeviceRow {
-            device: name.to_owned(),
-            threads,
-            units_running: count(device, UnitState::Running),
-            units_committed: count(device, UnitState::Committed),
-        })
-        .collect()
+    [
+        (cpu, "cpu", Device::Cpu, base),
+        (gpu, "gpu", Device::Gpu, base.min(2)),
+    ]
+    .into_iter()
+    .filter(|(wanted, ..)| *wanted)
+    .map(|(_, name, device, threads)| JobDeviceRow {
+        device: name.to_owned(),
+        threads,
+        units_running: count(device, UnitState::Running),
+        units_committed: count(device, UnitState::Committed),
+    })
+    .collect()
 }
 
 /// Milliseconds of speech in each language among a revision's committed segments.
-fn language_mix(
-    q: &SessionQueue,
-    revision: &str,
-) -> std::collections::BTreeMap<String, u64> {
+fn language_mix(q: &SessionQueue, revision: &str) -> std::collections::BTreeMap<String, u64> {
     let mut mix = std::collections::BTreeMap::new();
     for seg in q
         .transcript()
@@ -931,6 +965,18 @@ fn language_mix(
         *mix.entry(seg.lang).or_default() += seg.end_ms.saturating_sub(seg.start_ms);
     }
     mix
+}
+
+/// The factor the 'ready by' estimate multiplies a job's profile speeds by: the measured one for sessions of its
+/// kind once a unit of one has finished, and until then the provisional emu-low detection allowance when the job
+/// has more than one language (owner, 17 Nov 2026; replace the allowance with the laptops' measurements).
+fn job_planning_factor(job: &wb_queue::store::Job, measured: Option<f64>) -> f64 {
+    let pass = if job.kind == JobKind::Night {
+        wb_queue::speed::Pass::Night
+    } else {
+        wb_queue::speed::Pass::Rolling
+    };
+    wb_queue::speed::planning_factor(measured, pass, job.languages.len())
 }
 
 /// Seconds a job still needs: its remaining audio split over its languages by the mix committed so far, each
@@ -980,8 +1026,6 @@ impl Queue {
         let open = plock(&self.open);
         let profile = self.profile();
         let verdict = self.core.verdict();
-        // This computer's measured speed against the profile's, once units have finished.
-        let factor = self.manager.speed_factor();
         for s in open.iter() {
             let q = plock(&s.handle.queue);
             let Ok(jobs) = q.jobs() else { continue };
@@ -998,12 +1042,16 @@ impl Queue {
                 let audio_ms = units.iter().map(|u| u.end_ms).max().unwrap_or(0);
                 let remaining = q.remaining_audio_ms(j.id).unwrap_or(0);
                 if matches!(j.state, JobState::Queued | JobState::Running) {
+                    // This computer's measured speed for sessions of this kind once a unit of one has finished;
+                    // until then the provisional detection allowance for several languages (owner, 17 Nov 2026).
+                    let factor =
+                        job_planning_factor(&j, self.manager.speed_factor(j.languages.len() > 1));
                     seconds.push(job_seconds_left(
                         profile.as_ref(),
                         &j,
                         remaining,
                         &language_mix(&q, &j.revision),
-                        factor,
+                        Some(factor),
                     ));
                 }
                 let devices = profile
@@ -1279,8 +1327,18 @@ pub(crate) fn report_json(app: &AppHandle) -> serde_json::Value {
         "log": q.core.log().into_iter().map(|l| format!("{} {}", l.at_ms, l.text)).collect::<Vec<_>>(),
         "configuration": q.profile().and_then(|p| p.config).map(|c| format!("{c:?}")),
         "forced_hybrid": gate_hooks::force_hybrid(),
-        "speed_factor": q.manager.speed_factor(),
-        "speed_units": q.manager.speed_units(),
+        "speed_factor": q.manager.speed_factor(true),
+        "speed_units": q.manager.speed_units(true),
+        "speed_factor_one_language": q.manager.speed_factor(false),
+        "speed_units_one_language": q.manager.speed_units(false),
+        "estimate_basis": wb_queue::speed::basis_text(
+            q.manager.speed_factor(true),
+            q.manager.speed_units(true),
+            q.manager.speed_factor(false),
+            q.manager.speed_units(false),
+        ),
+        "detection_allowance_rolling": wb_queue::speed::ROLLING_DETECTION_ALLOWANCE,
+        "detection_allowance_night": wb_queue::speed::NIGHT_DETECTION_ALLOWANCE,
         "profile_reads": q.readings.profile_reads.load(Ordering::Relaxed),
         "profile_read_max_us": q.readings.profile_read_max_us.load(Ordering::Relaxed),
         "profile_read_total_us": q.readings.profile_read_total_us.load(Ordering::Relaxed),
@@ -1333,12 +1391,18 @@ mod tests {
             ["cpu", "gpu"]
         );
         assert_eq!(rows[0].threads, hybrid.cpu_threads.max(1));
-        assert!(rows[1].threads <= 2, "a graphics engine takes at most 2 threads");
+        assert!(
+            rows[1].threads <= 2,
+            "a graphics engine takes at most 2 threads"
+        );
         assert_eq!((rows[0].units_running, rows[0].units_committed), (1, 0));
         assert_eq!((rows[1].units_running, rows[1].units_committed), (0, 2));
         // The scheduler's reduction lowers the threads by one, never below one.
         let fewer = job_devices(&hybrid, 1, &units);
-        assert_eq!(fewer[0].threads, hybrid.cpu_threads.max(1).saturating_sub(1).max(1));
+        assert_eq!(
+            fewer[0].threads,
+            hybrid.cpu_threads.max(1).saturating_sub(1).max(1)
+        );
         assert_eq!(job_devices(&hybrid, 99, &units)[0].threads, 1);
     }
 
@@ -1381,7 +1445,10 @@ mod tests {
             true,
         );
         let expected = 3600.0 * (0.25 * by_lang["en"] + 0.75 * by_lang["hi"]);
-        assert!((promised - expected).abs() < 1e-6, "{promised} against {expected}");
+        assert!(
+            (promised - expected).abs() < 1e-6,
+            "{promised} against {expected}"
+        );
         // It does not take the slowest processor cell of the model when the configuration is graphics.
         let cpu_slowest = tier_g.rtf_for(&models["hi"], false);
         assert!(promised < 3600.0 * cpu_slowest || cpu_slowest == 0.0);
@@ -1394,6 +1461,46 @@ mod tests {
     }
 
     #[test]
+    fn the_first_ready_estimate_of_a_bilingual_session_carries_the_detection_allowance() {
+        let tier_g = profile_of(include_str!(
+            "../../../crates/wb-capability/fixtures/tier-g.json"
+        ));
+        let models = tier_g.rolling_models(&["en".into(), "hi".into()]);
+        let json = serde_json::to_value(&models).unwrap();
+        let hour = 3_600_000;
+        let mix = std::collections::BTreeMap::from([("hi".to_string(), 1u64)]);
+        let both = rolling_job(json.clone(), &["en", "hi"]);
+        let one = rolling_job(json, &["hi"]);
+        // Before any unit has finished: x1.34 for two languages, the profile's word for one.
+        assert_eq!(
+            job_planning_factor(&both, None),
+            wb_queue::speed::ROLLING_DETECTION_ALLOWANCE
+        );
+        assert_eq!(job_planning_factor(&one, None), 1.0);
+        let promised = job_seconds_left(Some(&tier_g), &both, hour, &mix, Some(1.0));
+        let first = job_seconds_left(
+            Some(&tier_g),
+            &both,
+            hour,
+            &mix,
+            Some(job_planning_factor(&both, None)),
+        );
+        assert!(
+            (first / promised - wb_queue::speed::ROLLING_DETECTION_ALLOWANCE).abs() < 1e-9,
+            "{first} against {promised}"
+        );
+        // A night job gets the night figure.
+        let mut night = rolling_job(serde_json::json!({}), &["en", "hi"]);
+        night.kind = JobKind::Night;
+        assert_eq!(
+            job_planning_factor(&night, None),
+            wb_queue::speed::NIGHT_DETECTION_ALLOWANCE
+        );
+        // Once a unit of such a session has finished, the measurement replaces the allowance.
+        assert_eq!(job_planning_factor(&both, Some(1.46)), 1.46);
+    }
+
+    #[test]
     fn a_processor_only_profile_has_one_device_row_and_no_profile_none() {
         let cpu = profile_of(include_str!(
             "../../../crates/wb-capability/fixtures/tier-c-cpu-only.json"
@@ -1401,8 +1508,13 @@ mod tests {
         let rows = job_devices(&cpu, 0, &[]);
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].device, "cpu");
-        let none = profile_of(include_str!("../../../crates/wb-capability/fixtures/tier-r.json"));
-        assert!(job_devices(&none, 0, &[]).is_empty(), "tier R has no configuration");
+        let none = profile_of(include_str!(
+            "../../../crates/wb-capability/fixtures/tier-r.json"
+        ));
+        assert!(
+            job_devices(&none, 0, &[]).is_empty(),
+            "tier R has no configuration"
+        );
     }
 
     #[test]

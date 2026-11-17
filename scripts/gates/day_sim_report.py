@@ -244,6 +244,13 @@ def main() -> int:
     P("")
 
     # ------------------------------------------------------------------ path 5: pause and resume; path 6: kill; path 7: night
+    P("ESTIMATES  the first 'ready by' after Stop and the night plan, with the basis each rests on (the provisional emu-low detection allowance until a unit of a session with several languages has finished)")
+    q = report.get("queue", {})
+    for l in qlog + app_log:
+        if re.search(r": stopped\. |night pass planned|night pass skipped", l):
+            P(f"  {l}")
+    P(f"  at the end: basis '{q.get('estimate_basis')}'; several languages: factor {q.get('speed_factor')} from {q.get('speed_units')} unit(s); one language: factor {q.get('speed_factor_one_language')} from {q.get('speed_units_one_language')} unit(s); allowances rolling {q.get('detection_allowance_rolling')}, night {q.get('detection_allowance_night')}")
+    P("")
     P("PATH 5  queue_pause and queue_resume")
     for l in qlog:
         if re.search(r"operator (paused|resumed)|waiting, not processing|processing may continue|paused:|resumed \(", l):

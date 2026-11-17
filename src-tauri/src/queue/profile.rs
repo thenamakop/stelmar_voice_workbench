@@ -193,10 +193,12 @@ impl ProfileView {
         gpu: bool,
     ) -> (u64, u64) {
         let distinct: std::collections::BTreeSet<&str> = model_ids.into_iter().collect();
-        distinct.into_iter().fold((0u64, 0u64), |(peak, local), id| {
-            let (p, l) = self.peak_for(id, gpu);
-            (peak.saturating_add(p), local.saturating_add(l))
-        })
+        distinct
+            .into_iter()
+            .fold((0u64, 0u64), |(peak, local), id| {
+                let (p, l) = self.peak_for(id, gpu);
+                (peak.saturating_add(p), local.saturating_add(l))
+            })
     }
 
     fn largest_peak(&self, gpu: bool) -> (u64, u64) {
@@ -437,7 +439,10 @@ mod tests {
         );
         let (peak, _) = v.memory_for_models(models, true);
         assert_eq!(peak, (1526 + 2780) * MIB);
-        assert!(peak >= measured_engine_peak, "the sum never undercounts here");
+        assert!(
+            peak >= measured_engine_peak,
+            "the sum never undercounts here"
+        );
         let new = engine_memory_limit(peak, ample);
         assert!(!over_safe_share(measured_engine_peak, new));
     }

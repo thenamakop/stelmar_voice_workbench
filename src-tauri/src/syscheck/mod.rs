@@ -675,8 +675,16 @@ mod tests {
         assert_eq!(read_at(&mut kept, 0), 1, "the first read probes");
         assert_eq!(read_at(&mut kept, 1), 1, "kept");
         assert_eq!(read_at(&mut kept, 29), 1, "kept while under 30 s old");
-        assert_eq!(read_at(&mut kept, 30), 2, "a reading 30 s old is read again");
-        assert_eq!(read_at(&mut kept, 45), 2, "the new reading is kept from its own time");
+        assert_eq!(
+            read_at(&mut kept, 30),
+            2,
+            "a reading 30 s old is read again"
+        );
+        assert_eq!(
+            read_at(&mut kept, 45),
+            2,
+            "the new reading is kept from its own time"
+        );
         kept.clear();
         assert_eq!(read_at(&mut kept, 46), 3, "a new check clears it at once");
     }
