@@ -998,6 +998,24 @@ function Get-PackCollectFiles {
 
 # Writes the zip with forward slashes in the entry names (the form Windows PowerShell 5.1's own
 # Compress-Archive does not guarantee) and a ZIP-MANIFEST.json with each file's SHA-256 for ingest.
+# Pure. The name of a run's results zip. Until 17 Nov 2026 it was gate-results-<machine>.zip for every run, so a
+# second run on the same laptop with another work folder (the mic run has its own) rewrote the first run's zip. Now the
+# name carries the moment the work folder's first run began (kept in state.json, so a restart or a resume writes the
+# same name and a later run of the same work folder rewrites its own cumulative zip) and the run label if there is one.
+function Get-PackZipName {
+  [CmdletBinding()]
+  param([string]$Machine, $Created, [string]$RunLabel = '')
+  $when = $null
+  if ($Created -is [datetime]) { $when = $Created }
+  elseif ($Created) { try { $when = ([datetimeoffset]::Parse([string]$Created, [Globalization.CultureInfo]::InvariantCulture)).DateTime } catch { $when = $null } }
+  if ($null -eq $when) { $when = Get-Date }
+  $m = ($Machine -replace '[^A-Za-z0-9._-]', '-')
+  if (-not $m) { $m = 'laptop' }
+  $l = ($RunLabel -replace '[^A-Za-z0-9._-]', '-').Trim('-')
+  if ($l.Length -gt 40) { $l = $l.Substring(0, 40) }
+  'gate-results-{0}-{1}{2}.zip' -f $m, $when.ToString('yyyyMMdd-HHmmss', [Globalization.CultureInfo]::InvariantCulture), $(if ($l) { '-' + $l } else { '' })
+}
+
 function New-PackZip {
   param(
     [Parameter(Mandatory = $true)] [string]$WorkDir,
@@ -1054,4 +1072,4 @@ function Format-PackGateLine {
   ('{0,-8} {1,-24}{2}{3} {4}' -f $Status, $Id, $m, $r, $Headline).TrimEnd()
 }
 
-Export-ModuleMember -Function Get-PackProp, ConvertTo-PackHashtable, Read-PackJson, Write-PackJson, Write-PackLog, Set-PackLogFile, Get-PackManifestProblems, Read-PackManifest, Get-PackLedgerRows, Test-PackLedgerMatches, Get-PackBootInfo, Select-PackNextGate, New-PackState, Get-PackStatePath, Read-PackState, Save-PackState, Set-PackGateStatus, Get-PackGateState, New-PackResult, Write-PackResult, Get-PackEvidenceVerdict, ConvertTo-PackStatus, Test-PackAdmin, Get-PackMainsPower, Test-PackIdle, Get-PackBlockingPrograms, ConvertTo-PackArg, Invoke-PackGateProcess, Invoke-PackUnblock, Test-PackLaunchable, ConvertTo-PackPsLiteral, New-PackResumeParams, Get-PackRemovablePaths, Get-PackResumeLauncherPath, New-PackResumeLauncher, Get-PackPowerShellExe, Get-PackShutdownExe, Request-PackRestart, Register-PackResume, Unregister-PackResume, Test-PackResumeRegistered, Get-PackChangesPath, Add-PackChange, Invoke-PackCleanup, Get-PackStillChanged, Get-PackMachineName, New-PackSummary, Get-PackCollectFiles, New-PackZip, Format-PackMinutes, Format-PackGateLine, Write-PackBanner, New-PackPromptHandler
+Export-ModuleMember -Function Get-PackProp, ConvertTo-PackHashtable, Read-PackJson, Write-PackJson, Write-PackLog, Set-PackLogFile, Get-PackManifestProblems, Read-PackManifest, Get-PackLedgerRows, Test-PackLedgerMatches, Get-PackBootInfo, Select-PackNextGate, New-PackState, Get-PackStatePath, Read-PackState, Save-PackState, Set-PackGateStatus, Get-PackGateState, New-PackResult, Write-PackResult, Get-PackEvidenceVerdict, ConvertTo-PackStatus, Test-PackAdmin, Get-PackMainsPower, Test-PackIdle, Get-PackBlockingPrograms, ConvertTo-PackArg, Invoke-PackGateProcess, Invoke-PackUnblock, Test-PackLaunchable, ConvertTo-PackPsLiteral, New-PackResumeParams, Get-PackRemovablePaths, Get-PackResumeLauncherPath, New-PackResumeLauncher, Get-PackPowerShellExe, Get-PackShutdownExe, Request-PackRestart, Register-PackResume, Unregister-PackResume, Test-PackResumeRegistered, Get-PackChangesPath, Add-PackChange, Invoke-PackCleanup, Get-PackStillChanged, Get-PackMachineName, New-PackSummary, Get-PackCollectFiles, Get-PackZipName, New-PackZip, Format-PackMinutes, Format-PackGateLine, Write-PackBanner, New-PackPromptHandler

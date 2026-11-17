@@ -7,7 +7,8 @@
   2. Copies the run's logs, reports and capability files to docs\evidence\gate-pack\<machine>\ (a dry run
      on the Legion goes to docs\evidence\gate-pack-dryrun\<profile>\), removing user paths and secret
      values on the way. Evidence files are written by this script only. -AsDryRun <label> files a native
-     run on the Legion (the microphone test) the same way, under that label.
+     run on the Legion (the microphone test) the same way, under that label; on an emulated zip it only
+     gives the evidence its own folder (a re-run of a few gates).
   3. Real laptop run: the rows of docs\GATES.md named by each gate's ledger entry change from PROVISIONAL
      or DEFERRED to PASS or FAIL only when every laptop and every gate the row needs has a verdict; the
      old status stays in the cell as "[was: ...]". A FAIL adds a "Phase N REOPENED" row to the Open
@@ -69,16 +70,18 @@ try {
   if (-not $Role) { $Role = [string]$summary.role }
   if ($Role -notin 'low', 'mid') { Fail 'the zip does not say which laptop it came from; pass -Role low or -Role mid' }
   $emu = [string]$summary.emulated
+  $evName = $emu
   if ($AsDryRun) {
     if ($AsDryRun -notmatch '^[A-Za-z0-9._-]+$') { Fail '-AsDryRun takes a short label of letters, digits, dot, dash and underscore' }
-    if ($emu) { Fail "the zip is already an emulated run ($emu); -AsDryRun is for a run on the Legion that was not emulated" }
-    $emu = $AsDryRun
-    $summary.emulated = $AsDryRun
+    # A native run on the Legion becomes a dry run under the label; an emulated run keeps its profile and only gets
+    # its own evidence folder, so a re-run of two gates does not overwrite the files of the earlier run.
+    if (-not $emu) { $emu = $AsDryRun; $summary.emulated = $AsDryRun }
+    $evName = $AsDryRun
   }
   $created = [datetime]::Parse([string]$summary.created, [Globalization.CultureInfo]::InvariantCulture).ToLocalTime()
   $date = $created.ToString('d MMM yyyy', [Globalization.CultureInfo]::InvariantCulture)
   $machine = ([string]$summary.machine -replace '[^A-Za-z0-9._-]', '-')
-  $evRel = $(if ($emu) { "docs/evidence/gate-pack-dryrun/$emu" } else { "docs/evidence/gate-pack/$machine" })
+  $evRel = $(if ($emu) { "docs/evidence/gate-pack-dryrun/$evName" } else { "docs/evidence/gate-pack/$machine" })
   $evDir = Join-Path $Repo ($evRel -replace '/', '\')
   Write-Host ("zip: {0}" -f (Split-Path -Leaf $Zip))
   Write-Host ("run: {0} laptop, machine {1}{2}; pack commit {3}; created {4}; {5}" -f $Role, $summary.machine, $(if ($emu) { " [EMULATED: $emu on the Legion]" } else { '' }), $summary.source_commit, $date, $(if ($summary.quick) { '-Quick (not at full length)' } else { 'full length' }))

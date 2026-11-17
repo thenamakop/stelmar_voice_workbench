@@ -64,6 +64,18 @@ try {
   $z.Dispose()
   Check 'the zip holds summary.json, the manifest and the gate results' ($names -contains 'summary.json' -and $names -contains 'ZIP-MANIFEST.json' -and ($names -contains 'work/gates/a-p1/result.json'))
   Check 'the end banner names the zip' (($r.Out -join "`n") -match 'Results zip')
+  Check 'the zip name carries the machine, the start of the work folder and nothing else without a label' ($zip[0].Name -match '^gate-results-.+-\d{8}-\d{6}\.zip$')
+  # 1b. A second run with another work folder (the mic run has its own) must not replace the first run's zip.
+  $firstTime = $zip[0].LastWriteTime; $firstName = $zip[0].Name
+  Start-Sleep -Seconds 2
+  $facts2 = Join-Path $tmp 'facts.json'
+  $out2 = @(& $ps -NoProfile -ExecutionPolicy Bypass -File (Join-Path $pack 'run-gates.ps1') -Role low -Unattended -UnattendedWaitMinutes 0 -NoRestart -FactsFile $facts2 -WorkDir (Join-Path $tmp 'work2') -BackupRoot (Join-Path $tmp 'backup2') -RunLabel 'dryrun-mic' -Only a-p1 2>&1 | ForEach-Object { "$_" })
+  $zipsNow = @(Get-ChildItem -LiteralPath $pack -Filter 'gate-results-*.zip')
+  Check 'a second run with another work folder writes a second zip' ($zipsNow.Count -eq 2)
+  Check 'the first zip is untouched' ((Get-Item -LiteralPath (Join-Path $pack $firstName)).LastWriteTime -eq $firstTime)
+  Check 'the second zip carries the run label' (@($zipsNow | Where-Object { $_.Name -like '*-dryrun-mic.zip' }).Count -eq 1)
+  foreach ($zz in @($zipsNow | Where-Object { $_.Name -ne $firstName })) { Remove-Item -LiteralPath $zz.FullName -Force }
+  Remove-Item -LiteralPath (Join-Path $tmp 'work2') -Recurse -Force -ErrorAction SilentlyContinue
 
   # 2. A second run does not repeat finished gates; -Retry repeats the FAIL.
   Remove-Item -LiteralPath $zip[0].FullName -Force

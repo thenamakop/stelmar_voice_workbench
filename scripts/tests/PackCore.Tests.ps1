@@ -195,5 +195,14 @@ try {
 Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
 }
 
+# ---- the results zip name (17 Nov 2026: one name per machine let a second work folder replace the first zip) ----
+$zn1 = Get-PackZipName -Machine 'LENOVO-83DF-b8384c' -Created '2026-11-17T17:22:18.1234567+05:30' -RunLabel ''
+Check 'the zip name has the machine and the start of the work folder' ($zn1 -eq 'gate-results-LENOVO-83DF-b8384c-20261117-172218.zip')
+Check 'the same work folder start and label always give the same name (a resume rewrites its own zip)' ($zn1 -eq (Get-PackZipName -Machine 'LENOVO-83DF-b8384c' -Created '2026-11-17T17:22:18.1234567+05:30'))
+Check 'another work folder start gives another name' ($zn1 -ne (Get-PackZipName -Machine 'LENOVO-83DF-b8384c' -Created '2026-11-17T04:00:00.0000000+05:30'))
+Check 'the run label is part of the name' ((Get-PackZipName -Machine 'X' -Created '2026-11-17T04:00:00+05:30' -RunLabel 'dryrun-mic') -eq 'gate-results-X-20261117-040000-dryrun-mic.zip')
+Check 'a label with spaces and path characters is made safe' ((Get-PackZipName -Machine 'a b' -Created '2026-11-17T04:00:00+05:30' -RunLabel 'x/y z:') -eq 'gate-results-a-b-20261117-040000-x-y-z.zip')
+Check 'a missing start time still gives a valid name' ((Get-PackZipName -Machine 'M' -Created '') -match '^gate-results-M-\d{8}-\d{6}\.zip$')
+
 if ($fails) { Write-Host "$fails failed"; exit 1 }
 Write-Host 'PackCore tests passed'

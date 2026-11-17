@@ -136,8 +136,8 @@
       "priority": "P1", "order": 100, "script": "gates/hashing-1.ps1", "group": "cold",
       "needs": { "interface": true, "ac": true, "boot_within_min": 30 }, "interactive": false,
       "est_minutes": { "low": 12, "mid": 12 },
-      "quick": { "minutes": 12, "note": "as designed (this is the run that proves the restart-and-resume path)" },
-      "threshold": "zero overruns and no gap while the models are hashed in background mode over at least 1 GB and 10 s of the recording; recording equals both references; shared-break count reported; any break in the app only is a recorder failure",
+      "quick": { "minutes": 6, "note": "a 4-minute recording plus about 2 minutes of set-up (measured 6 min on 17 Nov 2026); this is the run that proves the restart-and-resume path" },
+      "threshold": "zero overruns and no gap while the models are hashed in background mode over at least 1 GB, and at least 10 s of hashing inside the recording or the whole model set (4 GB or more) hashed while it ran; recording equals both references; shared-break count reported; any break in the app only is a recorder failure",
       "ledger": [
         { "table": "open", "match": "R5 (owner's decision, 12 Nov 2026): CLOSED on the Legion under `emu-low`", "kind": "verdict" },
         { "table": "open", "match": "Hashing and upstream breaks (13 Nov 2026)", "kind": "verdict" }
@@ -162,8 +162,8 @@
       "title": "Model hashing runs 2 to 10: four purged-cold, five warm",
       "priority": "P2", "order": 10, "script": "gates/hashing-2-10.ps1", "group": "interface",
       "needs": { "interface": true, "ac": true }, "interactive": false,
-      "est_minutes": { "low": 108, "mid": 108 },
-      "quick": { "minutes": 12, "note": "run 2 only (purged)" },
+      "est_minutes": { "low": 132, "mid": 132 },
+      "quick": { "minutes": 24, "note": "run 2 (purged) and run 3 (warm), then up to 2 more purged runs when run 2 reads at the warm rate and so does not count as cold: 4 runs of about 6 min = 24 min (measured 24 min on 17 Nov 2026); 12 min if run 2 counts as cold. Full length: 9 runs of about 12 min = 108 min, plus up to 2 extra purged runs = 132 min" },
       "threshold": "as hashing-1 for every run; a purged run counts as cold only if its read rate is at most 0.6 times the same laptop's warm-cache rate; shared-break counts compared between cold and warm runs",
       "depends_on": [ "hashing-1" ],
       "ledger": [

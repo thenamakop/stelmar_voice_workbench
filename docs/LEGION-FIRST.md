@@ -95,5 +95,5 @@ If a day slips, keep the order and push later phases back; never skip a gate. Lo
 ## 7. When the laptops arrive
 
 1. Copy `gate-pack/` to each laptop (USB drive) and run `run-gates.ps1` as administrator. It needs no development tools.
-2. Copy each laptop's `gate-results-<machine>.zip` back to the Legion and run `scripts/ingest-gate-results.ps1`, which updates `docs/GATES.md`.
+2. Copy each laptop's `gate-results-<machine>-<date and time>[-<run label>].zip` files (every one in the pack folder; a run with another work folder writes its own) back to the Legion and run `scripts/ingest-gate-results.ps1`, which updates `docs/GATES.md`.
 3. Fix any FAIL in its own phase before merging further work. Record the laptops' names and specs in `docs/GATES.md`.

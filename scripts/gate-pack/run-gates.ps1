@@ -6,7 +6,7 @@
   One command. It reads gates.manifest.json, works out what can run now (priority P1 first, then P2),
   runs it, saves its place after every gate, and asks you (in plain words) for anything it needs: the
   audio interface, mains power, a restart, the Wi-Fi switch. Results go to work\ and to
-  gate-results-<machine>.zip next to this file.
+  gate-results-<machine>-<start of the work folder>[-<run label>].zip next to this file.
 
     run-gates.ps1 -Role low        first run on the low-baseline laptop (use -Role mid on the other)
     run-gates.ps1                  carry on where it stopped
@@ -493,7 +493,7 @@ $zipPath = ''
 if (-not $NoZip) {
   $zipDir = $PackRoot
   try { $probe = Join-Path $zipDir '.write-test'; Set-Content -LiteralPath $probe -Value 'x' -ErrorAction Stop; Remove-Item -LiteralPath $probe -Force } catch { $zipDir = $WorkDir }
-  $zipPath = Join-Path $zipDir ("gate-results-{0}.zip" -f $machine)
+  $zipPath = Join-Path $zipDir (Get-PackZipName -Machine $machine -Created (Get-PackProp $state 'created' '') -RunLabel $RunLabel)
   $z = New-PackZip -WorkDir $WorkDir -ZipPath $zipPath -Summary $summary -CommitText $commit
 }
 $gates = @($summary['gates'])

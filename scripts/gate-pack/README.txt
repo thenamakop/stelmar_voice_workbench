@@ -60,7 +60,7 @@ What it does, in order
    - The network test: the pack asks you to switch Wi-Fi OFF (and unplug any network cable), runs a
      25-minute test, then asks you to switch it back ON. Do not forget to switch it back on.
 
- Day 2 (about 11 hours per laptop; see "Two laptops" below):
+ Day 2 (about 11 to 13 hours per laptop; see "Two laptops" below):
    - More recorder checks (cold-cache hashing, background decoding), the speed tables on the
      processor, a full system check, and, if this pack has it, the 2.5-hour microphone test in a quiet room.
 
@@ -103,9 +103,11 @@ When it is finished
  not have; the reason is shown). It also lists anything it left changed on the laptop. Then:
    1. Run  Start-Gates.cmd -Cleanup  once, so volume, mute and the restart task are put back.
    2. Switch Wi-Fi back ON if it is off.
-   3. Copy the file  gate-results-<laptop name>.zip  (next to this README) to the USB drive and give
-      it to the pack owner. It holds logs and numbers only: no audio recordings of speech, no models.
-      The zip may be copied more than once during the two days; the last one has everything.
+   3. Copy the file  gate-results-<laptop name>-<date and time>.zip  (next to this README) to the USB
+      drive and give it to the pack owner. It holds logs and numbers only: no audio recordings of speech,
+      no models. The zip may be copied more than once during the two days; the newest copy of the same
+      name has everything. A run with a different work folder (or label) writes its own zip with another
+      name and never replaces the first: copy every gate-results-*.zip.
 
 What stays on the laptop
 ------------------------
