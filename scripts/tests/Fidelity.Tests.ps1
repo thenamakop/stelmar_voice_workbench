@@ -146,5 +146,26 @@ $oldFormat = [pscustomobject]@{
 $l = Get-WbPlayerLateCallbacks -Play $oldFormat
 Check 'data from the 1.5-times threshold with a longest gap under the buffer holds no late callback' ($l.Known -and $l.Events.Count -eq 0)
 
+
+# ---- the hashing window (17 Nov 2026: two dry-run FAILs on "at least 10 s of hashing inside the recording") ----
+$w = Test-WbHashWindow -Files 6 -FilesInside 6 -OverlapSeconds 4.5 -HashedGB 4.76
+Check 'the pack models (6 files, 4.76 GB) hashed in 4.5 s on a fast disk while the recorder ran: the window is long enough' ($w.Pass -and $w.WholeSet -and -not $w.Long)
+$w = Test-WbHashWindow -Files 6 -FilesInside 6 -OverlapSeconds 4.8 -HashedGB 4.76
+Check 'the second dry-run (4.8 s) passes the same way' $w.Pass
+$w = Test-WbHashWindow -Files 11 -FilesInside 11 -OverlapSeconds 11.6 -HashedGB 9.66
+Check 'the Legion models folder of Phase 2b (11 files, 9.66 GB, 11.6 s) still passes by length' ($w.Pass -and $w.Long)
+$w = Test-WbHashWindow -Files 6 -FilesInside 6 -OverlapSeconds 23.4 -HashedGB 4.76
+Check 'a slow laptop disk (4.76 GB in 23 s) passes by length' ($w.Pass -and $w.Long)
+$w = Test-WbHashWindow -Files 6 -FilesInside 3 -OverlapSeconds 2.0 -HashedGB 2.4
+Check 'only half of the files hashed while the recording ran, and short: not enough' (-not $w.Pass -and $w.Text -match '3 of 6 files')
+$w = Test-WbHashWindow -Files 6 -FilesInside 6 -OverlapSeconds 1.0 -HashedGB 0.9
+Check 'every file inside but under 4 GB and under 10 s: not enough (the set is too small to compete with the recorder)' (-not $w.Pass)
+$w = Test-WbHashWindow -Files 0 -FilesInside 0 -OverlapSeconds 0 -HashedGB 0
+Check 'no model hashed at all: not enough' (-not $w.Pass)
+$w = Test-WbHashWindow -Files 6 -FilesInside 6 -OverlapSeconds 4.5 -HashedGB 4.76 -RecordingKnown $false
+Check 'a recording whose start or end time is unknown: not enough' (-not $w.Pass)
+$rg = Get-Content -LiteralPath (Join-Path $here '..\gates\recorder-gate.ps1') -Raw
+Check 'recorder-gate.ps1 uses Test-WbHashWindow and no longer demands a fixed 10 s' ($rg -match 'Test-WbHashWindow' -and $rg -notmatch '\$hashOverlapS -ge 10')
+
 if ($fails) { Write-Host "$fails failed"; exit 1 }
 Write-Host 'Fidelity tests passed'

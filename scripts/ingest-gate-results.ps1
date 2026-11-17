@@ -6,7 +6,8 @@
   1. Checks the zip (every file's SHA-256 against ZIP-MANIFEST.json) and reads summary.json.
   2. Copies the run's logs, reports and capability files to docs\evidence\gate-pack\<machine>\ (a dry run
      on the Legion goes to docs\evidence\gate-pack-dryrun\<profile>\), removing user paths and secret
-     values on the way. Evidence files are written by this script only.
+     values on the way. Evidence files are written by this script only. -AsDryRun <label> files a native
+     run on the Legion (the microphone test) the same way, under that label.
   3. Real laptop run: the rows of docs\GATES.md named by each gate's ledger entry change from PROVISIONAL
      or DEFERRED to PASS or FAIL only when every laptop and every gate the row needs has a verdict; the
      old status stays in the cell as "[was: ...]". A FAIL adds a "Phase N REOPENED" row to the Open
@@ -25,6 +26,10 @@ param(
   [Parameter(Mandatory = $true)] [string]$Zip,
   [ValidateSet('', 'low', 'mid')] [string]$Role = '',
   [switch]$Preview,
+  # A run on the Legion that is not an emulation (the microphone test on the Legion's own microphone runs
+  # natively): recorded as a dry run under this label, never as a laptop. Rows 84 and 111 and the Machines
+  # table are not touched. Example: -AsDryRun legion-native-mic
+  [string]$AsDryRun = '',
   [string]$Repo = '',
   [string]$GatesMd = '',
   [string]$EvidenceRoot = ''
@@ -64,6 +69,12 @@ try {
   if (-not $Role) { $Role = [string]$summary.role }
   if ($Role -notin 'low', 'mid') { Fail 'the zip does not say which laptop it came from; pass -Role low or -Role mid' }
   $emu = [string]$summary.emulated
+  if ($AsDryRun) {
+    if ($AsDryRun -notmatch '^[A-Za-z0-9._-]+$') { Fail '-AsDryRun takes a short label of letters, digits, dot, dash and underscore' }
+    if ($emu) { Fail "the zip is already an emulated run ($emu); -AsDryRun is for a run on the Legion that was not emulated" }
+    $emu = $AsDryRun
+    $summary.emulated = $AsDryRun
+  }
   $created = [datetime]::Parse([string]$summary.created, [Globalization.CultureInfo]::InvariantCulture).ToLocalTime()
   $date = $created.ToString('d MMM yyyy', [Globalization.CultureInfo]::InvariantCulture)
   $machine = ([string]$summary.machine -replace '[^A-Za-z0-9._-]', '-')

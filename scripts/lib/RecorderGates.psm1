@@ -28,6 +28,13 @@ function Get-PackRecorderOutcome {
   }
 }
 
+# Pure. The checks of the evidence that did not hold (the lines "  [ ] ..."), so a FAIL says why in the headline
+# and not just "FAIL".
+function Get-PackFailedChecks {
+  param([string[]]$EvidenceLines = @())
+  @($EvidenceLines | Where-Object { $_ -match '^\s*\[ \]\s+\S' } | ForEach-Object { ($_ -replace '^\s*\[ \]\s+', '').Trim() })
+}
+
 # Pure. The run folder named in the evidence ("audio and reports: <path> (not in the repository)").
 function Get-PackRunDirFromEvidence {
   param([string[]]$EvidenceLines = @())
@@ -244,6 +251,10 @@ function Invoke-PackRecorderGate {
   $addFile = Join-Path $gdir ($(if ($RunTag) { "$Id-$RunTag-additions.txt" } else { "$Id-additions.txt" }))
   Set-Content -LiteralPath $addFile -Value @($extra) -Encoding UTF8
   $head = $(if ($out.VerdictLine) { $out.VerdictLine -replace '^verdict:\s*', '' } else { $status })
+  if ($out.Status -eq 'FAIL') {
+    $failedChecks = @(Get-PackFailedChecks -EvidenceLines $evLines)
+    if ($failedChecks.Count -gt 0) { $head = ($head + ': ' + ($failedChecks -join '; ')) }
+  }
   if ($rigKind -eq 'vb-cable-fallback') { $head = "$head [VB-CABLE fallback: does not close the hardware-interface rows]" }
   # Unmatched stretches of the app's recording: shared when the reference capture has them too (the source
   # chain broke), app-only when it has not (the recorder's own).
@@ -328,4 +339,4 @@ function Get-PackBesideDevice {
   $cpu
 }
 
-Export-ModuleMember -Function Get-PackAppTimeFindings, Get-PackMachineThreads, Get-PackBesideProduction, Get-PackBesideDevice, Get-PackRecorderOutcome, Get-PackRunDirFromEvidence, Get-PackRigKindFromEvidence, Get-PackCompareOffsetMs, Get-PackScanFindings, Get-PackRunDetectors, Invoke-PackRecorderGate
+Export-ModuleMember -Function Get-PackFailedChecks, Get-PackAppTimeFindings, Get-PackMachineThreads, Get-PackBesideProduction, Get-PackBesideDevice, Get-PackRecorderOutcome, Get-PackRunDirFromEvidence, Get-PackRigKindFromEvidence, Get-PackCompareOffsetMs, Get-PackScanFindings, Get-PackRunDetectors, Invoke-PackRecorderGate

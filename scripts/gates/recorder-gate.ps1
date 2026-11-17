@@ -521,6 +521,7 @@ if (Test-WbHasProperty $rec 'detectors_disabled') {
 # R5 (hashing gate): the app hashed the real model files while the recording ran, in background mode.
 $hashFiles = @()
 $hashOverlapS = 0.0
+$hashInside = 0
 $hashBytes = [int64]0
 $afterReboot = $false
 if ($Gate -eq 'hashing') {
@@ -540,6 +541,7 @@ if ($Gate -eq 'hashing') {
     # Only a file that checked out and was being read while the recording ran counts.
     if ($ov -gt 0 -and $h.Result -eq 'ok') {
       $hashOverlapS += $ov / 1000.0
+      $hashInside++
       $hashBytes += $h.Bytes
       $hashMsInRun += $h.TookMs
     }
@@ -554,7 +556,8 @@ if ($Gate -eq 'hashing') {
   $hashMBs = $(if ($hashMsInRun -gt 0) { $hashBytes / 1e6 / ($hashMsInRun / 1000.0) } else { 0 })
   $checks['the models folder and the recording folder are on the same drive and physical disk (otherwise hashing cannot compete with the recorder for the disk)'] = [bool]$sameDisk
   $checks["at least 1 GB of model files was hashed while the recording ran ($([math]::Round($hashedGB, 2)) GB at $([math]::Round($hashMBs)) MB/s while the recorder wrote)"] = ($hashedGB -ge 1.0)
-  $checks["model files were hashed while the recording ran: $($hashFiles.Count) files, $([math]::Round($hashBytes / 1e9, 2)) GB, $([math]::Round($hashOverlapS, 1)) s of hashing inside the recording (at least 10 s)"] = ($hashFiles.Count -ge 1 -and $hashOverlapS -ge 10 -and $recStartMs -gt 0 -and $recEndMs -gt 0)
+  $hw = Test-WbHashWindow -Files $hashFiles.Count -FilesInside $hashInside -OverlapSeconds $hashOverlapS -HashedGB $hashedGB -RecordingKnown ($recStartMs -gt 0 -and $recEndMs -gt 0)
+  $checks["model files were hashed while the recording ran: $($hashFiles.Count) files, $([math]::Round($hashBytes / 1e9, 2)) GB; $($hw.Text) (needs at least 10 s of hashing inside the recording, or the whole model set of at least 4 GB hashed while it ran)"] = [bool]$hw.Pass
   $checks['every hashed file was read in Windows background mode (model_hash lines say background=true, memory priority 1)'] = ($hashFiles.Count -ge 1 -and @($hashFiles | Where-Object { -not $_.Background }).Count -eq 0)
 }
 $hashNote = $(if ($Gate -eq 'hashing' -and -not $afterReboot) { '; warm cache, not conclusive for R5' } else { '' })

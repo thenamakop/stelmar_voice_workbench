@@ -140,6 +140,21 @@ try {
   Check 'an emulated run is listed as emulated and not at full length' ($t -match 'emulated: emu-low on the Legion \(not a laptop\)' -and $t -match '-Quick: not at full length')
   Check 'an emulated run goes to its own evidence folder' (Test-Path (Join-Path $tmp 'docs\evidence\gate-pack-dryrun\emu-low\RESULTS.txt'))
 
+  # --- 6b. a native run on the Legion (the microphone test) filed with -AsDryRun is a dry run, never a laptop ---
+  [IO.File]::WriteAllText($gatesMd2, $orig, (New-Object Text.UTF8Encoding($false)))
+  $z5b = New-RunZip 'mic' 'Legion' 'low' '' @((Gate 'soak' 'PASS' $ledgerSoak 'cable'), (Gate 'quick-check' 'INFO' $ledgerQuick 'n/a')) '2026-11-17T04:00:00Z'
+  $i5b = Ingest @('-Zip', $z5b, '-AsDryRun', 'legion-native-mic')
+  $t = Get-Content -LiteralPath $gatesMd2 -Raw
+  $stripped = ($t -split "## Gate pack runs")[0].TrimEnd()
+  Check '-AsDryRun: the run is ingested (exit 0)' ($i5b.Code -eq 0)
+  Check '-AsDryRun: every row of the two tables is as it was, and the Machines table is not filled' ($stripped -eq $orig.TrimEnd())
+  Check '-AsDryRun: the run is listed as a dry run on the Legion, not a laptop' ($t -match 'emulated: legion-native-mic on the Legion \(not a laptop\)' -and $t -notmatch 'low laptop, Legion')
+  Check '-AsDryRun: the evidence goes to the dry-run folder under the label' ((Test-Path (Join-Path $tmp 'docs\evidence\gate-pack-dryrun\legion-native-mic\RESULTS.txt')) -and -not (Test-Path (Join-Path $tmp 'docs\evidence\gate-pack\Legion')))
+  $i5c = Ingest @('-Zip', $z5, '-AsDryRun', 'x')
+  Check '-AsDryRun on an already emulated zip is refused' ($i5c.Code -ne 0 -and $i5c.Text -match 'already an emulated run')
+  $i5d = Ingest @('-Zip', $z5b, '-AsDryRun', 'bad label!')
+  Check '-AsDryRun takes only a plain label' ($i5d.Code -ne 0 -and $i5d.Text -match 'short label')
+
   # --- 7. a damaged zip is refused ---
   $bad = Join-Path $tmp 'bad.zip'
   Copy-Item -LiteralPath $z1 -Destination $bad

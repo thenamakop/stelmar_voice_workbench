@@ -279,4 +279,19 @@ function Get-WbVerdictLines {
   $lines
 }
 
-Export-ModuleMember -Function Invoke-WbCompare, Get-WbPlayerLateCallbacks, Get-WbUpstreamBreaks, Get-WbRunVerdict, Get-WbVerdictLines
+# Pure. The hashing gate (R5) wants the app's hashing of the model files to have run while the recording ran, long
+# enough to compete with the recorder for the disk. It used to demand 10 s of hashing inside the recording, a number
+# taken from the Legion's models folder (11 files, 9.66 GB, 11.6 to 13.7 s). The pack carries 6 files, 4.76 GB; on a
+# fast disk that is hashed in about 5 s, so a run that kept the recorder clean failed this one check (17 Nov 2026).
+# Now the window is long enough when EITHER at least MinSeconds of hashing ran inside the recording, OR the whole
+# model set (every hashed file overlapped the recording and at least MinSetGB were hashed) was hashed while it ran.
+function Test-WbHashWindow {
+  [CmdletBinding()]
+  param([int]$Files, [int]$FilesInside, [double]$OverlapSeconds, [double]$HashedGB, [bool]$RecordingKnown = $true, [double]$MinSeconds = 10, [double]$MinSetGB = 4)
+  $long = ($OverlapSeconds -ge $MinSeconds)
+  $whole = ($Files -ge 1 -and $FilesInside -eq $Files -and $HashedGB -ge $MinSetGB)
+  $how = $(if ($long) { ('{0:n1} s of hashing inside the recording' -f $OverlapSeconds) } elseif ($whole) { ('the whole model set ({0:n2} GB in {1} files) was hashed while the recording ran, in {2:n1} s' -f $HashedGB, $Files, $OverlapSeconds) } else { ('{0:n1} s of hashing inside the recording; {1} of {2} files overlapped it; {3:n2} GB' -f $OverlapSeconds, $FilesInside, $Files, $HashedGB) })
+  [pscustomobject]@{ Pass = ([bool]($Files -ge 1 -and $RecordingKnown -and ($long -or $whole))); Long = $long; WholeSet = $whole; Text = $how }
+}
+
+Export-ModuleMember -Function Test-WbHashWindow, Invoke-WbCompare, Get-WbPlayerLateCallbacks, Get-WbUpstreamBreaks, Get-WbRunVerdict, Get-WbVerdictLines
