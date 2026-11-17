@@ -264,32 +264,135 @@ function Update-IngestRunsBlock {
   $runId = [string]$Summary.created
   $emu = [string]$Summary.emulated
   $kept = New-Object System.Collections.Generic.List[string]
-  foreach ($l in $Lines) { if ($l.IndexOf("[run $runId]", [StringComparison]::Ordinal) -lt 0) { $kept.Add($l) } }
+  # The rows of this run are written again; a "superseded by" mark they already carry (with its reason) is carried over.
+  $oldMarks = @{}
+  foreach ($l in $Lines) {
+    if ($l.IndexOf("[run $runId]", [StringComparison]::Ordinal) -lt 0) { $kept.Add($l); continue }
+    $oc = @(Split-IngestRow $l)
+    if ($oc.Count -eq 7) { $om = [regex]::Match([string]$oc[4], '^superseded by run \S+ \([^)]*\); '); if ($om.Success) { $oldMarks[$oc[1] + '|' + $oc[3]] = $om.Value } }
+  }
   $hasBlock = @($kept | Where-Object { $_ -match '^##\s+Gate pack runs\s*$' }).Count -gt 0
   if (-not $hasBlock) {
     $kept.Add('')
     $kept.Add('## Gate pack runs')
     $kept.Add('')
-    $kept.Add('One row per gate of each run of `gate-pack/run-gates.ps1`, written by `scripts/ingest-gate-results.ps1`. A row marked "emulated" is a dry run on the Legion (`emu-low` or `emu-mid`, `-Quick`): it proves the pack and the ingest, and is never evidence for the laptops. Real runs also update the rows of the two tables above.')
+    $kept.Add('One row per gate of each run')
     $kept.Add('')
     $kept.Add('| Run | Gate | Result | Machine or profile | Notes | Evidence | Date |')
     $kept.Add('| --- | --- | --- | --- | --- | --- | --- |')
   }
-  $who = $(if ($emu) { "emulated: $emu on the Legion (not a laptop)" } else { "$Role laptop, $($Summary.machine)" })
+  $intro = 'One row per gate of each run of `gate-pack/run-gates.ps1`, written by `scripts/ingest-gate-results.ps1`. A row marked "emulated" is a dry run on the Legion under `emu-low` or `emu-mid` (usually `-Quick`); a row marked "dry run: native" is a run on the Legion itself, with no emulation. Both prove the pack and the ingest and are never evidence for the laptops. A row that starts with "superseded by run" was followed by a later run of the same gate under the same label; read the later row. Only the gates a run was asked to run get rows. Real runs also update the rows of the two tables above.'
+  for ($i = 0; $i -lt $kept.Count; $i++) { if ($kept[$i].StartsWith('One row per gate of each run')) { $kept[$i] = $intro } }
+  $who = Get-IngestRunWho -Summary $Summary -Role $Role
+  $packNote = $(if ([string]$Summary.source_commit) { 'pack ' + ([string]$Summary.source_commit).Substring(0, [math]::Min(7, ([string]$Summary.source_commit).Length)) } else { '' })
   foreach ($g in @($Summary.gates)) {
     $notes = New-Object System.Collections.Generic.List[string]
+    if ($packNote) { $notes.Add($packNote) }
     if ([bool]$Summary.quick -or [bool]$g.quick) { $notes.Add('-Quick: not at full length') }
     if ([string]$g.rig) { $notes.Add('rig: ' + [string]$g.rig) }
     $head = ([string]$g.headline -replace '\|', '/')
     if ($head.Length -gt 220) { $head = $head.Substring(0, 220) + ' ...' }
     $notes.Add($head)
-    $kept.Add((Join-IngestRow @("run $($Summary.machine) $runId [run $runId]", [string]$g.id, [string]$g.status, $who, ($notes -join '; '), ('`' + $EvidenceDir + '`'), $Date)))
+    $mark = $(if ($oldMarks.ContainsKey([string]$g.id + '|' + $who)) { $oldMarks[[string]$g.id + '|' + $who] } else { '' })
+    $kept.Add((Join-IngestRow @("run $($Summary.machine) $runId [run $runId]", [string]$g.id, [string]$g.status, $who, ($mark + ($notes -join '; ')), ('`' + $EvidenceDir + '`'), $Date)))
   }
   foreach ($p in @($Summary.pending)) { $kept.Add((Join-IngestRow @("run $($Summary.machine) $runId [run $runId]", [string]$p.id, 'WAITING', $who, ([string]$p.reason -replace '\|', '/'), ('`' + $EvidenceDir + '`'), $Date))) }
   foreach ($p in @($Summary.not_in_pack)) { $kept.Add((Join-IngestRow @("run $($Summary.machine) $runId [run $runId]", [string]$p.id, 'NOT IN THIS PACK', $who, 'the gate was not built into this pack', ('`' + $EvidenceDir + '`'), $Date))) }
   @($kept.ToArray())
 }
 
+# Pure. Who a run of the Gate pack runs block belongs to: "emulated: <profile> on the Legion (not a laptop)", for a native run on
+# the Legion that was filed as a dry run "dry run: native on the Legion (not a laptop), <label>", else "<role> laptop, <machine>".
+function Get-IngestRunWho {
+  [CmdletBinding()]
+  param([Parameter(Mandatory = $true)] $Summary, [string]$Role)
+  $emu = [string]$Summary.emulated
+  $native = $Summary.PSObject.Properties['native_dry_run'] -and [bool]$Summary.native_dry_run
+  if ($emu -and $native) { return "dry run: native on the Legion (not a laptop), $emu" }
+  if ($emu) { return "emulated: $emu on the Legion (not a laptop)" }
+  "$Role laptop, $($Summary.machine)"
+}
+
+# Pure. Which gates a run was asked to run. summary.json does not say (a run with -Only lists the other gates as "not run"),
+# so it is read from the state file of the run: a gate the runner started, or that waited with a reason of its own, is in the
+# run; a gate with no entry at all is outside it. A run is "scoped" when some gate in the pack has no entry (a run of all the
+# gates touches every gate). -Explicit (the ingest's -Scope) overrides. Returns $null for a run that is not scoped, else the ids.
+function Get-IngestRunScope {
+  [CmdletBinding()]
+  param([Parameter(Mandatory = $true)] $Summary, $State, [string[]]$Explicit = @())
+  $explicit = @($Explicit | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+  if ($explicit.Count -gt 0) { return $explicit }
+  if ($null -eq $State -or $null -eq $State.gates) { return $null }
+  $untouched = @($Summary.pending | Where-Object { -not $State.gates.PSObject.Properties[[string]$_.id] })
+  if ($untouched.Count -eq 0) { return $null }
+  $ids = New-Object System.Collections.Generic.List[string]
+  foreach ($id in @($Summary.order_used)) { if ($id) { $ids.Add([string]$id) } }
+  foreach ($p in $State.gates.PSObject.Properties) {
+    $gs = $p.Value
+    $started = $gs.PSObject.Properties['started'] -and [string]$gs.started
+    $waiting = [string]$gs.status -in 'PENDING', 'interrupted', 'running'
+    if ($started -or $waiting) { $ids.Add([string]$p.Name) }
+  }
+  @($ids | Sort-Object -Unique)
+}
+
+# Changes a summary in place so that only the gates in $Ids stay (gates, pending); a run of a few gates does not say anything about
+# the others, nor about the gates its pack lacks. Returns the ids dropped.
+function Select-IngestScope {
+  [CmdletBinding()]
+  param([Parameter(Mandatory = $true)] $Summary, [Parameter(Mandatory = $true)] [string[]]$Ids)
+  $dropped = New-Object System.Collections.Generic.List[string]
+  $keepG = @($Summary.gates | Where-Object { $Ids -contains [string]$_.id })
+  foreach ($g in @($Summary.gates | Where-Object { $Ids -notcontains [string]$_.id })) { $dropped.Add([string]$g.id) }
+  $keepP = @($Summary.pending | Where-Object { $Ids -contains [string]$_.id })
+  foreach ($g in @($Summary.pending | Where-Object { $Ids -notcontains [string]$_.id })) { $dropped.Add([string]$g.id) }
+  foreach ($g in @($Summary.not_in_pack)) { $dropped.Add([string]$g.id) }
+  $Summary.gates = $keepG
+  $Summary.pending = $keepP
+  $Summary.not_in_pack = @()
+  @($dropped.ToArray())
+}
+
+# Pure. In the Gate pack runs block, an older row of a gate that a later run of the same label (the "Machine or profile" cell)
+# has a result for starts its Notes with "superseded by run <id> (pack <commit>)". Only PASS, FAIL, INFO and INVALID supersede
+# (a later SKIPPED or WAITING says nothing). -Because (the ingest's -Because) adds a reason for the older rows that did not pass,
+# when -RunId is the run that supersedes them. Safe to repeat: an existing mark that names the same later run stays as it is.
+function Update-IngestSuperseded {
+  [CmdletBinding()]
+  param([Parameter(Mandatory = $true)] [AllowEmptyString()] [string[]]$Lines, [string]$RunId = '', [string]$Because = '')
+  $out = @($Lines)
+  $rows = New-Object System.Collections.Generic.List[object]
+  for ($i = 0; $i -lt $out.Count; $i++) {
+    if ($out[$i] -notmatch '^\|' -or $out[$i] -notmatch '\[run (\S+?)\]') { continue }
+    $id = $Matches[1]
+    $c = @(Split-IngestRow $out[$i])
+    if ($c.Count -ne 7) { continue }
+    $rows.Add([pscustomobject]@{ Index = $i; RunId = $id; Cells = $c; Gate = $c[1]; Status = $c[2]; Who = $c[3] })
+  }
+  $result = @('PASS', 'FAIL', 'INFO', 'INVALID')
+  $because = ($Because -replace '[()|]', ' ').Trim()
+  foreach ($grp in @($rows | Group-Object { $_.Gate + '|' + $_.Who })) {
+    $latest = @($grp.Group | Where-Object { $result -contains $_.Status } | Sort-Object RunId -Descending | Select-Object -First 1)
+    foreach ($r in $grp.Group) {
+      $c = $r.Cells
+      $notes = [string]$c[4]
+      $had = [regex]::Match($notes, '^superseded by run (\S+) \(([^)]*)\); ')
+      $plain = $(if ($had.Success) { $notes.Substring($had.Length) } else { $notes })
+      $want = $null
+      if ($latest.Count -gt 0 -and [string]::CompareOrdinal($r.RunId, $latest[0].RunId) -lt 0) {
+        if ($had.Success -and $had.Groups[1].Value -eq $latest[0].RunId) { $want = $notes }
+        else {
+          $pk = [regex]::Match([string]$latest[0].Cells[4], '(?:^|; )pack ([0-9a-f]{7,40})')
+          $parts = @(); if ($pk.Success) { $parts += ('pack ' + $pk.Groups[1].Value) }
+          if ($because -and $RunId -eq $latest[0].RunId -and @('FAIL', 'INVALID') -contains $r.Status) { $parts += $because }
+          $want = ('superseded by run {0} ({1}); {2}' -f $latest[0].RunId, ($parts -join '; '), $plain).Replace('()', '(later run)')
+        }
+      } else { $want = $plain }
+      if ($want -ne $notes) { $c[4] = $want; $out[$r.Index] = Join-IngestRow $c }
+    }
+  }
+  $out
+}
 # Fills the Machines row of a laptop that still says "(fill in on arrival)".
 function Update-IngestMachines {
   [CmdletBinding()]
@@ -360,4 +463,4 @@ function Find-IngestPython {
   ''
 }
 
-Export-ModuleMember -Function Set-IngestReporterFindings, Find-IngestPython, Get-IngestTableMap, ConvertTo-IngestRedacted, Get-IngestRequiredRoles, Read-IngestAnnotations, Get-IngestStatusCell, Update-IngestGatesLines, Update-IngestRunsBlock, Update-IngestMachines
+Export-ModuleMember -Function Set-IngestReporterFindings, Find-IngestPython, Get-IngestTableMap, ConvertTo-IngestRedacted, Get-IngestRequiredRoles, Read-IngestAnnotations, Get-IngestStatusCell, Update-IngestGatesLines, Update-IngestRunsBlock, Update-IngestMachines, Get-IngestRunWho, Get-IngestRunScope, Select-IngestScope, Update-IngestSuperseded, Split-IngestRow, Join-IngestRow

@@ -16,7 +16,10 @@
      need the hardware audio interface open. The Machines table is filled for the laptop.
   4. Every run, real or emulated, also gets one row per gate in the "Gate pack runs" block. An emulated
      run changes no other row.
-  -Preview prints what would change and writes nothing.
+  A "Gate pack runs" row says "superseded by run <id> (pack <commit>)" when a later run of the same gate under the same label has
+  a result (PASS, FAIL, INFO or INVALID); -Because 'text' adds a reason for the older rows that did not pass. A native dry run on the Legion is labelled "dry run: native on the
+  Legion (not a laptop)", never "emulated". A run made with -Only gets rows only for the gates it ran or waited on (read from the
+  state file in the zip; -Scope a,b names them when that cannot be read); the other gates get no row.  -Preview prints what would change and writes nothing.
 
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File .\scripts\ingest-gate-results.ps1 -Zip D:\usb\gate-results-X.zip -Preview
@@ -34,6 +37,12 @@ param(
   # Strings to remove from everything kept in the repository, besides what the redaction always removes: the laptop's
   # computer name and user name when you know them (an identity.json at the root of the zip, if a pack has one, is read too).
   [string[]]$Redact = @(),
+  # The gates this run was asked to run, when the zip cannot say (the ingest reads it from the run's state file: a run made with -Only
+  # gets rows only for the gates it ran or waited on). Example: -Scope engines-info,hashing-1
+  [string[]]$Scope = @(),
+  # A short reason (no brackets or bars) written into the older rows this run supersedes, for the ones that did not pass.
+  # Example: -Because 'pack bug fixed in aeb32fb'
+  [string]$Because = '',
   [string]$Repo = '',
   [string]$GatesMd = '',
   [string]$EvidenceRoot = ''
@@ -92,7 +101,7 @@ try {
     if ($AsDryRun -notmatch '^[A-Za-z0-9._-]+$') { Fail '-AsDryRun takes a short label of letters, digits, dot, dash and underscore' }
     # A native run on the Legion becomes a dry run under the label; an emulated run keeps its profile and only gets
     # its own evidence folder, so a re-run of two gates does not overwrite the files of the earlier run.
-    if (-not $emu) { $emu = $AsDryRun; $summary.emulated = $AsDryRun }
+    if (-not $emu) { $emu = $AsDryRun; $summary.emulated = $AsDryRun; $summary | Add-Member -NotePropertyName native_dry_run -NotePropertyValue $true -Force }
     $evName = $AsDryRun
   }
   $created = [datetime]::Parse([string]$summary.created, [Globalization.CultureInfo]::InvariantCulture).ToLocalTime()
@@ -101,7 +110,13 @@ try {
   $evRel = $(if ($emu) { "docs/evidence/gate-pack-dryrun/$evName" } else { "docs/evidence/gate-pack/$machine" })
   $evDir = Join-Path $Repo ($evRel -replace '/', '\')
   Write-Host ("zip: {0}" -f (Split-Path -Leaf $Zip))
-  Write-Host ("run: {0} laptop, machine {1}{2}; pack commit {3}; created {4}; {5}" -f $Role, $summary.machine, $(if ($emu) { " [EMULATED: $emu on the Legion]" } else { '' }), $summary.source_commit, $date, $(if ($summary.quick) { '-Quick (not at full length)' } else { 'full length' }))
+  Write-Host ("run: {0} laptop, machine {1}{2}; pack commit {3}; created {4}; {5}" -f $Role, $summary.machine, $(if ($emu) { $(if ($summary.PSObject.Properties['native_dry_run']) { " [DRY RUN, native on the Legion: $emu]" } else { " [EMULATED: $emu on the Legion]" }) } else { '' }), $summary.source_commit, $date, $(if ($summary.quick) { '-Quick (not at full length)' } else { 'full length' }))
+  # A run made with -Only says nothing about the gates it was not asked to run: no row for them (not WAITING, not NOT IN THIS PACK).
+  $scopeIds = Get-IngestRunScope -Summary $summary -State (Read-PackJson -Path (Join-Path $tmp 'work\state.json')) -Explicit $Scope
+  if ($null -ne $scopeIds) {
+    $dropped = @(Select-IngestScope -Summary $summary -Ids @($scopeIds))
+    Write-Host ("scope: this run was asked for {0}; {1} other gate(s) get no row" -f (@($scopeIds) -join ', '), $dropped.Count)
+  }
   $counts = @($summary.gates | Group-Object status | ForEach-Object { "$($_.Count) $($_.Name)" }) -join ', '
   Write-Host ("gates: {0}; waiting {1}; not in this pack {2}" -f $counts, @($summary.pending).Count, @($summary.not_in_pack).Count)
 
@@ -150,7 +165,7 @@ try {
     # A short reading of the summary, written by this script.
     $txt = New-Object System.Collections.Generic.List[string]
     $txt.Add("Gate pack run: $Role laptop, machine $($summary.machine), created $($summary.created)")
-    $txt.Add("Pack commit $($summary.source_commit); $(if ($emu) { "EMULATED ($emu), not a laptop" } else { 'real laptop' }); $(if ($summary.quick) { '-Quick, not at full length' } else { 'full length' })")
+    $txt.Add("Pack commit $($summary.source_commit); $(if ($emu) { $(if ($summary.PSObject.Properties['native_dry_run']) { "dry run: native on the Legion ($emu), not a laptop" } else { "EMULATED ($emu), not a laptop" }) } else { 'real laptop' }); $(if ($summary.quick) { '-Quick, not at full length' } else { 'full length' })")
     foreach ($g in @($summary.gates)) { $txt.Add(('{0,-8} {1,-20} {2}' -f $g.status, $g.id, $g.headline)) }
     foreach ($p in @($summary.pending)) { $txt.Add(('WAITING  {0,-20} {1}' -f $p.id, $p.reason)) }
     foreach ($p in @($summary.not_in_pack)) { $txt.Add(('NOT IN THIS PACK  {0}' -f $p.id)) }
@@ -184,8 +199,9 @@ try {
       foreach ($r in $u.Reopened) { Write-Host "  GATE FAILED: $r on $($summary.machine): its phase is REOPENED (row added to the Open items)" -ForegroundColor Red }
       Write-Host ('=' * 78) -ForegroundColor Red
     }
-  } else { $changes.Add('  an emulated run: the rows of the Gates and Open items tables are not touched') }
+  } else { $changes.Add('  a dry run on the Legion: the rows of the Gates and Open items tables are not touched') }
   $newLines = Update-IngestRunsBlock -Lines $newLines -Summary $summary -Role $Role -Date $date -EvidenceDir $evRel
+  $newLines = Update-IngestSuperseded -Lines $newLines -RunId ([string]$summary.created) -Because $Because
   $diffCount = 0
   $max = [math]::Max($lines.Count, $newLines.Count)
   for ($i = 0; $i -lt $max; $i++) { $a = $(if ($i -lt $lines.Count) { $lines[$i] } else { $null }); $b = $(if ($i -lt $newLines.Count) { $newLines[$i] } else { $null }); if ($a -ne $b) { $diffCount++ } }

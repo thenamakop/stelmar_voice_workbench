@@ -152,7 +152,7 @@ try {
   $stripped = ($t -split "## Gate pack runs")[0].TrimEnd()
   Check '-AsDryRun: the run is ingested (exit 0)' ($i5b.Code -eq 0)
   Check '-AsDryRun: every row of the two tables is as it was, and the Machines table is not filled' ($stripped -eq $orig.TrimEnd())
-  Check '-AsDryRun: the run is listed as a dry run on the Legion, not a laptop' ($t -match 'emulated: legion-native-mic on the Legion \(not a laptop\)' -and $t -notmatch 'low laptop, Legion')
+  Check '-AsDryRun: the run is listed as a dry run on the Legion, not a laptop' ($t -match 'dry run: native on the Legion \(not a laptop\), legion-native-mic' -and $t -cnotmatch 'emulated: legion-native-mic' -and $t -notmatch 'low laptop, Legion')
   Check '-AsDryRun: the evidence goes to the dry-run folder under the label' ((Test-Path (Join-Path $tmp 'docs\evidence\gate-pack-dryrun\legion-native-mic\RESULTS.txt')) -and -not (Test-Path (Join-Path $tmp 'docs\evidence\gate-pack\Legion')))
   [IO.File]::WriteAllText($gatesMd2, $orig, (New-Object Text.UTF8Encoding($false)))
   $i5c = Ingest @('-Zip', $z5, '-AsDryRun', 'rerun-x')
