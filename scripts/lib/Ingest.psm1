@@ -26,13 +26,29 @@ Set-StrictMode -Version 2
 Import-Module (Join-Path $PSScriptRoot 'PackNative.psm1')
 $script:Marker = ' ;; gate pack: '
 
+# What the repository (public) may keep of a laptop's logs. Removed on the way in: user profile paths, secret values,
+# private network addresses (home or office gateways and hosts), MAC addresses, Wi-Fi names, serial numbers and
+# machine GUIDs, a person's name in a device name ("Anna's AirPods"), and every string in -Extra (the laptop's computer
+# name and user name, which a laptop's pack or the person ingesting can name: -Redact on the ingest script, or an
+# identity.json at the root of the zip). Public servers (1.1.1.1, 8.8.8.8, a Microsoft address the app contacted) and
+# Windows' own constants (power-plan GUIDs, ROOT\MEDIA device ids of a virtual cable) are not personal and stay.
 function ConvertTo-IngestRedacted {
   [CmdletBinding()]
-  param([AllowEmptyString()] [string[]]$Line)
+  param([AllowEmptyString()] [string[]]$Line, [string[]]$Extra = @())
+  $extra = @($Extra | Where-Object { $_ -and $_.Trim().Length -ge 3 } | Sort-Object -Unique)
   foreach ($l in @($Line)) {
     $s = $l
-    $s = $s -replace '[A-Za-z]:\\Users\\[^\\"''<>|]+', '%USERPROFILE%'
+    $s = $s -replace '[A-Za-z]:(?:\\){1,2}Users(?:\\){1,2}[^\\"''<>|]+', '%USERPROFILE%'
     $s = $s -replace '\b([A-Za-z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD))=\S*', '$1=<redacted>'
+    # Private IPv4 (10/8, 172.16/12, 192.168/16, link-local 169.254/16); not a part of a longer dotted number (a driver or build version).
+    $s = $s -replace '(?<![\d.])(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|169\.254\.\d{1,3}\.\d{1,3})(?![\d]|\.\d)', '<private-ip>'
+    $s = $s -replace '(?i)\bfe80::[0-9a-f:%.\w]*', '<ipv6>'
+    $s = $s -replace '(?i)\b(?:[0-9a-f]{1,4}:){7}[0-9a-f]{1,4}\b', '<ipv6>'
+    $s = $s -replace '\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b', '<mac>'
+    $s = $s -replace '(?i)\b(B?SSID)(\s*[:=]\s*)\S.*$', '$1$2<redacted>'
+    $s = $s -replace '(?i)\b(serial ?number|SerialNo|IdentifyingNumber|MachineGuid|BIOS serial)(\s*[:=]\s*)\S+', '$1$2<redacted>'
+    $s = $s -replace "\b[A-Z][A-Za-z-]{1,20}['’]s(?=\s+(?:AirPods|Buds|Headphones|Headset|iPhone|Galaxy|Pixel|Watch|Speaker|Phone|Laptop|PC|Surface|Earbuds))", '<name>''s'
+    foreach ($x in $extra) { $s = $s -replace ('(?i)(?<![A-Za-z0-9])' + [regex]::Escape($x.Trim()) + '(?![A-Za-z0-9])'), '<redacted>' }
     $s
   }
 }

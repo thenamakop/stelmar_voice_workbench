@@ -6,7 +6,7 @@
   1. Checks the zip (every file's SHA-256 against ZIP-MANIFEST.json) and reads summary.json.
   2. Copies the run's logs, reports and capability files to docs\evidence\gate-pack\<machine>\ (a dry run
      on the Legion goes to docs\evidence\gate-pack-dryrun\<profile>\), removing user paths and secret
-     values on the way. Evidence files are written by this script only. -AsDryRun <label> files a native
+     values on the way. Evidence files are written by this script only. -Redact names more strings to remove. -AsDryRun <label> files a native
      run on the Legion (the microphone test) the same way, under that label; on an emulated zip it only
      gives the evidence its own folder (a re-run of a few gates).
   3. Real laptop run: the rows of docs\GATES.md named by each gate's ledger entry change from PROVISIONAL
@@ -31,6 +31,9 @@ param(
   # natively): recorded as a dry run under this label, never as a laptop. Rows 84 and 111 and the Machines
   # table are not touched. Example: -AsDryRun legion-native-mic
   [string]$AsDryRun = '',
+  # Strings to remove from everything kept in the repository, besides what the redaction always removes: the laptop's
+  # computer name and user name when you know them (an identity.json at the root of the zip, if a pack has one, is read too).
+  [string[]]$Redact = @(),
   [string]$Repo = '',
   [string]$GatesMd = '',
   [string]$EvidenceRoot = ''
@@ -64,6 +67,15 @@ try {
   if ($bad.Count -gt 0) { Fail ("the zip does not match its ZIP-MANIFEST.json:`n  " + ($bad -join "`n  ")) }
   $summary = Read-PackJson -Path (Join-Path $tmp 'summary.json')
   if ($null -eq $summary) { Fail 'the zip has no summary.json' }
+  # What to remove besides the always-removed kinds: -Redact, and the names in identity.json (never copied to the evidence).
+  $extra = New-Object System.Collections.Generic.List[string]
+  foreach ($x in @($Redact | ForEach-Object { $_ -split ',' })) { if ($x.Trim()) { $extra.Add($x.Trim()) } }
+  $idFile = Join-Path $tmp 'identity.json'
+  if (Test-Path -LiteralPath $idFile) {
+    $idj = Read-PackJson -Path $idFile
+    if ($idj) { foreach ($k in 'computername', 'username', 'userdomain') { if ($idj.PSObject.Properties[$k] -and [string]$idj.$k) { $extra.Add([string]$idj.$k) } } }
+  }
+  $extraArr = @($extra.ToArray())
   if ([int]$summary.pack_version -ne 1) { Fail "pack_version $($summary.pack_version) is not understood by this script" }
   # Windows PowerShell turns ISO date strings into dates; one stable text keeps the run id the same.
   $summary.created = ([datetime]$summary.created).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ', [Globalization.CultureInfo]::InvariantCulture)
@@ -121,14 +133,14 @@ try {
       New-Item -ItemType Directory -Force -Path (Split-Path -Parent $to) | Out-Null
       if ($textExt -contains $f.Extension.ToLowerInvariant()) {
         $lines = @(Get-Content -LiteralPath $f.FullName -Encoding UTF8)
-        [IO.File]::WriteAllText($to, ((@(ConvertTo-IngestRedacted -Line $lines) -join "`r`n") + "`r`n"), (New-Object Text.UTF8Encoding($false)))
+        [IO.File]::WriteAllText($to, ((@(ConvertTo-IngestRedacted -Line $lines -Extra $extraArr) -join "`r`n") + "`r`n"), (New-Object Text.UTF8Encoding($false)))
       } else { Copy-Item -LiteralPath $f.FullName -Destination $to -Force }
       $copied++
     }
-    Copy-Item -LiteralPath (Join-Path $tmp 'summary.json') -Destination (Join-Path $evDir 'summary.json') -Force
+    [IO.File]::WriteAllText((Join-Path $evDir 'summary.json'), ((@(ConvertTo-IngestRedacted -Line @(Get-Content -LiteralPath (Join-Path $tmp 'summary.json') -Encoding UTF8) -Extra $extraArr) -join "`r`n") + "`r`n"), (New-Object Text.UTF8Encoding($false)))
     if (Test-Path -LiteralPath $repOut) {
       New-Item -ItemType Directory -Force -Path (Join-Path $evDir 'reports') | Out-Null
-      foreach ($f in @(Get-ChildItem -LiteralPath $repOut -File)) { [IO.File]::WriteAllText((Join-Path (Join-Path $evDir 'reports') $f.Name), ((@(ConvertTo-IngestRedacted -Line @(Get-Content -LiteralPath $f.FullName -Encoding UTF8)) -join "`r`n") + "`r`n"), (New-Object Text.UTF8Encoding($false))) }
+      foreach ($f in @(Get-ChildItem -LiteralPath $repOut -File)) { [IO.File]::WriteAllText((Join-Path (Join-Path $evDir 'reports') $f.Name), ((@(ConvertTo-IngestRedacted -Line @(Get-Content -LiteralPath $f.FullName -Encoding UTF8) -Extra $extraArr) -join "`r`n") + "`r`n"), (New-Object Text.UTF8Encoding($false))) }
     }
     # A short reading of the summary, written by this script.
     $txt = New-Object System.Collections.Generic.List[string]
@@ -138,9 +150,13 @@ try {
     foreach ($p in @($summary.pending)) { $txt.Add(('WAITING  {0,-20} {1}' -f $p.id, $p.reason)) }
     foreach ($p in @($summary.not_in_pack)) { $txt.Add(('NOT IN THIS PACK  {0}' -f $p.id)) }
     if (@($summary.still_changed).Count -gt 0) { $txt.Add('LEFT CHANGED ON THE LAPTOP:'); foreach ($s in @($summary.still_changed)) { $txt.Add("  $s") } }
-    [IO.File]::WriteAllText((Join-Path $evDir 'RESULTS.txt'), ((@(ConvertTo-IngestRedacted -Line @($txt.ToArray())) -join "`r`n") + "`r`n"), (New-Object Text.UTF8Encoding($false)))
+    [IO.File]::WriteAllText((Join-Path $evDir 'RESULTS.txt'), ((@(ConvertTo-IngestRedacted -Line @($txt.ToArray()) -Extra $extraArr) -join "`r`n") + "`r`n"), (New-Object Text.UTF8Encoding($false)))
     Write-Host "evidence: $copied files to $evRel"
   } else { Write-Host "preview: evidence would go to $evRel" }
+
+  # The words of the ledger rows come from the summary: the same removal.
+  foreach ($g in @($summary.gates)) { foreach ($k in 'headline', 'rig') { if ($g.PSObject.Properties[$k] -and $g.$k) { $g.$k = [string](@(ConvertTo-IngestRedacted -Line @([string]$g.$k) -Extra $extraArr)[0]) } } }
+  foreach ($p in @($summary.pending)) { if ($p.PSObject.Properties['reason'] -and $p.reason) { $p.reason = [string](@(ConvertTo-IngestRedacted -Line @([string]$p.reason) -Extra $extraArr)[0]) } }
 
   # ---- 3 and 4. docs\GATES.md ----
   $raw = [IO.File]::ReadAllText($GatesMd)
