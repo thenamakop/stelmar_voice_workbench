@@ -611,8 +611,15 @@ function Test-PackLaunchable {
 
 # ---- Resume after a restart ----------------------------------------------------------------------
 
-$script:ResumeTaskName = 'STELMAR-GatePack-Resume'
-$script:RunKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+# The two environment variables let the tests use a harmless task name and Run key; a real run never sets them.
+$script:ResumeTaskName = $(if ($env:WB_PACK_RESUME_TASK) { $env:WB_PACK_RESUME_TASK } else { 'STELMAR-GatePack-Resume' })
+$script:RunKey = $(if ($env:WB_PACK_RESUME_RUNKEY) { $env:WB_PACK_RESUME_RUNKEY } else { 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' })
+
+# Windows' own shutdown.exe. WB_PACK_SHUTDOWN lets a test point at a stub so no test can restart the laptop.
+function Get-PackShutdownExe {
+  if ($env:WB_PACK_SHUTDOWN) { return $env:WB_PACK_SHUTDOWN }
+  Join-Path $env:SystemRoot 'System32\shutdown.exe'
+}
 
 # schtasks.exe writes to stderr when a task is missing; under -ErrorAction Stop that would end the
 # caller, so the call is made with its own Continue preference.
@@ -622,42 +629,192 @@ function Invoke-PackSchtasks {
   [pscustomobject]@{ ExitCode = $r.ExitCode; Output = ((@($r.Output) + @($r.Error)) -join ' ') }
 }
 
-# A task that starts the runner again when this person logs in after the restart. With administrator
-# rights it is a scheduled task that runs elevated (no prompt); without them it is a Run key entry
-# (the dry run on the Legion). Both are removed again by -Cleanup and when the pack finishes.
-function Register-PackResume {
-  param([Parameter(Mandatory = $true)] [string]$RunScript, [string[]]$ExtraArguments = @(), [bool]$Admin = $true)
-  $ps = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-  $argText = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -Resumed {1}' -f $RunScript, ($ExtraArguments -join ' ')
-  if ($Admin) {
-    $tr = '"{0}" {1}' -f $ps, $argText
-    $r = Invoke-PackSchtasks -Arguments @('/Create', '/F', '/TN', $script:ResumeTaskName, '/SC', 'ONLOGON', '/RL', 'HIGHEST', '/DELAY', '0000:20', '/TR', $tr)
-    if ($r.ExitCode -ne 0) { throw "Could not register the logon task: $($r.Output)" }
-    return 'scheduled task ' + $script:ResumeTaskName
+# The task that starts the runner again when this person logs in after the restart.
+#
+# The task never carries the runner's own command line. schtasks.exe /TR refuses more than 261
+# characters, and the real command (run-gates.ps1 with its pack, work, lock, backup and emulator paths and
+# the gate list) is longer: "Value for '/TR' option cannot be more than 261 character(s)" stopped the
+# dry-run restart on 17 Nov 2026. The command lives in a small launcher script in the work folder; the task
+# runs only "powershell.exe -File <launcher>".
+
+# Pure. One value as PowerShell source: strings single-quoted (a quote doubled), booleans, arrays.
+function ConvertTo-PackPsLiteral {
+  param($Value)
+  if ($null -eq $Value) { return '$null' }
+  if ($Value -is [bool]) { return $(if ($Value) { '$true' } else { '$false' }) }
+  if ($Value -is [System.Management.Automation.SwitchParameter]) { return $(if ($Value.IsPresent) { '$true' } else { '$false' }) }
+  if ($Value -is [double] -or $Value -is [int] -or $Value -is [long]) { return ([string]::Format([Globalization.CultureInfo]::InvariantCulture, '{0}', $Value)) }
+  if ($Value -is [System.Collections.IEnumerable] -and $Value -isnot [string]) {
+    return '@(' + ((@($Value) | ForEach-Object { ConvertTo-PackPsLiteral $_ }) -join ', ') + ')'
   }
-  Set-ItemProperty -Path $script:RunKey -Name $script:ResumeTaskName -Value ('"{0}" {1}' -f $ps, $argText)
-  'Run key entry ' + $script:ResumeTaskName
+  "'" + (([string]$Value) -replace "'", "''") + "'"
 }
 
-function Unregister-PackResume {
-  $removed = New-Object System.Collections.Generic.List[string]
-  $q = Invoke-PackSchtasks -Arguments @('/Query', '/TN', $script:ResumeTaskName)
-  if ($q.ExitCode -eq 0) {
-    $null = Invoke-PackSchtasks -Arguments @('/Delete', '/F', '/TN', $script:ResumeTaskName)
-    $removed.Add('scheduled task ' + $script:ResumeTaskName)
+# Pure. The parameters the resumed runner gets, as an ordered hashtable (only what is set). Emulator,
+# role and the gate list are the ones of the run that asked for the restart.
+function New-PackResumeParams {
+  param(
+    [string]$Profile = 'laptop', [string]$PackRoot, [string]$WorkDir, [string]$LockDir = '', [string]$BackupRoot = '',
+    [string]$Emulate = '', [bool]$Quick = $false, [string[]]$Only = @(), [string[]]$Skip = @(), [string]$Role = '',
+    [double]$MinFreeRamGB = 0, [string]$RunLabel = '', [bool]$NoZip = $false
+  )
+  $p = [ordered]@{ Resumed = $true; Profile = $Profile; PackRoot = $PackRoot; WorkDir = $WorkDir }
+  if ($Role) { $p['Role'] = $Role }
+  if ($LockDir) { $p['LockDir'] = $LockDir }
+  if ($BackupRoot) { $p['BackupRoot'] = $BackupRoot }
+  if ($Emulate) { $p['Emulate'] = $Emulate }
+  if ($Quick) { $p['Quick'] = $true }
+  if (@($Only).Count -gt 0) { $p['Only'] = @($Only) }
+  if (@($Skip).Count -gt 0) { $p['Skip'] = @($Skip) }
+  if ($MinFreeRamGB -gt 0) { $p['MinFreeRamGB'] = $MinFreeRamGB }
+  if ($RunLabel) { $p['RunLabel'] = $RunLabel }
+  if ($NoZip) { $p['NoZip'] = $true }
+  $p
+}
+
+# The drive roots among Paths that Windows reports as removable (a USB stick; a USB SSD is usually 'Fixed').
+function Get-PackRemovablePaths {
+  param([string[]]$Paths)
+  $out = New-Object System.Collections.Generic.List[string]
+  foreach ($p in @($Paths)) {
+    try {
+      $root = [System.IO.Path]::GetPathRoot($p)
+      if ($root -and ([System.IO.DriveInfo]$root).DriveType -eq [System.IO.DriveType]::Removable -and -not $out.Contains($root)) { $out.Add($root) }
+    } catch { }
   }
-  $v = Get-ItemProperty -Path $script:RunKey -Name $script:ResumeTaskName -ErrorAction SilentlyContinue
+  @($out.ToArray())
+}
+
+function Get-PackResumeLauncherPath {
+  param([Parameter(Mandatory = $true)] [string]$WorkDir)
+  Join-Path $WorkDir 'resume-pack.ps1'
+}
+
+# Writes the launcher: sets the work folder as the current folder, runs the runner with the parameters
+# (splatted, so no quoting of paths is needed), and keeps the window open at the end so the person
+# reads the final banner. An error is shown, written to resume-error.txt and waited on, never lost.
+function New-PackResumeLauncher {
+  param([Parameter(Mandatory = $true)] [string]$Path, [Parameter(Mandatory = $true)] [string]$RunScript, [Parameter(Mandatory = $true)] [string]$WorkDir, [Parameter(Mandatory = $true)] $Params, [int]$WaitForRunnerSeconds = 120)
+  $lines = New-Object System.Collections.Generic.List[string]
+  $lines.Add('# STELMAR gate pack: carries on after the restart. Written by run-gates.ps1; removed when the run ends.')
+  $lines.Add("`$ErrorActionPreference = 'Stop'")
+  $lines.Add('$workDir = ' + (ConvertTo-PackPsLiteral $WorkDir))
+  $lines.Add('$p = @{')
+  foreach ($k in @($Params.Keys)) { $lines.Add(('  {0} = {1}' -f $k, (ConvertTo-PackPsLiteral $Params[$k]))) }
+  $lines.Add('}')
+  $lines.Add('try {')
+  # A pack on a USB drive may not be ready 30 seconds after logon: wait for the runner to appear.
+  $lines.Add('  $waited = 0')
+  $lines.Add('  while (-not (Test-Path -LiteralPath ' + (ConvertTo-PackPsLiteral $RunScript) + ') -and $waited -lt ' + $WaitForRunnerSeconds + ') { Start-Sleep -Seconds 2; $waited += 2 }')
+  $lines.Add('  Set-Location -LiteralPath $workDir')
+  $lines.Add('  & ' + (ConvertTo-PackPsLiteral $RunScript) + ' @p')
+  $lines.Add('} catch {')
+  $lines.Add('  $m = "The pack could not carry on after the restart: " + $_.Exception.Message')
+  $lines.Add('  try { Set-Content -LiteralPath (Join-Path $workDir ''resume-error.txt'') -Value $m } catch { }')
+  $lines.Add('  Write-Host $m -ForegroundColor Red')
+  $lines.Add('}')
+  $lines.Add("Read-Host 'This window can be closed now. Press Enter to close it' | Out-Null")
+  $dir = Split-Path -Parent $Path
+  if ($dir -and -not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+  # UTF-8 with a byte-order mark, so Windows PowerShell 5.1 reads a folder name with accents correctly.
+  [System.IO.File]::WriteAllText($Path, (($lines.ToArray()) -join "`r`n") + "`r`n", (New-Object System.Text.UTF8Encoding($true)))
+  $Path
+}
+
+function Get-PackPowerShellExe { Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe' }
+
+# Registers the resume at logon of the current user and reads it back. Returns a description. Throws (and
+# leaves nothing behind) when the task cannot be created or is not what was asked for. With administrator
+# rights it is a scheduled task at logon, highest run level, started 30 seconds after logon so Windows
+# start-up settles, with no time limit and no stop on battery; without them it is a Run key entry (not
+# elevated; the cold-cache gates need administrator rights and say so). -TaskName, -RunKey and -RunLevel
+# exist so tests can use harmless names.
+function Register-PackResume {
+  param(
+    [Parameter(Mandatory = $true)] [string]$Launcher,
+    [bool]$Admin = $true,
+    [string]$TaskName = $script:ResumeTaskName,
+    [string]$RunKey = $script:RunKey,
+    [ValidateSet('Highest', 'Limited')] [string]$RunLevel = 'Highest',
+    [int]$DelaySeconds = 30
+  )
+  if (-not (Test-Path -LiteralPath $Launcher)) { throw "Could not register the logon task: the launcher $Launcher is missing" }
+  $ps = Get-PackPowerShellExe
+  $argText = '-NoProfile -ExecutionPolicy Bypass -File "{0}"' -f $Launcher
+  $work = Split-Path -Parent $Launcher
+  if (-not $Admin) {
+    $cmd = '"{0}" {1}' -f $ps, $argText
+    # The Run key's command line is read by Windows with a limit of about 260 characters.
+    if ($cmd.Length -gt 255) { throw "Could not register the carry-on after the restart: the launcher path is too long for the Run key ($($cmd.Length) characters, 255 allowed). Use a shorter work folder." }
+    if (-not (Test-Path -LiteralPath $RunKey)) { New-Item -Path $RunKey -Force | Out-Null }
+    Set-ItemProperty -Path $RunKey -Name $TaskName -Value $cmd -ErrorAction Stop
+    $back = (Get-ItemProperty -Path $RunKey -Name $TaskName -ErrorAction Stop).$TaskName
+    if ($back -ne $cmd) { Remove-ItemProperty -Path $RunKey -Name $TaskName -ErrorAction SilentlyContinue; throw 'Could not register the carry-on after the restart: the Run key entry reads back different.' }
+    return 'Run key entry ' + $TaskName + ' (starts at logon, not elevated)'
+  }
+  $user = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+  $how = ''
+  try {
+    $action = New-ScheduledTaskAction -Execute $ps -Argument $argText -WorkingDirectory $work
+    $trigger = New-ScheduledTaskTrigger -AtLogOn -User $user
+    $trigger.Delay = 'PT{0}S' -f $DelaySeconds
+    $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel $RunLevel
+    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew
+    $null = Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force -ErrorAction Stop
+    $how = 'scheduled task ' + $TaskName
+  } catch {
+    # The Task Scheduler cmdlets are missing or refused: try schtasks.exe, whose /TR holds only the launcher.
+    $why = $_.Exception.Message
+    $tr = '"{0}" {1}' -f $ps, $argText
+    if ($tr.Length -gt 255) { throw "Could not register the logon task: $why (and the launcher path is too long for schtasks: $($tr.Length) characters, 255 allowed)" }
+    $lvl = $(if ($RunLevel -eq 'Highest') { 'HIGHEST' } else { 'LIMITED' })
+    $r = Invoke-PackSchtasks -Arguments @('/Create', '/F', '/TN', $TaskName, '/SC', 'ONLOGON', '/RL', $lvl, '/DELAY', ('0000:{0:00}' -f [math]::Min(59, $DelaySeconds)), '/TR', $tr)
+    if ($r.ExitCode -ne 0) { throw "Could not register the logon task: $why; schtasks said: $($r.Output)" }
+    $how = 'scheduled task ' + $TaskName + ' (through schtasks)'
+  }
+  # Read it back: it must be there and point at the launcher.
+  $q = Invoke-PackSchtasks -Arguments @('/Query', '/TN', $TaskName, '/XML')
+  if ($q.ExitCode -ne 0 -or $q.Output -notmatch [regex]::Escape((Split-Path -Leaf $Launcher))) {
+    $null = Invoke-PackSchtasks -Arguments @('/Delete', '/F', '/TN', $TaskName)
+    throw "Could not register the logon task: it was created but does not read back as the launcher ($($q.Output))"
+  }
+  $how
+}
+
+# Removes the task and the Run key entry, and the launcher when -WorkDir is given. Returns what was removed.
+function Unregister-PackResume {
+  param([string]$TaskName = $script:ResumeTaskName, [string]$RunKey = $script:RunKey, [string]$WorkDir = '')
+  $removed = New-Object System.Collections.Generic.List[string]
+  $q = Invoke-PackSchtasks -Arguments @('/Query', '/TN', $TaskName)
+  if ($q.ExitCode -eq 0) {
+    $null = Invoke-PackSchtasks -Arguments @('/Delete', '/F', '/TN', $TaskName)
+    $removed.Add('scheduled task ' + $TaskName)
+  }
+  $v = $null
+  if (Test-Path -LiteralPath $RunKey) { $v = Get-ItemProperty -Path $RunKey -Name $TaskName -ErrorAction SilentlyContinue }
   if ($v) {
-    Remove-ItemProperty -Path $script:RunKey -Name $script:ResumeTaskName -ErrorAction SilentlyContinue
-    $removed.Add('Run key entry ' + $script:ResumeTaskName)
+    Remove-ItemProperty -Path $RunKey -Name $TaskName -ErrorAction SilentlyContinue
+    $removed.Add('Run key entry ' + $TaskName)
+  }
+  if ($WorkDir) {
+    $l = Get-PackResumeLauncherPath -WorkDir $WorkDir
+    if (Test-Path -LiteralPath $l) { Remove-Item -LiteralPath $l -Force -ErrorAction SilentlyContinue; $removed.Add('launcher ' + $l) }
   }
   @($removed.ToArray())
 }
 
 function Test-PackResumeRegistered {
-  $q = Invoke-PackSchtasks -Arguments @('/Query', '/TN', $script:ResumeTaskName)
+  param([string]$TaskName = $script:ResumeTaskName, [string]$RunKey = $script:RunKey)
+  $q = Invoke-PackSchtasks -Arguments @('/Query', '/TN', $TaskName)
   if ($q.ExitCode -eq 0) { return $true }
-  [bool](Get-ItemProperty -Path $script:RunKey -Name $script:ResumeTaskName -ErrorAction SilentlyContinue)
+  if (-not (Test-Path -LiteralPath $RunKey)) { return $false }
+  [bool](Get-ItemProperty -Path $RunKey -Name $TaskName -ErrorAction SilentlyContinue)
+}
+
+# Asks Windows to restart in 15 seconds (shutdown /a cancels). Returns ExitCode and Output.
+function Request-PackRestart {
+  $r = Invoke-PackNative -FilePath (Get-PackShutdownExe) -ArgumentList @('/r', '/t', '15', '/c', 'STELMAR gate pack: restart for the cold-cache gates')
+  [pscustomobject]@{ ExitCode = $r.ExitCode; Output = ((@($r.Output) + @($r.Error)) -join ' ') }
 }
 
 # ---- What the pack changes, and putting it back --------------------------------------------------
@@ -686,7 +843,7 @@ function Add-PackChange {
 function Invoke-PackCleanup {
   param([Parameter(Mandatory = $true)] [string]$WorkDir, [string]$Testbench = '')
   $lines = New-Object System.Collections.Generic.List[string]
-  foreach ($r in @(Unregister-PackResume)) { $lines.Add("removed: $r") }
+  foreach ($r in @(Unregister-PackResume -WorkDir $WorkDir)) { $lines.Add("removed: $r") }
   $p = Get-PackChangesPath $WorkDir
   $list = Read-PackJson -Path $p -AsHashtable
   if ($null -ne $list) {
@@ -897,4 +1054,4 @@ function Format-PackGateLine {
   ('{0,-8} {1,-24}{2}{3} {4}' -f $Status, $Id, $m, $r, $Headline).TrimEnd()
 }
 
-Export-ModuleMember -Function Get-PackProp, ConvertTo-PackHashtable, Read-PackJson, Write-PackJson, Write-PackLog, Set-PackLogFile, Get-PackManifestProblems, Read-PackManifest, Get-PackLedgerRows, Test-PackLedgerMatches, Get-PackBootInfo, Select-PackNextGate, New-PackState, Get-PackStatePath, Read-PackState, Save-PackState, Set-PackGateStatus, Get-PackGateState, New-PackResult, Write-PackResult, Get-PackEvidenceVerdict, ConvertTo-PackStatus, Test-PackAdmin, Get-PackMainsPower, Test-PackIdle, Get-PackBlockingPrograms, ConvertTo-PackArg, Invoke-PackGateProcess, Invoke-PackUnblock, Test-PackLaunchable, Register-PackResume, Unregister-PackResume, Test-PackResumeRegistered, Get-PackChangesPath, Add-PackChange, Invoke-PackCleanup, Get-PackStillChanged, Get-PackMachineName, New-PackSummary, Get-PackCollectFiles, New-PackZip, Format-PackMinutes, Format-PackGateLine, Write-PackBanner, New-PackPromptHandler
+Export-ModuleMember -Function Get-PackProp, ConvertTo-PackHashtable, Read-PackJson, Write-PackJson, Write-PackLog, Set-PackLogFile, Get-PackManifestProblems, Read-PackManifest, Get-PackLedgerRows, Test-PackLedgerMatches, Get-PackBootInfo, Select-PackNextGate, New-PackState, Get-PackStatePath, Read-PackState, Save-PackState, Set-PackGateStatus, Get-PackGateState, New-PackResult, Write-PackResult, Get-PackEvidenceVerdict, ConvertTo-PackStatus, Test-PackAdmin, Get-PackMainsPower, Test-PackIdle, Get-PackBlockingPrograms, ConvertTo-PackArg, Invoke-PackGateProcess, Invoke-PackUnblock, Test-PackLaunchable, ConvertTo-PackPsLiteral, New-PackResumeParams, Get-PackRemovablePaths, Get-PackResumeLauncherPath, New-PackResumeLauncher, Get-PackPowerShellExe, Get-PackShutdownExe, Request-PackRestart, Register-PackResume, Unregister-PackResume, Test-PackResumeRegistered, Get-PackChangesPath, Add-PackChange, Invoke-PackCleanup, Get-PackStillChanged, Get-PackMachineName, New-PackSummary, Get-PackCollectFiles, New-PackZip, Format-PackMinutes, Format-PackGateLine, Write-PackBanner, New-PackPromptHandler

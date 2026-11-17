@@ -84,6 +84,12 @@ function Banner([string[]]$Lines, [string]$Colour = 'Yellow') {
   Write-PackBanner -Lines $Lines -Colour $Colour -LogFile (Join-Path $WorkDir 'runner.log')
 }
 
+# The test-only overrides of the restart path (see PackCore.psm1). A real run never sets them; say so if one is set, because
+# with a different task name -Cleanup would look for the wrong task.
+foreach ($ov in 'WB_PACK_RESUME_TASK', 'WB_PACK_RESUME_RUNKEY', 'WB_PACK_SHUTDOWN') {
+  if (Test-Path "Env:\$ov") { Say "warning: the environment variable $ov is set ($((Get-Item "Env:\$ov").Value)); it is for tests and changes what the restart step does" }
+}
+
 # ---- -Cleanup ------------------------------------------------------------------------------------
 if ($Cleanup) {
   $lines = @(Invoke-PackCleanup -WorkDir $WorkDir -Testbench $testbench)
@@ -227,7 +233,10 @@ if ($Resumed) {
   $state['restart']['resumed_at'] = (Get-Date).ToString('o')
   $state['restart']['uptime_at_resume_min'] = [math]::Round($uptime.UptimeMin, 1)
   Say ("resumed after the restart: the laptop has been up {0:n1} minutes" -f $uptime.UptimeMin)
-  Unregister-PackResume | Out-Null
+  Unregister-PackResume -WorkDir $WorkDir | Out-Null
+} elseif (Test-PackResumeRegistered) {
+  # A restart was asked for and then cancelled (shutdown /a) or never happened: the carry-on must not fire at some later logon.
+  foreach ($u in @(Unregister-PackResume -WorkDir $WorkDir)) { Say "removed a leftover carry-on from a restart that did not happen: $u" }
 }
 # Anything that was running when the laptop restarted or the runner died was interrupted.
 foreach ($k in @($state['gates'].Keys)) {
@@ -323,24 +332,62 @@ function Invoke-OneGate($g) {
 }
 
 function Confirm-Restart {
-  param([string[]]$For)
-  Banner (@('A RESTART IS NEEDED', ('These gates must start within an hour of a restart: ' + ($For -join ', ')), 'Save your work. The pack will carry on by itself when you log in again.', 'The laptop restarts only if you type RESTART below.')) 'Yellow'
+  param([string[]]$For, [string]$How = '')
+  $lines = @('A RESTART IS NEEDED', ('These gates must start within an hour of a restart: ' + ($For -join ', ')))
+  if ($How) { $lines += "The pack will carry on by itself when you log in again ($How)." }
+  else { $lines += 'The pack will carry on by itself when you log in again.' }
+  if ($How -match 'Run key') { $lines += 'This carry-on is NOT elevated (the pack was not started as administrator): the cold-cache runs that need administrator rights will say so.' }
+  $removable = @(Get-PackRemovablePaths -Paths @($PackRoot, $WorkDir))
+  if ($removable.Count -gt 0) { $lines += ('The pack or its results are on a removable drive (' + ($removable -join ', ') + '): leave it plugged in, with the same drive letter, until the pack has carried on.') }
+  $lines += 'Log in with the same Windows account, within an hour of the restart. Save your work.'
+  $lines += 'The laptop restarts only if you type RESTART below.'
+  Banner $lines 'Yellow'
   $a = (Read-Host 'Type RESTART to restart now, or press Enter to skip').Trim()
   $a -ceq 'RESTART'
 }
 
+# Sets up the carry-on after the restart. Returns what was registered, or $null (after saying why in plain
+# words) when it could not be: then no restart is offered, because nothing would bring the pack back.
+function Register-RestartResume {
+  try {
+    $rp = New-PackResumeParams -Profile $Profile -PackRoot $PackRoot -WorkDir $WorkDir -LockDir $LockDir -BackupRoot $BackupRoot -Emulate $Emulate -Quick ([bool]$quickRun) -Only $Only -Skip $Skip -Role $Role -MinFreeRamGB $MinFreeRamGB -RunLabel $RunLabel -NoZip ([bool]$NoZip)
+    $launcher = New-PackResumeLauncher -Path (Get-PackResumeLauncherPath -WorkDir $WorkDir) -RunScript $runnerScript -WorkDir $WorkDir -Params $rp
+    $how = Register-PackResume -Launcher $launcher -Admin (Test-PackAdmin)
+    Say "registered: $how (launcher $launcher)"
+    return $how
+  } catch {
+    $why = $_.Exception.Message
+    Say "could not register the carry-on after the restart: $why"
+    [void](Unregister-PackResume -WorkDir $WorkDir)
+    Banner @('THE PACK CANNOT RESTART THE LAPTOP YET', 'It could not set up the step that carries on after the restart, so it will not offer a restart.', "Reason: $why", 'Run it as administrator (right-click Windows PowerShell, Run as administrator) and start again.', 'The gates that need a restart stay waiting; everything else is run.') 'Red'
+    return $null
+  }
+}
+
+# Restarts the laptop (the carry-on is already registered). Returns $false, with the registration and the
+# state put back, when Windows does not accept the restart.
 function Invoke-RestartNow {
-  $extra = @('-Profile', $Profile, '-PackRoot', ('"{0}"' -f $PackRoot), '-WorkDir', ('"{0}"' -f $WorkDir), '-LockDir', ('"{0}"' -f $LockDir), '-BackupRoot', ('"{0}"' -f $BackupRoot))
-  if ($Emulate) { $extra += @('-Emulate', ('"{0}"' -f $Emulate)) }
-  if ($quickRun) { $extra += '-Quick' }
-  if ($Only.Count -gt 0) { $extra += @('-Only', ($Only -join ',')) }
-  $how = Register-PackResume -RunScript $runnerScript -ExtraArguments $extra -Admin (Test-PackAdmin)
+  param([string]$How = '')
   $state['restart']['requested_at'] = (Get-Date).ToString('o')
   $state['restart']['boot_time_before'] = (Get-PackBootInfo).BootTime.ToString('o')
   Save-PackState -WorkDir $WorkDir -State $state
-  Say "registered: $how"
-  Say 'restarting in 15 seconds (shutdown /a cancels)'
-  & shutdown.exe /r /t 15 /c 'STELMAR gate pack: restart for the cold-cache gates' | Out-Null
+  Say 'restarting in 15 seconds (shutdown /a cancels the restart; then run run-gates.ps1 -Cleanup)'
+  $r = Request-PackRestart
+  if ($r.ExitCode -ne 0) {
+    Say ('Windows did not accept the restart: ' + $r.Output)
+    Undo-RestartResume
+    Banner @('THE LAPTOP DID NOT RESTART', ('Windows did not accept the restart request (exit {0}): {1}' -f $r.ExitCode, $r.Output), 'The carry-on step was removed again.', 'Restart the laptop by hand and run run-gates.ps1 again within an hour of the restart.') 'Red'
+    return $false
+  }
+  $true
+}
+
+# The person did not type RESTART (or the restart failed): nothing may stay registered or recorded.
+function Undo-RestartResume {
+  foreach ($u in @(Unregister-PackResume -WorkDir $WorkDir)) { Say "removed: $u" }
+  $state['restart']['requested_at'] = $null
+  $state['restart']['boot_time_before'] = $null
+  Save-PackState -WorkDir $WorkDir -State $state
 }
 
 # ---- Keep the laptop awake while the pack runs (system and display), until this process ends -----
@@ -385,7 +432,13 @@ while (-not $stopRequested) {
   # Nothing can run this minute.
   if ($sel.NeedsRestart -and -not $NoRestart -and -not $Unattended -and $restartsAsked -lt 3) {
     $restartsAsked++
-    if (Confirm-Restart -For $sel.RestartFor) { Invoke-RestartNow; exit 0 }
+    # The carry-on is registered FIRST. If that fails no restart is offered.
+    $how = Register-RestartResume
+    if ($null -ne $how) {
+      if (Confirm-Restart -For $sel.RestartFor -How $how) {
+        if (Invoke-RestartNow -How $how) { exit 0 }
+      } else { Undo-RestartResume }
+    }
     foreach ($id in $sel.RestartFor) { [void]$deferred.Add($id) }
     continue
   }
