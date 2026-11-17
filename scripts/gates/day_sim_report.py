@@ -217,7 +217,7 @@ def main() -> int:
     actions = report.get("actions", [])
     for a in actions:
         P(f"  action {a.get('do')} on {a.get('session')} at {a.get('at_ist')}: {'ok' if a.get('ok') else 'ERROR ' + str(a.get('error'))} {a.get('detail') or ''}")
-    orig = next((s for n, s in info.items() if not n.endswith("-copy") and s["title"] == plan.get("actions", [{}])[-1].get("from")), None)
+    orig = next((s for n, s in info.items() if not n.endswith("-copy") and s["title"] == (plan.get("actions") or [{}])[-1].get("from")), None)
     imp = next((s for n, s in info.items() if n.endswith("-copy")), None)
     if orig and imp:
         a = [x["text"] for x in sorted(jsonl(orig["dir"] / "post-1.jsonl"), key=lambda x: x["start_ms"])]
@@ -267,6 +267,13 @@ def main() -> int:
         n2 = len(jsonl(s["dir"] / "post-2.jsonl"))
         if n2:
             P(f"  {name}: post-2.jsonl {n2} segments")
+        db = s["dir"] / "transcript.db"
+        for r in sql(db, "SELECT name, complete, is_default FROM revisions ORDER BY name"):
+            P(f"  {name}: revision {r[0]}: complete {bool(r[1])}, default {bool(r[2])}")
+        for j in sql(db, "SELECT id, kind, revision, state, cursor_ms FROM jobs WHERE kind='night'"):
+            P(f"  {name}: night job {j[0]} (revision {j[2]}): state {j[3]}, committed to {j[4] / 1000:.1f} s")
+            for u in sql(db, "SELECT idx, start_ms, end_ms, state FROM units WHERE job=? ORDER BY idx", (j[0],)):
+                P(f"    night unit {u[0]}: {u[1] / 1000:.1f} s to {u[2] / 1000:.1f} s, state {u[3]}")
     P("")
 
     P("Scheduler log (every line, IST time first):")

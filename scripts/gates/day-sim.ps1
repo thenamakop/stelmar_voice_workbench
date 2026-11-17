@@ -45,6 +45,8 @@ param(
   [string]$ProfileData = 'D:\STELMAR-Gate\system-check\full-emu-low\data',
   [string]$Audio = 'D:\STELMAR-Gate\day-sim\smoke',
   [int]$NightMinutes = 8,
+  # Names the run folder and the evidence file: smoke (the first smoke) or a second smoke with other audio.
+  [string]$Tag = 'smoke',
   [int]$PartSeconds = 120,
   [string]$CaptureDevice = '',
   [string]$PlayDevice = '',
@@ -103,10 +105,10 @@ function Write-SmokeEvidence([string]$Run) {
   $rep = Invoke-WbNative -FilePath $python -ArgumentList @('-X', 'utf8', (Join-Path $repo 'scripts\gates\day_sim_report.py'), $Run, $tmp)
   if (-not (Test-Path -LiteralPath $tmp)) { throw "the report was not written: $((@($rep.Error) + @($rep.Output)) -join ' ')" }
   $body = @([IO.File]::ReadAllLines($tmp, [Text.Encoding]::UTF8))
-  $out = Join-Path $OutDir "day-sim-smoke-$Profile.txt"
+  $out = Join-Path $OutDir "day-sim-$Tag-$Profile.txt"
   $header = @(
     "date: $(Get-Date -Format 'yyyy-MM-dd HH:mm') (IST on the Legion)",
-    "command: powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\gates\day-sim.ps1 -Smoke -Profile $Profile",
+    "command: powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\gates\day-sim.ps1 -Smoke -Profile $Profile -Tag $Tag -Audio $Audio -NightMinutes $NightMinutes",
     "machine: $Machine, emulation profile $Profile; the gate build target\gate\stelmar-voice-workbench.exe, WB_GATE_DAY_PLAN; NOT A GATE (a smoke run of the queue paths)",
     "source: $((Invoke-WbNative -FilePath 'git' -ArgumentList @('-C', $repo, 'rev-parse', '--short', 'HEAD')).Output -join '')",
     "build: $(Split-Path -Leaf $Exe) sha256 $((Get-FileHash -LiteralPath $Exe -Algorithm SHA256).Hash.ToLowerInvariant())",
@@ -146,10 +148,10 @@ try {
     if ($rigPlan) { Assert-WbRigPlacement -JobMask $rigPlan.JobMask -PlayerMask $rigPlan.PlayerMask -ReferenceMask $rigPlan.ReferenceMask -What 'planned, before anything starts' }
 
     $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-    $run = Join-Path $WorkRoot "smoke-$Profile-$stamp"
+    $run = Join-Path $WorkRoot "$Tag-$Profile-$stamp"
     $rec = Join-Path $run 'rec'
     $data = Join-Path $run 'data'
-    $backup = Join-Path $BackupRoot "smoke-$Profile-$stamp"
+    $backup = Join-Path $BackupRoot "$Tag-$Profile-$stamp"
     New-Item -ItemType Directory -Force -Path $rec, $data | Out-Null
     Copy-Item -LiteralPath (Join-Path $ProfileData 'capability.json') -Destination $data
     if (Test-Path -LiteralPath (Join-Path $ProfileData 'verified-models.json')) { Copy-Item -LiteralPath (Join-Path $ProfileData 'verified-models.json') -Destination $data }
@@ -184,14 +186,19 @@ try {
       $at += $dur + 30
     }
     $first = $sessions[0].title
-    $mixed = $sessions[2].title
-    $actions = @(
-      [ordered]@{ session = $first; on = 'stop'; after_s = 6; do = 'queue_pause' },
-      [ordered]@{ session = $first; on = 'stop'; after_s = 50; do = 'queue_resume' },
-      [ordered]@{ session = $mixed; on = 'start'; after_s = 170; do = 'lock_language'; lang = 'hi' },
-      [ordered]@{ session = $mixed; on = 'start'; after_s = 230; do = 'lock_language' },
-      [ordered]@{ session = $first; on = 'stop'; after_s = 120; do = 'import_session'; from = $first }
-    )
+    # The first smoke (three sessions) also pauses, locks a language and imports; a single long session does none
+    # of that: it exists to show a unit decoded before Stop and a night pass that commits post-2.
+    $actions = @()
+    if ($sessions.Count -ge 3) {
+      $mixed = $sessions[2].title
+      $actions = @(
+        [ordered]@{ session = $first; on = 'stop'; after_s = 6; do = 'queue_pause' },
+        [ordered]@{ session = $first; on = 'stop'; after_s = 50; do = 'queue_resume' },
+        [ordered]@{ session = $mixed; on = 'start'; after_s = 170; do = 'lock_language'; lang = 'hi' },
+        [ordered]@{ session = $mixed; on = 'start'; after_s = 230; do = 'lock_language' },
+        [ordered]@{ session = $first; on = 'stop'; after_s = 120; do = 'import_session'; from = $first }
+      )
+    }
     $planFile = Join-Path $run 'day-plan.json'
     Write-Utf8 $planFile ((@{ sessions = $planSessions; actions = $actions } | ConvertTo-Json -Depth 6))
 

@@ -123,11 +123,14 @@ BLOCK: dict[str, int] = {}
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--smoke", action="store_true", help="three short sessions for the smoke run")
-    ap.add_argument("--out", default="D:/STELMAR-Gate/day-sim/smoke")
+    ap.add_argument("--long", action="store_true", help="one 14-minute Hindi-heavy session (second smoke: a unit decoded before Stop, a night pass that can finish)")
+    ap.add_argument("--out", default="")
     args = ap.parse_args()
-    if not args.smoke:
-        print("only --smoke is built so far (the full day's audio is step 7 after the owner's go)", file=sys.stderr)
+    if not (args.smoke or args.long):
+        print("only --smoke and --long are built so far (the full day's audio is step 7 after the owner's go)", file=sys.stderr)
         return 2
+    if not args.out:
+        args.out = "D:/STELMAR-Gate/day-sim/smoke-long" if args.long else "D:/STELMAR-Gate/day-sim/smoke"
 
     en = sorted(load_manifest("fleurs-en"), key=lambda u: u.id)
     hi = sorted(load_manifest("fleurs-hi"), key=lambda u: u.id)
@@ -135,21 +138,29 @@ def main() -> int:
     cs = [u for u in cs if 3.0 <= u.duration_s <= 20.0]
 
     sessions: list[Session] = []
-    # Disjoint slices: English session from the front of the English list, the mixed one from the back, and so on.
     BLOCK.clear()
-    sessions.append(build("Smoke English", ["en", "hi"], 11, 360.0, [("fleurs-en", en[:200], "en")]))
-    sessions.append(build("Smoke Hindi", ["en", "hi"], 12, 390.0, [("fleurs-hi", hi[:200], "hi")]))
-    # Mixed: a block of 3 English, 3 Hindi, 3 code-switched, in turn, from the other ends of the lists.
-    BLOCK.update({"fleurs-en": 3, "fleurs-hi": 3, "coshe-eval": 3})
-    sessions.append(
-        build(
-            "Smoke Mixed",
-            ["en", "hi"],
-            13,
-            450.0,
-            [("fleurs-en", reversed(en[-200:]), "en"), ("fleurs-hi", reversed(hi[-200:]), "hi"), ("coshe-eval", cs[:300], "hi")],
+    if args.long:
+        # Four Hindi utterances, then one English, in turn, from the middle of the lists (the first smoke used the
+        # ends): about 14 minutes, so the first unit (about 5 minutes) is cut and decoded while the session records.
+        BLOCK.update({"fleurs-hi": 4, "fleurs-en": 1})
+        sessions.append(
+            build("Long Hindi", ["en", "hi"], 21, 840.0, [("fleurs-hi", hi[200:500], "hi"), ("fleurs-en", en[200:500], "en")])
         )
-    )
+    else:
+        # Disjoint slices: English session from the front of the English list, the mixed one from the back, and so on.
+        sessions.append(build("Smoke English", ["en", "hi"], 11, 360.0, [("fleurs-en", en[:200], "en")]))
+        sessions.append(build("Smoke Hindi", ["en", "hi"], 12, 390.0, [("fleurs-hi", hi[:200], "hi")]))
+        # Mixed: a block of 3 English, 3 Hindi, 3 code-switched, in turn, from the other ends of the lists.
+        BLOCK.update({"fleurs-en": 3, "fleurs-hi": 3, "coshe-eval": 3})
+        sessions.append(
+            build(
+                "Smoke Mixed",
+                ["en", "hi"],
+                13,
+                450.0,
+                [("fleurs-en", reversed(en[-200:]), "en"), ("fleurs-hi", reversed(hi[-200:]), "hi"), ("coshe-eval", cs[:300], "hi")],
+            )
+        )
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
