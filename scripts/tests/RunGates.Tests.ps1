@@ -150,6 +150,55 @@ try {
   # 9. -Cleanup with nothing changed says so and exits 0.
   $c = @(& $ps -NoProfile -ExecutionPolicy Bypass -File (Join-Path $pack 'run-gates.ps1') -Cleanup -WorkDir (Join-Path $tmp 'work') 2>&1 | ForEach-Object { "$_" })
   Check '-Cleanup with nothing changed says so' (($c -join "`n") -match 'Nothing is left changed' -and $LASTEXITCODE -eq 0)
+
+  # 10. Disturbing programs (the facts file stands in for the process list). Unattended: the pack lists them, waits at most
+  #     -ProgramWaitMinutes, carries on, and records them in the state, in every gate's result and in its evidence.
+  Remove-Item -LiteralPath (Join-Path $tmp 'work') -Recurse -Force -ErrorAction SilentlyContinue
+  New-FakeGate 'one' 'PASS'; New-FakeGate 'two' 'PASS'
+  New-Manifest @((G 'one' 'P1' 1), (G 'two' 'P1' 2))
+  $factsSteam = '{"interface":true,"ac":true,"idle":true,"programs":["Steam","steamwebhelper"]}'
+  $rp = Run-Runner @('-ProgramWaitMinutes', '0') $factsSteam
+  $st = State
+  $sum = Get-Content -LiteralPath (Join-Path $tmp 'work\summary.json') -Raw | ConvertFrom-Json
+  Check 'unattended with Steam running: the banner names the programs and the run still finishes' (($rp.Out -join "`n") -match 'These programs are running' -and ($rp.Out -join "`n") -match 'steamwebhelper' -and $st.gates.one.status -eq 'PASS' -and $st.gates.two.status -eq 'PASS')
+  Check 'the state records the programs, the mode and the outcome' (($st.programs.at_start -join ',') -eq 'Steam,steamwebhelper' -and $st.programs.mode -eq 'unattended' -and $st.programs.outcome -eq 'still-running')
+  Check 'every gate result in the summary names the programs that were running' ((@($sum.gates | Where-Object { ($_.disturbing_programs -join ',') -eq 'Steam,steamwebhelper' }).Count -eq 2) -and (($sum.programs.at_start -join ',') -eq 'Steam,steamwebhelper'))
+  $ev = Join-Path $tmp 'work\gates\one\disturbing-programs.txt'
+  Check 'each gate has an evidence file naming them' ((Test-Path -LiteralPath $ev) -and ((Get-Content -LiteralPath $ev -Raw) -match 'Steam' -and (Get-Content -LiteralPath $ev -Raw) -match 'steamwebhelper'))
+  $zip = @(Get-ChildItem -LiteralPath $pack -Filter 'gate-results-*.zip' | Sort-Object LastWriteTime -Descending)[0]
+  $zz = [System.IO.Compression.ZipFile]::OpenRead($zip.FullName); $zn = @($zz.Entries | ForEach-Object { $_.FullName }); $zz.Dispose()
+  Check 'the evidence file is in the results zip' ($zn -contains 'work/gates/one/disturbing-programs.txt')
+
+  # Nothing disturbing: the same fields say none.
+  Remove-Item -LiteralPath (Join-Path $tmp 'work') -Recurse -Force
+  $rn = Run-Runner @('-ProgramWaitMinutes', '0')
+  $st = State
+  $sum = Get-Content -LiteralPath (Join-Path $tmp 'work\summary.json') -Raw | ConvertFrom-Json
+  Check 'no disturbing programs: outcome none, no banner, empty lists, evidence says none' ($st.programs.outcome -eq 'none' -and ($rn.Out -join "`n") -notmatch 'These programs are running' -and @($sum.gates | Where-Object { @($_.disturbing_programs).Count -gt 0 }).Count -eq 0 -and ((Get-Content -LiteralPath (Join-Path $tmp 'work\gates\one\disturbing-programs.txt') -Raw) -match 'none'))
+
+  # A person at the start (no -Unattended) with -NoProgramPrompt: the list is shown, nothing is asked, the run goes on.
+  Remove-Item -LiteralPath (Join-Path $tmp 'work') -Recurse -Force
+  $factsFile = Join-Path $tmp 'facts.json'; Set-Content -LiteralPath $factsFile -Value $factsSteam -Encoding ASCII
+  $a = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $pack 'run-gates.ps1'), '-Role', 'low', '-NoRestart', '-FactsFile', $factsFile, '-WorkDir', (Join-Path $tmp 'work'), '-BackupRoot', (Join-Path $tmp 'backup'), '-NoProgramPrompt')
+  $ra = @(& $ps @a 2>&1 | ForEach-Object { "$_" })
+  $st = State
+  Check 'attended with -NoProgramPrompt: mode attended, outcome shown, the run finished' ($st.programs.mode -eq 'attended' -and $st.programs.outcome -eq 'shown' -and $st.gates.one.status -eq 'PASS' -and ($ra -join "`n") -match 'Carrying on')
+
+  # A program that closes while the pack waits: the wait ends at the next look (15 s), not after the full time.
+  Remove-Item -LiteralPath (Join-Path $tmp 'work') -Recurse -Force
+  $log = Join-Path $tmp 'work\runner.log'
+  $job = Start-Job -ArgumentList $log, $factsFile -ScriptBlock {
+    param($log, $f)
+    for ($i = 0; $i -lt 240; $i++) {
+      Start-Sleep -Milliseconds 500
+      if ((Test-Path -LiteralPath $log) -and (Select-String -LiteralPath $log -Pattern 'Waiting up to' -Quiet)) { Set-Content -LiteralPath $f -Value '{"interface":true,"ac":true,"idle":true}' -Encoding ASCII; break }
+    }
+  }
+  $t0 = Get-Date
+  $rw = Run-Runner @('-ProgramWaitMinutes', '1') $factsSteam
+  $job | Wait-Job -Timeout 30 | Out-Null; Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
+  $st = State
+  Check 'a program closed during the wait: outcome closed, waited about one poll, still running list empty' ($st.programs.outcome -eq 'closed' -and $st.programs.waited_minutes -ge 0.2 -and $st.programs.waited_minutes -le 0.6 -and @($st.programs.at_end_of_check).Count -eq 0 -and ($st.programs.at_start -join ',') -eq 'Steam,steamwebhelper')
 } finally {
   Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
 }

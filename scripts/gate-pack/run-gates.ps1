@@ -48,6 +48,11 @@ param(
   [string]$RunLabel = '',
   # For tests: the facts the runner would measure.
   [string]$FactsFile = '',
+  # Programs that disturb the measurements (Steam, LatencyMon, ...): after a restart nobody is at the keyboard, so the pack waits at most
+  # this many minutes for them to close and then carries on.
+  [int]$ProgramWaitMinutes = 10,
+  # Only list the disturbing programs and carry on, without asking the person to close them (scripted runs).
+  [switch]$NoProgramPrompt,
   [switch]$NoZip
 )
 $ErrorActionPreference = 'Stop'
@@ -219,10 +224,17 @@ if (Test-Path -LiteralPath $testbench) {
 if ($blockedFiles.Count -gt 0) {
   Banner (@('WINDOWS OR YOUR ANTIVIRUS BLOCKED A FILE OF THE PACK. Nothing was changed.', 'Tell the pack owner which file and what Windows said:') + ($blockedFiles | ForEach-Object { '  ' + $_ }) + @('Do not turn protection off. Ask for an exception for the pack folder, or copy the pack again.')) 'Red'
 }
-$blockers = @(Get-PackBlockingPrograms)
-if ($blockers.Count -gt 0) {
-  Banner (@('Please close these programs before the recorder gates (they disturb the measurements):') + ($blockers | ForEach-Object { '  ' + $_ })) 'Yellow'
+# Programs that disturb the measurements. At a start with a person at the keyboard the pack asks them to close the programs and
+# checks again; after a restart (or -Unattended) it waits at most -ProgramWaitMinutes for them to close and then carries on, so the
+# one-hour window after a restart is never lost. Which programs were running is recorded in the state, in every gate's result and
+# in each gate's evidence folder.
+function Get-RunningProgramNames {
+  if ($FactsFile -and (Test-Path -LiteralPath $FactsFile)) { $f = Read-PackJson -Path $FactsFile -AsHashtable; return @($f['programs'] | Where-Object { $_ }) }
+  @(Get-PackBlockingPrograms)
 }
+$pc = Invoke-PackProgramCheck -Attended (-not ($Unattended -or $Resumed)) -WaitMinutes $ProgramWaitMinutes -NoPrompt:$NoProgramPrompt -GetNames { Get-RunningProgramNames } -Show { param($lines) Banner @($lines) 'Yellow' }
+$state['programs'] = [ordered]@{ mode = $pc.Mode; at_start = @($pc.Initial); at_end_of_check = @($pc.Final); asked = $pc.Asked; waited_minutes = $pc.WaitedMinutes; outcome = $pc.Outcome }
+if ($pc.Initial.Count -gt 0) { Say ('disturbing programs at the start: {0}; {1} ({2}, asked {3} time(s), waited {4} min); still running: {5}' -f ($pc.Initial -join ', '), $pc.Outcome, $pc.Mode, $pc.Asked, $pc.WaitedMinutes, $(if ($pc.Final.Count -gt 0) { $pc.Final -join ', ' } else { 'none' })) }
 if (-not (Test-PackAdmin)) {
   Say 'note: not running as administrator. The cold-cache hashing runs and the logon task need it; those gates will say so.'
 }
@@ -255,7 +267,7 @@ if (-not $BackupRoot) {
     $tries = 0
     while ($true) {
       $tries++
-      $d = Read-Host 'Type the drive letter of the external SSD (for example E:), or press Enter to use C:'
+      $d = Read-Host (Get-PackBackupPrompt)
       $ans = Resolve-PackBackupAnswer -Answer $d
       Write-Host ('  ' + $ans.Message)
       if (-not $ans.Ask) { $BackupRoot = $ans.Root; break }
@@ -285,6 +297,7 @@ function Invoke-OneGate($g) {
     uptime_min = [math]::Round($up.UptimeMin, 1); boot_time = $up.BootTime.ToString('o'); admin = (Test-PackAdmin)
     rig_prefer = $(if ($isEmu) { 'cable' } else { 'loopback' }); backup_root = $BackupRoot; unattended = [bool]$Unattended
     runner = $runnerScript
+    disturbing_programs = @(Get-RunningProgramNames)
   }
   $ctxFile = Join-Path $gdir 'ctx.json'
   Write-PackJson -Path $ctxFile -Value $ctx
@@ -323,7 +336,13 @@ function Invoke-OneGate($g) {
     if (Test-Path -LiteralPath $errLog) { $tail = (@(Get-Content -LiteralPath $errLog -Tail 3) -join ' | ') }
     $reason = "the gate script ended without a result (exit $($run.ExitCode)). $tail"
   } else { $status = [string]$res['status']; $reason = [string]$res['headline'] }
-  $fields = @{ status = $status; ended = (Get-Date).ToString('o'); minutes = $minutes; reason = $reason }
+  # Which disturbing programs were running at the start or at the end of this gate: in its state, its result summary and its evidence.
+  $dp = @(@($ctx['disturbing_programs']) + @(Get-RunningProgramNames) | Where-Object { $_ } | Sort-Object -Unique)
+  try {
+    $dpText = @('Programs that disturb the measurements, seen at the start or at the end of gate ' + $id + ':') + $(if ($dp.Count -gt 0) { @($dp | ForEach-Object { '  ' + $_ }) } else { @('  none') })
+    [IO.File]::WriteAllText((Join-Path $gdir 'disturbing-programs.txt'), (($dpText -join "`r`n") + "`r`n"), (New-Object Text.UTF8Encoding($false)))
+  } catch { Say ('could not write disturbing-programs.txt: ' + $_.Exception.Message) }
+  $fields = @{ status = $status; ended = (Get-Date).ToString('o'); minutes = $minutes; reason = $reason; disturbing_programs = @($dp) }
   Set-PackGateStatus -State $state -Id $id -Fields $fields
   if ($status -eq 'PENDING') { [void]$deferred.Add($id); Set-PackGateStatus -State $state -Id $id -Fields @{ attempts = ($attempts - 1) } }
   # An INVALID run is repeated (up to three tries) only when nothing says the next try would be the same: not after an

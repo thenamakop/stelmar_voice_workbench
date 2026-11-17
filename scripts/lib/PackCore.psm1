@@ -528,6 +528,79 @@ function Get-PackBlockingPrograms {
   @($Names | Where-Object { $_ -match $rx } | Sort-Object -Unique)
 }
 
+# What Read-Host shows before the drive letter. Read-Host adds its own colon, so the text must not end with one
+# (on 17 Nov 2026 the prompt ended "press Enter to use C::").
+function Get-PackBackupPrompt { 'Type the drive letter of the external SSD (for example E:), or press Enter to use C' }
+
+# The programs that disturb the measurements, at the start of a run.
+#  * A person is at the keyboard (-Attended): list them, ask the person to close them and press Enter, look again; if they are
+#    still running, ask once more, then go on. (-NoPrompt only shows the list and goes on: scripted runs.)
+#  * Nobody is (the carry-on after a restart, -Unattended): show the list and look again every -PollSeconds for at most
+#    -WaitMinutes (Steam often starts again at login), then go on. The wait never exceeds -WaitMinutes, so the one-hour
+#    window after a restart is not lost.
+# Never blocks and never stops the run. Returns what was running at the start and at the end, how often the person was asked,
+# how long it waited and the outcome: none, closed, still-running or shown. -GetNames, -Ask, -Show and -Sleep are for tests.
+function Invoke-PackProgramCheck {
+  [CmdletBinding()]
+  param(
+    [bool]$Attended = $true,
+    [int]$WaitMinutes = 10,
+    [int]$PollSeconds = 15,
+    [switch]$NoPrompt,
+    [scriptblock]$GetNames = { @(Get-PackBlockingPrograms) },
+    [scriptblock]$Ask = { param($text) Read-Host $text },
+    [scriptblock]$Show = { param($lines) foreach ($l in @($lines)) { Write-Host $l -ForegroundColor Yellow } },
+    [scriptblock]$Sleep = { param($seconds) Start-Sleep -Seconds $seconds }
+  )
+  $initial = @(& $GetNames | Where-Object { $_ } | Sort-Object -Unique)
+  $res = [ordered]@{ Mode = $(if ($Attended) { 'attended' } else { 'unattended' }); Initial = $initial; Final = $initial; Asked = 0; WaitedMinutes = 0.0; Outcome = 'none' }
+  if ($initial.Count -eq 0) { return [pscustomobject]$res }
+  $list = @($initial | ForEach-Object { '  ' + $_ })
+  $head = 'These programs are running. They disturb the measurements:'
+  if ($Attended -and -not $NoPrompt) {
+    & $Show (@($head) + $list + @('Close them now (Steam: right-click its tray icon, Exit), then press Enter here.'))
+    $now = $initial
+    for ($i = 0; $i -lt 2; $i++) {
+      if ($i -eq 0) { [void](& $Ask 'Close them, then press Enter to check again') }
+      else { & $Show (@('Still running:') + @($now | ForEach-Object { '  ' + $_ })); [void](& $Ask 'Close them and press Enter once more (the pack carries on after this)') }
+      $res.Asked++
+      $now = @(& $GetNames | Where-Object { $_ } | Sort-Object -Unique)
+      if ($now.Count -eq 0) { break }
+    }
+    $res.Final = $now
+    $res.Outcome = $(if ($now.Count -eq 0) { 'closed' } else { 'still-running' })
+    if ($now.Count -gt 0) { & $Show @('Carrying on. The results will say which programs were running.') }
+    return [pscustomobject]$res
+  }
+  if ($Attended) {
+    & $Show (@($head) + $list + @('Carrying on. The results will say which programs were running.'))
+    $res.Outcome = 'shown'
+    return [pscustomobject]$res
+  }
+  # Nobody at the keyboard.
+  $budget = [math]::Max(0, $WaitMinutes) * 60
+  if ($budget -le 0) {
+    & $Show (@($head) + $list + @('Carrying on. The results will say which programs were running.'))
+    $res.Outcome = 'still-running'
+    return [pscustomobject]$res
+  }
+  & $Show (@($head) + $list + @(('Waiting up to {0} minutes for them to close; then the pack carries on.' -f $WaitMinutes)))
+  $waited = 0
+  $now = $initial
+  $step = [math]::Max(1, $PollSeconds)
+  while ($waited -lt $budget -and $now.Count -gt 0) {
+    $s = [math]::Min($step, $budget - $waited)
+    & $Sleep $s
+    $waited += $s
+    $now = @(& $GetNames | Where-Object { $_ } | Sort-Object -Unique)
+  }
+  $res.WaitedMinutes = [math]::Round($waited / 60.0, 1)
+  $res.Final = $now
+  $res.Outcome = $(if ($now.Count -eq 0) { 'closed' } else { 'still-running' })
+  if ($now.Count -gt 0) { & $Show @(('Still running after {0} minutes. Carrying on. The results will say which programs were running.' -f $WaitMinutes)) }
+  [pscustomobject]$res
+}
+
 # ---- Starting a gate -----------------------------------------------------------------------------
 
 function ConvertTo-PackArg {
@@ -962,6 +1035,7 @@ function New-PackSummary {
       notes = $(if ($res) { @($res['notes']) } else { @() })
       quick = [bool](Get-PackProp $State 'quick' $false)
       not_at_full_length = $(if ($res) { [bool]$res['not_at_full_length'] } else { $false })
+      disturbing_programs = @(Get-PackProp $gs 'disturbing_programs' @())
       ledger = @(Get-PackProp $g 'ledger' @())
     }
     [void]$gates.Add($entry)
@@ -976,6 +1050,7 @@ function New-PackSummary {
     run_label = $RunLabel
     created = (Get-Date).ToString('o')
     restart = (Get-PackProp $State 'restart' $null)
+    programs = (Get-PackProp $State 'programs' $null)
     order_used = @(Get-PackProp $State 'order_used' @())
     gates = @($gates.ToArray())
     pending = @($pending.ToArray())
@@ -1088,4 +1163,4 @@ function Format-PackGateLine {
   ('{0,-8} {1,-24}{2}{3} {4}' -f $Status, $Id, $m, $r, $Headline).TrimEnd()
 }
 
-Export-ModuleMember -Function Get-PackProp, ConvertTo-PackHashtable, Read-PackJson, Write-PackJson, Write-PackLog, Set-PackLogFile, Get-PackManifestProblems, Read-PackManifest, Get-PackLedgerRows, Test-PackLedgerMatches, Get-PackBootInfo, Select-PackNextGate, New-PackState, Get-PackStatePath, Read-PackState, Save-PackState, Set-PackGateStatus, Get-PackGateState, New-PackResult, Write-PackResult, Get-PackEvidenceVerdict, ConvertTo-PackStatus, Test-PackAdmin, Get-PackMainsPower, Test-PackIdle, Get-PackBlockingPrograms, ConvertTo-PackArg, Invoke-PackGateProcess, Invoke-PackUnblock, Test-PackLaunchable, ConvertTo-PackPsLiteral, New-PackResumeParams, Get-PackRemovablePaths, Get-PackResumeLauncherPath, New-PackResumeLauncher, Get-PackPowerShellExe, Get-PackShutdownExe, Request-PackRestart, Register-PackResume, Unregister-PackResume, Test-PackResumeRegistered, Get-PackChangesPath, Add-PackChange, Invoke-PackCleanup, Get-PackStillChanged, Get-PackMachineName, New-PackSummary, Get-PackCollectFiles, Resolve-PackBackupAnswer, Get-PackZipName, New-PackZip, Format-PackMinutes, Format-PackGateLine, Write-PackBanner, New-PackPromptHandler
+Export-ModuleMember -Function Get-PackProp, ConvertTo-PackHashtable, Read-PackJson, Write-PackJson, Write-PackLog, Set-PackLogFile, Get-PackManifestProblems, Read-PackManifest, Get-PackLedgerRows, Test-PackLedgerMatches, Get-PackBootInfo, Select-PackNextGate, New-PackState, Get-PackStatePath, Read-PackState, Save-PackState, Set-PackGateStatus, Get-PackGateState, New-PackResult, Write-PackResult, Get-PackEvidenceVerdict, ConvertTo-PackStatus, Test-PackAdmin, Get-PackMainsPower, Test-PackIdle, Get-PackBlockingPrograms, ConvertTo-PackArg, Invoke-PackGateProcess, Invoke-PackUnblock, Test-PackLaunchable, ConvertTo-PackPsLiteral, New-PackResumeParams, Get-PackRemovablePaths, Get-PackResumeLauncherPath, New-PackResumeLauncher, Get-PackPowerShellExe, Get-PackShutdownExe, Request-PackRestart, Register-PackResume, Unregister-PackResume, Test-PackResumeRegistered, Get-PackChangesPath, Add-PackChange, Invoke-PackCleanup, Get-PackStillChanged, Get-PackMachineName, New-PackSummary, Get-PackCollectFiles, Resolve-PackBackupAnswer, Get-PackZipName, New-PackZip, Format-PackMinutes, Format-PackGateLine, Write-PackBanner, New-PackPromptHandler, Get-PackBackupPrompt, Invoke-PackProgramCheck

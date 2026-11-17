@@ -289,6 +289,7 @@ function Update-IngestRunsBlock {
     $notes = New-Object System.Collections.Generic.List[string]
     if ($packNote) { $notes.Add($packNote) }
     if ([bool]$Summary.quick -or [bool]$g.quick) { $notes.Add('-Quick: not at full length') }
+    if ($g.PSObject.Properties['disturbing_programs'] -and @($g.disturbing_programs | Where-Object { $_ }).Count -gt 0) { $notes.Add('disturbing programs were running: ' + ((@($g.disturbing_programs | Where-Object { $_ }) -join ', ') -replace '\|', '/')) }
     if ([string]$g.rig) { $notes.Add('rig: ' + [string]$g.rig) }
     $head = ([string]$g.headline -replace '\|', '/')
     if ($head.Length -gt 220) { $head = $head.Substring(0, 220) + ' ...' }

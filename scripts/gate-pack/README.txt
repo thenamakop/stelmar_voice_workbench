@@ -34,6 +34,13 @@ Before you start (5 minutes)
     be on the same disk, and a USB drive is slower and gives wrong answers.
  2. Close these programs if they are open (they disturb the measurements): LatencyMon, RTSS (RivaTuner),
     MSI Afterburner, Steam, Nahimic and any other "audio booster", game overlay or screen recorder.
+    ALSO switch off their "start with Windows" setting BEFORE the restart (Steam: Settings, Interface,
+    "Run Steam when my computer starts"; Task Manager, Startup apps, for the others). Otherwise they
+    start again when you log in after the restart. The pack lists the programs it finds when you start
+    it, asks you to close them and press Enter, and checks again (twice at most, then it carries on).
+    After the restart nobody is at the keyboard: it waits up to 10 minutes for them to close and then
+    carries on, so a program that came back costs time but never loses the one-hour window. Every
+    result says which of these programs were running.
  3. Plug in the charger. Wi-Fi stays ON until the pack asks you to switch it off.
  4. Do not run anything else on the laptop while the pack runs. Let the screen stay on.
 
