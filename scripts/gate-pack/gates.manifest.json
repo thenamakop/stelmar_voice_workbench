@@ -60,7 +60,7 @@
       "ledger": [
         { "table": "gates", "match": "Soak: 2 hours from VB-CABLE", "kind": "verdict" },
         { "table": "gates", "match": "Thermal behaviour during the 2-hour soak on a thin laptop", "kind": "info" },
-        { "table": "gates", "match": "Mirror SHA-256 equals the originals after Stop", "kind": "verdict" },
+        { "table": "gates", "match": "Mirror SHA-256 equals the originals after Stop", "kind": "verdict", "needs_separate_mirror_drive": true },
         { "table": "open", "match": "Laptop gate pack: add a reference capture that does not use cpal", "kind": "info" },
         { "table": "open", "match": "Re-run Phase 1 on both laptops with a hardware audio interface", "kind": "verdict", "needs_hardware_interface": true },
         { "table": "open", "match": "Measure the `zero_gap` and `repeated_block` rates of the recorder on real audio", "kind": "info", "needs_hardware_interface": true },

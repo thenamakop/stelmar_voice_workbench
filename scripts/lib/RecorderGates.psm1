@@ -180,6 +180,7 @@ function Invoke-PackRecorderGate {
   foreach ($f in @($paths.GateExe, $paths.Testbench)) { if (-not (Test-Path -LiteralPath $f)) { throw "the pack is missing $f (run run-gates.ps1 -Verify)" } }
   $minutes = $(if ($quick -and $QuickMinutes -gt 0) { $QuickMinutes } else { $FullMinutes })
   Assert-PackFreeDisk -Path ([string]$Ctx.work_dir) -NeedGB (Get-PackDiskNeedGB -Minutes $(if ($Gate -eq 'kill') { 20 } else { $minutes })) -What "the $Gate recordings"
+  Assert-PackBackupDrive -BackupRoot ([string]$Ctx.backup_root)
   $script1 = 'recorder-gate.ps1'
   $args1 = @(Get-PackLegacyCommon -Ctx $Ctx) + @('-RigPrefer', [string]$Ctx.rig_prefer, '-SecondReference')
   if ($Gate -eq 'kill') {
@@ -260,7 +261,7 @@ function Invoke-PackRecorderGate {
   # chain broke), app-only when it has not (the recorder's own).
   $sharedBreaks = @($evLines | Where-Object { $_ -match 'unmatched stretch:.*also in the reference capture: True' }).Count
   $appOnlyBreaks = @($evLines | Where-Object { $_ -match 'unmatched stretch:.*also in the reference capture: False' }).Count
-  $measured = [ordered]@{ rig = $rigKind; minutes = $minutes; exit_code = $e.ExitCode; run_dir = $runDir; shared_breaks = $sharedBreaks; app_only_breaks = $appOnlyBreaks }
+  $measured = [ordered]@{ rig = $rigKind; mirror_same_drive = [bool](Test-PackMirrorSameDrive -WorkPath ([string]$Ctx.work_dir) -BackupPath ([string]$Ctx.backup_root)); minutes = $minutes; exit_code = $e.ExitCode; run_dir = $runDir; shared_breaks = $sharedBreaks; app_only_breaks = $appOnlyBreaks }
   if ($thermalRes -and $thermalRes.Summary.Usable) {
     $measured['thermal'] = [ordered]@{ clock_drop_pct = $thermalRes.Summary.ClockDropPct; ac_lost = $thermalRes.Summary.AcLost; event37 = $thermalRes.Event37; limit_below_100 = $thermalRes.Summary.LimitBelow100 }
   }

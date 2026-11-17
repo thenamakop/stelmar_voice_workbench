@@ -16,7 +16,14 @@ What to bring for each laptop
  2. The laptop's charger. The laptop must stay on mains power the whole time.
  3. The USB audio interface, with one short audio cable from an OUTPUT socket of the interface to an
     INPUT socket of the same interface (the "loop-back" cable). Plug the interface into the laptop.
- 4. A fast external SSD (the pack makes a second copy of every recording there). Plug it in.
+ 4. An external SSD, if there is one (recommended, not required). While the recorder checks record, the
+    app copies each test recording to a second place (its "mirror"), and one check compares the copy
+    with the original. On an SSD that proves the copy works on a separate drive. Without an SSD, press
+    Enter when the pack asks for the drive letter: every check still runs and passes or fails on its
+    own; the copy then stays on the laptop's own drive and the results say so, and that one result
+    (the copy on a separate drive) stays open until a run with an SSD. If you type a letter and the
+    drive is not there, the pack says so and asks again. If the SSD is unplugged later, the recorder
+    checks show "waiting" with that reason (never FAIL): plug it in and run Start-Gates.cmd again.
  5. Only if this pack has the microphone test (Start-Gates.cmd -Status lists it): a quiet room for
     it (about 2.5 hours, near the end). Do not talk during it.
 
@@ -68,9 +75,9 @@ What it does, in order
 
 Two laptops, one interface
 --------------------------
- There is only one audio interface and one SSD for both laptops. The pack tells you when it needs the
+ There is only one audio interface (and, if you have it, one SSD) for both laptops. The pack tells you when it needs the
  interface ("Plug the audio interface in"). When one laptop's recorder checks are done, move the
- interface, its cable and the SSD to the other laptop. Each move takes about 10 minutes: the pack tests
+ interface, its cable and the SSD (if any) to the other laptop. Each move takes about 10 minutes: the pack tests
  the cable itself before it records anything and says so if the cable is wrong.
 
  Gates that need no cable (speed tables, system checks, the network test) can run on one laptop while
@@ -113,7 +120,7 @@ What stays on the laptop
 ------------------------
  The folder  work\  inside the pack holds the recordings of the test signal (and, if the microphone
  test was run, its 10-minute microphone sample). They are not in the zip. Delete the whole pack folder
- when the pack owner says the results are in. The SSD holds only copies of the test recordings.
+ when the pack owner says the results are in. The SSD (if used) holds only copies of the test recordings.
 
 This pack never connects to the network, sends nothing anywhere, and installs nothing. It needs no
 development tools: everything it runs is in this folder.

@@ -54,6 +54,7 @@ Invoke-PackGateBody -Ctx $ctx -Id 'mic-run' -ResultFile $ResultFile -Body {
   if ($speaker -match 'CABLE|VB-Audio|Virtual') { throw "RIG REFUSED: the default playback device is a virtual cable ($speaker); set the laptop's speakers as the default and run again" }
   $micName = [string]$mic.name
   Assert-PackFreeDisk -Path ([string]$ctx.work_dir) -NeedGB (Get-PackDiskNeedGB -Minutes ($plan.Seconds / 60.0)) -What 'the microphone recordings'
+  Assert-PackBackupDrive -BackupRoot ([string]$ctx.backup_root)
 
   $minutes = [math]::Round($plan.Seconds / 60.0)
   $answer = Request-PackPrompt -Ctx $ctx -TimeoutMinutes 60 -Message ("MICROPHONE TEST ($minutes minutes)`r`nThis test plays speech ALOUD from this laptop's speakers and records it with the built-in microphone ($micName).`r`nThe room must be quiet. Do not talk, do not move the laptop, leave the charger connected.`r`nThe speaker volume is set to a moderate level and put back at the end. Press Enter to start.")

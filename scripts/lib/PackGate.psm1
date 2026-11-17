@@ -97,7 +97,7 @@ function Complete-PackGate {
 # free memory; the gate is not counted as tried) or INVALID (a fault in the run).
 function Get-PackErrorStatus {
   param([string]$Message)
-  if ($Message -match '^(RIG REFUSED|RIG SELF-TEST FAILED|Overlay tools are running|Only [0-9.,]+ GB of RAM free|Not enough free disk space|An engine build is running)') { return 'PENDING' }
+  if ($Message -match '^(RIG REFUSED|RIG SELF-TEST FAILED|Overlay tools are running|Only [0-9.,]+ GB of RAM free|Not enough free disk space|The backup drive|An engine build is running)') { return 'PENDING' }
   'INVALID'
 }
 
@@ -119,6 +119,38 @@ function Get-PackAppReportError {
 function Get-PackDiskNeedGB {
   param([double]$Minutes = 0)
   [math]::Round(5.5 + 0.05 * [math]::Max(0.0, $Minutes), 1)
+}
+
+# The drive letter of a path ('E' for E:\x), or '' for a path without one.
+function Get-PackDriveLetter {
+  param([string]$Path)
+  if ($Path -match '^([A-Za-z]):') { return $Matches[1].ToUpperInvariant() }
+  ''
+}
+
+# Pure. True when the recordings and their mirror are on the same drive letter (the mirror is then not a separate copy
+# on another drive: the result says so and the ledger row that needs a separate drive stays open).
+function Test-PackMirrorSameDrive {
+  param([string]$WorkPath, [string]$BackupPath)
+  $a = Get-PackDriveLetter $WorkPath
+  $b = Get-PackDriveLetter $BackupPath
+  if (-not $a -or -not $b) { return $true }
+  $a -eq $b
+}
+
+# Throws a PENDING message (Get-PackErrorStatus) when the drive of the backup folder is not there. Before 17 Nov 2026 a
+# typed letter was never checked: the app's mirror then reported "Backup folder unreachable", the check "mirror SHA-256
+# equals the originals" failed and the gate came out FAIL (a recorder FAIL caused by a missing SSD).
+function Assert-PackBackupDrive {
+  param([string]$BackupRoot, [Nullable[bool]]$DriveReady = $null)
+  if (-not $BackupRoot) { return }
+  $l = Get-PackDriveLetter $BackupRoot
+  if (-not $l) { return }
+  $ready = $DriveReady
+  if ($null -eq $ready) { $ready = [bool](Test-Path -LiteralPath ($l + ':\')) }
+  if (-not $ready) {
+    throw ('The backup drive {0}: is not connected (the external SSD for the copies of the test recordings). Plug it in and run the pack again, or run it with -BackupRoot C:\STELMAR-Gate-Backup to keep the copies on the laptop''s own drive (every gate still runs; the results then say the mirror is on the same drive).' -f $l)
+  }
 }
 
 # Throws a PENDING message (Get-PackErrorStatus) when the drive of Path has less than NeedGB free.
@@ -196,4 +228,4 @@ function Get-PackLegacyCommon {
   $a
 }
 
-Export-ModuleMember -Function Read-PackCtx, Get-PackPaths, Initialize-PackGate, Write-PackGateLog, Request-PackPrompt, Complete-PackGate, Get-PackErrorStatus, Get-PackAppReportError, Get-PackDiskNeedGB, Assert-PackFreeDisk, Invoke-PackGateBody, Invoke-PackLegacyGate, Get-PackLegacyCommon
+Export-ModuleMember -Function Get-PackDriveLetter, Test-PackMirrorSameDrive, Assert-PackBackupDrive, Read-PackCtx, Get-PackPaths, Initialize-PackGate, Write-PackGateLog, Request-PackPrompt, Complete-PackGate, Get-PackErrorStatus, Get-PackAppReportError, Get-PackDiskNeedGB, Assert-PackFreeDisk, Invoke-PackGateBody, Invoke-PackLegacyGate, Get-PackLegacyCommon

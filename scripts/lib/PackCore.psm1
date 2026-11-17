@@ -998,6 +998,22 @@ function Get-PackCollectFiles {
 
 # Writes the zip with forward slashes in the entry names (the form Windows PowerShell 5.1's own
 # Compress-Archive does not guarantee) and a ZIP-MANIFEST.json with each file's SHA-256 for ingest.
+# Pure. What to do with the answer to "type the drive letter of the external SSD": the backup folder, or a message and
+# a new question. Enter (empty) means the laptop's own drive C:. A letter whose drive is not there asks again (a typed
+# letter used to be taken on trust and a missing SSD then made the recorder gates FAIL).
+function Resolve-PackBackupAnswer {
+  [CmdletBinding()]
+  param([string]$Answer, [scriptblock]$DriveReady = { param($l) Test-Path -LiteralPath ($l + ':\') })
+  $a = ([string]$Answer).Trim()
+  if (-not $a) { return [pscustomobject]@{ Root = 'C:\STELMAR-Gate-Backup'; Ask = $false; Message = 'The copies of the recordings stay on C: (the results will say the mirror is on the same drive).' } }
+  if ($a -match '^([A-Za-z]):?[\\/]?$') {
+    $l = $Matches[1].ToUpperInvariant()
+    if (& $DriveReady $l) { return [pscustomobject]@{ Root = ($l + ':\STELMAR-Gate-Backup'); Ask = $false; Message = ('The copies of the recordings go to {0}:.' -f $l) } }
+    return [pscustomobject]@{ Root = ''; Ask = $true; Message = ('Drive {0}: is not there. Plug the SSD in and type its letter again, or press Enter to use C:.' -f $l) }
+  }
+  [pscustomobject]@{ Root = ''; Ask = $true; Message = 'Type only a drive letter such as E: , or press Enter to use C:.' }
+}
+
 # Pure. The name of a run's results zip. Until 17 Nov 2026 it was gate-results-<machine>.zip for every run, so a
 # second run on the same laptop with another work folder (the mic run has its own) rewrote the first run's zip. Now the
 # name carries the moment the work folder's first run began (kept in state.json, so a restart or a resume writes the
@@ -1072,4 +1088,4 @@ function Format-PackGateLine {
   ('{0,-8} {1,-24}{2}{3} {4}' -f $Status, $Id, $m, $r, $Headline).TrimEnd()
 }
 
-Export-ModuleMember -Function Get-PackProp, ConvertTo-PackHashtable, Read-PackJson, Write-PackJson, Write-PackLog, Set-PackLogFile, Get-PackManifestProblems, Read-PackManifest, Get-PackLedgerRows, Test-PackLedgerMatches, Get-PackBootInfo, Select-PackNextGate, New-PackState, Get-PackStatePath, Read-PackState, Save-PackState, Set-PackGateStatus, Get-PackGateState, New-PackResult, Write-PackResult, Get-PackEvidenceVerdict, ConvertTo-PackStatus, Test-PackAdmin, Get-PackMainsPower, Test-PackIdle, Get-PackBlockingPrograms, ConvertTo-PackArg, Invoke-PackGateProcess, Invoke-PackUnblock, Test-PackLaunchable, ConvertTo-PackPsLiteral, New-PackResumeParams, Get-PackRemovablePaths, Get-PackResumeLauncherPath, New-PackResumeLauncher, Get-PackPowerShellExe, Get-PackShutdownExe, Request-PackRestart, Register-PackResume, Unregister-PackResume, Test-PackResumeRegistered, Get-PackChangesPath, Add-PackChange, Invoke-PackCleanup, Get-PackStillChanged, Get-PackMachineName, New-PackSummary, Get-PackCollectFiles, Get-PackZipName, New-PackZip, Format-PackMinutes, Format-PackGateLine, Write-PackBanner, New-PackPromptHandler
+Export-ModuleMember -Function Get-PackProp, ConvertTo-PackHashtable, Read-PackJson, Write-PackJson, Write-PackLog, Set-PackLogFile, Get-PackManifestProblems, Read-PackManifest, Get-PackLedgerRows, Test-PackLedgerMatches, Get-PackBootInfo, Select-PackNextGate, New-PackState, Get-PackStatePath, Read-PackState, Save-PackState, Set-PackGateStatus, Get-PackGateState, New-PackResult, Write-PackResult, Get-PackEvidenceVerdict, ConvertTo-PackStatus, Test-PackAdmin, Get-PackMainsPower, Test-PackIdle, Get-PackBlockingPrograms, ConvertTo-PackArg, Invoke-PackGateProcess, Invoke-PackUnblock, Test-PackLaunchable, ConvertTo-PackPsLiteral, New-PackResumeParams, Get-PackRemovablePaths, Get-PackResumeLauncherPath, New-PackResumeLauncher, Get-PackPowerShellExe, Get-PackShutdownExe, Request-PackRestart, Register-PackResume, Unregister-PackResume, Test-PackResumeRegistered, Get-PackChangesPath, Add-PackChange, Invoke-PackCleanup, Get-PackStillChanged, Get-PackMachineName, New-PackSummary, Get-PackCollectFiles, Resolve-PackBackupAnswer, Get-PackZipName, New-PackZip, Format-PackMinutes, Format-PackGateLine, Write-PackBanner, New-PackPromptHandler

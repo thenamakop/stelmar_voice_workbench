@@ -167,10 +167,16 @@ function Update-IngestGatesLines {
       $needsHw = ($le.PSObject.Properties['needs_hardware_interface'] -and [bool]$le.needs_hardware_interface)
       $kind = [string]$le.kind
       $thisState = $st
+      # The mirror row asks for a copy on a separate drive: a run whose mirror was on the recordings' own drive proves the
+      # copy works but not that; the row stays open (the same way as a run on the VB-CABLE fallback).
+      $needsMirror = ($le.PSObject.Properties['needs_separate_mirror_drive'] -and [bool]$le.needs_separate_mirror_drive)
+      $mirrorSame = $false
+      if ($g.PSObject.Properties['measured'] -and $g.measured -and $g.measured.PSObject.Properties['mirror_same_drive']) { $mirrorSame = [bool]$g.measured.mirror_same_drive }
       $needsAvx = ($le.PSObject.Properties['needs_avx512'] -and [bool]$le.needs_avx512)
       $avxNa = ($needsAvx -and $g.PSObject.Properties['measured'] -and $g.measured -and $g.measured.PSObject.Properties['avx512_applicable'] -and -not [bool]$g.measured.avx512_applicable)
       if ($avxNa -and $st -ne 'FAIL') { $thisState = 'NOT APPLICABLE' }
       elseif ($needsHw -and $fallback -and $st -ne 'FAIL') { $thisState = 'FALLBACK' }
+      elseif ($needsMirror -and $mirrorSame -and $st -ne 'FAIL') { $thisState = 'FALLBACK' }
       elseif ($kind -eq 'info' -and $st -eq 'PASS') { $thisState = 'INFO' }
       elseif ($st -eq 'PASS' -and (([bool]$Summary.quick) -or ($g.PSObject.Properties['quick'] -and [bool]$g.quick) -or ($g.PSObject.Properties['not_at_full_length'] -and [bool]$g.not_at_full_length))) { $thisState = 'INFO' }
       $cellIx = $(if ($tbl -eq 'gates') { 1 } else { 2 })

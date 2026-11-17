@@ -249,9 +249,18 @@ if (-not $BackupRoot) {
   if ($Unattended -or $FactsFile) { $BackupRoot = 'C:\STELMAR-Gate-Backup' }
   else {
     Write-Host ''
-    Write-Host 'The recorder gates mirror every recording to a second place.'
-    $d = (Read-Host 'Type the drive letter of the external SSD (for example E:) or press Enter to use C: (the results then say the mirror is on the same disk)').Trim()
-    if ($d -match '^[A-Za-z]:?\\?$') { $BackupRoot = ($d.Substring(0, 1).ToUpper() + ':\STELMAR-Gate-Backup') } else { $BackupRoot = 'C:\STELMAR-Gate-Backup' }
+    Write-Host 'The recorder gates copy every test recording to a second place while they record (the "mirror").'
+    Write-Host 'An external SSD is better: it proves the copy works on a separate drive. Without one, press Enter:'
+    Write-Host 'every gate still runs and the results say the copy is on the same drive.'
+    $tries = 0
+    while ($true) {
+      $tries++
+      $d = Read-Host 'Type the drive letter of the external SSD (for example E:), or press Enter to use C:'
+      $ans = Resolve-PackBackupAnswer -Answer $d
+      Write-Host ('  ' + $ans.Message)
+      if (-not $ans.Ask) { $BackupRoot = $ans.Root; break }
+      if ($tries -ge 5) { $BackupRoot = 'C:\STELMAR-Gate-Backup'; Write-Host '  Using C: after five tries.'; break }
+    }
   }
   $state['backup_root'] = $BackupRoot
   Save-PackState -WorkDir $WorkDir -State $state
