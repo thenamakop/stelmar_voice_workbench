@@ -51,7 +51,10 @@ describe("devices of a job", () => {
     ]);
     expect(deviceLines({ ...running, devices: [] })).toEqual([]);
     expect(
-      deviceLines({ ...running, devices: [{ device: "cpu", threads: 1, units_running: 0, units_committed: 0 }] }),
+      deviceLines({
+        ...running,
+        devices: [{ device: "cpu", threads: 1, units_running: 0, units_committed: 0 }],
+      }),
     ).toEqual(["Processor · 1 thread"]);
   });
 });

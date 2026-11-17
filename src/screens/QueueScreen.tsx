@@ -122,7 +122,12 @@ function JobCard({
       </div>
       {deviceLines(job).length > 0 && (
         <div
-          style={{ fontSize: 13, lineHeight: "var(--lh-small)", color: "var(--text-secondary)", marginTop: 2 }}
+          style={{
+            fontSize: 13,
+            lineHeight: "var(--lh-small)",
+            color: "var(--text-secondary)",
+            marginTop: 2,
+          }}
         >
           {deviceLines(job).join("  ·  ")}
         </div>
@@ -312,9 +317,7 @@ export function QueueScreen({ queue, capability }: QueueScreenProps) {
         title="Queue"
         meta={
           <>
-            <span>
-              {snap ? snap.ready_text : "Rolling and night passes run here at low priority"}
-            </span>
+            <span>{snap ? snap.ready_text : "Rolling and night passes run here at low priority"}</span>
             {sched?.paused && <Badge tone="warning">Paused</Badge>}
           </>
         }

@@ -183,7 +183,7 @@ pub fn may_start(
 mod tests {
     use super::*;
 
-    /// 2027-02-08 00:00 IST in epoch ms.
+    /// 2027-02-09 00:00 IST in epoch ms.
     fn day0() -> u64 {
         let utc_midnight = 1_802_174_400_000u64 - 1_802_174_400_000 % DAY_MS;
         utc_midnight - IST_OFFSET_MS
@@ -204,11 +204,11 @@ mod tests {
     }
 
     const PROGRAMME: &str = r#"{"sessions":[
-        {"date":"2027-02-08","end":"10:00","transcribe":false},
-        {"date":"2027-02-08","end":"11:30","transcribe":true},
-        {"date":"2027-02-08","end":"18:15","transcribe":true},
-        {"date":"2027-02-08","end":"19:30","transcribe":false},
-        {"date":"2027-02-09","end":"13:00","transcribe":true}]}"#;
+        {"date":"2027-02-09","end":"10:00","transcribe":false},
+        {"date":"2027-02-09","end":"11:30","transcribe":true},
+        {"date":"2027-02-09","end":"18:15","transcribe":true},
+        {"date":"2027-02-09","end":"19:30","transcribe":false},
+        {"date":"2027-02-10","end":"13:00","transcribe":true}]}"#;
 
     #[test]
     fn the_night_waits_for_the_programmes_last_transcribed_session_of_the_day() {

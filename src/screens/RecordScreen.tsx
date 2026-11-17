@@ -690,7 +690,7 @@ export function RecordScreen({ hasProfile, recorder, capability, queue }: Record
                   session.backup_root
                     ? "Recording to this machine in 10-minute parts, copied to the backup folder as they are written."
                     : "Recording to this machine in 10-minute parts. No backup folder is set."
-                } Each closed part is transcribed in the background. ${(queue.snapshot?.ready_text ?? "")}`.trim()
+                } Each closed part is transcribed in the background. ${queue.snapshot?.ready_text ?? ""}`.trim()
               : shownName
                 ? `Session stopped. ${queue.snapshot ? queue.snapshot.ready_text : "The transcript fills in as the queue works."}`
                 : "No session is open. The lines below are sample text that checks the English, Hindi, mixed and Urdu fonts."}

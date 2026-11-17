@@ -44,7 +44,10 @@ export function modelPairs(job: QueueJob): [string, string][] {
 /** "Processor · 2 threads · 1 running · 3 done": one line per device a job runs on. */
 export function deviceLines(job: QueueJob): string[] {
   return job.devices.map((d) => {
-    const bits = [d.device === "gpu" ? "Graphics" : "Processor", `${d.threads} thread${d.threads === 1 ? "" : "s"}`];
+    const bits = [
+      d.device === "gpu" ? "Graphics" : "Processor",
+      `${d.threads} thread${d.threads === 1 ? "" : "s"}`,
+    ];
     if (d.units_running > 0) bits.push(`${d.units_running} running`);
     if (d.units_committed > 0) bits.push(`${d.units_committed} done`);
     return bits.join(" · ");
