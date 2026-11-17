@@ -1,0 +1,114 @@
+{
+  "changes": [
+    {
+      "kind": "render-volume",
+      "description": "speaker volume of 'Speakers (Realtek(R) Audio)' (was 92 percent)",
+      "restore": {
+        "level_before": "0.9218831",
+        "device": "Speakers (Realtek(R) Audio)"
+      },
+      "at": "2026-11-16T00:28:02.4217281+05:30",
+      "restored": true,
+      "restore_note": ""
+    },
+    {
+      "kind": "mic-mute",
+      "description": "microphone mute of 'Microphone Array (Realtek(R) Audio)' (was off)",
+      "restore": {
+        "state_before": "off",
+        "device": "Microphone Array (Realtek(R) Audio)"
+      },
+      "at": "2026-11-16T00:28:02.5972+05:30",
+      "restored": true,
+      "restore_note": ""
+    },
+    {
+      "kind": "render-volume",
+      "description": "speaker volume of 'Speakers (Realtek(R) Audio)' (was 92 percent)",
+      "restore": {
+        "level_before": "0.9218831",
+        "device": "Speakers (Realtek(R) Audio)"
+      },
+      "at": "2026-11-16T00:43:33.2761295+05:30",
+      "restored": true,
+      "restore_note": ""
+    },
+    {
+      "kind": "mic-mute",
+      "description": "microphone mute of 'Microphone Array (Realtek(R) Audio)' (was off)",
+      "restore": {
+        "state_before": "off",
+        "device": "Microphone Array (Realtek(R) Audio)"
+      },
+      "at": "2026-11-16T00:43:33.36883+05:30",
+      "restored": true,
+      "restore_note": ""
+    },
+    {
+      "kind": "render-volume",
+      "description": "speaker volume of 'Speakers (Realtek(R) Audio)' (was 92 percent)",
+      "restore": {
+        "level_before": "0.9218831",
+        "device": "Speakers (Realtek(R) Audio)"
+      },
+      "at": "2026-11-16T01:11:57.2163682+05:30",
+      "restored": true,
+      "restore_note": ""
+    },
+    {
+      "kind": "mic-mute",
+      "description": "microphone mute of 'Microphone Array (Realtek(R) Audio)' (was off)",
+      "restore": {
+        "state_before": "off",
+        "device": "Microphone Array (Realtek(R) Audio)"
+      },
+      "at": "2026-11-16T01:11:57.3780724+05:30",
+      "restored": true,
+      "restore_note": ""
+    },
+    {
+      "kind": "render-volume",
+      "description": "speaker volume of 'Speakers (Realtek(R) Audio)' (was 92 percent)",
+      "restore": {
+        "level_before": "0.9218831",
+        "device": "Speakers (Realtek(R) Audio)"
+      },
+      "at": "2026-11-16T01:58:07.5305453+05:30",
+      "restored": true,
+      "restore_note": ""
+    },
+    {
+      "kind": "mic-mute",
+      "description": "microphone mute of 'Microphone Array (Realtek(R) Audio)' (was off)",
+      "restore": {
+        "state_before": "off",
+        "device": "Microphone Array (Realtek(R) Audio)"
+      },
+      "at": "2026-11-16T01:58:07.7171801+05:30",
+      "restored": true,
+      "restore_note": ""
+    },
+    {
+      "kind": "render-volume",
+      "description": "speaker volume of 'Speakers (Realtek(R) Audio)' (was 92 percent)",
+      "restore": {
+        "level_before": "0.9218831",
+        "device": "Speakers (Realtek(R) Audio)"
+      },
+      "at": "2026-11-17T04:43:36.5748875+05:30",
+      "restored": true,
+      "restore_note": ""
+    },
+    {
+      "kind": "mic-mute",
+      "description": "microphone mute of 'Microphone Array (Realtek(R) Audio)' (was off)",
+      "restore": {
+        "state_before": "off",
+        "device": "Microphone Array (Realtek(R) Audio)"
+      },
+      "at": "2026-11-17T04:43:36.771108+05:30",
+      "restored": true,
+      "restore_note": ""
+    }
+  ]
+}

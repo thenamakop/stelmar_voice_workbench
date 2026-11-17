@@ -1,22 +1,22 @@
-Gate pack run: low laptop, machine LENOVO-83DF-b8384c, created 2026-11-15T07:30:24Z
-Pack commit 9b4ada057be99e255d84623e0349afe55c3503c6; EMULATED (emu-low), not a laptop; -Quick, not at full length
+Gate pack run: low laptop, machine LENOVO-83DF-b8384c, created 2026-11-17T08:59:26Z
+Pack commit 38699fda7ac50158e161e2e0ee9d7dba699c2a8d; EMULATED (emu-low), not a laptop; -Quick, not at full length
 PASS     engines-info         avx2 exit 0; avx512 exit 3; vulkan exit 0
 PASS     quick-check          the quick check took 414 s (bar 480 s); recorder safety run passed; tier C
 INFO     speed-table-igpu     1 of 1 cells measured; slowest RTF 0.150; information only
 PASS     soak                 PASS (PROVISIONAL: emulated)
+PASS     load-cold            PASS (PROVISIONAL: emulated)
 PASS     load-settled         PASS (PROVISIONAL: emulated)
 PASS     panic                PASS (PROVISIONAL: emulated)
 PASS     webview              PASS (PROVISIONAL: emulated)
 PASS     kill                 PASS (PROVISIONAL: emulated)
+FAIL     hashing-1            FAIL
+PASS     network-off          engines and the release app made no network connection with the network off; no shipped executable imports Winsock, WinHTTP or WinINet
+FAIL     hashing-2-10         1 of 1 hashing runs failed (run2)
 PASS     live-batch-safety    PASS (PROVISIONAL: emulated) [beside the recorder: live engine (voice detection) and batch engine on CPU (avx2), model large-v3-turbo-q5_0 (the quick check's rolling model for English); batch 2 threads, live 2 threads]
 INFO     bg-decode-info       shared upstream breaks over 5 minutes: 0 without a background decode, 0 with one (CPU (avx2), model large-v3-turbo-q5_0 (the quick check's rolling model for English); batch 2 threads, live 2 threads); breaks only in the app: 0 and 0
+PASS     rename-engines       PASS (PROVISIONAL: emulated)
 INFO     speed-table-cpu      1 of 1 cells measured; slowest RTF 1.087; information only
 PASS     batch-scripts        6 runs on 2 device(s) (Intel(R) RaptorLake-S Mobile Graphics Controller), 0 problem(s)
 SKIPPED  full-check           skipped under -Quick
-WAITING  load-cold            not run
-WAITING  hashing-1            not run
-WAITING  network-off          needs a person at the keyboard (running unattended)
-WAITING  hashing-2-10         not run
-WAITING  rename-engines       needs a person at the keyboard (running unattended)
 WAITING  mic-run              needs a person at the keyboard (running unattended)
 NOT IN THIS PACK  supervisor-kill

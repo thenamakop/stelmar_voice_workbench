@@ -1,17 +1,17 @@
 {
     "pack_version":  1,
-    "source_commit":  "9b4ada057be99e255d84623e0349afe55c3503c6",
+    "source_commit":  "38699fda7ac50158e161e2e0ee9d7dba699c2a8d",
     "machine":  "LENOVO-83DF-b8384c",
     "role":  "low",
     "emulated":  "emu-low",
     "quick":  true,
-    "run_label":  "dryrun-partA3",
-    "created":  "2026-11-15T13:00:24.2173845+05:30",
+    "run_label":  "dryrun-partB",
+    "created":  "2026-11-17T14:29:26.9616896+05:30",
     "restart":  {
-                    "requested_at":  null,
-                    "boot_time_before":  null,
-                    "resumed_at":  null,
-                    "uptime_at_resume_min":  null
+                    "requested_at":  "2026-11-17T13:44:11.0243411+05:30",
+                    "boot_time_before":  "2026-11-17T10:33:38.3704336+05:30",
+                    "resumed_at":  "2026-11-17T13:45:58.1051193+05:30",
+                    "uptime_at_resume_min":  1.1
                 },
     "order_used":  [
                        "engines-info",
@@ -25,7 +25,15 @@
                        "live-batch-safety",
                        "bg-decode-info",
                        "speed-table-cpu",
-                       "batch-scripts"
+                       "batch-scripts",
+                       "network-off",
+                       "network-off",
+                       "network-off",
+                       "network-off",
+                       "rename-engines",
+                       "hashing-1",
+                       "hashing-2-10",
+                       "load-cold"
                    ],
     "gates":  [
                   {
@@ -158,8 +166,8 @@
                       "priority":  "P1",
                       "status":  "PASS",
                       "attempts":  1,
-                      "started":  "2026-11-15T11:52:29.3650930+05:30",
-                      "ended":  "2026-11-15T11:59:29.1855130+05:30",
+                      "started":  "2026-11-15T11:52:29.365093+05:30",
+                      "ended":  "2026-11-15T11:59:29.185513+05:30",
                       "minutes":  7,
                       "headline":  "the quick check took 414 s (bar 480 s); recorder safety run passed; tier C",
                       "measured":  {
@@ -364,6 +372,75 @@
                                  ]
                   },
                   {
+                      "id":  "load-cold",
+                      "priority":  "P1",
+                      "status":  "PASS",
+                      "attempts":  1,
+                      "started":  "2026-11-17T13:46:18.0394929+05:30",
+                      "ended":  "2026-11-17T13:53:24.4422769+05:30",
+                      "minutes":  7.1,
+                      "headline":  "PASS (PROVISIONAL: emulated)",
+                      "measured":  {
+                                       "rig":  "vb-cable",
+                                       "minutes":  5,
+                                       "exit_code":  0,
+                                       "run_dir":  "D:\\STELMAR-Gate\\dryrun-work\\audio\\load-emu-low-20261117-134742",
+                                       "shared_breaks":  1,
+                                       "app_only_breaks":  0,
+                                       "thermal":  {
+                                                       "clock_drop_pct":  -3.5217035217035217,
+                                                       "ac_lost":  false,
+                                                       "event37":  0,
+                                                       "limit_below_100":  83
+                                                   },
+                                       "detectors":  {
+                                                         "zero_gap":  {
+                                                                          "Firings":  1,
+                                                                          "Matched":  1,
+                                                                          "MatchedBoth":  1,
+                                                                          "FalseAlarms":  0,
+                                                                          "RealMissed":  0,
+                                                                          "ReferenceFindings":  1,
+                                                                          "PerHour":  11.86982755778298
+                                                                      },
+                                                         "repeated_block":  {
+                                                                                "Firings":  0,
+                                                                                "Matched":  0,
+                                                                                "MatchedBoth":  0,
+                                                                                "FalseAlarms":  0,
+                                                                                "RealMissed":  0,
+                                                                                "ReferenceFindings":  0,
+                                                                                "PerHour":  0
+                                                                            }
+                                                     }
+                                   },
+                      "threshold":  "equals both references; every logical CPU busy and the integrated GPU loaded; zero overruns and xruns",
+                      "rig":  "VB-CABLE",
+                      "rig_detail":  "",
+                      "shared_breaks":  1,
+                      "evidence":  [
+                                       "D:\\STELMAR-Gate\\dryrun-work\\gates\\load-cold\\evidence\\load-emu-low.txt",
+                                       "D:\\STELMAR-Gate\\dryrun-work\\gates\\load-cold\\load-cold-additions.txt"
+                                   ],
+                      "notes":  {
+
+                                },
+                      "quick":  true,
+                      "not_at_full_length":  false,
+                      "ledger":  [
+                                     {
+                                         "table":  "gates",
+                                         "match":  "Load test: 30 minutes with every logical CPU of the job busy",
+                                         "kind":  "verdict"
+                                     },
+                                     {
+                                         "table":  "open",
+                                         "match":  "Load gate on the laptops, two conditions",
+                                         "kind":  "verdict"
+                                     }
+                                 ]
+                  },
+                  {
                       "id":  "load-settled",
                       "priority":  "P1",
                       "status":  "PASS",
@@ -553,7 +630,7 @@
                       "priority":  "P1",
                       "status":  "PASS",
                       "attempts":  1,
-                      "started":  "2026-11-15T12:28:25.1392800+05:30",
+                      "started":  "2026-11-15T12:28:25.13928+05:30",
                       "ended":  "2026-11-15T12:33:58.8169901+05:30",
                       "minutes":  5.6,
                       "headline":  "PASS (PROVISIONAL: emulated)",
@@ -608,6 +685,159 @@
                                          "table":  "open",
                                          "match":  "Print the capture margin in the kill gate (13 Nov 2026)",
                                          "kind":  "verdict"
+                                     }
+                                 ]
+                  },
+                  {
+                      "id":  "hashing-1",
+                      "priority":  "P1",
+                      "status":  "FAIL",
+                      "attempts":  1,
+                      "started":  "2026-11-17T10:37:41.9721263+05:30",
+                      "ended":  "2026-11-17T10:43:21.7763812+05:30",
+                      "minutes":  5.7,
+                      "headline":  "FAIL",
+                      "measured":  {
+                                       "rig":  "vb-cable",
+                                       "minutes":  4,
+                                       "exit_code":  1,
+                                       "run_dir":  "D:\\STELMAR-Gate\\dryrun-work\\audio\\hashing-emu-low-20261117-103859",
+                                       "shared_breaks":  0,
+                                       "app_only_breaks":  0,
+                                       "detectors":  {
+                                                         "zero_gap":  {
+                                                                          "Firings":  0,
+                                                                          "Matched":  0,
+                                                                          "MatchedBoth":  0,
+                                                                          "FalseAlarms":  0,
+                                                                          "RealMissed":  0,
+                                                                          "ReferenceFindings":  0,
+                                                                          "PerHour":  0
+                                                                      },
+                                                         "repeated_block":  {
+                                                                                "Firings":  0,
+                                                                                "Matched":  0,
+                                                                                "MatchedBoth":  0,
+                                                                                "FalseAlarms":  0,
+                                                                                "RealMissed":  0,
+                                                                                "ReferenceFindings":  0,
+                                                                                "PerHour":  0
+                                                                            }
+                                                     },
+                                       "hash_mb_per_s":  961.52186805415238,
+                                       "raw_read_mb_per_s":  1667.4293920774023,
+                                       "after_restart":  true,
+                                       "hashed_files":  6
+                                   },
+                      "threshold":  "the app hashed at least 1 GB of model files in background mode while recording; models and recording on the same disk; the run followed a restart; recording equals both references",
+                      "rig":  "VB-CABLE",
+                      "rig_detail":  "",
+                      "shared_breaks":  0,
+                      "evidence":  [
+                                       "D:\\STELMAR-Gate\\dryrun-work\\gates\\hashing-1\\evidence\\hashing-emu-low.txt",
+                                       "D:\\STELMAR-Gate\\dryrun-work\\gates\\hashing-1\\hashing-1-additions.txt",
+                                       "D:\\STELMAR-Gate\\dryrun-work\\gates\\hashing-1\\hashing-1-additions.txt"
+                                   ],
+                      "notes":  {
+
+                                },
+                      "quick":  true,
+                      "not_at_full_length":  false,
+                      "ledger":  [
+                                     {
+                                         "table":  "open",
+                                         "match":  "R5 (owner\u0027s decision, 12 Nov 2026): CLOSED on the Legion under `emu-low`",
+                                         "kind":  "verdict"
+                                     },
+                                     {
+                                         "table":  "open",
+                                         "match":  "Hashing and upstream breaks (13 Nov 2026)",
+                                         "kind":  "verdict"
+                                     }
+                                 ]
+                  },
+                  {
+                      "id":  "network-off",
+                      "priority":  "P1",
+                      "status":  "PASS",
+                      "attempts":  4,
+                      "started":  "2026-11-15T15:44:38.5649362+05:30",
+                      "ended":  "2026-11-15T15:51:46.2566758+05:30",
+                      "minutes":  7.1,
+                      "headline":  "engines and the release app made no network connection with the network off; no shipped executable imports Winsock, WinHTTP or WinINet",
+                      "measured":  {
+                                       "static_control":  true,
+                                       "static_findings":  [
+
+                                                           ],
+                                       "engines":  "NETWORK-OFF RESULT: PASS (every engine ran with the network off: info and a short decode, no non-loopback socket)"
+                                   },
+                      "threshold":  "no non-loopback socket in any engine or app process tree with the network off; no Winsock, WinHTTP or WinINet import in a shipped executable",
+                      "rig":  "",
+                      "rig_detail":  "",
+                      "shared_breaks":  null,
+                      "evidence":  [
+                                       "D:\\STELMAR-Gate\\dryrun-work\\gates\\network-off\\network-off.txt",
+                                       "D:\\STELMAR-Gate\\dryrun-work\\gates\\network-off\\evidence\\network-off-engines.txt"
+                                   ],
+                      "notes":  {
+
+                                },
+                      "quick":  true,
+                      "not_at_full_length":  false,
+                      "ledger":  [
+                                     {
+                                         "table":  "gates",
+                                         "match":  "Engines run with the network adapters off",
+                                         "kind":  "verdict"
+                                     },
+                                     {
+                                         "table":  "open",
+                                         "match":  "Network-off checker follow-ups (offline audit, 12 Nov 2026)",
+                                         "kind":  "verdict"
+                                     }
+                                 ]
+                  },
+                  {
+                      "id":  "hashing-2-10",
+                      "priority":  "P2",
+                      "status":  "FAIL",
+                      "attempts":  1,
+                      "started":  "2026-11-17T12:07:24.7325246+05:30",
+                      "ended":  "2026-11-17T12:13:16.4627196+05:30",
+                      "minutes":  5.9,
+                      "headline":  "1 of 1 hashing runs failed (run2)",
+                      "measured":  {
+                                       "runs":  1,
+                                       "cold_runs":  0,
+                                       "warm_rate_mb_s":  null,
+                                       "shared_breaks_purged":  0,
+                                       "shared_breaks_warm":  0,
+                                       "extra_purged_runs":  0,
+                                       "rig":  "vb-cable"
+                                   },
+                      "threshold":  "every run: zero overruns and no gap while the models are hashed in background mode (at least 1 GB, 10 s inside the recording); recording equals both references; a purged run counts as cold only at most 0.6 times the warm-cache rate of this laptop",
+                      "rig":  "VB-CABLE",
+                      "rig_detail":  "",
+                      "shared_breaks":  0,
+                      "evidence":  [
+                                       "D:\\STELMAR-Gate\\dryrun-work\\gates\\hashing-2-10\\evidence\\hashing-emu-low-run2.txt",
+                                       "D:\\STELMAR-Gate\\dryrun-work\\gates\\hashing-2-10\\hashing-2-10-run2-additions.txt",
+                                       "D:\\STELMAR-Gate\\dryrun-work\\gates\\hashing-2-10\\hashing-2-10-summary.txt"
+                                   ],
+                      "notes":  "run2: the run did not pass (FAIL)",
+                      "quick":  true,
+                      "not_at_full_length":  false,
+                      "ledger":  [
+                                     {
+                                         "table":  "open",
+                                         "match":  "Hashing and upstream breaks (13 Nov 2026)",
+                                         "kind":  "verdict"
+                                     },
+                                     {
+                                         "table":  "open",
+                                         "match":  "VB-CABLE uses the whole upstream-break allowance",
+                                         "kind":  "info"
                                      }
                                  ]
                   },
@@ -711,6 +941,43 @@
                                          "match":  "Shared upstream breaks in the recording rig are unexplained",
                                          "kind":  "info",
                                          "needs_hardware_interface":  true
+                                     }
+                                 ]
+                  },
+                  {
+                      "id":  "rename-engines",
+                      "priority":  "P2",
+                      "status":  "PASS",
+                      "attempts":  1,
+                      "started":  "2026-11-15T15:53:31.30188+05:30",
+                      "ended":  "2026-11-15T16:14:44.6245644+05:30",
+                      "minutes":  21.2,
+                      "headline":  "PASS (PROVISIONAL: emulated)",
+                      "measured":  {
+                                       "exit_code":  0,
+                                       "banner_lines":  [
+                                                            "engines renamed away : Record opened True; text \u0027No speech engine found.\u0027 found in the window: True",
+                                                            "control, engines present : Record opened True; text \u0027No speech engine found.\u0027 found in the window: False"
+                                                        ]
+                                   },
+                      "threshold":  "both 3-minute recordings pass their own checks; the banner \"No speech engine found.\" shows with the engines renamed away and not with them present",
+                      "rig":  "",
+                      "rig_detail":  "",
+                      "shared_breaks":  null,
+                      "evidence":  [
+                                       "D:\\STELMAR-Gate\\dryrun-work\\gates\\rename-engines\\evidence\\rename-engines-emu-low.txt",
+                                       "D:\\STELMAR-Gate\\dryrun-work\\gates\\rename-engines\\rename-engines.ps1.out.log"
+                                   ],
+                      "notes":  {
+
+                                },
+                      "quick":  true,
+                      "not_at_full_length":  false,
+                      "ledger":  [
+                                     {
+                                         "table":  "gates",
+                                         "match":  "Every engine renamed away: the app still records",
+                                         "kind":  "verdict"
                                      }
                                  ]
                   },
@@ -830,91 +1097,6 @@
                   }
               ],
     "pending":  [
-                    {
-                        "id":  "load-cold",
-                        "priority":  "P1",
-                        "title":  "30-minute load gate within an hour of a restart",
-                        "reason":  "not run",
-                        "ledger":  [
-                                       {
-                                           "table":  "gates",
-                                           "match":  "Load test: 30 minutes with every logical CPU of the job busy",
-                                           "kind":  "verdict"
-                                       },
-                                       {
-                                           "table":  "open",
-                                           "match":  "Load gate on the laptops, two conditions",
-                                           "kind":  "verdict"
-                                       }
-                                   ]
-                    },
-                    {
-                        "id":  "hashing-1",
-                        "priority":  "P1",
-                        "title":  "Cold-cache model hashing while recording starts: run 1, right after a real restart",
-                        "reason":  "not run",
-                        "ledger":  [
-                                       {
-                                           "table":  "open",
-                                           "match":  "R5 (owner\u0027s decision, 12 Nov 2026): CLOSED on the Legion under `emu-low`",
-                                           "kind":  "verdict"
-                                       },
-                                       {
-                                           "table":  "open",
-                                           "match":  "Hashing and upstream breaks (13 Nov 2026)",
-                                           "kind":  "verdict"
-                                       }
-                                   ]
-                    },
-                    {
-                        "id":  "network-off",
-                        "priority":  "P1",
-                        "title":  "Network off: engines, static import check, the release app\u0027s quick check",
-                        "reason":  "needs a person at the keyboard (running unattended)",
-                        "ledger":  [
-                                       {
-                                           "table":  "gates",
-                                           "match":  "Engines run with the network adapters off",
-                                           "kind":  "verdict"
-                                       },
-                                       {
-                                           "table":  "open",
-                                           "match":  "Network-off checker follow-ups (offline audit, 12 Nov 2026)",
-                                           "kind":  "verdict"
-                                       }
-                                   ]
-                    },
-                    {
-                        "id":  "hashing-2-10",
-                        "priority":  "P2",
-                        "title":  "Model hashing runs 2 to 10: four purged-cold, five warm",
-                        "reason":  "not run",
-                        "ledger":  [
-                                       {
-                                           "table":  "open",
-                                           "match":  "Hashing and upstream breaks (13 Nov 2026)",
-                                           "kind":  "verdict"
-                                       },
-                                       {
-                                           "table":  "open",
-                                           "match":  "VB-CABLE uses the whole upstream-break allowance",
-                                           "kind":  "info"
-                                       }
-                                   ]
-                    },
-                    {
-                        "id":  "rename-engines",
-                        "priority":  "P2",
-                        "title":  "Every engine renamed away: the app still records and shows its message",
-                        "reason":  "needs a person at the keyboard (running unattended)",
-                        "ledger":  [
-                                       {
-                                           "table":  "gates",
-                                           "match":  "Every engine renamed away: the app still records",
-                                           "kind":  "verdict"
-                                       }
-                                   ]
-                    },
                     {
                         "id":  "mic-run",
                         "priority":  "P2",

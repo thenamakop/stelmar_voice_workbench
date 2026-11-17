@@ -1,0 +1,44 @@
+Engines run with the network off (Phase 2 item 12)
+date: 2026-11-15 15:44 (IST on the Legion)
+machine: LENOVO-83DF-b8384c; PATH while running: C:\WINDOWS\System32;C:\WINDOWS (no development tools); test clip: a FLEURS English clip of 6 s (no audio or text below); model small; models in the repository's models folder
+
+network state at the start (scripts/lib/NetworkState.psm1):
+  Network state: Offline
+    reason: no physical adapter (Wi-Fi or Ethernet) is Up
+    reason: no connection profile reports Internet or LocalNetwork
+    reason: no probe reached its target
+    default route: 0.0.0.0/0 via 10.16.0.1 on Wi-Fi (ifIndex 6, metric 0)
+    0.0.0.0/0 via 10.16.0.1 on Wi-Fi (ifIndex 6) - ignored: adapter is Disconnected
+    interface Wi-Fi (ifIndex 6): status Disconnected, virtual False, IPv6:Disconnected IPv4:Disconnected, non-link-local address True
+    connection profiles: none
+    physical adapters Up: none
+    probe 1.1.1.1:443: reached False (A socket operation was attempted to an unreachable host 1.1.1.1:443)
+    probe 8.8.8.8:443: reached False (A socket operation was attempted to an unreachable host 8.8.8.8:443)
+
+== avx2
+-- native info : exit code 0 (expected 0) ok; 0.4 s; sockets of the process tree: non-loopback 0, loopback samples 0, polls 1 (mean 382 ms apart)
+-- native batch on cpu : exit code 0; segments 1, Latin letters 78 (the text is not printed); 3.5 s; ok; sockets: non-loopback 0, loopback samples 0, polls 10 (mean 347 ms apart)
+
+== vulkan
+-- native info : exit code 0 (expected 0) ok; 0.8 s; sockets of the process tree: non-loopback 0, loopback samples 0, polls 3 (mean 262 ms apart)
+-- native batch on cpu : exit code 0; segments 1, Latin letters 78 (the text is not printed); 3.8 s; ok; sockets: non-loopback 0, loopback samples 0, polls 11 (mean 346 ms apart)
+-- native batch on gpu:0 (Intel(R) RaptorLake-S Mobile Graphics Controller) : exit code 0; segments 1, Latin letters 78 (the text is not printed); 4 s; ok; sockets: non-loopback 0, loopback samples 0, polls 13 (mean 309 ms apart)
+-- native batch on gpu:1 (NVIDIA GeForce RTX 4070 Laptop GPU) : exit code 0; segments 1, Latin letters 78 (the text is not printed); 2.7 s; ok; sockets: non-loopback 0, loopback samples 0, polls 10 (mean 268 ms apart)
+
+network state at the end:
+  Network state: Offline
+    reason: no physical adapter (Wi-Fi or Ethernet) is Up
+    reason: no connection profile reports Internet or LocalNetwork
+    reason: no probe reached its target
+    default route: 0.0.0.0/0 via 10.16.0.1 on Wi-Fi (ifIndex 6, metric 0)
+    0.0.0.0/0 via 10.16.0.1 on Wi-Fi (ifIndex 6) - ignored: adapter is Disconnected
+    interface Wi-Fi (ifIndex 6): status Disconnected, virtual False, IPv6:Disconnected IPv4:Disconnected, non-link-local address True
+    connection profiles: none
+    physical adapters Up: none
+    probe 1.1.1.1:443: reached False (A socket operation was attempted to an unreachable host 1.1.1.1:443)
+    probe 8.8.8.8:443: reached False (A socket operation was attempted to an unreachable host 8.8.8.8:443)
+
+summary: avx2/native/info exit 0 ok; avx2/native/batch cpu exit 0 ok; vulkan/native/info exit 0 ok; vulkan/native/batch cpu exit 0 ok; vulkan/native/batch gpu:0 (Intel(R) RaptorLake-S Mobile Graphics Controller) exit 0 ok; vulkan/native/batch gpu:1 (NVIDIA GeForce RTX 4070 Laptop GPU) exit 0 ok
+socket check: non-loopback TCP connections, TCP listeners or UDP endpoints seen in the engines' process trees: 0 in 6 runs
+what PASS means: no standing non-loopback socket or endpoint was observed in an engine process tree at any poll (the polls are a few hundred ms apart, so a connection attempt that fails at once is not seen; the static check that no engine or app binary imports Winsock, WinHTTP or WinINet covers that). A wildcard listener (0.0.0.0 or ::) is a non-loopback socket. A socket created more than 2 s before its engine started is listed with its owner and not counted.
+NETWORK-OFF RESULT: PASS (every engine ran with the network off: info and a short decode, no non-loopback socket)

@@ -55,6 +55,9 @@ function New-RunZip([string]$Name, [string]$Machine, [string]$Role, [string]$Emu
   $work = Join-Path $tmp ("work-" + $Name)
   New-Item -ItemType Directory -Force -Path (Join-Path $work 'gates\soak') | Out-Null
   Set-Content -LiteralPath (Join-Path $work 'gates\soak\gate.log') -Value @('log of C:\Users\Real Person\pack', 'TOKEN=zzz') -Encoding UTF8
+  New-Item -ItemType Directory -Force -Path (Join-Path $work 'gates\rename-engines\scratch\renamed') | Out-Null
+  [IO.File]::WriteAllBytes((Join-Path $work 'gates\rename-engines\scratch\renamed\wb-engine-avx2.exe.renamed'), [byte[]](77, 90, 0, 0))
+  [IO.File]::WriteAllBytes((Join-Path $work 'gates\rename-engines\scratch\x.dmp'), [byte[]](1, 2, 3))
   $summary = [ordered]@{
     pack_version = 1; source_commit = 'abc1234'; machine = $Machine; role = $Role; emulated = $(if ($Emulated) { $Emulated } else { $null })
     quick = [bool]$Emulated; created = $Created; gates = @($Gates); pending = @(); not_in_pack = @(); still_changed = @()
@@ -95,6 +98,7 @@ try {
   Check 'the run is listed in the Gate pack runs block' ($t -match '## Gate pack runs' -and $t -match '\| soak \| PASS \| low laptop, Acme-Book-14-aabbcc')
   $ev = Join-Path $tmp 'docs\evidence\gate-pack\Acme-Book-14-aabbcc\gates\soak\gate.log'
   Check 'evidence is copied with user paths and secrets removed' ((Test-Path $ev) -and ((Get-Content -LiteralPath $ev -Raw) -match '%USERPROFILE%\\pack' -and (Get-Content -LiteralPath $ev -Raw) -match 'TOKEN=<redacted>'))
+  Check 'a renamed engine program or a dump is never copied into the evidence' (@(Get-ChildItem -LiteralPath (Join-Path $tmp 'docs\evidence') -Recurse -File | Where-Object { $_.Extension -in '.renamed', '.dmp', '.exe' }).Count -eq 0)
   Check 'RESULTS.txt is written by the script' (Test-Path (Join-Path $tmp 'docs\evidence\gate-pack\Acme-Book-14-aabbcc\RESULTS.txt'))
 
   # --- 2. re-ingest of the same zip changes nothing ---

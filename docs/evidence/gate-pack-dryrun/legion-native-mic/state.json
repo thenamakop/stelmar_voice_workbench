@@ -1,0 +1,38 @@
+{
+  "pack_version": 1,
+  "role": "low",
+  "profile": "laptop",
+  "quick": true,
+  "created": "2026-11-15T17:32:19.6834193+05:30",
+  "restart": {
+    "requested_at": null,
+    "boot_time_before": null,
+    "resumed_at": null,
+    "uptime_at_resume_min": null
+  },
+  "gates": {
+    "full-check": {
+      "attempts": 0,
+      "status": "SKIPPED",
+      "reason": "skipped under -Quick",
+      "ended": "2026-11-16T00:27:28.1889591+05:30"
+    },
+    "mic-run": {
+      "attempts": 5,
+      "status": "PASS",
+      "reason": "the app equals both independent references sample for sample (microphone run, 15 minutes)",
+      "result_file": "D:\\STELMAR-Gate\\mic-work\\gates\\mic-run\\result.json",
+      "started": "2026-11-17T04:43:03.5201342+05:30",
+      "minutes": 15.8,
+      "ended": "2026-11-17T04:58:51.8585732+05:30"
+    }
+  },
+  "order_used": [
+    "mic-run",
+    "mic-run",
+    "mic-run",
+    "mic-run",
+    "mic-run"
+  ],
+  "backup_root": "C:\\STELMAR-Gate-Backup"
+}

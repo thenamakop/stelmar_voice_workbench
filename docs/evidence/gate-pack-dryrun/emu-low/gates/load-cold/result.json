@@ -1,0 +1,53 @@
+{
+    "id":  "load-cold",
+    "status":  "PASS",
+    "headline":  "PASS (PROVISIONAL: emulated)",
+    "measured":  {
+                     "rig":  "vb-cable",
+                     "minutes":  5,
+                     "exit_code":  0,
+                     "run_dir":  "D:\\STELMAR-Gate\\dryrun-work\\audio\\load-emu-low-20261117-134742",
+                     "shared_breaks":  1,
+                     "app_only_breaks":  0,
+                     "thermal":  {
+                                     "clock_drop_pct":  -3.5217035217035217,
+                                     "ac_lost":  false,
+                                     "event37":  0,
+                                     "limit_below_100":  83
+                                 },
+                     "detectors":  {
+                                       "zero_gap":  {
+                                                        "Firings":  1,
+                                                        "Matched":  1,
+                                                        "MatchedBoth":  1,
+                                                        "FalseAlarms":  0,
+                                                        "RealMissed":  0,
+                                                        "ReferenceFindings":  1,
+                                                        "PerHour":  11.86982755778298
+                                                    },
+                                       "repeated_block":  {
+                                                              "Firings":  0,
+                                                              "Matched":  0,
+                                                              "MatchedBoth":  0,
+                                                              "FalseAlarms":  0,
+                                                              "RealMissed":  0,
+                                                              "ReferenceFindings":  0,
+                                                              "PerHour":  0
+                                                          }
+                                   }
+                 },
+    "threshold":  "equals both references; every logical CPU busy and the integrated GPU loaded; zero overruns and xruns",
+    "rig":  "VB-CABLE",
+    "rig_detail":  "",
+    "shared_breaks":  1,
+    "evidence":  [
+                     "D:\\STELMAR-Gate\\dryrun-work\\gates\\load-cold\\evidence\\load-emu-low.txt",
+                     "D:\\STELMAR-Gate\\dryrun-work\\gates\\load-cold\\load-cold-additions.txt"
+                 ],
+    "notes":  [
+
+              ],
+    "quick":  true,
+    "not_at_full_length":  false,
+    "finished":  "2026-11-17T13:53:23.8119500+05:30"
+}

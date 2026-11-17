@@ -1,0 +1,18 @@
+STELMAR Voice Workbench offline check: offline
+Date: 2026-11-15 15:45:00 +05:30   Machine: LENOVO-83DF-b8384c   Windows 10.0.26200.0
+Exe: D:\STELMAR-Gate\pack\target\release\stelmar-voice-workbench.exe (2026-11-15 01:18)
+Network state: Offline
+  reason: no physical adapter (Wi-Fi or Ethernet) is Up
+  reason: no connection profile reports Internet or LocalNetwork
+  reason: no probe reached its target
+  default route: 0.0.0.0/0 via 10.16.0.1 on Wi-Fi (ifIndex 6, metric 0)
+  0.0.0.0/0 via 10.16.0.1 on Wi-Fi (ifIndex 6) - ignored: adapter is Disconnected
+  interface Wi-Fi (ifIndex 6): status Disconnected, virtual False, IPv6:Disconnected IPv4:Disconnected, non-link-local address True
+  connection profiles: none
+  physical adapters Up: none
+  probe 1.1.1.1:443: reached False (A socket operation was attempted to an unreachable host 1.1.1.1:443)
+  probe 8.8.8.8:443: reached False (A socket operation was attempted to an unreachable host 8.8.8.8:443)
+Run 1: window 626 ms, rendered 1452 ms, not blank = True (charcoal 7.3%, 81 colours), app alive = True, WebView2 processes = 6, non-loopback network = none
+Median: window 626 ms, rendered 1452 ms (runs after the first are warm starts)
+No online baseline found (D:\STELMAR-Gate\dryrun-work\gates\network-off\evidence\offline-app\offline-check-online.txt); run with -Label online first to compare.
+Result: PASS

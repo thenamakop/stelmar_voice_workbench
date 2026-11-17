@@ -1,0 +1,20 @@
+{
+    "pack_root":  "D:\\STELMAR-Gate\\pack",
+    "work_dir":  "D:\\STELMAR-Gate\\dryrun-work",
+    "gate_id":  "hashing-1",
+    "gate_dir":  "D:\\STELMAR-Gate\\dryrun-work\\gates\\hashing-1",
+    "profile":  "emu-low",
+    "emulate":  "D:\\Projects\\stelmar_voice_workbench-gatepack\\target\\release\\wb-emulate.exe",
+    "role":  "low",
+    "quick":  true,
+    "machine":  "LENOVO-83DF-b8384c",
+    "lock_dir":  "D:\\Projects",
+    "min_free_ram_gb":  7,
+    "uptime_min":  4.1,
+    "boot_time":  "2026-11-17T10:33:38.3704336+05:30",
+    "admin":  true,
+    "rig_prefer":  "cable",
+    "backup_root":  "C:\\STELMAR-Gate-Backup",
+    "unattended":  false,
+    "runner":  "D:\\STELMAR-Gate\\pack\\run-gates.ps1"
+}

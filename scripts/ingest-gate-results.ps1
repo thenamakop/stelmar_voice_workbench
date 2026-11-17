@@ -110,7 +110,9 @@ try {
     New-Item -ItemType Directory -Force -Path $evDir | Out-Null
     foreach ($f in @(Get-ChildItem -LiteralPath (Join-Path $tmp 'work') -Recurse -File -ErrorAction SilentlyContinue)) {
       # Programs, libraries and audio are never evidence (an older zip may carry engine copies).
-      if (@('.exe', '.dll', '.pdb', '.sys', '.wav', '.bin') -contains $f.Extension.ToLowerInvariant()) { continue }
+      # (.renamed is an engine program the rename-engines gate moved aside; on 17 Nov 2026 it reached the evidence folder.)
+      if (@('.exe', '.dll', '.pdb', '.sys', '.wav', '.bin', '.renamed', '.dmp', '.zip', '.gguf') -contains $f.Extension.ToLowerInvariant()) { continue }
+      if ($f.FullName -match '\\scratch\\' -and $textExt -notcontains $f.Extension.ToLowerInvariant()) { continue }
       $rel = $f.FullName.Substring((Join-Path $tmp 'work').Length).TrimStart('\')
       $to = Join-Path $evDir $rel
       New-Item -ItemType Directory -Force -Path (Split-Path -Parent $to) | Out-Null

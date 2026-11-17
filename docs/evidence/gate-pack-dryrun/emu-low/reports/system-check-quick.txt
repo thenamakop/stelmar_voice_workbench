@@ -1,6 +1,6 @@
 
 == quick check on this laptop ==
-report written: 2026-11-15 13:00
+report written: 2026-11-17 14:29
 emulation: emu-low; kind quick; excerpt 30 s; partial True
 check time: 414 s measured by the check, 414 s wall clock from launch to exit; quick-check bar 480 s (within the bar; the bar is for the real low laptop, so this is PROVISIONAL)
 quick-check target 360 s: NOT met (414 s)

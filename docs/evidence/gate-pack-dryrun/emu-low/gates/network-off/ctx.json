@@ -1,0 +1,20 @@
+{
+  "pack_root": "D:\\STELMAR-Gate\\pack",
+  "work_dir": "D:\\STELMAR-Gate\\dryrun-work",
+  "gate_id": "network-off",
+  "gate_dir": "D:\\STELMAR-Gate\\dryrun-work\\gates\\network-off",
+  "profile": "emu-low",
+  "emulate": "D:\\Projects\\stelmar_voice_workbench-gatepack\\target\\release\\wb-emulate.exe",
+  "role": "low",
+  "quick": true,
+  "machine": "LENOVO-83DF-b8384c",
+  "lock_dir": "D:\\Projects",
+  "min_free_ram_gb": 7.0,
+  "uptime_min": 1135.1,
+  "boot_time": "2026-11-14T20:49:32.3095823+05:30",
+  "admin": true,
+  "rig_prefer": "cable",
+  "backup_root": "C:\\STELMAR-Gate-Backup",
+  "unattended": false,
+  "runner": "D:\\STELMAR-Gate\\pack\\run-gates.ps1"
+}

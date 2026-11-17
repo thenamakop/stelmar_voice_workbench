@@ -1,0 +1,22 @@
+Gate pack run: low laptop, machine LENOVO-83DF-b8384c, created 2026-11-16T23:29:00Z
+Pack commit 65e05bfa108888260febc6f6f98d979e827e5254; EMULATED (legion-native-mic), not a laptop; -Quick, not at full length
+SKIPPED  full-check           skipped under -Quick
+PASS     mic-run              the app equals both independent references sample for sample (microphone run, 15 minutes)
+WAITING  engines-info         not run
+WAITING  quick-check          not run
+WAITING  speed-table-igpu     not run
+WAITING  soak                 not run
+WAITING  load-cold            not run
+WAITING  load-settled         not run
+WAITING  panic                not run
+WAITING  webview              not run
+WAITING  kill                 not run
+WAITING  hashing-1            not run
+WAITING  network-off          not run
+WAITING  hashing-2-10         not run
+WAITING  live-batch-safety    not run
+WAITING  bg-decode-info       not run
+WAITING  rename-engines       not run
+WAITING  speed-table-cpu      not run
+WAITING  batch-scripts        not run
+NOT IN THIS PACK  supervisor-kill

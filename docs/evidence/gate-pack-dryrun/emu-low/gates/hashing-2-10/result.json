@@ -1,0 +1,29 @@
+{
+    "id":  "hashing-2-10",
+    "status":  "FAIL",
+    "headline":  "1 of 1 hashing runs failed (run2)",
+    "measured":  {
+                     "runs":  1,
+                     "cold_runs":  0,
+                     "warm_rate_mb_s":  null,
+                     "shared_breaks_purged":  0,
+                     "shared_breaks_warm":  0,
+                     "extra_purged_runs":  0,
+                     "rig":  "vb-cable"
+                 },
+    "threshold":  "every run: zero overruns and no gap while the models are hashed in background mode (at least 1 GB, 10 s inside the recording); recording equals both references; a purged run counts as cold only at most 0.6 times the warm-cache rate of this laptop",
+    "rig":  "VB-CABLE",
+    "rig_detail":  "",
+    "shared_breaks":  0,
+    "evidence":  [
+                     "D:\\STELMAR-Gate\\dryrun-work\\gates\\hashing-2-10\\evidence\\hashing-emu-low-run2.txt",
+                     "D:\\STELMAR-Gate\\dryrun-work\\gates\\hashing-2-10\\hashing-2-10-run2-additions.txt",
+                     "D:\\STELMAR-Gate\\dryrun-work\\gates\\hashing-2-10\\hashing-2-10-summary.txt"
+                 ],
+    "notes":  [
+                  "run2: the run did not pass (FAIL)"
+              ],
+    "quick":  true,
+    "not_at_full_length":  false,
+    "finished":  "2026-11-17T12:13:14.6686854+05:30"
+}
