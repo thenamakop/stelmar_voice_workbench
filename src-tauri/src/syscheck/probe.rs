@@ -268,6 +268,47 @@ pub fn fingerprint(
 mod tests {
     use super::*;
 
+    /// Where a hardware reading spends its time (owner, 17 Nov 2026: why a profile read took 146 ms in the second
+    /// smoke). Prints each part's mean over 10 calls; nothing is asserted. Run on a quiet machine:
+    /// `cargo test -p stelmar-voice-workbench --lib timing_of_the_parts_of_a_hardware_reading -- --ignored --nocapture`.
+    #[test]
+    #[ignore = "a timing measurement, not a check"]
+    fn timing_of_the_parts_of_a_hardware_reading() {
+        fn mean_ms<T>(mut f: impl FnMut() -> T) -> f64 {
+            let _ = f();
+            let t = std::time::Instant::now();
+            for _ in 0..10 {
+                std::hint::black_box(f());
+            }
+            t.elapsed().as_secs_f64() * 100.0
+        }
+        let dir = std::env::temp_dir();
+        println!("os_name            {:8.2} ms", mean_ms(os_name));
+        println!("on_mains_power     {:8.2} ms", mean_ms(on_mains_power));
+        println!(
+            "list_inputs        {:8.2} ms",
+            mean_ms(|| wb_recorder::capture::list_inputs().map_or(0, |v| v.len()))
+        );
+        println!(
+            "disk_free_bytes    {:8.2} ms",
+            mean_ms(|| wb_recorder::sys::disk_free_bytes(&dir).unwrap_or(0))
+        );
+        let roots = Roots {
+            recordings: &dir,
+            backup: None,
+        };
+        println!(
+            "hardware() in all  {:8.2} ms",
+            mean_ms(|| hardware(crate::machine::get(), &[], &roots).0.logical_processors)
+        );
+        let fixture = include_str!("../../../crates/wb-capability/fixtures/tier-g.json");
+        println!(
+            "parse capability   {:8.2} ms ({} bytes)",
+            mean_ms(|| wb_capability::parse_capability(fixture).is_ok()),
+            fixture.len()
+        );
+    }
+
     fn procs(names: &[&str]) -> Vec<(u32, String)> {
         names
             .iter()

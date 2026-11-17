@@ -437,3 +437,127 @@ fn the_second_engine_of_a_hybrid_counts_what_the_first_may_still_grow_by() {
     );
     r.manager.stop();
 }
+
+/// Runs for a moment (so the unit has a measurable duration), stages one segment and reports the unit done; the
+/// profile promised 0.001 seconds of processing per second of audio for it.
+struct Timed;
+
+impl UnitExecutor for Timed {
+    fn expected_memory(&self, _claim: &Claim) -> (u64, u64) {
+        (1 << 30, 0)
+    }
+
+    fn expected_rtf(
+        &self,
+        _claim: &Claim,
+        mix_ms: &std::collections::BTreeMap<String, u64>,
+    ) -> Option<f64> {
+        // The mix the manager read from the staged file reaches the executor: Hindi only.
+        assert!(
+            mix_ms.keys().all(|l| l == "hi") && mix_ms.values().sum::<u64>() > 0,
+            "{mix_ms:?}"
+        );
+        Some(0.001)
+    }
+
+    fn run(
+        &self,
+        claim: &Claim,
+        _grant: Grant,
+        _cancel: &Cancel,
+        _observer: &mut dyn Observer,
+    ) -> UnitEnd {
+        std::thread::sleep(Duration::from_millis(200));
+        let mut c = Committer::open_staged(&claim.staged).unwrap();
+        c.commit_chunk(
+            &[ev(
+                claim.unit.idx,
+                claim.unit.start_ms + 6_000,
+                claim.unit.end_ms - 100,
+            )],
+            claim.unit.end_ms,
+        )
+        .unwrap();
+        UnitEnd::Done(RunReport {
+            restarts: 0,
+            segments_committed: 1,
+            committed_until_ms: claim.unit.end_ms,
+            done: None,
+            peak_memory_bytes: None,
+            memory_limit_deaths: 0,
+        })
+    }
+}
+
+/// A 120-second session with one unit; with `prestaged` the unit already holds a decoded chunk, as a unit that
+/// was paused and resumes does.
+fn timed_run(name: &str, prestaged: bool) -> Arc<Manager> {
+    let dir = temp(name);
+    let mut q = SessionQueue::open(&dir).unwrap();
+    let job = q
+        .ensure_rolling_job(
+            "hall-a",
+            serde_json::json!({"hi": "m"}),
+            vec!["en".into(), "hi".into()],
+            1,
+        )
+        .unwrap();
+    q.add_part(1, 0, 120_000, 48_000, &PartPauses::default())
+        .unwrap();
+    q.plan_units(job, true).unwrap();
+    if prestaged {
+        let path = wb_runner::session_queue::staged_path(&dir, "post-1", 0);
+        Committer::open_staged(&path)
+            .unwrap()
+            .commit_chunk(&[ev(0, 1_000, 5_000)], 5_000)
+            .unwrap();
+    }
+    let handle = Arc::new(SessionHandle {
+        name: "hall-a".into(),
+        queue: Mutex::new(q),
+        work_dir: dir.join("work"),
+    });
+    let manager = Manager::new(
+        Gate::new(),
+        Arc::new(Timed),
+        Arc::new(Log::default()),
+        Config {
+            chunks_exe: PathBuf::from("this-engine-does-not-exist.exe"),
+            models_dir: dir.clone(),
+            scrub_env: false,
+            chunks_timeout: Duration::from_secs(5),
+            gate_poll: Duration::from_millis(50),
+            clock_ms: Arc::new(|| 1_000),
+            ist_text: Arc::new(|| "t".to_owned()),
+        },
+    );
+    manager.add_session(handle.clone());
+    let _slot = manager
+        .start_slot(Slot {
+            name: "cpu".into(),
+            device: Device::Cpu,
+        })
+        .unwrap();
+    wait_until("the unit to be committed", 10, || {
+        handle.queue.lock().unwrap().units(job).unwrap()[0].state == UnitState::Committed
+    });
+    manager
+}
+
+#[test]
+fn a_finished_unit_moves_the_speed_factor_to_what_it_took_over_what_the_profile_promised() {
+    let manager = timed_run("speed-fresh", false);
+    assert_eq!(manager.speed_units(), 1);
+    // 120 s of audio in at least 0.2 s against a promised 0.001 s per second (0.12 s): at least 1.6 times slower.
+    let f = manager.speed_factor().expect("a factor after one unit");
+    assert!(f >= 1.6, "{f}");
+    manager.stop();
+}
+
+#[test]
+fn a_unit_that_resumed_from_its_staged_file_says_nothing_about_speed() {
+    let manager = timed_run("speed-resumed", true);
+    assert_eq!(manager.speed_units(), 0);
+    assert_eq!(manager.speed_factor(), None);
+    manager.stop();
+}

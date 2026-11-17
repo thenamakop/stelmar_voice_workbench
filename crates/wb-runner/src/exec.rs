@@ -3,6 +3,7 @@
 //! file's last chunk marker) and reports how it ended. The workers use the [`UnitExecutor`] trait, so their
 //! logic is tested with a fake one.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use wb_protocol::{
@@ -44,6 +45,14 @@ pub trait UnitExecutor: Send + Sync {
     /// The measured peak commit and integrated-GPU local memory of the engine this claim would start (the start
     /// gate's inputs). An unmeasured model reports the largest peak the profile holds.
     fn expected_memory(&self, claim: &Claim) -> (u64, u64);
+
+    /// The profile's real-time factor for this unit on its device: each language's measured factor for the model
+    /// the job uses for it, weighted by `mix_ms` (milliseconds of speech per language the unit produced). The
+    /// manager compares it with the time the unit really took, so estimates move to this computer's measured
+    /// speed. `None` when the profile has nothing for the unit (the unit then says nothing about speed).
+    fn expected_rtf(&self, _claim: &Claim, _mix_ms: &BTreeMap<String, u64>) -> Option<f64> {
+        None
+    }
 
     /// Runs the unit to the end (or until `cancel`). The grant carries the per-process memory limit.
     fn run(

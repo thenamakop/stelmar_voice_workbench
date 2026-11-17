@@ -1,0 +1,66 @@
+﻿Speed and memory diagnosis under emu-low (owner, 17 Nov 2026, steps 2 and 3): the profile cell against the queue
+date: 2026-11-17 20:25 (IST on the Legion)
+machine: Legion, profile emu-low (4 logical processors, 11 GiB job limit)
+command: powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\gates\speed-diagnosis.ps1
+source: 0835c3c
+audio and requests: the second smoke's session folder (units of post-1 and post-2), copied requests in the work folder; {"gpu": {"kind": "gpu", "index": 0}, "threads": 2, "files": ["req-N1.json", "req-N2.json", "req-P.json", "req-Q.json", "req-R.json"]}
+engine: wb-engine vulkan build (the app's), sha256 312de4131d96fa1be83d8fb0fd7cf4f6469b17498a05d00665d48987e63e8137; wb-emulate emu-low; engine at below-normal priority as the queue runs it; one process per run
+
+Idle checks before each run (total CPU of the host averaged over 60 s must be under 10%, and no other pwsh, cargo, robocopy, python or wb-* process busy)
+  P1: 2026-11-17 19:56:08 host CPU 6.2% (max 13%) over 60 s, attempts 4, busy none; top: PerformanceMonitor 23.6 CPU-s, System 19.4 CPU-s, MsMpEng 6.4 CPU-s, dwm 4.0 CPU-s; free RAM 20.2 GB -> IDLE
+  Q: 2026-11-17 19:58:37 host CPU 6.0% (max 12%) over 60 s, attempts 1, busy none; top: PerformanceMonitor 23.7 CPU-s, System 19.5 CPU-s, MsMpEng 5.1 CPU-s, dwm 3.6 CPU-s; free RAM 20.2 GB -> IDLE
+  R: 2026-11-17 20:04:32 host CPU 5.7% (max 12%) over 60 s, attempts 1, busy none; top: PerformanceMonitor 23.5 CPU-s, System 18.7 CPU-s, MsMpEng 4.2 CPU-s, svchost 3.7 CPU-s; free RAM 20.2 GB -> IDLE
+  P2: 2026-11-17 20:09:12 host CPU 5.9% (max 11%) over 60 s, attempts 1, busy none; top: PerformanceMonitor 24.1 CPU-s, System 19.2 CPU-s, MsMpEng 4.4 CPU-s, dwm 3.5 CPU-s; free RAM 20.2 GB -> IDLE
+  N2: 2026-11-17 20:11:41 host CPU 5.8% (max 11%) over 60 s, attempts 1, busy none; top: PerformanceMonitor 24.1 CPU-s, System 19.0 CPU-s, dwm 4.5 CPU-s, MsMpEng 3.9 CPU-s; free RAM 20.2 GB -> IDLE
+  N1: 2026-11-17 20:15:45 host CPU 5.4% (max 10%) over 60 s, attempts 1, busy none; top: PerformanceMonitor 23.6 CPU-s, System 14.1 CPU-s, dwm 3.9 CPU-s, MsMpEng 3.9 CPU-s; free RAM 20.2 GB -> IDLE
+
+Runs (every one under wb-emulate --profile emu-low; the engine is the app's Vulkan build; engine process at below-normal priority like the queue's)
+  P1  profile cell: bench, Hindi 60 s clip, turbo q5_0, Vulkan UHD, 2 threads, rolling (first)
+      exit 0, wall 89.0 s, started 2026-11-17 19:56:08, engine sha256 312de4131d96fa1b
+      bench: RTF 0.708 (warm-up 0.728), clip 60.0 s, load 0.7 s, 5 segments, peak commit 1524 MiB, working set 1077 MiB, device Intel(R) RaptorLake-S Mobile Graphics Controller
+      trace (88 samples, 1 per second): peak commit 1521 MiB, peak working set 1074 MiB, 90% of the peak commit reached at 2 s (2% of the run); commit at 25/50/75/100% of the run 1519/1520/1521/70 MiB; slope over the last 70% -131.9 MiB/min (commit), -90.5 MiB/min (working set)
+      CPU: engine 46% of one core on average (max 124%), host total 7.5% on average (max 16%) during the run
+  Q   queue's rolling unit: batch, en+hi with detection on every chunk, 288 s, the request post-1 unit 1 ran
+      exit 0, wall 294.0 s, started 2026-11-17 19:58:38, engine sha256 312de4131d96fa1b
+      ready: models ['large-v3-turbo-q5_0'], load 0.6 s, device Intel(R) RaptorLake-S Mobile Graphics Controller, threads 2
+      stats: unit 1, 25 chunks, audio 287.9 s, unit time 291.1 s, RTF 1.011 (engine reports 1.011), detections 25, both ways 0, peak working set 1099 MiB
+      done: segments 25, chunks 25, retried 0, unclear 0, low coverage 0, truncated 0, elapsed 291.7085822
+      trace (293 samples, 1 per second): peak commit 1537 MiB, peak working set 1097 MiB, 90% of the peak commit reached at 2 s (1% of the run); commit at 25/50/75/100% of the run 1446/1533/1536/70 MiB; slope over the last 70% +4.6 MiB/min (commit), +20.2 MiB/min (working set)
+      CPU: engine 35% of one core on average (max 155%), host total 7.1% on average (max 15%) during the run
+  R   the same unit with the cell's conditions: batch, Hindi only, no language detection
+      exit 0, wall 220.0 s, started 2026-11-17 20:04:32, engine sha256 312de4131d96fa1b
+      ready: models ['large-v3-turbo-q5_0'], load 0.6 s, device Intel(R) RaptorLake-S Mobile Graphics Controller, threads 2
+      stats: unit 1, 21 chunks, audio 287.9 s, unit time 216.8 s, RTF 0.753 (engine reports 0.753), detections 0, both ways 0, peak working set 1101 MiB
+      done: segments 21, chunks 21, retried 1, unclear 0, low coverage 0, truncated 0, elapsed 217.4287723
+      warnings: chunk_rescued x1, chunk_retry x1
+      trace (219 samples, 1 per second): peak commit 1538 MiB, peak working set 1098 MiB, 90% of the peak commit reached at 2 s (1% of the run); commit at 25/50/75/100% of the run 1534/1534/1536/70 MiB; slope over the last 70% -20.4 MiB/min (commit), -13.7 MiB/min (working set)
+      CPU: engine 47% of one core on average (max 155%), host total 7.5% on average (max 14%) during the run
+  P2  profile cell again (drift check)
+      exit 0, wall 89.0 s, started 2026-11-17 20:09:12, engine sha256 312de4131d96fa1b
+      bench: RTF 0.709 (warm-up 0.725), clip 60.0 s, load 0.7 s, 5 segments, peak commit 1524 MiB, working set 1077 MiB, device Intel(R) RaptorLake-S Mobile Graphics Controller
+      trace (88 samples, 1 per second): peak commit 1524 MiB, peak working set 1077 MiB, 90% of the peak commit reached at 2 s (2% of the run); commit at 25/50/75/100% of the run 1520/1521/1521/633 MiB; slope over the last 70% -81.1 MiB/min (commit), -43.1 MiB/min (working set)
+      CPU: engine 46% of one core on average (max 106%), host total 7.5% on average (max 14%) during the run
+  N2  night model only (large-v3 q5_0), Hindi only, no detection, first 120 s
+      exit 0, wall 183.0 s, started 2026-11-17 20:11:41, engine sha256 312de4131d96fa1b
+      ready: models ['large-v3-q5_0'], load 1.2 s, device Intel(R) RaptorLake-S Mobile Graphics Controller, threads 2
+      stats: unit 0, 10 chunks, audio 120.0 s, unit time 179.8 s, RTF 1.498 (engine reports 1.498), detections 0, both ways 0, peak working set 2297 MiB
+      done: segments 10, chunks 10, retried 1, unclear 0, low coverage 0, truncated 0, elapsed 180.9794694
+      warnings: chunk_rescued x1, chunk_retry x1
+      trace (182 samples, 1 per second): peak commit 2780 MiB, peak working set 2290 MiB, 90% of the peak commit reached at 8 s (4% of the run); commit at 25/50/75/100% of the run 2708/2711/2711/2711 MiB; slope over the last 70% +0.4 MiB/min (commit), +0.9 MiB/min (working set)
+      CPU: engine 36% of one core on average (max 132%), host total 8.2% on average (max 15%) during the run
+  N1  queue's night unit: batch, en (turbo) + hi (large-v3 q5_0) with detection, 295 s, the request post-2 unit 0 ran
+      exit 0, wall 556.0 s, started 2026-11-17 20:15:45, engine sha256 312de4131d96fa1b
+      ready: models ['large-v3-q5_0', 'large-v3-turbo-q5_0'], load 1.9 s, device Intel(R) RaptorLake-S Mobile Graphics Controller, threads 2
+      stats: unit 0, 29 chunks, audio 295.2 s, unit time 551.6 s, RTF 1.868 (engine reports 1.868), detections 29, both ways 0, peak working set 3251 MiB
+      done: segments 30, chunks 29, retried 2, unclear 0, low coverage 0, truncated 0, elapsed 553.4380097
+      warnings: chunk_half_done x1, chunk_rescued x1, chunk_retry x1
+      trace (555 samples, 1 per second): peak commit 4093 MiB, peak working set 3249 MiB, 90% of the peak commit reached at 130 s (23% of the run); commit at 25/50/75/100% of the run 4007/4012/4090/870 MiB; slope over the last 70% +10.8 MiB/min (commit), +14.9 MiB/min (working set)
+      CPU: engine 32% of one core on average (max 163%), host total 7.7% on average (max 16%) during the run
+
+Arithmetic (no reading; the reading goes in a note that names its author)
+  Q / R: 1.011 / 0.753 = 1.34   (queue's conditions over the cell's conditions, same audio)
+  R / P1: 0.753 / 0.708 = 1.06   (batch with the cell's conditions over the cell's bench)
+  P1 / P2: 0.708 / 0.709 = 1.00   (drift of the bench between the first and the last run)
+  N1 / N2: 1.868 / 1.498 = 1.25   (queue's night unit over night model alone (different lengths))
+  P1 against the profile's 0.696 for this cell: 1.02
+  P2 against the profile's 0.696 for this cell: 1.02

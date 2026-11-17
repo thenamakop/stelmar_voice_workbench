@@ -11,6 +11,10 @@ use wb_capability::{Capability, DeviceConfig, OverrideKind, Tier};
 #[derive(Debug, Clone, PartialEq)]
 struct Peak {
     model: String,
+    /// The language of the clip the cell was measured on (`en`, `hi`, `ur`).
+    lang: String,
+    /// A rolling-settings cell (the near-live stand-in cells are not what the queue runs).
+    rolling: bool,
     gpu: bool,
     peak_commit_bytes: u64,
     gpu_local_bytes: u64,
@@ -74,6 +78,8 @@ impl ProfileView {
             .iter()
             .map(|m| Peak {
                 model: m.model.clone(),
+                lang: m.lang.code().to_owned(),
+                rolling: m.mode == wb_capability::Mode::Rolling,
                 gpu: !matches!(m.config, DeviceConfig::Cpu),
                 peak_commit_bytes: m.peak_commit_bytes,
                 gpu_local_bytes: m.gpu_local_bytes.unwrap_or(0),
@@ -175,6 +181,24 @@ impl ProfileView {
         self.largest_peak(gpu)
     }
 
+    /// What one engine process needs when it loads every model in `model_ids` at once (a batch engine holds one
+    /// model for each distinct id of the job's `models_by_lang`: English on the rolling model and Hindi on the night
+    /// model are two models in one process). Each distinct model counts its own measured peak, so the sum is a
+    /// little above the true peak (the process's fixed part is counted once per model) and never below it.
+    /// The second smoke measured 4095 MiB for turbo q5_0 plus large-v3 q5_0 against 2780 + 1526 = 4306 MiB here;
+    /// taking the larger of the two (2780) put the engine at 73.6% of its memory limit.
+    pub fn memory_for_models<'a>(
+        &self,
+        model_ids: impl IntoIterator<Item = &'a str>,
+        gpu: bool,
+    ) -> (u64, u64) {
+        let distinct: std::collections::BTreeSet<&str> = model_ids.into_iter().collect();
+        distinct.into_iter().fold((0u64, 0u64), |(peak, local), id| {
+            let (p, l) = self.peak_for(id, gpu);
+            (peak.saturating_add(p), local.saturating_add(l))
+        })
+    }
+
     fn largest_peak(&self, gpu: bool) -> (u64, u64) {
         self.peaks
             .iter()
@@ -196,6 +220,73 @@ impl ProfileView {
         };
         let exact = of(true);
         if exact > 0.0 { exact } else { of(false) }
+    }
+
+    /// The real-time factor the profile measured for `model` on clips of `lang` with the queue's (rolling)
+    /// settings on a kind of device, or, when there is no such cell, the slowest one of the model there
+    /// (`rtf_for`). 0 when nothing was measured.
+    pub fn rtf_for_lang(&self, model: &str, lang: &str, gpu: bool) -> f64 {
+        let exact = self
+            .peaks
+            .iter()
+            .filter(|p| p.rolling && p.gpu == gpu && p.model == model && p.lang == lang)
+            .map(|p| p.rtf)
+            .fold(0.0, f64::max);
+        if exact > 0.0 {
+            exact
+        } else {
+            self.rtf_for(model, gpu)
+        }
+    }
+
+    /// The profile's real-time factor for the audio of one unit: each language's measured factor for the model
+    /// `models` (the job's `models_by_lang`, with `*` for any other language) gives it, weighted by `mix_ms`, the
+    /// milliseconds of speech in each language. `None` when the mix is empty or a language has no model or no
+    /// measurement.
+    pub fn expected_rtf(
+        &self,
+        models: &serde_json::Map<String, serde_json::Value>,
+        mix_ms: &BTreeMap<String, u64>,
+        gpu: bool,
+    ) -> Option<f64> {
+        let total: u64 = mix_ms.values().sum();
+        if total == 0 {
+            return None;
+        }
+        let mut weighted = 0.0;
+        for (lang, ms) in mix_ms {
+            let id = models
+                .get(lang)
+                .or_else(|| models.get("*"))
+                .and_then(|v| v.as_str())?;
+            let rtf = self.rtf_for_lang(id, lang, gpu);
+            if rtf <= 0.0 {
+                return None;
+            }
+            weighted += rtf * *ms as f64;
+        }
+        Some(weighted / total as f64)
+    }
+
+    /// The profile's real-time factor for each of `languages` with the model `models` gives it (`*` for a
+    /// language without its own); a language with no model or no measurement is left out.
+    pub fn rtf_by_lang(
+        &self,
+        models: &serde_json::Map<String, serde_json::Value>,
+        languages: &[String],
+        gpu: bool,
+    ) -> BTreeMap<String, f64> {
+        languages
+            .iter()
+            .filter_map(|l| {
+                let id = models
+                    .get(l)
+                    .or_else(|| models.get("*"))
+                    .and_then(|v| v.as_str())?;
+                let rtf = self.rtf_for_lang(id, l, gpu);
+                (rtf > 0.0).then(|| (l.clone(), rtf))
+            })
+            .collect()
     }
 
     /// The engine build the profile measured for a kind of device (`avx2`, `avx512`, `vulkan`), if it did.
@@ -289,6 +380,115 @@ mod tests {
             .max()
             .unwrap_or(0);
         assert_eq!(peak, largest);
+    }
+
+    #[test]
+    fn an_engine_that_loads_two_models_counts_both_peaks_and_a_repeated_model_once() {
+        let cap = tier_g();
+        let v = ProfileView::from_capability(&cap, vec![]);
+        let mut ids: Vec<String> = cap
+            .profile
+            .measurements
+            .iter()
+            .map(|m| m.model.clone())
+            .collect();
+        ids.sort();
+        ids.dedup();
+        assert!(ids.len() >= 2, "the fixture needs two measured models");
+        let (a, b) = (ids[0].as_str(), ids[1].as_str());
+        for gpu in [false, true] {
+            let (pa, la) = v.peak_for(a, gpu);
+            let (pb, lb) = v.peak_for(b, gpu);
+            assert_eq!(v.memory_for_models([a, b, a], gpu), (pa + pb, la + lb));
+            assert_eq!(v.memory_for_models([a, a, a], gpu), (pa, la));
+            assert_eq!(v.memory_for_models([b], gpu), (pb, lb));
+        }
+        assert_eq!(v.memory_for_models([], false), (0, 0));
+    }
+
+    /// The second smoke (emu-low, 17 Nov 2026): the night engine held turbo q5_0 (English) and large-v3 q5_0
+    /// (Hindi) and peaked at 4095 MiB. Sized on the larger model alone (2780 MiB) the limit was 5561 MiB and the
+    /// engine sat at 73.6% of it, over the 70% bar; sized on both models it is far under.
+    #[test]
+    fn the_second_smokes_night_engine_is_under_the_safe_share_of_a_limit_sized_on_both_models() {
+        use wb_queue::sched::{engine_memory_limit, over_safe_share};
+        const MIB: u64 = 1 << 20;
+        let mut cap = tier_g();
+        let models = ["large-v3-turbo-q5_0", "large-v3-q5_0"];
+        let peaks = [1526 * MIB, 2780 * MIB];
+        cap.profile.measurements.truncate(2);
+        for (m, (id, peak)) in cap
+            .profile
+            .measurements
+            .iter_mut()
+            .zip(models.iter().zip(peaks))
+        {
+            m.model = (*id).to_string();
+            m.peak_commit_bytes = peak;
+            m.config = wb_capability::DeviceConfig::Gpu { index: 0 };
+        }
+        let v = ProfileView::from_capability(&cap, vec![]);
+        let measured_engine_peak = 4095 * MIB;
+        let ample = 11 * (1 << 30);
+        let old = engine_memory_limit(v.peak_for(models[1], true).0, ample);
+        assert!(
+            over_safe_share(measured_engine_peak, old),
+            "the old sizing was over the bar"
+        );
+        let (peak, _) = v.memory_for_models(models, true);
+        assert_eq!(peak, (1526 + 2780) * MIB);
+        assert!(peak >= measured_engine_peak, "the sum never undercounts here");
+        let new = engine_memory_limit(peak, ample);
+        assert!(!over_safe_share(measured_engine_peak, new));
+    }
+
+    /// The second smoke's profile cells (emu-low, Vulkan UHD, 2 threads), as the speed log compares units with.
+    fn smoke_cells() -> ProfileView {
+        use wb_capability::{DeviceConfig, Lang, Mode};
+        let mut cap = tier_g();
+        while cap.profile.measurements.len() < 3 {
+            let first = cap.profile.measurements[0].clone();
+            cap.profile.measurements.push(first);
+        }
+        cap.profile.measurements.truncate(3);
+        let cells = [
+            ("large-v3-turbo-q5_0", Lang::En, 0.389),
+            ("large-v3-turbo-q5_0", Lang::Hi, 0.696),
+            ("large-v3-q5_0", Lang::Hi, 1.479),
+        ];
+        for (m, (id, lang, rtf)) in cap.profile.measurements.iter_mut().zip(cells) {
+            m.model = id.to_string();
+            m.lang = lang;
+            m.rtf = rtf;
+            m.mode = Mode::Rolling;
+            m.config = DeviceConfig::Gpu { index: 0 };
+        }
+        ProfileView::from_capability(&cap, vec![])
+    }
+
+    #[test]
+    fn the_expected_speed_of_a_unit_weights_each_languages_cell_by_its_share_of_the_speech() {
+        let v = smoke_cells();
+        let models = serde_json::json!({
+            "*": "large-v3-q5_0", "en": "large-v3-turbo-q5_0", "hi": "large-v3-q5_0"
+        });
+        let models = models.as_object().unwrap();
+        // A night unit that is 10% English (turbo, 0.389) and 90% Hindi (large-v3 q5_0, 1.479).
+        let mix = BTreeMap::from([("en".to_string(), 20_000u64), ("hi".to_string(), 180_000)]);
+        let e = v.expected_rtf(models, &mix, true).unwrap();
+        assert!((e - (0.389 * 0.1 + 1.479 * 0.9)).abs() < 1e-9, "{e}");
+        // A language the job has only the `*` model for takes it; the cell of the model's slowest language stands in.
+        let ur = BTreeMap::from([("ur".to_string(), 60_000u64)]);
+        let e = v.expected_rtf(models, &ur, true).unwrap();
+        assert!((e - 1.479).abs() < 1e-9, "{e}");
+        // Nothing measured on the processor, nothing to compare with.
+        assert_eq!(v.expected_rtf(models, &mix, false), None);
+        // No speech, no figure.
+        assert_eq!(v.expected_rtf(models, &BTreeMap::new(), true), None);
+        // The cell of the language itself, not the model's slowest one.
+        assert!((v.rtf_for_lang("large-v3-turbo-q5_0", "en", true) - 0.389).abs() < 1e-9);
+        assert!((v.rtf_for_lang("large-v3-turbo-q5_0", "hi", true) - 0.696).abs() < 1e-9);
+        assert!((v.rtf_for_lang("large-v3-turbo-q5_0", "ur", true) - 0.696).abs() < 1e-9);
     }
 
     #[test]

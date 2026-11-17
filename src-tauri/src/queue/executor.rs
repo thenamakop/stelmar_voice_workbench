@@ -182,16 +182,14 @@ impl UnitExecutor for AppExecutor {
             return (u64::MAX / 4, 0);
         };
         let gpu = claim.device == Device::Gpu;
-        // The largest peak among the job's models on this kind of device: an engine holds up to two models.
-        let mut peak = 0u64;
-        let mut local = 0u64;
-        if let Some(map) = claim.job.models_by_lang.as_object() {
-            for id in map.values().filter_map(|v| v.as_str()) {
-                let (p, l) = profile.peak_for(id, gpu);
-                peak = peak.max(p);
-                local = local.max(l);
-            }
-        }
+        // The engine loads every distinct model of the job (up to two: the night pass can have the rolling model for
+        // English and a large model for Hindi), so their peaks add up (found by the second smoke: 73.6% of a limit
+        // that was sized on the larger model alone).
+        let (peak, local) = match claim.job.models_by_lang.as_object() {
+            Some(map) => profile
+                .memory_for_models(map.values().filter_map(|v| v.as_str()), gpu),
+            None => (0, 0),
+        };
         if peak == 0 {
             // Nothing measured at all: assume the largest the profile holds, else a figure that refuses to
             // start rather than guessing small (AGENTS.md: measured, not assumed).
@@ -199,6 +197,12 @@ impl UnitExecutor for AppExecutor {
             return (if p == 0 { 6 << 30 } else { p }, l);
         }
         (peak, local)
+    }
+
+    fn expected_rtf(&self, claim: &Claim, mix_ms: &BTreeMap<String, u64>) -> Option<f64> {
+        let profile = (self.env.profile)()?;
+        let models = claim.job.models_by_lang.as_object()?;
+        profile.expected_rtf(models, mix_ms, claim.device == Device::Gpu)
     }
 
     fn run(

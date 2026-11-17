@@ -1,0 +1,27 @@
+Speed table of smoke2-emu-low-20261117-150935: what the queue ran, against the profile cell behind its promised speed
+profile: emu-low, created 2026-11-14T00:20:35.6124572+05:30, check full
+
+Per unit (the queue's side)
+  unit            audio s  speech s  chunks  detect  retries  device                   thr  model(s)                                  beam/best  wall s   RTF   peak/limit MiB
+  post-1 u0       295       221      30  yes           1  gpu 0                      2  large-v3-turbo-q5_0                        5/5          530   1.79  1546/3051
+  post-1 u1       288       198      25  yes           0  gpu 0                      2  large-v3-turbo-q5_0                        5/5          418   1.45  1542/3051
+  post-1 u2       285       202      27  yes           0  gpu 0                      2  large-v3-turbo-q5_0                        5/5          421   1.48  1549/3051
+  post-2 u0       295       221      30  yes           1  gpu 0                      2  large-v3-q5_0,large-v3-turbo-q5_0          5/5          807   2.73  4095/5561
+  post-2 u1       288       163      21  yes           0  gpu 0                      2  large-v3-q5_0,large-v3-turbo-q5_0          5/5            -      -  -
+
+The same settings in every unit: beam 5, best-of 5, temperature fallback on, previous-text context on (200 characters),
+max chunk 15 s, sentence split on, VAD threshold 0.5, flash attention on, language detection on every chunk of 0.3 s or more
+when the session has two or more languages and no operator lock. Languages of the units above: en, hi
+
+The profile cells (what the speed promise comes from)
+  cell: model, language, device, threads: RTF (warm-up RTF), clip, load s, peak commit MiB, method
+  large-v3-q5_0 hi vulkan Intel(R) RaptorLake-S Mobile Graphics Controller 2 thr: RTF 1.479 (warm-up 1.484), 60 s clip, load 1.2 s, commit 2780 MiB, working set 2296 MiB; bench clip bench-hi.wav, first 60 s, rolling settings, warm-up + 3 run(s), single run above RTF 2, 2 threads
+  large-v3-turbo-q5_0 en vulkan Intel(R) RaptorLake-S Mobile Graphics Controller 2 thr: RTF 0.389 (warm-up 0.392), 60 s clip, load 0.9 s, commit 1519 MiB, working set 1041 MiB; bench clip bench-en.wav, first 60 s, rolling settings, warm-up + 3 run(s), single run above RTF 2, 2 threads
+  large-v3-turbo-q5_0 hi vulkan Intel(R) RaptorLake-S Mobile Graphics Controller 2 thr: RTF 0.696 (warm-up 0.680), 60 s clip, load 0.6 s, commit 1526 MiB, working set 1079 MiB; bench clip bench-hi.wav, first 60 s, rolling settings, warm-up + 3 run(s), single run above RTF 2, 2 threads
+
+The profile's pick: config {"kind": "gpu", "index": 0}, cpu_threads 2; en: rolling large-v3-turbo-q5_0 RTF 0.389; hi: rolling large-v3-turbo-q5_0 RTF 0.696, night large-v3-q5_0 RTF 1.479; ur: rolling large-v3-turbo-q5_0 RTF 0.653
+
+Where they differ (arithmetic from the files; the reading is in a note that names its author)
+  device, model, threads and beam/best-of: the same as the cell in every unit
+  what the cell does not do, and a unit does: language detection on every chunk (two languages), sentence split, one engine process
+  per unit (load and first-use cost each time), the unit's own audio (a concatenation of FLEURS sentences with 0.5 to 3 s pauses)

@@ -724,16 +724,7 @@ impl Queue {
                 .and_then(|jobs| jobs.into_iter().find(|j| j.kind == JobKind::Rolling))
                 .and_then(|j| q.units(j.id).ok())
                 .map_or(0, |u| u.iter().map(|u| u.end_ms).max().unwrap_or(0));
-            let mut mix: std::collections::BTreeMap<String, u64> =
-                std::collections::BTreeMap::new();
-            for seg in q
-                .transcript()
-                .store()
-                .segments("post-1", 0, u64::MAX)
-                .unwrap_or_default()
-            {
-                *mix.entry(seg.lang).or_default() += seg.end_ms.saturating_sub(seg.start_ms);
-            }
+            let mix = language_mix(&q, "post-1");
             audio.push(SessionAudio {
                 id: s.name.clone(),
                 audio_ms_by_lang: wb_queue::estimate::split_by_mix(total, &s.languages, &mix)
@@ -742,7 +733,14 @@ impl Queue {
             });
         }
         let langs: Vec<String> = languages.into_iter().collect();
-        let rtf = profile.night_rtf(&langs);
+        // The profile's night speeds, moved to what this computer's finished units showed (the profile alone
+        // promised 1.48 for a night unit that ran at 2.73 in the second smoke).
+        let factor = self.manager.speed_factor();
+        let rtf: std::collections::BTreeMap<String, f64> = profile
+            .night_rtf(&langs)
+            .into_iter()
+            .map(|(l, r)| (l, wb_queue::speed::scaled(r, factor)))
+            .collect();
         match night::plan(now, &audio, &rtf) {
             Plan::Run {
                 sessions,
@@ -767,8 +765,15 @@ impl Queue {
                         ));
                     }
                 }
+                let basis = match factor {
+                    Some(f) => format!(
+                        "measured speed: {f:.2} times the profile's, from {} finished unit(s)",
+                        self.manager.speed_units()
+                    ),
+                    None => "the profile's speed: no unit has finished yet".to_owned(),
+                };
                 self.core.push_log(format!(
-                    "night pass planned for {} session(s): about {:.1} h, ready by {} IST",
+                    "night pass planned for {} session(s): about {:.1} h, ready by {} IST ({basis})",
                     sessions.len(),
                     estimate_s / 3600.0,
                     wb_queue::estimate::format_ist_hhmm(finish_ms)
@@ -911,6 +916,53 @@ fn job_devices(profile: &ProfileView, fewer: u32, units: &[wb_queue::store::Unit
         .collect()
 }
 
+/// Milliseconds of speech in each language among a revision's committed segments.
+fn language_mix(
+    q: &SessionQueue,
+    revision: &str,
+) -> std::collections::BTreeMap<String, u64> {
+    let mut mix = std::collections::BTreeMap::new();
+    for seg in q
+        .transcript()
+        .store()
+        .segments(revision, 0, u64::MAX)
+        .unwrap_or_default()
+    {
+        *mix.entry(seg.lang).or_default() += seg.end_ms.saturating_sub(seg.start_ms);
+    }
+    mix
+}
+
+/// Seconds a job still needs: its remaining audio split over its languages by the mix committed so far, each
+/// language at the profile's factor for the job's model for it on the configured device, moved to this computer's
+/// measured speed (`factor`) once units have finished. Without a profile the audio counts at real time.
+fn job_seconds_left(
+    profile: Option<&ProfileView>,
+    job: &wb_queue::store::Job,
+    remaining_ms: u64,
+    mix: &std::collections::BTreeMap<String, u64>,
+    factor: Option<f64>,
+) -> f64 {
+    use wb_queue::speed::scaled;
+    let Some(p) = profile else {
+        return scaled(remaining_ms as f64 / 1000.0, factor);
+    };
+    let models = job.models_by_lang.as_object().cloned().unwrap_or_default();
+    let by_lang: std::collections::BTreeMap<String, f64> = p
+        .rtf_by_lang(&models, &job.languages, p.uses_gpu())
+        .into_iter()
+        .map(|(l, r)| (l, scaled(r, factor)))
+        .collect();
+    let slowest = by_lang.values().copied().fold(0.0, f64::max);
+    let default = if slowest > 0.0 {
+        slowest
+    } else {
+        scaled(1.0, factor)
+    };
+    let split = wb_queue::estimate::split_by_mix(remaining_ms, &job.languages, mix);
+    wb_queue::estimate::job_seconds(&split, &by_lang, default, 0, 0.0)
+}
+
 fn state_name(s: JobState) -> &'static str {
     match s {
         JobState::Queued => "queued",
@@ -928,6 +980,8 @@ impl Queue {
         let open = plock(&self.open);
         let profile = self.profile();
         let verdict = self.core.verdict();
+        // This computer's measured speed against the profile's, once units have finished.
+        let factor = self.manager.speed_factor();
         for s in open.iter() {
             let q = plock(&s.handle.queue);
             let Ok(jobs) = q.jobs() else { continue };
@@ -944,21 +998,13 @@ impl Queue {
                 let audio_ms = units.iter().map(|u| u.end_ms).max().unwrap_or(0);
                 let remaining = q.remaining_audio_ms(j.id).unwrap_or(0);
                 if matches!(j.state, JobState::Queued | JobState::Running) {
-                    // Remaining audio at the slowest measured speed of the job's models (an estimate; the
-                    // job's own measured speed replaces it as units finish).
-                    let rtf = profile.as_ref().map_or(1.0, |p| {
-                        j.models_by_lang
-                            .as_object()
-                            .map(|m| {
-                                m.values()
-                                    .filter_map(|v| v.as_str())
-                                    .map(|id| p.rtf_for(id, false))
-                                    .fold(0.0, f64::max)
-                            })
-                            .filter(|r| *r > 0.0)
-                            .unwrap_or(1.0)
-                    });
-                    seconds.push(remaining as f64 / 1000.0 * rtf);
+                    seconds.push(job_seconds_left(
+                        profile.as_ref(),
+                        &j,
+                        remaining,
+                        &language_mix(&q, &j.revision),
+                        factor,
+                    ));
                 }
                 let devices = profile
                     .as_ref()
@@ -1233,6 +1279,8 @@ pub(crate) fn report_json(app: &AppHandle) -> serde_json::Value {
         "log": q.core.log().into_iter().map(|l| format!("{} {}", l.at_ms, l.text)).collect::<Vec<_>>(),
         "configuration": q.profile().and_then(|p| p.config).map(|c| format!("{c:?}")),
         "forced_hybrid": gate_hooks::force_hybrid(),
+        "speed_factor": q.manager.speed_factor(),
+        "speed_units": q.manager.speed_units(),
         "profile_reads": q.readings.profile_reads.load(Ordering::Relaxed),
         "profile_read_max_us": q.readings.profile_read_max_us.load(Ordering::Relaxed),
         "profile_read_total_us": q.readings.profile_read_total_us.load(Ordering::Relaxed),
@@ -1292,6 +1340,57 @@ mod tests {
         let fewer = job_devices(&hybrid, 1, &units);
         assert_eq!(fewer[0].threads, hybrid.cpu_threads.max(1).saturating_sub(1).max(1));
         assert_eq!(job_devices(&hybrid, 99, &units)[0].threads, 1);
+    }
+
+    fn rolling_job(models: serde_json::Value, languages: &[&str]) -> wb_queue::store::Job {
+        wb_queue::store::Job {
+            id: 1,
+            session: "hall-a".into(),
+            kind: JobKind::Rolling,
+            models_by_lang: models,
+            languages: languages.iter().map(|l| (*l).to_owned()).collect(),
+            revision: "post-1".into(),
+            state: JobState::Running,
+            cursor_ms: 0,
+            position: 1,
+            created_ms: 0,
+            started_ms: None,
+            finished_ms: None,
+            error: None,
+        }
+    }
+
+    #[test]
+    fn the_ready_estimate_uses_the_configured_device_the_language_mix_and_the_measured_speed() {
+        let tier_g = profile_of(include_str!(
+            "../../../crates/wb-capability/fixtures/tier-g.json"
+        ));
+        assert!(tier_g.uses_gpu(), "the fixture is a graphics configuration");
+        let models = tier_g.rolling_models(&["en".into(), "hi".into()]);
+        let json = serde_json::to_value(&models).unwrap();
+        let job = rolling_job(json, &["en", "hi"]);
+        let mix = std::collections::BTreeMap::from([
+            ("en".to_string(), 100_000u64),
+            ("hi".to_string(), 300_000),
+        ]);
+        let hour = 3_600_000;
+        let promised = job_seconds_left(Some(&tier_g), &job, hour, &mix, None);
+        let by_lang = tier_g.rtf_by_lang(
+            job.models_by_lang.as_object().unwrap(),
+            &job.languages,
+            true,
+        );
+        let expected = 3600.0 * (0.25 * by_lang["en"] + 0.75 * by_lang["hi"]);
+        assert!((promised - expected).abs() < 1e-6, "{promised} against {expected}");
+        // It does not take the slowest processor cell of the model when the configuration is graphics.
+        let cpu_slowest = tier_g.rtf_for(&models["hi"], false);
+        assert!(promised < 3600.0 * cpu_slowest || cpu_slowest == 0.0);
+        // After units finished at twice the promised time the same remaining audio needs twice as long.
+        let measured = job_seconds_left(Some(&tier_g), &job, hour, &mix, Some(2.0));
+        assert!((measured - 2.0 * promised).abs() < 1e-6, "{measured}");
+        // Without a profile the audio counts at real time, moved by the measured speed too.
+        assert_eq!(job_seconds_left(None, &job, hour, &mix, None), 3600.0);
+        assert_eq!(job_seconds_left(None, &job, hour, &mix, Some(1.5)), 5400.0);
     }
 
     #[test]

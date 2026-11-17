@@ -7,6 +7,7 @@
 //! * [`order`]: units finish in any order on two engines and commit in audio order;
 //! * [`sched`]: priorities, pause rules and the memory rules, as functions of a resource snapshot;
 //! * [`estimate`]: "all transcripts ready by 19:40";
+//! * [`speed`]: the speed this computer reaches, from the units it has finished, against the profile's;
 //! * [`night`]: the night pass plan (decision D6);
 //! * [`import`]: registering a session folder copied from another machine.
 //!
@@ -18,6 +19,7 @@ pub mod night;
 pub mod order;
 pub mod revision;
 pub mod sched;
+pub mod speed;
 pub mod store;
 pub mod units;
 

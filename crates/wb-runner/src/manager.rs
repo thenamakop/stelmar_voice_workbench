@@ -16,13 +16,14 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
 use wb_protocol::Event;
+use wb_queue::speed::{SpeedLog, UnitSpeed};
 use wb_queue::store::{Device, Retry, Segment};
-use wb_supervisor::{Cancel, Notice, Observer};
+use wb_supervisor::{Cancel, Notice, Observer, RunReport};
 
 use crate::chunks::{ChunksError, ChunksJob, PeakTracker, pauses_for_part};
 use crate::exec::{UnitEnd, UnitExecutor};
 use crate::gate::{GateEvent, StartGate, StartRequest, wait_for_gate};
-use crate::session_queue::{Claim, SessionQueue};
+use crate::session_queue::{Claim, SessionQueue, read_staged};
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(PoisonError::into_inner)
@@ -107,6 +108,8 @@ pub struct Manager {
     /// What each running engine may still grow by (its measured peak minus what it has reached): the engine that
     /// starts next must leave room for it (AGENTS.md memory rules for two engines at once).
     headroom: Mutex<BTreeMap<String, u64>>,
+    /// How long this computer's finished units took against what the profile promised for them.
+    speed: Mutex<SpeedLog>,
 }
 
 impl Manager {
@@ -131,7 +134,42 @@ impl Manager {
             disabled: Mutex::new(Vec::new()),
             other_device: Mutex::new(false),
             headroom: Mutex::new(BTreeMap::new()),
+            speed: Mutex::new(SpeedLog::default()),
         })
+    }
+
+    /// Measured over promised: how much slower (above 1) or faster (below 1) this computer's finished units ran
+    /// than the profile said (the median of the last few). `None` until a unit has finished from its start.
+    pub fn speed_factor(&self) -> Option<f64> {
+        lock(&self.speed).factor()
+    }
+
+    /// How many finished units the speed factor rests on.
+    pub fn speed_units(&self) -> usize {
+        lock(&self.speed).units()
+    }
+
+    /// Adds a finished unit to the speed log. Only a unit that ran from its start in one engine process says
+    /// what the profile's number means: a resumed unit covers less audio than its range, and a restarted one
+    /// includes the wait for the restart.
+    fn note_speed(&self, claim: &Claim, report: &RunReport, took: Duration, fresh: bool) {
+        if !fresh || report.restarts > 0 {
+            return;
+        }
+        let mut mix: BTreeMap<String, u64> = BTreeMap::new();
+        if let Ok(events) = read_staged(&claim.staged) {
+            for e in events {
+                *mix.entry(e.lang).or_default() += e.end_ms.saturating_sub(e.start_ms);
+            }
+        }
+        let Some(expected) = self.executor.expected_rtf(claim, &mix) else {
+            return;
+        };
+        lock(&self.speed).record(UnitSpeed {
+            audio_ms: claim.unit.end_ms.saturating_sub(claim.unit.start_ms),
+            took_s: took.as_secs_f64(),
+            expected_rtf: expected,
+        });
     }
 
     /// Whether a second device (a graphics engine beside the processor one) is in use: failures that exhaust one
@@ -497,6 +535,8 @@ impl Manager {
             // Until its own peak is read, a running engine may still grow by all of its expected peak.
             lock(&self.headroom).insert(slot.name.clone(), peak.saturating_add(gpu_local));
             self.events.changed();
+            // A unit with nothing staged runs from its start: its time says something about speed.
+            let fresh = read_staged(&claim.staged).is_ok_and(|s| s.is_empty());
             let started = Instant::now();
             let mut obs = SlotObserver {
                 events: self.events.as_ref(),
@@ -508,7 +548,11 @@ impl Manager {
             let end = self.executor.run(&claim, grant, &cancel, &mut obs);
             lock(&self.headroom).remove(&slot.name);
             lock(&self.running).retain(|(n, _)| n != &slot.name);
-            self.finish_unit(&session, &claim, slot, end, started.elapsed(), grant);
+            let timing = UnitTiming {
+                took: started.elapsed(),
+                fresh,
+            };
+            self.finish_unit(&session, &claim, slot, end, timing, grant);
             self.events.changed();
         }
     }
@@ -519,12 +563,14 @@ impl Manager {
         claim: &Claim,
         slot: &Slot,
         end: UnitEnd,
-        took: Duration,
+        timing: UnitTiming,
         grant: crate::gate::Grant,
     ) {
         let now = (self.cfg.clock_ms)();
+        let UnitTiming { took, fresh } = timing;
         match end {
             UnitEnd::Done(report) => {
+                self.note_speed(claim, &report, took, fresh);
                 self.events.log(
                     LogLevel::Info,
                     &format!(
@@ -615,6 +661,13 @@ impl Manager {
             }
         }
     }
+}
+
+/// How long a unit's engine run took and whether it ran from the unit's start (nothing was staged before).
+#[derive(Clone, Copy)]
+struct UnitTiming {
+    took: Duration,
+    fresh: bool,
 }
 
 fn fmt_bytes(b: Option<u64>) -> String {
