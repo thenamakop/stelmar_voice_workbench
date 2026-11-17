@@ -7,8 +7,8 @@ network state at the start (scripts/lib/NetworkState.psm1):
     reason: no physical adapter (Wi-Fi or Ethernet) is Up
     reason: no connection profile reports Internet or LocalNetwork
     reason: no probe reached its target
-    default route: 0.0.0.0/0 via 10.16.0.1 on Wi-Fi (ifIndex 6, metric 0)
-    0.0.0.0/0 via 10.16.0.1 on Wi-Fi (ifIndex 6) - ignored: adapter is Disconnected
+    default route: 0.0.0.0/0 via <private-ip> on Wi-Fi (ifIndex 6, metric 0)
+    0.0.0.0/0 via <private-ip> on Wi-Fi (ifIndex 6) - ignored: adapter is Disconnected
     interface Wi-Fi (ifIndex 6): status Disconnected, virtual False, IPv6:Disconnected IPv4:Disconnected, non-link-local address True
     connection profiles: none
     physical adapters Up: none
@@ -30,8 +30,8 @@ network state at the end:
     reason: no physical adapter (Wi-Fi or Ethernet) is Up
     reason: no connection profile reports Internet or LocalNetwork
     reason: no probe reached its target
-    default route: 0.0.0.0/0 via 10.16.0.1 on Wi-Fi (ifIndex 6, metric 0)
-    0.0.0.0/0 via 10.16.0.1 on Wi-Fi (ifIndex 6) - ignored: adapter is Disconnected
+    default route: 0.0.0.0/0 via <private-ip> on Wi-Fi (ifIndex 6, metric 0)
+    0.0.0.0/0 via <private-ip> on Wi-Fi (ifIndex 6) - ignored: adapter is Disconnected
     interface Wi-Fi (ifIndex 6): status Disconnected, virtual False, IPv6:Disconnected IPv4:Disconnected, non-link-local address True
     connection profiles: none
     physical adapters Up: none
