@@ -1,7 +1,17 @@
 <#
 .SYNOPSIS
-  Phase 4 day simulation. So far only -Smoke exists: a short run (about 35 minutes) that is NOT a gate; it makes the
-  paths of the post-processing queue run together once with the real engines before the full day is started.
+  Phase 4 day simulation, in four modes (exactly one):
+    -Smoke     a short run that is NOT a gate: the paths of the post-processing queue run together once with the real
+               engines (the description below is of this mode).
+    -Day       the full day (owner, 18 Nov 2026): four sessions of 90 minutes at the programme's times (10:00, 12:00,
+               14:30, 16:00 on the scheduler's clock) played through the cable in real time, a reference capture of
+               the cable for each, then the night pass in a 2 h time box whose finish is extrapolated (an ESTIMATE).
+               About 11 h. Audio: make_day_audio_full.py --day. Judged by the Phase 1 recording rule per session
+               (Fidelity.psm1) and the queue checks of the plan; evidence by day_report.py.
+    -Rehearse  the same schedule compressed (four sessions of 2 minutes, a night box of 8 minutes): proves the script
+               end to end in under 30 minutes. NOT a gate. Audio: make_day_audio_full.py --rehearse.
+    -Kill      the engine-kill test (queue-kill.ps1 calls it).
+  The quiet-machine rule is checked with the gate lock held (Wait-WbQuiet; idle-check.json in the run folder).
 
 .DESCRIPTION
   -Smoke runs the gate build of the app (target\gate, cargo feature gate-hooks; never an installer build) inside the
@@ -38,6 +48,11 @@
 [CmdletBinding()]
 param(
   [switch]$Smoke,
+  # The full day (four sessions at the programme's times, the night box), its compressed rehearsal and the engine-kill
+  # test (owner, 18 Nov 2026, plan step 7). Exactly one of -Smoke, -Day, -Rehearse and -Kill.
+  [switch]$Day,
+  [switch]$Rehearse,
+  [switch]$Kill,
   [ValidateSet('emu-low', 'emu-mid')] [string]$Profile = 'emu-low',
   [string]$Machine = 'Legion',
   [string]$WorkRoot = 'D:\STELMAR-Gate\day-sim',
@@ -46,7 +61,9 @@ param(
   [string]$Audio = 'D:\STELMAR-Gate\day-sim\smoke',
   [int]$NightMinutes = 8,
   # Longest the whole run may take (the app's start to the stop); a longer session or night box needs more.
-  [int]$MaxMinutes = 100,
+  [int]$MaxMinutes = 0,
+  # Minutes the night decision may take after the last session (the rolling backlog comes first); 0 = per mode.
+  [int]$DecisionMinutes = 0,
   # Names the run folder and the evidence file: smoke (the first smoke) or a second smoke with other audio.
   [string]$Tag = 'smoke',
   [int]$PartSeconds = 120,
@@ -63,7 +80,18 @@ param(
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repo = (Resolve-Path (Join-Path $here '..\..')).Path
-if (-not $Smoke) { throw 'only -Smoke exists so far: the full day simulation is built after the owner says go' }
+$modeSwitches = @($Smoke, $Day, $Rehearse, $Kill | Where-Object { $_ })
+if ($modeSwitches.Count -ne 1) { throw 'choose exactly one of -Smoke, -Day, -Rehearse and -Kill' }
+$mode = $(if ($Day) { 'day' } elseif ($Rehearse) { 'rehearse' } elseif ($Kill) { 'kill' } else { 'smoke' })
+$fidelity = ($mode -eq 'day' -or $mode -eq 'rehearse')
+if (-not $PSBoundParameters.ContainsKey('Tag')) { $Tag = $mode }
+if (-not $PSBoundParameters.ContainsKey('Audio')) {
+  $Audio = @{ smoke = 'D:\STELMAR-Gate\day-sim\smoke'; day = 'D:\STELMAR-Gate\day-sim\day-audio'; rehearse = 'D:\STELMAR-Gate\day-sim\day-audio-rehearse'; kill = 'D:\STELMAR-Gate\day-sim\kill-audio' }[$mode]
+}
+if (-not $PSBoundParameters.ContainsKey('NightMinutes')) { $NightMinutes = @{ smoke = 8; day = 120; rehearse = 8; kill = 0 }[$mode] }
+if (-not $PSBoundParameters.ContainsKey('PartSeconds') -and $mode -eq 'rehearse') { $PartSeconds = 60 }
+if ($MaxMinutes -le 0) { $MaxMinutes = @{ smoke = 100; day = 900; rehearse = 45; kill = 240 }[$mode] }
+if ($DecisionMinutes -le 0) { $DecisionMinutes = @{ smoke = 40; day = 360; rehearse = 20; kill = 240 }[$mode] }
 if (-not $OutDir) { $OutDir = Join-Path $repo 'docs\evidence\phase-4' }
 if (-not $Exe) { $Exe = Join-Path $repo 'target\gate\stelmar-voice-workbench.exe' }
 if (-not $Testbench) { $Testbench = Join-Path $repo 'target\release\wb-testbench.exe' }
@@ -76,6 +104,7 @@ Import-Module (Join-Path $repo 'scripts\lib\Redact.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\AppProcess.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Rig.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\CableRig.psm1') -Force
+Import-Module (Join-Path $repo 'scripts\lib\Fidelity.psm1') -Force
 $python = Join-Path $repo 'eval\.venv\Scripts\python.exe'
 New-Item -ItemType Directory -Force -Path $OutDir, $WorkRoot | Out-Null
 
@@ -180,21 +209,145 @@ function Read-NewLines([string]$Path, [ref]$Count) {
   $new
 }
 
+# The quiet-machine rule (owner, 17 Nov 2026), checked with the gate lock held: host CPU under $CpuMax percent averaged
+# over 60 s and no other heavy process (pwsh, cargo, robocopy, python, wb-* and the like) busy. A machine that does not
+# become quiet is waited for; every attempt, with the top processes by CPU, goes to idle-check.json. After
+# $FallbackAfterMin minutes of failed checks the run goes on when the host CPU is under $FallbackCpuMax percent and
+# nothing named is busy, and the file says so (verdict 'fallback'); after $GiveUpMin minutes the run is refused.
+function Wait-WbQuiet {
+  param([string]$Out, [double]$CpuMax = 10, [double]$FallbackCpuMax = 15, [int]$FallbackAfterMin = 15, [int]$GiveUpMin = 120, [int]$Seconds = 60)
+  $busyRx = '^(pwsh|powershell|cargo|rustc|robocopy|python|git|link|cl|msbuild|cmake|ninja|node|wb-.*|stelmar.*)$'
+  $parentId = 0
+  try { $parentId = [int](Get-CimInstance Win32_Process -Filter "ProcessId = $PID").ParentProcessId } catch { $parentId = 0 }
+  $counter = New-Object System.Diagnostics.PerformanceCounter('Processor', '% Processor Time', '_Total')
+  $null = $counter.NextValue()
+  $began = Get-Date
+  $attempts = @()
+  while ($true) {
+    $before = @{}
+    foreach ($p in @(Get-Process -ErrorAction SilentlyContinue)) {
+      $t = $null
+      try { $t = $p.TotalProcessorTime.TotalSeconds } catch { $t = $null }
+      if ($null -ne $t) { $before[$p.Id] = $t }
+    }
+    $samples = New-Object System.Collections.Generic.List[double]
+    for ($i = 0; $i -lt $Seconds; $i++) { Start-Sleep -Seconds 1; $samples.Add([double]$counter.NextValue()) }
+    $busy = @()
+    $top = @()
+    foreach ($p in @(Get-Process -ErrorAction SilentlyContinue)) {
+      if ($p.Id -eq $PID -or $p.Id -eq $parentId -or -not $before.ContainsKey($p.Id)) { continue }
+      $t = $null
+      try { $t = $p.TotalProcessorTime.TotalSeconds } catch { $t = $null }
+      if ($null -eq $t) { continue }
+      $d = $t - $before[$p.Id]
+      if ($d -ge 0.5) { $top += [pscustomobject]@{ name = $p.ProcessName; cpu_s = [math]::Round($d, 1) } }
+      if ($d -ge 3 -and $p.ProcessName -match $busyRx) { $busy += ('{0} {1:F1} CPU-s' -f $p.ProcessName, $d) }
+    }
+    $avg = ($samples | Measure-Object -Average).Average
+    $max = ($samples | Measure-Object -Maximum).Maximum
+    $elapsed = ((Get-Date) - $began).TotalMinutes
+    $ok = ($avg -lt $CpuMax -and $busy.Count -eq 0)
+    $fallback = ((-not $ok) -and $elapsed -ge $FallbackAfterMin -and $avg -lt $FallbackCpuMax -and $busy.Count -eq 0)
+    $free = [math]::Round((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory / 1MB, 1)
+    $attempts += [pscustomobject]@{
+      at = (Get-Date).ToString('o'); cpu_avg = [math]::Round($avg, 1); cpu_max = [math]::Round($max, 0); busy = @($busy)
+      top = @($top | Sort-Object cpu_s -Descending | Select-Object -First 8); free_ram_gb = $free
+    }
+    Write-Host ("{0} quiet check {1}: host CPU {2:F1}% (max {3:F0}%), busy: {4}, free RAM {5} GB -> {6}" -f (Get-Date -Format 'HH:mm:ss'), $attempts.Count, $avg, $max, $(if ($busy.Count) { $busy -join '; ' } else { 'none' }), $free, $(if ($ok) { 'IDLE' } elseif ($fallback) { 'NOT IDLE, going on (under the fallback limit after the wait)' } else { 'NOT IDLE' }))
+    $verdict = $(if ($ok) { 'idle' } elseif ($fallback) { 'fallback' } elseif ($elapsed -ge $GiveUpMin) { 'refused' } else { 'waiting' })
+    Write-Utf8 $Out ((@{
+          verdict = $verdict; cpu_max_limit = $CpuMax; fallback_cpu_limit = $FallbackCpuMax; fallback_after_min = $FallbackAfterMin
+          seconds = $Seconds; waited_min = [math]::Round($elapsed, 1); attempts = @($attempts)
+        } | ConvertTo-Json -Depth 6))
+    if ($ok -or $fallback) { return $verdict }
+    if ($elapsed -ge $GiveUpMin) { throw "the machine did not become quiet within $GiveUpMin minutes (see $Out)" }
+    Start-Sleep -Seconds 20
+  }
+}
+
+# Each recorded session judged by the Phase 1 recording rule (scripts\lib\Fidelity.psm1, docs/PLAN.md section 12):
+# the app's recording against the reference capture of the same cable, one fixed offset per run, 0 dropped samples,
+# upstream breaks counted against max(1, floor(minutes / 10)); an INVALID run is reported as such, not repeated here.
+function Invoke-FidelityJudging {
+  param([string]$Run, $Refs, $ReportJson)
+  $results = @()
+  foreach ($r in @($Refs)) {
+    $fid = Join-Path $Run "fid-$($r.Index)"
+    New-Item -ItemType Directory -Force -Path $fid | Out-Null
+    $sess = @(@($ReportJson.sessions) | Where-Object { $_.title -eq $r.Title })[0]
+    if (-not $sess) {
+      $results += [ordered]@{ title = $r.Title; verdict = 'NOT RECORDED'; reasons = @('the app did not report this session') }
+      continue
+    }
+    $sessionDir = [string]$sess.dir
+    $null = Invoke-WbAnalyse -Testbench $Testbench -Session $sessionDir -Source $r.Source -Report (Join-Path $fid 'analysis.json')
+    $null = Invoke-WbAnalyse -Testbench $Testbench -Session $r.Dir -Source $r.Source -Report (Join-Path $fid 'reference-analysis.json')
+    $cmp = Invoke-WbCompare -Testbench $Testbench -SessionDir $sessionDir -ReferenceDir $r.Dir -RunDir $fid
+    $compare = Read-Json (Join-Path $fid 'compare.json')
+    $refAnalysis = Read-Json (Join-Path $fid 'reference-analysis.json')
+    $play = Read-Json (Join-Path $Run "play-$($r.Index).json")
+    $reference = Read-Json (Join-Path $Run "reference-$($r.Index).json")
+    $dropped = [int64]0
+    $overrun = [int64]0
+    $xruns = [int64]0
+    if ($sess.stopped -and $sess.stopped.recorder) {
+      $dropped = [int64]$sess.stopped.recorder.dropped_samples
+      $overrun = [int64]$sess.stopped.recorder.overrun_samples
+      $xruns = [int64]$sess.stopped.recorder.xruns
+    }
+    $verdict = $null
+    $lines = @()
+    try {
+      $playStart = [DateTimeOffset]::Parse($play.started_at)
+      $verdict = Get-WbRunVerdict -Compare $compare -RefAnalysis $refAnalysis -Play $play -Reference $reference -PlayStarted $playStart -DroppedSamples $dropped
+      $lines = @(Get-WbVerdictLines -Result $verdict -Compare $compare)
+    } catch {
+      $lines = @("the verdict could not be worked out: $($_.Exception.Message)")
+    }
+    Write-Utf8 (Join-Path $Run "fidelity-$($r.Index).txt") ($lines -join "`r`n")
+    $results += [ordered]@{
+      title = $r.Title; index = $r.Index
+      verdict = $(if ($verdict) { $verdict.Verdict } else { 'NO VERDICT' })
+      audio_minutes = $(if ($verdict) { [math]::Round($verdict.AudioMinutes, 1) } else { $null })
+      upstream_breaks = $(if ($verdict) { @($verdict.Breaks).Count } else { $null })
+      counted_breaks = $(if ($verdict) { @($verdict.CountedBreaks).Count } else { $null })
+      break_limit = $(if ($verdict) { $verdict.BreakLimit } else { $null })
+      invalid_reasons = $(if ($verdict) { @($verdict.InvalidReasons) } else { @() })
+      fail_reasons = $(if ($verdict) { @($verdict.FailReasons) } else { @() })
+      compare_aligned = $(if ($compare) { [bool]$compare.aligned } else { $null })
+      runs_of_the_app = $(if ($compare) { @($compare.segments).Count } else { $null })
+      differing_frames = $(if ($compare) { [int64]$compare.differing_frames } else { $null })
+      dropped_samples = $dropped; overrun_samples = $overrun; xruns = $xruns
+    }
+  }
+  Write-Utf8 (Join-Path $Run 'fidelity.json') ((@{ sessions = @($results) } | ConvertTo-Json -Depth 6))
+  $results
+}
+
 function Write-SmokeEvidence([string]$Run) {
   $tmp = Join-Path $Run 'evidence.txt'
-  $rep = Invoke-WbNative -FilePath $python -ArgumentList @('-X', 'utf8', (Join-Path $repo 'scripts\gates\day_sim_report.py'), $Run, $tmp)
+  $svg = Join-Path $Run 'timeline.svg'
+  Remove-Item -LiteralPath $tmp, $svg -Force -ErrorAction SilentlyContinue
+  $reportPy = $(if ($mode -eq 'smoke') { 'day_sim_report.py' } else { 'day_report.py' })
+  $reportArgs = @('-X', 'utf8', (Join-Path $repo "scripts\gates\$reportPy"), $Run, $tmp)
+  if ($mode -ne 'smoke') { $reportArgs += @('--mode', $mode) }
+  $rep = Invoke-WbNative -FilePath $python -ArgumentList $reportArgs
   if (-not (Test-Path -LiteralPath $tmp)) { throw "the report was not written: $((@($rep.Error) + @($rep.Output)) -join ' ')" }
   $body = @([IO.File]::ReadAllLines($tmp, [Text.Encoding]::UTF8))
-  $out = Join-Path $OutDir "day-sim-$Tag-$Profile.txt"
+  $base = $(if ($mode -eq 'smoke') { "day-sim-$Tag-$Profile" } elseif ($mode -eq 'day') { "day-sim-$Profile" } elseif ($mode -eq 'rehearse') { "day-sim-rehearsal-$Profile" } else { "queue-kill-$Profile" })
+  $out = Join-Path $OutDir "$base.txt"
+  $switch = @{ smoke = '-Smoke'; day = '-Day'; rehearse = '-Rehearse'; kill = '-Kill' }[$mode]
+  $purpose = $(if ($mode -eq 'smoke') { 'NOT A GATE (a smoke run of the queue paths)' } elseif ($mode -eq 'rehearse') { 'NOT A GATE (the whole schedule compressed, to prove the script end to end)' } else { 'PROVISIONAL (emulation profile; the real laptops repeat it)' })
   $header = @(
     "date: $(Get-Date -Format 'yyyy-MM-dd HH:mm') (IST on the Legion)",
-    "command: powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\gates\day-sim.ps1 -Smoke -Profile $Profile -Tag $Tag -Audio $Audio -NightMinutes $NightMinutes",
-    "machine: $Machine, emulation profile $Profile; the gate build target\gate\stelmar-voice-workbench.exe, WB_GATE_DAY_PLAN; NOT A GATE (a smoke run of the queue paths)",
+    "command: powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\gates\day-sim.ps1 $switch -Profile $Profile -Tag $Tag -Audio $Audio -NightMinutes $NightMinutes -MaxMinutes $MaxMinutes -DecisionMinutes $DecisionMinutes",
+    "machine: $Machine, emulation profile $Profile; the gate build target\gate\stelmar-voice-workbench.exe, WB_GATE_DAY_PLAN; $purpose",
     "source: $((Invoke-WbNative -FilePath 'git' -ArgumentList @('-C', $repo, 'rev-parse', '--short', 'HEAD')).Output -join '')",
     "build: $(Split-Path -Leaf $Exe) sha256 $((Get-FileHash -LiteralPath $Exe -Algorithm SHA256).Hash.ToLowerInvariant())",
     "run folder: $Run"
   )
   Write-WbEvidence -Path $out -Lines ($header + $body)
+  if (Test-Path -LiteralPath $svg) { Copy-Item -LiteralPath $svg -Destination (Join-Path $OutDir "$base-timeline.svg") -Force }
   Write-Host "evidence: $out"
 }
 
@@ -204,14 +357,17 @@ if ($FromRun) {
 }
 
 foreach ($f in @($Exe, $Testbench, $Emulate)) { if (-not (Test-Path -LiteralPath $f)) { throw "Missing $f; build it first (scripts\gates\build-gate.ps1)" } }
-$audioManifest = Join-Path $Audio 'smoke-audio.json'
-if (-not (Test-Path -LiteralPath $audioManifest)) { throw "no smoke audio at $Audio; run: eval\.venv\Scripts\python scripts\gates\make_day_audio.py --smoke" }
+$audioManifest = Join-Path $Audio $(if ($mode -eq 'smoke') { 'smoke-audio.json' } else { 'day-audio.json' })
+if (-not (Test-Path -LiteralPath $audioManifest)) {
+  $how = @{ smoke = 'make_day_audio.py --smoke'; day = 'make_day_audio_full.py --day'; rehearse = 'make_day_audio_full.py --rehearse'; kill = 'make_day_audio_full.py --kill-test' }[$mode]
+  throw "no audio at $Audio; run: eval\.venv\Scripts\python scripts\gates\$how"
+}
 foreach ($f in @('capability.json')) { if (-not (Test-Path -LiteralPath (Join-Path $ProfileData $f))) { throw "no saved profile at $ProfileData (run scripts\gates\system-check-gate.ps1 -Runs full-emu-low)" } }
 $sessions = @((Get-Content -LiteralPath $audioManifest -Raw -Encoding UTF8 | ConvertFrom-Json).sessions)
 
 $failed = $null
 try {
-  $result = Invoke-WbGate -Name "day-sim smoke $Profile" -Body {
+  $result = Invoke-WbGate -Name "day-sim $mode $Profile" -Body {
     if (Get-Process stelmar-voice-workbench -ErrorAction SilentlyContinue) { throw 'The app is already running; close it first.' }
     # The rig first (see recorder-gate.ps1): paired endpoints, the cable not the default device, nobody else playing
     # into it, a known signal heard on the capture.
@@ -236,6 +392,17 @@ try {
     Copy-Item -LiteralPath (Join-Path $ProfileData 'capability.json') -Destination $data
     if (Test-Path -LiteralPath (Join-Path $ProfileData 'verified-models.json')) { Copy-Item -LiteralPath (Join-Path $ProfileData 'verified-models.json') -Destination $data }
     Write-Host "$(Get-Date -Format 'HH:mm:ss') run folder $run"
+    # Room for the recordings, their mirror and the work files before four sessions of 90 minutes start.
+    $needGb = @{ smoke = 4; day = 30; rehearse = 3; kill = 12 }[$mode]
+    foreach ($root in @($rec, $backup)) {
+      $drive = (Get-Item -LiteralPath (Split-Path -Qualifier $root) -ErrorAction Stop).PSDrive
+      $freeGb = [math]::Round($drive.Free / 1GB, 1)
+      Write-Host "$(Get-Date -Format 'HH:mm:ss') free space on $($drive.Name): $freeGb GB (this run needs about $needGb GB)"
+      if ($freeGb -lt $needGb) { throw "only $freeGb GB free on $($drive.Name): ; the $mode run needs about $needGb GB" }
+    }
+    # The quiet-machine rule, with the gate lock held: nothing starts on a busy machine.
+    $quiet = Wait-WbQuiet -Out (Join-Path $run 'idle-check.json')
+    Write-Host "$(Get-Date -Format 'HH:mm:ss') quiet-machine rule: $quiet"
 
     function Start-Emulated([string]$Mode, [int]$LimitMinutes) {
       $emu = Start-Process -FilePath $Emulate -ArgumentList @('--profile', $Profile, '--log', (Q (Join-Path $run "emulate-$Mode.log")), '--', (Q $Exe)) -PassThru -WindowStyle Hidden
@@ -260,16 +427,26 @@ try {
     # 2. The plan.
     $at = 0
     $planSessions = @()
+    $prevEnd = -1
     foreach ($s in $sessions) {
       $dur = [int][math]::Ceiling([double]$s.seconds) + 25
-      $planSessions += [ordered]@{ title = $s.title; at_s = $at; duration_s = $dur; languages = @($s.languages); device = $capName }
-      $at += $dur + 30
+      if ($mode -eq 'day' -or $mode -eq 'rehearse') {
+        # The programme's times (10:00, 12:00, 14:30 and 16:00 on the scheduler's clock; compressed in the rehearsal).
+        if ([int]$s.at_s -lt $prevEnd) { throw "the sessions overlap: '$($s.title)' starts at $($s.at_s) s, the one before it ends at $prevEnd s" }
+        $planSessions += [ordered]@{ title = $s.title; hall = $s.hall; at_s = [int]$s.at_s; duration_s = $dur; languages = @($s.languages); script = $s.script; device = $capName }
+        $prevEnd = [int]$s.at_s + $dur
+      } else {
+        $planSessions += [ordered]@{ title = $s.title; at_s = $at; duration_s = $dur; languages = @($s.languages); device = $capName }
+        $at += $dur + 30
+      }
     }
     $first = $sessions[0].title
     # The first smoke (three sessions) also pauses, locks a language and imports; a single long session does none
-    # of that: it exists to show a unit decoded before Stop and a night pass that commits post-2.
+    # of that: it exists to show a unit decoded before Stop and a night pass that commits post-2. The day and its
+    # rehearsal do nothing to the queue: they judge what it does by itself. The kill test imports a copy of each
+    # session once the kills are done, so the same audio is decoded again without interruption for comparison.
     $actions = @()
-    if ($sessions.Count -ge 3) {
+    if ($mode -eq 'smoke' -and $sessions.Count -ge 3) {
       $mixed = $sessions[2].title
       $actions = @(
         [ordered]@{ session = $first; on = 'stop'; after_s = 6; do = 'queue_pause' },
@@ -278,6 +455,14 @@ try {
         [ordered]@{ session = $mixed; on = 'start'; after_s = 230; do = 'lock_language' },
         [ordered]@{ session = $first; on = 'stop'; after_s = 120; do = 'import_session'; from = $first }
       )
+    }
+    if ($mode -eq 'kill') {
+      $lastTitle = $sessions[$sessions.Count - 1].title
+      $n = 0
+      foreach ($s in $sessions) {
+        $actions += [ordered]@{ session = $lastTitle; on = 'stop'; after_s = (900 + 15 * $n); do = 'import_session'; from = $s.title }
+        $n++
+      }
     }
     $planFile = Join-Path $run 'day-plan.json'
     Write-Utf8 $planFile ((@{ sessions = $planSessions; actions = $actions } | ConvertTo-Json -Depth 6))
@@ -294,11 +479,23 @@ try {
     $env:WB_GATE_BACKUP = $backup
     $env:WB_GATE_QUEUE_LOG = $queueLog
     $env:WB_GATE_CLOCK_OFFSET_S = "$offset"
-    $env:WB_GATE_NIGHT_WAIT_S = '60'
+    # The day's night pass waits the real 30 minutes after the last session; the smoke and the rehearsal 60 seconds.
+    if ($mode -eq 'smoke' -or $mode -eq 'rehearse') { $env:WB_GATE_NIGHT_WAIT_S = '60' }
+    # The kill test needs both engines at once, and neither emulation profile chose a hybrid: forced and labelled.
+    if ($mode -eq 'kill') { $env:WB_GATE_FORCE_HYBRID = '1' }
     $env:WB_GATE_PART_SECONDS = "$PartSeconds"
     $emu = $null
     $players = @()
+    $refs = @()
+    $rigConfirmed = $false
     $kill = $null
+    $kills = @()
+    $killKinds = @('avx2', 'vulkan', 'avx2', 'vulkan', 'avx2', 'vulkan', 'avx2', 'vulkan', 'avx2', 'vulkan')
+    $killRng = New-Object System.Random 4242
+    $nextKillAt = $null
+    $killWaitSince = $null
+    $lastKillProbe = Get-Date
+    $rollingAllAt = $null
     $started = Get-Date
     $hardLimit = $started.AddMinutes($MaxMinutes)
     $lines = 0
@@ -307,6 +504,9 @@ try {
     $nightPlanned = $null
     $nightSkipped = $null
     $nightDone = $null
+    $nightExpected = 0
+    $nightCompleted = 0
+    $rollingCompleted = 0
     $lastProgress = Get-Date
     $lastSample = Get-Date
     $sampleFile = Join-Path $run 'process-samples.csv'
@@ -325,22 +525,46 @@ try {
               $s = @($sessions | Where-Object { $_.title -eq $title })[0]
               $i = $startedTitles.Count
               $goFile = Join-Path $run "GO-$i"
-              $play = Start-Process -FilePath $Testbench -ArgumentList @('play', '--device', (Q $playName), '--file', (Q (Join-Path $Audio $s.file)), '--go-file', (Q $goFile), '--report', (Q (Join-Path $run "play-$i.json"))) -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $run "play-$i.out") -RedirectStandardError (Join-Path $run "play-$i.err")
-              if ($rigPlan) { $null = Set-WbRigPlacement -Process $play -Mask $rigPlan.PlayerMask -Role 'player' }
-              Set-Content -LiteralPath $goFile -Value 'go' -Encoding ascii
+              $source = Join-Path $Audio $s.file
+              if ($fidelity) {
+                # One independent reference capture of the cable per session, outside the job (wb-testbench capture).
+                $refDir = Join-Path $run "reference-$i"
+                $refStop = Join-Path $run "STOP-REF-$i"
+                $refProc = Start-Process -FilePath $Testbench -ArgumentList @('capture', '--device', (Q $capName), '--dir', (Q $refDir), '--stop-file', (Q $refStop), '--go-file', (Q $goFile), '--report', (Q (Join-Path $run "reference-$i.json"))) -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $run "reference-$i.out") -RedirectStandardError (Join-Path $run "reference-$i.err")
+                Start-Sleep -Seconds 1
+              }
+              $play = Start-Process -FilePath $Testbench -ArgumentList @('play', '--device', (Q $playName), '--file', (Q $source), '--go-file', (Q $goFile), '--report', (Q (Join-Path $run "play-$i.json"))) -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $run "play-$i.out") -RedirectStandardError (Join-Path $run "play-$i.err")
+              if ($fidelity) {
+                $rig = Set-WbRigPins -Plan $rigPlan -Player $play -Reference $refProc -GoFile $goFile
+                if (-not $rigConfirmed) { $rig = Confirm-WbRigAgainstJob -Rig $rig -Player $play -Reference $refProc; $rigConfirmed = $true }
+                $refs += [pscustomobject]@{ Index = $i; Title = $title; Proc = $refProc; Stop = $refStop; Dir = $refDir; Source = $source }
+              } else {
+                if ($rigPlan) { $null = Set-WbRigPlacement -Process $play -Mask $rigPlan.PlayerMask -Role 'player' }
+                Set-Content -LiteralPath $goFile -Value 'go' -Encoding ascii
+              }
               $players += $play
               $progress.Add("$(Get-Date -Format 'HH:mm:ss') player $i started for $title ($($s.seconds) s)")
             }
           }
+          if ($l -match 'DAY: stopped "(.+?)"') {
+            $stoppedTitle = $Matches[1]
+            foreach ($r in @($refs | Where-Object { $_.Title -eq $stoppedTitle })) { Set-Content -LiteralPath $r.Stop -Value 'stop' -Encoding ascii }
+            $progress.Add("$(Get-Date -Format 'HH:mm:ss') $l")
+          }
           if ($l -match 'every session of the plan was recorded') { $allRecorded = Get-Date; $progress.Add("$(Get-Date -Format 'HH:mm:ss') all sessions recorded") }
-          if ($l -match 'night pass planned') { $nightPlanned = Get-Date; $progress.Add("$(Get-Date -Format 'HH:mm:ss') $l") }
-          if ($l -match 'post-2 transcript complete') { $nightDone = Get-Date; $progress.Add("$(Get-Date -Format 'HH:mm:ss') $l") }
+          if ($l -match 'night pass planned for (\d+) session') { $nightPlanned = Get-Date; $nightExpected = [int]$Matches[1]; $progress.Add("$(Get-Date -Format 'HH:mm:ss') $l") }
+          if ($l -match 'post-1 transcript complete') { $rollingCompleted++; $progress.Add("$(Get-Date -Format 'HH:mm:ss') $l") }
+          if ($l -match 'post-2 transcript complete') {
+            $nightCompleted++
+            if ($nightExpected -gt 0 -and $nightCompleted -ge $nightExpected) { $nightDone = Get-Date }
+            $progress.Add("$(Get-Date -Format 'HH:mm:ss') $l")
+          }
           if ($l -match 'night pass skipped') { $nightSkipped = Get-Date; $progress.Add("$(Get-Date -Format 'HH:mm:ss') $l") }
         }
         $lines = $ref.Value
 
         # One batch engine killed from outside, once an engine of the second or third session has run 20 s.
-        if (-not $kill -and $startedTitles.Count -ge 2) {
+        if ($mode -eq 'smoke' -and -not $kill -and $startedTitles.Count -ge 2) {
           $tree = @(Get-WbProcessTree $emu.Id | ForEach-Object { [int]$_.ProcessId })
           $eng = @(Get-CimInstance Win32_Process -Filter "Name like 'wb-engine%'" -ErrorAction SilentlyContinue | Where-Object { $tree -contains [int]$_.ProcessId -and $_.CommandLine -match '\sbatch(\s|$)' })
           foreach ($e in $eng) {
@@ -355,13 +579,50 @@ try {
           }
         }
 
+        # The kill test: 5 batch engines of each kind killed from outside at seeded random times (90 to 240 s apart), each
+        # once it has run 20 s; kinds alternate. A kind that does not show up for 15 minutes is swapped for the other.
+        if ($mode -eq 'kill' -and $kills.Count -lt $killKinds.Count -and $startedTitles.Count -ge 1 -and ((Get-Date) - $lastKillProbe).TotalSeconds -ge 5 -and ($null -eq $nextKillAt -or (Get-Date) -ge $nextKillAt)) {
+          $lastKillProbe = Get-Date
+          $kind = $killKinds[$kills.Count]
+          $tree = @(Get-WbProcessTree $emu.Id | ForEach-Object { [int]$_.ProcessId })
+          $eng = @(Get-CimInstance Win32_Process -Filter "Name like 'wb-engine-$kind%'" -ErrorAction SilentlyContinue | Where-Object { $tree -contains [int]$_.ProcessId -and $_.CommandLine -match '\sbatch(\s|$)' })
+          $hit = $null
+          $hitAge = 0.0
+          foreach ($e in $eng) {
+            $age = ((Get-Date) - [datetime]$e.CreationDate).TotalSeconds
+            if ($age -ge 20) { $hit = $e; $hitAge = $age; break }
+          }
+          if ($hit) {
+            $kr = Invoke-WbNative -FilePath 'taskkill.exe' -ArgumentList @('/F', '/PID', "$($hit.ProcessId)")
+            $kills += [pscustomobject]@{ N = $kills.Count + 1; At = (Get-Date).ToString('o'); Kind = $kind; Pid = $hit.ProcessId; AgeS = [math]::Round($hitAge, 1); Exit = $kr.ExitCode }
+            Add-Content -LiteralPath (Join-Path $run 'script-events.log') -Value ("{0}`tKILL {1}: engine {2} pid {3} after {4:n0} s, taskkill exit {5}" -f (Get-Date -Format 'HH:mm:ss'), $kills.Count, $kind, $hit.ProcessId, $hitAge, $kr.ExitCode) -Encoding UTF8
+            $progress.Add("$(Get-Date -Format 'HH:mm:ss') kill $($kills.Count) of $($killKinds.Count): $kind engine pid $($hit.ProcessId) after $([math]::Round($hitAge)) s")
+            $nextKillAt = (Get-Date).AddSeconds(90 + $killRng.Next(0, 150))
+            $killWaitSince = $null
+          } else {
+            if (-not $killWaitSince) { $killWaitSince = Get-Date }
+            elseif (((Get-Date) - $killWaitSince).TotalMinutes -ge 15) {
+              $killKinds[$kills.Count] = $(if ($kind -eq 'avx2') { 'vulkan' } else { 'avx2' })
+              $killWaitSince = $null
+              $progress.Add("$(Get-Date -Format 'HH:mm:ss') no $kind engine to kill for 15 minutes: the next kill is of the other kind")
+            }
+          }
+        }
+
         # End of the run: a short night pass, or the reason there is none.
         $stop = $false
-        if ($nightDone -and ((Get-Date) - $nightDone).TotalSeconds -ge 30) { $stop = $true; $progress.Add("$(Get-Date -Format 'HH:mm:ss') the night pass is complete: stopping") }
-        elseif ($nightPlanned -and ((Get-Date) - $nightPlanned).TotalMinutes -ge $NightMinutes) { $stop = $true; $progress.Add("$(Get-Date -Format 'HH:mm:ss') night pass time box of $NightMinutes min reached: stopping") }
-        elseif ($nightSkipped -and ((Get-Date) - $nightSkipped).TotalSeconds -ge 30) { $stop = $true }
-        elseif ($allRecorded -and -not $nightPlanned -and ((Get-Date) - $allRecorded).TotalMinutes -ge 40) { $stop = $true; $progress.Add("$(Get-Date -Format 'HH:mm:ss') no night decision within 40 min of the last session: stopping") }
-        elseif ((Get-Date) -gt $hardLimit) { $stop = $true; $progress.Add("$(Get-Date -Format 'HH:mm:ss') hard limit of $MaxMinutes min: stopping") }
+        if ($mode -eq 'kill') {
+          # Two recorded sessions and two imported copies, all four transcripts complete; or the hard limits below.
+          if ($rollingCompleted -ge 4 -and -not $rollingAllAt) { $rollingAllAt = Get-Date; $progress.Add("$(Get-Date -Format 'HH:mm:ss') all four transcripts are complete ($($kills.Count) engines killed)") }
+          if ($rollingAllAt -and ((Get-Date) - $rollingAllAt).TotalSeconds -ge 30) { $stop = $true }
+        }
+        if (-not $stop -and $mode -ne 'kill') {
+          if ($nightDone -and ((Get-Date) - $nightDone).TotalSeconds -ge 30) { $stop = $true; $progress.Add("$(Get-Date -Format 'HH:mm:ss') the night pass is complete: stopping") }
+          elseif ($nightPlanned -and ((Get-Date) - $nightPlanned).TotalMinutes -ge $NightMinutes) { $stop = $true; $progress.Add("$(Get-Date -Format 'HH:mm:ss') night pass time box of $NightMinutes min reached: stopping") }
+          elseif ($nightSkipped -and ((Get-Date) - $nightSkipped).TotalSeconds -ge 30) { $stop = $true }
+        }
+        if (-not $stop -and $allRecorded -and -not $nightPlanned -and ((Get-Date) - $allRecorded).TotalMinutes -ge $DecisionMinutes) { $stop = $true; $progress.Add("$(Get-Date -Format 'HH:mm:ss') no night decision within $DecisionMinutes min of the last session: stopping") }
+        if (-not $stop -and (Get-Date) -gt $hardLimit) { $stop = $true; $progress.Add("$(Get-Date -Format 'HH:mm:ss') hard limit of $MaxMinutes min: stopping") }
         if ($stop -and -not (Test-Path -LiteralPath $stopFile)) { Set-Content -LiteralPath $stopFile -Value 'stop' -Encoding ascii }
 
         if (((Get-Date) - $lastSample).TotalSeconds -ge 10) {
@@ -378,19 +639,29 @@ try {
       }
     } finally {
       foreach ($p in $players) { if ($p -and -not $p.HasExited) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue } }
+      foreach ($r in $refs) {
+        if ($r.Proc -and -not $r.Proc.HasExited) {
+          if (-not (Test-Path -LiteralPath $r.Stop)) { Set-Content -LiteralPath $r.Stop -Value 'stop' -Encoding ascii }
+          if (-not $r.Proc.WaitForExit(120000)) { Stop-Process -Id $r.Proc.Id -Force -ErrorAction SilentlyContinue }
+        }
+      }
       if ($emu -and -not $emu.HasExited) {
         Set-Content -LiteralPath $stopFile -Value 'stop' -Encoding ascii
         if (-not $emu.WaitForExit(120000)) { $null = Invoke-WbNative -FilePath 'taskkill.exe' -ArgumentList @('/F', '/T', '/PID', "$($emu.Id)") }
       }
-      foreach ($v in 'WB_GATE_DAY_PLAN', 'WB_GATE_DAY_STOP_FILE', 'WB_GATE_REPORT', 'WB_GATE_BACKUP', 'WB_GATE_QUEUE_LOG', 'WB_GATE_CLOCK_OFFSET_S', 'WB_GATE_NIGHT_WAIT_S', 'WB_GATE_PART_SECONDS', 'WB_GATE_ROOT', 'WB_GATE_DATA_DIR', 'WB_GATE_CHECK') {
+      foreach ($v in 'WB_GATE_DAY_PLAN', 'WB_GATE_DAY_STOP_FILE', 'WB_GATE_REPORT', 'WB_GATE_BACKUP', 'WB_GATE_QUEUE_LOG', 'WB_GATE_CLOCK_OFFSET_S', 'WB_GATE_NIGHT_WAIT_S', 'WB_GATE_FORCE_HYBRID', 'WB_GATE_PART_SECONDS', 'WB_GATE_ROOT', 'WB_GATE_DATA_DIR', 'WB_GATE_CHECK') {
         Remove-Item "Env:\$v" -ErrorAction SilentlyContinue
       }
     }
     Write-Utf8 (Join-Path $run 'script-notes.json') ((@{
           started = $started.ToString('o'); ended = (Get-Date).ToString('o'); emu_exit = $emu.ExitCode; clock_offset_s = $offset
-          kill = $kill; progress = @($progress.ToArray()); profile = @{ tier = "$($d.tier)"; config = ($d.config.config | ConvertTo-Json -Compress); cpu_threads = $d.config.cpu_threads; process_while_recording = $d.process_while_recording }
-          night_minutes = $NightMinutes; part_seconds = $PartSeconds; cable = @{ play = $playName; capture = $capName }
+          mode = $mode; quiet = $quiet; kill = $kill; kills = @($kills); night_expected = $nightExpected; night_completed = $nightCompleted; progress = @($progress.ToArray()); profile = @{ tier = "$($d.tier)"; config = ($d.config.config | ConvertTo-Json -Compress); cpu_threads = $d.config.cpu_threads; process_while_recording = $d.process_while_recording }
+          night_minutes = $NightMinutes; part_seconds = $PartSeconds; audio_dir = $Audio; cable = @{ play = $playName; capture = $capName }
         } | ConvertTo-Json -Depth 6))
+    if ($fidelity) {
+      Write-Host "$(Get-Date -Format 'HH:mm:ss') judging each session by the recording rule (analyse, compare)"
+      $null = Invoke-FidelityJudging -Run $run -Refs $refs -ReportJson (Read-Json (Join-Path $run 'report.json'))
+    }
     $run
   }
   $runDir = @($result)[-1]
