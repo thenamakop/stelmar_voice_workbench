@@ -3,14 +3,15 @@
 
   Question: how much does per-chunk language detection slow real queue work on THIS laptop? The system check
   benches one language with no detection; the queue of a two-language session detects the language of every
-  chunk. Four measurements, each on the engine's own `batch` command with the request the queue builds
-  (crates/wb-runner/src/exec.rs build_request: Settings::default with the role, sentence-sized chunks, VAD
-  chunking, detection on when the session has more than one language):
-    a) rolling, bench-hi.wav, language hi only, no detection (the conditions of the quick check's cell);
-    b) rolling, bench-codeswitch.wav, languages en+hi, detection on every chunk;
-    c) night, as a), with large-v3 for Hindi;
-    d) night, as b), turbo for English and large-v3 for Hindi (the two models the queue's night engine loads).
-  Optional e) rolling, bench-en.wav, English only, when it costs under a minute.
+  chunk. The measurement is on the SAME audio, so the clip's content cancels out: bench-codeswitch.wav, looped
+  into a longer input in the gate's work folder (never in the pack), is decoded twice on the engine's own
+  `batch` command with the request the queue builds (crates/wb-runner/src/exec.rs build_request: Settings::default
+  with the role, sentence-sized chunks, VAD chunking):
+    fixed)  the language fixed to hi, no detection (the engine refuses several languages with detection off);
+    detect) languages en+hi, detection on every chunk, as the queue does for a two-language session.
+  Done for rolling (the quick check's models; 5 min full, 2 min quick) and for night (turbo for English and
+  large-v3 for Hindi, as the queue's night engine loads them; 2 min full, 1 min quick). The factor and the
+  seconds per detection come from fixed against detect only. bench-hi.wav (rolling, fixed hi) is a reference line.
   The device, backend build, thread count and the rolling model of each language are the cell the laptop's own
   quick check chose (capability.json). Nothing is hard-coded for a class of machine.
 
@@ -70,29 +71,43 @@ function Get-BilingualDevice {
   [ordered]@{ kind = 'cpu' }
 }
 
+# Pure. How long the looped input of each part is, in seconds (owner, 18 Nov 2026): rolling 5 min full / 2 min quick,
+# night 2 min full / 1 min quick. bench-codeswitch has 4 sentence-sized chunks a minute, so full mode gives about 20
+# detections for rolling and about 8 for night; the report says how many there were.
+function Get-BilingualLoopSeconds {
+  param([ValidateSet('rolling', 'night')] [string]$Part, [bool]$Quick)
+  if ($Part -eq 'rolling') { if ($Quick) { return 120 } else { return 300 } }
+  if ($Quick) { return 60 } else { return 120 }
+}
+
 # Pure. The measurements to make. -Hi and -En are cells from Get-BilingualCell. All run on the Hindi cell's engine,
-# device and threads (one engine holds both models, as the queue starts it).
-# Returns objects: Key, Part (rolling|night|en), Mode (fixed|detect), Clip, Role, Languages, Models (lang -> id), Detect, Repeats, Label.
+# device and threads (one engine holds both models, as the queue starts it). The measurements of one part use the
+# SAME audio: the looped bench-codeswitch.wav (LoopSeconds), once with the language fixed to hi and no detection,
+# once with en+hi and detection on every chunk. The reference line is bench-hi.wav, rolling, fixed hi, one clip,
+# only when it costs under 45 s (the cell's own RTF times the clip).
+# Returns objects: Key, Part (rolling|night|reference), Mode (fixed|detect), Clip, LoopSeconds ($null: the clip as it is), Role,
+# Languages, Models (lang -> id), Detect, Repeats, Label.
 function Get-BilingualPlan {
   param($Hi, $En, [bool]$Quick = $false, [double]$ClipSeconds = 60)
   $reps = $(if ($Quick) { 1 } else { 2 })
   $plan = New-Object System.Collections.Generic.List[object]
   if ($null -eq $Hi) { return @() }
-  $plan.Add([pscustomobject]@{ Key = 'rolling-fixed-hi'; Part = 'rolling'; Mode = 'fixed'; Clip = 'bench-hi.wav'; Role = 'rolling'; Languages = @('hi'); Models = [ordered]@{ hi = $Hi.Model }; Detect = $false; Repeats = $reps
-      Label = 'rolling, bench-hi, language fixed to hi, no detection' })
-  if ($En) {
-    $plan.Add([pscustomobject]@{ Key = 'rolling-detect-en-hi'; Part = 'rolling'; Mode = 'detect'; Clip = 'bench-codeswitch.wav'; Role = 'rolling'; Languages = @('en', 'hi'); Models = [ordered]@{ en = $En.Model; hi = $Hi.Model }; Detect = $true; Repeats = $reps
-        Label = 'rolling, bench-codeswitch, languages en+hi, detection on every chunk' })
-  }
   $nm = Get-BilingualNightModels
-  $plan.Add([pscustomobject]@{ Key = 'night-fixed-hi'; Part = 'night'; Mode = 'fixed'; Clip = 'bench-hi.wav'; Role = 'night'; Languages = @('hi'); Models = [ordered]@{ hi = $nm['hi'] }; Detect = $false; Repeats = $reps
-      Label = 'night, bench-hi, language fixed to hi, no detection' })
-  $plan.Add([pscustomobject]@{ Key = 'night-detect-en-hi'; Part = 'night'; Mode = 'detect'; Clip = 'bench-codeswitch.wav'; Role = 'night'; Languages = @('en', 'hi'); Models = [ordered]@{ en = $nm['en']; hi = $nm['hi'] }; Detect = $true; Repeats = $reps
-      Label = 'night, bench-codeswitch, languages en+hi (turbo for en, large-v3 for hi), detection on every chunk' })
-  # English alone: only when it costs under a minute (the cell's own RTF times the clip, plus a load allowance).
-  if ($En -and ($En.Rtf * $ClipSeconds) -le 40) {
-    $plan.Add([pscustomobject]@{ Key = 'rolling-fixed-en'; Part = 'en'; Mode = 'fixed'; Clip = 'bench-en.wav'; Role = 'rolling'; Languages = @('en'); Models = [ordered]@{ en = $En.Model }; Detect = $false; Repeats = $reps
-        Label = 'rolling, bench-en, language fixed to en, no detection' })
+  $rl = Get-BilingualLoopSeconds -Part 'rolling' -Quick $Quick
+  $nl = Get-BilingualLoopSeconds -Part 'night' -Quick $Quick
+  $plan.Add([pscustomobject]@{ Key = 'rolling-fixed-hi'; Part = 'rolling'; Mode = 'fixed'; Clip = 'bench-codeswitch.wav'; LoopSeconds = $rl; Role = 'rolling'; Languages = @('hi'); Models = [ordered]@{ hi = $Hi.Model }; Detect = $false; Repeats = $reps
+      Label = 'rolling, bench-codeswitch looped, language fixed to hi, no detection' })
+  if ($En) {
+    $plan.Add([pscustomobject]@{ Key = 'rolling-detect-en-hi'; Part = 'rolling'; Mode = 'detect'; Clip = 'bench-codeswitch.wav'; LoopSeconds = $rl; Role = 'rolling'; Languages = @('en', 'hi'); Models = [ordered]@{ en = $En.Model; hi = $Hi.Model }; Detect = $true; Repeats = $reps
+        Label = 'rolling, bench-codeswitch looped, languages en+hi, detection on every chunk' })
+  }
+  $plan.Add([pscustomobject]@{ Key = 'night-fixed-hi'; Part = 'night'; Mode = 'fixed'; Clip = 'bench-codeswitch.wav'; LoopSeconds = $nl; Role = 'night'; Languages = @('hi'); Models = [ordered]@{ hi = $nm['hi'] }; Detect = $false; Repeats = $reps
+      Label = 'night, bench-codeswitch looped, language fixed to hi, no detection' })
+  $plan.Add([pscustomobject]@{ Key = 'night-detect-en-hi'; Part = 'night'; Mode = 'detect'; Clip = 'bench-codeswitch.wav'; LoopSeconds = $nl; Role = 'night'; Languages = @('en', 'hi'); Models = [ordered]@{ en = $nm['en']; hi = $nm['hi'] }; Detect = $true; Repeats = $reps
+      Label = 'night, bench-codeswitch looped, languages en+hi (turbo for en, large-v3 for hi), detection on every chunk' })
+  if (($Hi.Rtf * $ClipSeconds) -le 45) {
+    $plan.Add([pscustomobject]@{ Key = 'reference-bench-hi'; Part = 'reference'; Mode = 'fixed'; Clip = 'bench-hi.wav'; LoopSeconds = $null; Role = 'rolling'; Languages = @('hi'); Models = [ordered]@{ hi = $Hi.Model }; Detect = $false; Repeats = $reps
+        Label = 'reference: rolling, bench-hi (one Hindi clip), language fixed to hi, no detection' })
   }
   @($plan.ToArray())
 }
@@ -147,27 +162,39 @@ function Get-BilingualMedian {
   ($v[$v.Count / 2 - 1] + $v[$v.Count / 2]) / 2
 }
 
-# Pure. One part (rolling or night) from the runs of its fixed and its detect measurement.
-# -FixedRuns and -DetectRuns are arrays of Get-BilingualRunStats objects.
-# ExtraPerDetection: the seconds the detect run took beyond what the fixed run's RTF predicts for its audio,
-# per detection. It assumes the same speed on both clips, so it is an estimate, and says so in the evidence.
+# Pure. One part (rolling or night) from the runs of its fixed and its detect measurement. Both decoded the SAME audio, so
+# the factor and the time per detection come from these two only. -FixedRuns and -DetectRuns are arrays of
+# Get-BilingualRunStats objects (plain arrays: @() around a generic List fails with "Argument types do not match").
+#   Factor            detect RTF over fixed RTF (medians)
+#   DeltaS            engine seconds with detection minus engine seconds fixed (medians), the same audio
+#   NoiseS            what the two measurements cannot tell apart: the larger spread between a measurement's own runs
+#                     (full mode has two), and never less than 3 percent of the fixed time
+#   WithinNoise       DeltaS is not larger than NoiseS: the result line then says "no extra time seen"
+#   ExtraPerDetection DeltaS / detections, kept (also when negative) in the evidence
 function Get-BilingualPart {
   param($FixedRuns, $DetectRuns)
   $f = @($FixedRuns | Where-Object { $_ -and $_.ok })
   $d = @($DetectRuns | Where-Object { $_ -and $_.ok })
-  if ($f.Count -eq 0 -or $d.Count -eq 0) { return [pscustomobject]@{ Ok = $false; FixedRtf = $null; DetectRtf = $null; Factor = $null; Detections = $null; DetectionsPerMin = $null; ExtraPerDetection = $null; FixedRuns = $f.Count; DetectRuns = $d.Count } }
+  if ($f.Count -eq 0 -or $d.Count -eq 0) { return [pscustomobject]@{ Ok = $false; FixedRtf = $null; DetectRtf = $null; Factor = $null; Detections = $null; DetectionsPerMin = $null; AudioS = $null; FixedS = $null; DetectS = $null; DeltaS = $null; NoiseS = $null; WithinNoise = $null; ExtraPerDetection = $null; FixedRuns = $f.Count; DetectRuns = $d.Count } }
   $fr = Get-BilingualMedian -Values @($f | ForEach-Object { [double]$_.rtf })
   $dr = Get-BilingualMedian -Values @($d | ForEach-Object { [double]$_.rtf })
+  $fs = Get-BilingualMedian -Values @($f | ForEach-Object { [double]$_.decode_s })
+  $ds = Get-BilingualMedian -Values @($d | ForEach-Object { [double]$_.decode_s })
   $det = [int][math]::Round((Get-BilingualMedian -Values @($d | ForEach-Object { [double]$_.detections })))
   $audioS = (Get-BilingualMedian -Values @($d | ForEach-Object { [double]$_.audio_ms })) / 1000.0
-  $dec = Get-BilingualMedian -Values @($d | ForEach-Object { [double]$_.decode_s })
   $factor = $null
   if ($fr -gt 0) { $factor = $dr / $fr }
   $perMin = $null
   if ($audioS -gt 0) { $perMin = $det / ($audioS / 60.0) }
+  $delta = $ds - $fs
+  $fv = @($f | ForEach-Object { [double]$_.decode_s })
+  $dv = @($d | ForEach-Object { [double]$_.decode_s })
+  $spreadF = ($fv | Measure-Object -Maximum).Maximum - ($fv | Measure-Object -Minimum).Minimum
+  $spreadD = ($dv | Measure-Object -Maximum).Maximum - ($dv | Measure-Object -Minimum).Minimum
+  $noise = [math]::Max([math]::Max($spreadF, $spreadD), 0.03 * $fs)
   $extra = $null
-  if ($det -gt 0) { $extra = ($dec - $fr * $audioS) / $det }
-  [pscustomobject]@{ Ok = $true; FixedRtf = $fr; DetectRtf = $dr; Factor = $factor; Detections = $det; DetectionsPerMin = $perMin; ExtraPerDetection = $extra; FixedRuns = $f.Count; DetectRuns = $d.Count }
+  if ($det -gt 0) { $extra = $delta / $det }
+  [pscustomobject]@{ Ok = $true; FixedRtf = $fr; DetectRtf = $dr; Factor = $factor; Detections = $det; DetectionsPerMin = $perMin; AudioS = $audioS; FixedS = $fs; DetectS = $ds; DeltaS = $delta; NoiseS = $noise; WithinNoise = ($delta -le $noise); ExtraPerDetection = $extra; FixedRuns = $f.Count; DetectRuns = $d.Count }
 }
 
 function Format-BilingualNum {
@@ -176,20 +203,26 @@ function Format-BilingualNum {
   ([double]$Value).ToString($Format, $script:Inv)
 }
 
-# Pure. The result line: "rolling RTF 0.75 fixed-hi / 1.01 en+hi with detection (x1.34; 14 detections, 1.1 s each);
-# night 1.50 / 1.87 (x1.25); vulkan gpu 0, hi medium / en small, 2 threads".
+# Pure. "rolling RTF 0.80 fixed-hi / 0.95 en+hi with detection (x1.19; 20 detections, 0.8 s each)". A time per detection
+# that is negative or within noise is not printed: "no extra time seen" (the evidence keeps the number).
+function Format-BilingualPartText {
+  param($Part, [string]$Name)
+  if ($null -eq $Part -or -not $Part.Ok) { return ('{0} not measured' -f $Name) }
+  $each = ''
+  if ($Part.Detections -gt 0) {
+    if ($Part.WithinNoise -or $null -eq $Part.ExtraPerDetection -or $Part.ExtraPerDetection -le 0) { $each = ', no extra time seen' }
+    else { $each = ', {0} s each' -f (Format-BilingualNum $Part.ExtraPerDetection '0.0') }
+  }
+  '{0} RTF {1} fixed-hi / {2} en+hi with detection (x{3}; {4} detections{5})' -f $Name, (Format-BilingualNum $Part.FixedRtf), (Format-BilingualNum $Part.DetectRtf), (Format-BilingualNum $Part.Factor), $Part.Detections, $each
+}
+
+# Pure. The result line: "rolling RTF 0.80 fixed-hi / 0.95 en+hi with detection (x1.19; 20 detections, 0.8 s each);
+# night RTF 1.54 fixed-hi / 1.70 en+hi with detection (x1.10; 8 detections, 1.5 s each); vulkan gpu 0, hi medium / en small, 2 threads".
 function Format-BilingualHeadline {
   param($Rolling, $Night, [string]$Where, [string[]]$NotMeasured = @())
   $parts = New-Object System.Collections.Generic.List[string]
-  if ($Rolling -and $Rolling.Ok) {
-    $each = ''
-    # A negative figure means the detect run was not slower than the fixed run's RTF predicts (the two clips differ):
-    # the evidence keeps the number, the line does not print a negative time per detection.
-    if ($null -ne $Rolling.ExtraPerDetection -and $Rolling.ExtraPerDetection -gt 0) { $each = ', {0} s each' -f (Format-BilingualNum $Rolling.ExtraPerDetection '0.0') }
-    elseif ($null -ne $Rolling.ExtraPerDetection) { $each = ', no extra time seen per detection' }
-    $parts.Add(('rolling RTF {0} fixed-hi / {1} en+hi with detection (x{2}; {3} detections{4})' -f (Format-BilingualNum $Rolling.FixedRtf), (Format-BilingualNum $Rolling.DetectRtf), (Format-BilingualNum $Rolling.Factor), $Rolling.Detections, $each))
-  } else { $parts.Add('rolling not measured') }
-  if ($Night -and $Night.Ok) { $parts.Add(('night {0} / {1} (x{2})' -f (Format-BilingualNum $Night.FixedRtf), (Format-BilingualNum $Night.DetectRtf), (Format-BilingualNum $Night.Factor))) } else { $parts.Add('night not measured') }
+  $parts.Add((Format-BilingualPartText -Part $Rolling -Name 'rolling'))
+  $parts.Add((Format-BilingualPartText -Part $Night -Name 'night'))
   if ($Where) { $parts.Add($Where) }
   $s = ($parts -join '; ')
   if ($NotMeasured.Count -gt 0) { $s += ' [' + ($NotMeasured -join '; ') + ']' }
@@ -207,23 +240,23 @@ function Format-BilingualWhere {
 }
 
 # Pure. The evidence lines (no transcript text; numbers and the request's shape only).
-# -Records: one per measurement with key, label, models, clip, languages, detect, runs (Get-BilingualRunStats objects).
+# -Records: one per measurement with key, label, models, clip, input, languages, detect, runs (Get-BilingualRunStats objects).
 function Get-BilingualReportLines {
   param($Records, $Rolling, $Night, [string]$Machine, [string]$Profile, [bool]$Quick, $Hi, $En, [string[]]$Notes = @())
   $L = New-Object System.Collections.Generic.List[string]
   $mode = 'full (each measurement twice, median reported)'
   if ($Quick) { $mode = 'quick (each measurement once)' }
-  $L.Add('Speed with and without per-chunk language detection (gate pack, information only, no bar)')
+  $L.Add('Speed with and without per-chunk language detection, on the same audio (gate pack, information only, no bar)')
   $L.Add(('machine: {0}; profile: {1}; mode: {2}; date: {3}' -f $Machine, $Profile, $mode, (Get-Date).ToString('yyyy-MM-dd HH:mm', $script:Inv)))
   if ($Hi) { $L.Add(('cell chosen by this laptop''s quick check: {0}' -f (Format-BilingualWhere -Hi $Hi -En $En))) }
-  $L.Add('request: the queue''s (Settings::default with the role, beam 5, best of 5, sentence-sized chunks, detection on when two languages)')
+  $L.Add('request: the queue''s (Settings::default with the role, beam 5, best of 5, sentence-sized chunks); detection on only where two languages are given')
   $L.Add('RTF here = engine seconds for the unit (VAD, detection, decoding; not model load) / audio seconds')
   $L.Add('')
   foreach ($r in $Records) {
     $L.Add(('{0}: {1}' -f $r.key, $r.label))
     $det = 'off'
     if ($r.detect) { $det = 'on' }
-    $L.Add(('   models: {0}; clip: {1}; languages: {2}; detection: {3}' -f $r.models, $r.clip, $r.languages, $det))
+    $L.Add(('   models: {0}; input: {1}; languages: {2}; detection: {3}' -f $r.models, $r.input, $r.languages, $det))
     $i = 0
     foreach ($x in @($r.runs)) {
       $i++
@@ -237,13 +270,78 @@ function Get-BilingualReportLines {
   foreach ($p in @(@('rolling', $Rolling), @('night', $Night))) {
     $x = $p[1]
     if ($x -and $x.Ok) {
-      $L.Add(('{0}: fixed-language RTF {1}; with detection {2}; slowdown x{3}; {4} detections ({5} per minute of audio); about {6} s extra per detection' -f $p[0], (Format-BilingualNum $x.FixedRtf '0.000'), (Format-BilingualNum $x.DetectRtf '0.000'), (Format-BilingualNum $x.Factor), $x.Detections, (Format-BilingualNum $x.DetectionsPerMin '0.0'), (Format-BilingualNum $x.ExtraPerDetection '0.0')))
+      $L.Add(('{0}: fixed RTF {1} ({2} s); with detection RTF {3} ({4} s) for {5} s of audio; factor x{6}' -f $p[0], (Format-BilingualNum $x.FixedRtf '0.000'), (Format-BilingualNum $x.FixedS '0.0'), (Format-BilingualNum $x.DetectRtf '0.000'), (Format-BilingualNum $x.DetectS '0.0'), (Format-BilingualNum $x.AudioS '0'), (Format-BilingualNum $x.Factor)))
+      $verdict = 'outside the noise: detection added time'
+      if ($x.WithinNoise) { $verdict = 'within noise: no extra time seen' }
+      $L.Add(('{0}: {1} detections ({2} per minute of audio); time with detection minus time fixed = {3} s; {4} s per detection; noise {5} s ({6})' -f $p[0], $x.Detections, (Format-BilingualNum $x.DetectionsPerMin '0.0'), (Format-BilingualNum $x.DeltaS '0.0'), (Format-BilingualNum $x.ExtraPerDetection '0.00'), (Format-BilingualNum $x.NoiseS '0.0'), $verdict))
     } else { $L.Add(('{0}: not measured (no complete pair of runs)' -f $p[0])) }
   }
-  $L.Add('seconds per detection is an estimate: (engine seconds of the detect run - fixed RTF x its audio seconds) / detections; it assumes the same speed on the two clips (bench-hi and bench-codeswitch differ).')
+  $ref = @($Records | Where-Object { $_.key -eq 'reference-bench-hi' } | Select-Object -First 1)
+  if ($ref.Count -gt 0 -and $ref[0]) {
+    $ok = @($ref[0].runs | Where-Object { $_.ok })
+    if ($ok.Count -gt 0) { $L.Add(('reference (bench-hi.wav, one Hindi clip, rolling, language fixed to hi): RTF {0}; not used in any factor' -f (Format-BilingualNum (Get-BilingualMedian -Values @($ok | ForEach-Object { [double]$_.rtf })) '0.000'))) }
+  }
+  $L.Add('seconds per detection = (engine seconds with detection - engine seconds fixed) / detections, both on the same looped audio; a time that is negative or inside the noise is reported as no extra time seen.')
+  $L.Add('the fixed run forces Hindi on the English parts of the clip (the engine refuses several languages with detection off), so it is the closest same-audio baseline, not a transcript-quality comparison.')
   foreach ($n in $Notes) { $L.Add('note: ' + $n) }
   $L.Add('information only: no verdict')
   @($L.ToArray())
 }
 
-Export-ModuleMember -Function Get-BilingualNightModels, Get-BilingualSettings, Get-BilingualCell, Get-BilingualDevice, Get-BilingualPlan, New-BilingualRequest, Get-BilingualRunStats, Get-BilingualMedian, Get-BilingualPart, Format-BilingualNum, Format-BilingualHeadline, Format-BilingualWhere, Get-BilingualReportLines
+# ---- Looping a WAV (the input of the measurements is built in the gate's work folder, never in the pack) ----
+
+# Reads a PCM WAV: the fmt chunk bytes, the data bytes, the byte rate and the length in seconds.
+function Read-BilingualWav {
+  param([Parameter(Mandatory = $true)] [string]$Path)
+  $b = [IO.File]::ReadAllBytes($Path)
+  $asc = [Text.Encoding]::ASCII
+  if ($b.Length -lt 44 -or $asc.GetString($b, 0, 4) -ne 'RIFF' -or $asc.GetString($b, 8, 4) -ne 'WAVE') { throw "$Path is not a WAV file" }
+  $pos = 12L
+  $fmt = $null
+  $data = $null
+  while (($pos + 8) -le $b.Length) {
+    $id = $asc.GetString($b, [int]$pos, 4)
+    $len = [int64][BitConverter]::ToUInt32($b, [int]($pos + 4))
+    $body = $pos + 8
+    if ($id -eq 'fmt ') { $fmt = New-Object byte[] ([int]$len); [Array]::Copy($b, [int]$body, $fmt, 0, [int]$len) }
+    elseif ($id -eq 'data') {
+      $avail = [math]::Min($len, $b.Length - $body)
+      $data = New-Object byte[] ([int]$avail)
+      [Array]::Copy($b, [int]$body, $data, 0, [int]$avail)
+      break
+    }
+    $pos = $body + $len + ($len % 2)
+  }
+  if ($null -eq $fmt -or $fmt.Length -lt 16 -or $null -eq $data -or $data.Length -eq 0) { throw "$Path has no fmt or data chunk" }
+  $rate = [int64][BitConverter]::ToUInt32($fmt, 8)
+  if ($rate -le 0) { throw "$Path has a zero byte rate" }
+  [pscustomobject]@{ Fmt = $fmt; Data = $data; ByteRate = $rate; Seconds = ($data.Length / $rate) }
+}
+
+# Writes -Dest: the audio of -Source repeated as many whole times as it takes to reach -Seconds (at least once). Returns
+# Path, Repeats, Seconds (the real length) and SourceSeconds. Whole repeats keep every sentence intact.
+function New-BilingualLoop {
+  param([Parameter(Mandatory = $true)] [string]$Source, [Parameter(Mandatory = $true)] [string]$Dest, [Parameter(Mandatory = $true)] [double]$Seconds)
+  $w = Read-BilingualWav -Path $Source
+  $reps = [int][math]::Max(1, [math]::Ceiling($Seconds / $w.Seconds - 1e-9))
+  $asc = [Text.Encoding]::ASCII
+  $dataLen = [int64]$w.Data.Length * $reps
+  if ($dataLen -ge 4GB - 1MB) { throw 'the looped input would be larger than a WAV file can hold' }
+  $pad = $w.Fmt.Length % 2
+  $riff = 4L + 8 + $w.Fmt.Length + $pad + 8 + $dataLen
+  $dir = Split-Path -Parent $Dest
+  if ($dir) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+  $fs = [IO.File]::Create($Dest)
+  try {
+    $bw = New-Object IO.BinaryWriter($fs)
+    $bw.Write($asc.GetBytes('RIFF')); $bw.Write([uint32]$riff); $bw.Write($asc.GetBytes('WAVE'))
+    $bw.Write($asc.GetBytes('fmt ')); $bw.Write([uint32]$w.Fmt.Length); $bw.Write([byte[]]$w.Fmt)
+    if ($pad -eq 1) { $bw.Write([byte]0) }
+    $bw.Write($asc.GetBytes('data')); $bw.Write([uint32]$dataLen)
+    for ($i = 0; $i -lt $reps; $i++) { $bw.Write([byte[]]$w.Data) }
+    $bw.Flush()
+  } finally { $fs.Dispose() }
+  [pscustomobject]@{ Path = $Dest; Repeats = $reps; Seconds = ($w.Seconds * $reps); SourceSeconds = $w.Seconds }
+}
+
+Export-ModuleMember -Function Get-BilingualNightModels, Get-BilingualSettings, Get-BilingualCell, Get-BilingualDevice, Get-BilingualLoopSeconds, Get-BilingualPlan, New-BilingualRequest, Get-BilingualRunStats, Get-BilingualMedian, Get-BilingualPart, Format-BilingualNum, Format-BilingualPartText, Format-BilingualHeadline, Format-BilingualWhere, Get-BilingualReportLines, Read-BilingualWav, New-BilingualLoop

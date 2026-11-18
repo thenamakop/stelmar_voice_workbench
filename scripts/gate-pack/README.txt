@@ -79,8 +79,10 @@ What it does, in order
 
  Day 2 (about 11 to 13 hours per laptop; see "Two laptops" below):
    - A speed check with and without language detection (English and Hindi, for the daytime and the night
-     pass, on the settings this laptop's own quick check chose): about 15 minutes in a full run, about
-     8 minutes in a short test run. It needs no cable and gives numbers only, no pass or fail.
+     pass, on the settings this laptop's own quick check chose). It decodes the same few minutes of mixed
+     English and Hindi twice, once with the language fixed and once with detection on every sentence, and
+     compares the two: about 35 minutes in a full run, about 10 minutes in a short test run. It needs no
+     cable and gives numbers only, no pass or fail.
    - More recorder checks (cold-cache hashing, background decoding), the speed tables on the
      processor, a full system check, and, if this pack has it, the 2.5-hour microphone test in a quiet room.
 

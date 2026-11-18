@@ -45,18 +45,21 @@ Check 'a cpu cell gives a cpu device; a gpu cell its index' ((Get-BilingualDevic
 # --- the plan ---
 $plan = @(Get-BilingualPlan -Hi $hi -En $en -Quick $true)
 $keys = @($plan | ForEach-Object { $_.Key })
-Check 'the plan has the four measurements of the spec, in order, plus English alone (it costs under a minute here)' (($keys -join ',') -eq 'rolling-fixed-hi,rolling-detect-en-hi,night-fixed-hi,night-detect-en-hi,rolling-fixed-en')
+Check 'the plan has rolling and night, each fixed against detect on the same clip, plus the bench-hi reference line (it costs under 45 s here)' (($keys -join ',') -eq 'rolling-fixed-hi,rolling-detect-en-hi,night-fixed-hi,night-detect-en-hi,reference-bench-hi')
 $a = $plan | Where-Object Key -eq 'rolling-fixed-hi'; $b = $plan | Where-Object Key -eq 'rolling-detect-en-hi'
-$c = $plan | Where-Object Key -eq 'night-fixed-hi'; $d = $plan | Where-Object Key -eq 'night-detect-en-hi'
-Check 'a) rolling, bench-hi, hi only, detection off' ($a.Clip -eq 'bench-hi.wav' -and ($a.Languages -join ',') -eq 'hi' -and -not $a.Detect -and $a.Role -eq 'rolling' -and $a.Models['hi'] -eq 'large-v3-turbo-q5_0')
-Check 'b) rolling, bench-codeswitch, en+hi, detection on, the cell''s model per language' ($b.Clip -eq 'bench-codeswitch.wav' -and ($b.Languages -join ',') -eq 'en,hi' -and $b.Detect -and $b.Models['en'] -eq 'medium' -and $b.Models['hi'] -eq 'large-v3-turbo-q5_0')
-Check 'c) night, bench-hi, hi only, large-v3 for Hindi' ($c.Role -eq 'night' -and -not $c.Detect -and $c.Models['hi'] -eq 'large-v3-q5_0' -and $c.Clip -eq 'bench-hi.wav')
-Check 'd) night, bench-codeswitch, turbo for English and large-v3 for Hindi, detection on' ($d.Role -eq 'night' -and $d.Detect -and $d.Models['en'] -eq 'large-v3-turbo-q5_0' -and $d.Models['hi'] -eq 'large-v3-q5_0' -and $d.Clip -eq 'bench-codeswitch.wav')
+$c = $plan | Where-Object Key -eq 'night-fixed-hi'; $d = $plan | Where-Object Key -eq 'night-detect-en-hi'; $rf = $plan | Where-Object Key -eq 'reference-bench-hi'
+Check 'rolling fixed: bench-codeswitch, hi only, detection off, the cell''s Hindi model' ($a.Clip -eq 'bench-codeswitch.wav' -and ($a.Languages -join ',') -eq 'hi' -and -not $a.Detect -and $a.Role -eq 'rolling' -and $a.Models['hi'] -eq 'large-v3-turbo-q5_0' -and $a.Part -eq 'rolling')
+Check 'rolling detect: the SAME clip, en+hi, detection on, the cell''s model per language' ($b.Clip -eq $a.Clip -and $b.LoopSeconds -eq $a.LoopSeconds -and ($b.Languages -join ',') -eq 'en,hi' -and $b.Detect -and $b.Models['en'] -eq 'medium' -and $b.Models['hi'] -eq 'large-v3-turbo-q5_0')
+Check 'night fixed: bench-codeswitch, hi only, large-v3 for Hindi' ($c.Role -eq 'night' -and -not $c.Detect -and $c.Models['hi'] -eq 'large-v3-q5_0' -and $c.Clip -eq 'bench-codeswitch.wav')
+Check 'night detect: the same clip and length, turbo for English and large-v3 for Hindi, detection on' ($d.Role -eq 'night' -and $d.Detect -and $d.Models['en'] -eq 'large-v3-turbo-q5_0' -and $d.Models['hi'] -eq 'large-v3-q5_0' -and $d.Clip -eq $c.Clip -and $d.LoopSeconds -eq $c.LoopSeconds)
+Check 'the reference line is bench-hi as it is (no loop), rolling, fixed hi, and is not a part of any factor' ($rf.Clip -eq 'bench-hi.wav' -and $null -eq $rf.LoopSeconds -and $rf.Part -eq 'reference' -and -not $rf.Detect -and $rf.Role -eq 'rolling')
+Check 'quick: looped input of 2 min (rolling) and 1 min (night); full: 5 min and 2 min' ($a.LoopSeconds -eq 120 -and $c.LoopSeconds -eq 60 -and (Get-BilingualLoopSeconds -Part 'rolling' -Quick $false) -eq 300 -and (Get-BilingualLoopSeconds -Part 'night' -Quick $false) -eq 120 -and (@(Get-BilingualPlan -Hi $hi -En $en -Quick $false | Where-Object Key -eq 'night-detect-en-hi')[0].LoopSeconds) -eq 120)
 Check 'quick: each measurement once' (@($plan | Where-Object { $_.Repeats -ne 1 }).Count -eq 0)
 $planF = @(Get-BilingualPlan -Hi $hi -En $en -Quick $false)
 Check 'full: each measurement twice' (@($planF | Where-Object { $_.Repeats -ne 2 }).Count -eq 0)
-$enSlow = [pscustomobject]@{ Lang = 'en'; Model = 'large-v3-q5_0'; Rtf = 0.9; Variant = 'avx2'; DeviceKind = 'cpu'; GpuIndex = $null; Threads = 3 }
-Check 'English alone is left out when it would not cost under a minute (RTF 0.9 x 60 s)' (@(Get-BilingualPlan -Hi $hi -En $enSlow -Quick $true | Where-Object Key -eq 'rolling-fixed-en').Count -eq 0)
+$hiSlow = [pscustomobject]@{ Lang = 'hi'; Model = 'large-v3-q5_0'; Rtf = 0.9; Variant = 'avx2'; DeviceKind = 'cpu'; GpuIndex = $null; Threads = 3 }
+Check 'the bench-hi reference is left out when it would not be cheap (RTF 0.9 x 60 s)' (@(Get-BilingualPlan -Hi $hiSlow -En $en -Quick $true | Where-Object Key -eq 'reference-bench-hi').Count -eq 0 -and @(Get-BilingualPlan -Hi $hiSlow -En $en -Quick $true | Where-Object Key -eq 'rolling-fixed-hi').Count -eq 1)
+Check 'there is no English-alone measurement any more' (@($plan | Where-Object { $_.Clip -eq 'bench-en.wav' }).Count -eq 0)
 Check 'without an English cell the rolling en+hi measurement is not planned' (@(Get-BilingualPlan -Hi $hi -En $null -Quick $true | Where-Object Key -eq 'rolling-detect-en-hi').Count -eq 0)
 Check 'without a Hindi cell there is no plan' (@(Get-BilingualPlan -Hi $null -En $en).Count -eq 0)
 
@@ -103,7 +106,13 @@ Check 'no events at all is not ok' (-not (Get-BilingualRunStats -Events @()).ok)
 function Run($rtf, $audioS, $det) { [pscustomobject]@{ ok = $true; rtf = $rtf; decode_s = $rtf * $audioS; audio_ms = $audioS * 1000; detections = $det; chunks = 9; error = '' } }
 $part = Get-BilingualPart -FixedRuns @((Run 0.753 60 0)) -DetectRuns @((Run 1.011 60 14))
 Check 'slowdown factor is detect RTF over fixed RTF (1.011 / 0.753 = x1.34)' ($part.Ok -and (Near $part.Factor 1.3426 0.001))
-Check 'detections, per minute and the extra seconds per detection ((1.011 - 0.753) x 60 s / 14)' ($part.Detections -eq 14 -and (Near $part.DetectionsPerMin 14) -and (Near $part.ExtraPerDetection ((1.011 - 0.753) * 60 / 14) 1e-6))
+Check 'detections, per minute, and seconds per detection = (time with detection - time fixed) / detections, on the same audio ((1.011 - 0.753) x 60 s / 14)' ($part.Detections -eq 14 -and (Near $part.DetectionsPerMin 14) -and (Near $part.DeltaS ((1.011 - 0.753) * 60) 1e-6) -and (Near $part.ExtraPerDetection ((1.011 - 0.753) * 60 / 14) 1e-6) -and -not $part.WithinNoise)
+$q1 = Get-BilingualPart -FixedRuns @((Run 0.75 60 0)) -DetectRuns @((Run 0.76 60 4))
+Check 'one run each: a difference under 3 percent of the fixed time is within noise' ($q1.WithinNoise -and (Near $q1.NoiseS (0.03 * 0.75 * 60) 1e-6))
+$n2 = Get-BilingualPart -FixedRuns @((Run 0.70 60 0), (Run 0.80 60 0)) -DetectRuns @((Run 0.83 60 14), (Run 0.84 60 14))
+Check 'two runs each: a difference smaller than the runs'' own spread (6 s) is within noise' ($n2.WithinNoise -and (Near $n2.NoiseS 6 1e-6) -and (Near $n2.DeltaS (0.835 * 60 - 0.75 * 60) 1e-6))
+$n3 = Get-BilingualPart -FixedRuns @((Run 0.70 60 0), (Run 0.71 60 0)) -DetectRuns @((Run 1.00 60 14), (Run 1.01 60 14))
+Check 'two runs each: a clear difference is outside the noise' (-not $n3.WithinNoise -and $n3.DeltaS -gt 15)
 $night = Get-BilingualPart -FixedRuns @((Run 1.498 60 0)) -DetectRuns @((Run 1.868 60 14))
 Check 'night: 1.498 -> 1.868 is x1.25' ((Near $night.Factor 1.2470 0.001))
 $two = Get-BilingualPart -FixedRuns @((Run 0.70 60 0), (Run 0.80 60 0)) -DetectRuns @((Run 1.00 60 14), (Run 1.10 60 14))
@@ -117,25 +126,32 @@ Check 'no detections: no division by zero, extra seconds per detection is empty'
 
 # --- the result line ---
 $head = Format-BilingualHeadline -Rolling $part -Night $night -Where (Format-BilingualWhere -Hi $hi -En $en)
-Check 'the result line reads like the spec''s example' ($head -match '^rolling RTF 0\.75 fixed-hi / 1\.01 en\+hi with detection \(x1\.34; 14 detections, 1\.1 s each\); night 1\.50 / 1\.87 \(x1\.25\); vulkan gpu 1, hi large-v3-turbo-q5_0 / en medium, 2 threads$')
+Check 'the result line has RTF fixed and with detection, the factor, the detection count and seconds per detection, for rolling and night' ($head -match '^rolling RTF 0\.75 fixed-hi / 1\.01 en\+hi with detection \(x1\.34; 14 detections, 1\.1 s each\); night RTF 1\.50 fixed-hi / 1\.87 en\+hi with detection \(x1\.25; 14 detections, 1\.6 s each\); vulkan gpu 1, hi large-v3-turbo-q5_0 / en medium, 2 threads$')
 $head2 = Format-BilingualHeadline -Rolling $part -Night $none -Where 'w' -NotMeasured @('night-detect-en-hi: out of memory')
 $fast = Get-BilingualPart -FixedRuns @((Run 0.84 60 0)) -DetectRuns @((Run 0.80 60 4))
 $headFast = Format-BilingualHeadline -Rolling $fast -Night $night -Where 'w'
-Check 'a detect run that is not slower than the fixed RTF predicts (the clips differ): factor shown, no negative time per detection in the line, the number kept in the evidence' ($fast.ExtraPerDetection -lt 0 -and $headFast -match 'x0\.95; 4 detections, no extra time seen per detection' -and $headFast -notmatch '-\d')
+Check 'a detect run that is not slower than the fixed run (negative, within noise): factor shown, no negative time in the line ("no extra time seen"), the number kept in the part for the evidence' ($fast.ExtraPerDetection -lt 0 -and $fast.WithinNoise -and $headFast -match 'x0\.95; 4 detections, no extra time seen\)' -and $headFast -notmatch '-\d')
+$headN = Format-BilingualHeadline -Rolling $n2 -Night $n2 -Where 'w'
+Check 'a positive difference inside the noise is also "no extra time seen", never a time per detection' ($headN -match 'no extra time seen' -and $headN -notmatch ' s each')
+Check 'a part with no detections prints no time per detection at all' ((Format-BilingualPartText -Part $zero -Name 'rolling') -eq 'rolling RTF 0.75 fixed-hi / 0.80 en+hi with detection (x1.07; 0 detections)')
 Check 'a part that could not be measured says so and why' ($head2 -match 'night not measured' -and $head2 -match 'out of memory')
 
 # --- the evidence text: counts and numbers, no transcript ---
-$rec = @([pscustomobject]@{ key = 'rolling-fixed-hi'; label = 'x'; models = 'hi=turbo'; clip = 'bench-hi.wav'; languages = 'hi'; detect = $false; runs = @((Run 0.70 60 0), (Run 0.80 60 0)) })
+$rec = @(
+  [pscustomobject]@{ key = 'rolling-fixed-hi'; label = 'x'; models = 'hi=turbo'; clip = 'bench-codeswitch.wav'; input = 'bench-codeswitch.wav looped x5 = 300 s'; languages = 'hi'; detect = $false; runs = @((Run 0.70 60 0), (Run 0.80 60 0)) },
+  [pscustomobject]@{ key = 'reference-bench-hi'; label = 'ref'; models = 'hi=turbo'; clip = 'bench-hi.wav'; input = 'bench-hi.wav as it is (60 s)'; languages = 'hi'; detect = $false; runs = @((Run 0.72 60 0)) })
 $lines = @(Get-BilingualReportLines -Records $rec -Rolling $part -Night $night -Machine 'M1' -Profile 'laptop' -Quick $false -Hi $hi -En $en -Notes @('a note'))
 $text = $lines -join "`n"
-Check 'the evidence lists each run, the median, the slowdown, the estimate caveat and says it is information only' ($text -match 'run 1: RTF 0\.700' -and $text -match 'run 2: RTF 0\.800' -and $text -match 'median RTF: 0\.750' -and $text -match 'slowdown x1\.34' -and $text -match 'estimate' -and $text -match 'information only: no verdict' -and $text -match 'note: a note')
+Check 'the evidence lists each run, the median, the input, the factor, the detections, seconds per detection, the noise and says it is information only' ($text -match 'run 1: RTF 0\.700' -and $text -match 'run 2: RTF 0\.800' -and $text -match 'median RTF: 0\.750' -and $text -match 'input: bench-codeswitch\.wav looped x5 = 300 s' -and $text -match 'factor x1\.34' -and $text -match '14 detections' -and $text -match 's per detection; noise' -and $text -match 'information only: no verdict' -and $text -match 'note: a note')
+Check 'the evidence has the bench-hi reference line and says it is in no factor, and says the fixed run forces Hindi on the English parts' ($text -match 'reference \(bench-hi\.wav, one Hindi clip, rolling, language fixed to hi\): RTF 0\.720; not used in any factor' -and $text -match 'forces Hindi on the English parts')
 Check 'the evidence says which mode (full: twice)' ($text -match 'full \(each measurement twice')
 
 # --- the registry, the script, the README ---
 $mf = Read-PackManifest -Path (Join-Path $repo 'scripts\gate-pack\gates.manifest.json')
 $g = @($mf.gates | Where-Object { $_.id -eq 'speed-bilingual' })
 Check 'the registry has speed-bilingual: P2, unattended, after quick-check, no ledger row (run rows only)' ($g.Count -eq 1 -and $g[0].priority -eq 'P2' -and -not $g[0].interactive -and @($g[0].depends_on) -contains 'quick-check' -and @($g[0].ledger).Count -eq 0)
-Check 'the registry states the quick and the full estimate (8 and 15 minutes on the low laptop)' ($g[0].quick.minutes -eq 8 -and $g[0].est_minutes.low -eq 15 -and $g[0].est_minutes.mid -ge 8)
+Check 'the registry states the quick and the full estimate (10 minutes quick; 35 low and 28 mid for a full run)' ($g[0].quick.minutes -eq 10 -and $g[0].est_minutes.low -eq 35 -and $g[0].est_minutes.mid -eq 28)
+Check 'the registry describes the same-audio measurement and the looped lengths' ($g[0].threshold -match 'bench-codeswitch looped' -and $g[0].threshold -match 'rolling 5 min full / 2 min quick' -and $g[0].threshold -match 'night 2 min full / 1 min quick')
 Check 'the registry says information only, no bar' ($g[0].threshold -match 'information only' -and $g[0].threshold -match 'no bar')
 $sb = [IO.File]::ReadAllText((Join-Path $repo 'scripts\gate-pack\gates\speed-bilingual.ps1'))
 $mod = [IO.File]::ReadAllText((Join-Path $repo 'scripts\lib\SpeedBilingual.psm1'))
@@ -153,7 +169,46 @@ Check 'a measurement that was never planned gives an empty pair, not an error' (
 Check 'the script takes the gate lock like the other measuring gates' ($sb -match "Invoke-WbGate -Name 'speed-bilingual'")
 Check 'no transcript text is kept: the engine output file is overwritten per run and only counts are written' ($sb -notmatch '\.text\b' -and $mod -notmatch '\.text\b')
 $readme = [IO.File]::ReadAllText((Join-Path $repo 'scripts\gate-pack\README.txt'))
-Check 'the README mentions the gate with its quick and full time' ($readme -match 'language detection' -and $readme -match 'about\s+8\s+minutes' -and $readme -match 'about\s+15\s+minutes')
+Check 'the README mentions the gate with its quick and full time, and that it compares the same audio' ($readme -match 'language detection' -and $readme -match 'about\s+10\s+minutes' -and $readme -match 'about\s+35\s+minutes' -and $readme -match 'same few minutes')
+Check 'the script builds the looped input in the work folder, hands the request the looped file, and deletes the loops and the engine output afterwards' ($sb -match 'New-BilingualLoop' -and $sb -match "'loops'" -and $sb -match '-ClipPath \$m\.InputPath' -and $sb -match 'Remove-Item -LiteralPath \$loopDir' -and $sb -match "'cell\.out'")
+Check 'the script never writes a loop into the pack (the loops folder is under the gate''s work folder)' ($sb -match "\`$loopDir = Join-Path \`$work 'loops'" -and $sb -match "\`$work = Join-Path \`$gdir 'work'")
+Check 'the script notes fewer than 15 detections' ($sb -match 'fewer than the 15 aimed for')
+
+# --- the looped input ---
+$tmp = Join-Path ([IO.Path]::GetTempPath()) ('sbtest-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+try {
+  # A 16 kHz mono 16-bit WAV of 2.5 s whose samples count up, so a repeat can be recognised, with an extra LIST chunk before the data.
+  $samples = 40000
+  $pcm = New-Object byte[] ($samples * 2)
+  for ($i = 0; $i -lt $samples; $i++) { $v = [int16]($i % 30000); $pcm[2 * $i] = [byte]($v -band 0xFF); $pcm[2 * $i + 1] = [byte](($v -shr 8) -band 0xFF) }
+  $src = Join-Path $tmp 'src.wav'
+  $ms = New-Object IO.MemoryStream; $bw = New-Object IO.BinaryWriter($ms); $asc = [Text.Encoding]::ASCII
+  $list = $asc.GetBytes('abcd')
+  $bw.Write($asc.GetBytes('RIFF')); $bw.Write([uint32](4 + 24 + 8 + 4 + 8 + $pcm.Length)); $bw.Write($asc.GetBytes('WAVE'))
+  $bw.Write($asc.GetBytes('fmt ')); $bw.Write([uint32]16); $bw.Write([uint16]1); $bw.Write([uint16]1); $bw.Write([uint32]16000); $bw.Write([uint32]32000); $bw.Write([uint16]2); $bw.Write([uint16]16)
+  $bw.Write($asc.GetBytes('LIST')); $bw.Write([uint32]4); $bw.Write($list)
+  $bw.Write($asc.GetBytes('data')); $bw.Write([uint32]$pcm.Length); $bw.Write($pcm); $bw.Flush()
+  [IO.File]::WriteAllBytes($src, $ms.ToArray())
+  $w = Read-BilingualWav -Path $src
+  Check 'the WAV reader finds the data after another chunk: 2.5 s at 32000 bytes a second' ($w.Data.Length -eq 80000 -and $w.ByteRate -eq 32000 -and (Near $w.Seconds 2.5))
+  $dst = Join-Path $tmp 'loops\out.wav'
+  $lp = New-BilingualLoop -Source $src -Dest $dst -Seconds 6
+  Check 'a loop of 6 s from 2.5 s is 3 whole repeats = 7.5 s (whole sentences only), written into a new folder' ($lp.Repeats -eq 3 -and (Near $lp.Seconds 7.5) -and (Test-Path -LiteralPath $dst))
+  $w2 = Read-BilingualWav -Path $dst
+  $same = $true; for ($r = 0; $r -lt 3; $r++) { for ($k = 0; $k -lt 200; $k++) { if ($w2.Data[$r * 80000 + $k] -ne $w.Data[$k]) { $same = $false } } }
+  Check 'the looped file is a valid WAV with the same format and the clip repeated byte for byte' ($w2.Data.Length -eq 240000 -and $w2.ByteRate -eq 32000 -and $same -and ((Get-Item -LiteralPath $dst).Length -eq 44 + 240000))
+  Check 'a loop shorter than the clip is the clip once; an exact multiple does not add a repeat' ((New-BilingualLoop -Source $src -Dest (Join-Path $tmp 'a.wav') -Seconds 1).Repeats -eq 1 -and (New-BilingualLoop -Source $src -Dest (Join-Path $tmp 'b.wav') -Seconds 5).Repeats -eq 2)
+  # The real clip of the repository, if it is there: 60 s, so 2 min is 2 repeats and 5 min is 5.
+  $real = Join-Path $repo 'resources\bench\bench-codeswitch.wav'
+  if (Test-Path -LiteralPath $real) {
+    $rw = Read-BilingualWav -Path $real
+    Check 'bench-codeswitch.wav is 60 s: the quick loop (2 min) is 2 repeats, the full rolling loop (5 min) 5, the night loops 1 and 2' ((Near $rw.Seconds 60 0.5) -and (New-BilingualLoop -Source $real -Dest (Join-Path $tmp 'r120.wav') -Seconds 120).Repeats -eq 2 -and (New-BilingualLoop -Source $real -Dest (Join-Path $tmp 'r300.wav') -Seconds 300).Repeats -eq 5 -and (New-BilingualLoop -Source $real -Dest (Join-Path $tmp 'n60.wav') -Seconds 60).Repeats -eq 1)
+  }
+  $bad = Join-Path $tmp 'bad.wav'; [IO.File]::WriteAllBytes($bad, (New-Object byte[] 100))
+  $threw = $false; try { Read-BilingualWav -Path $bad | Out-Null } catch { $threw = $true }
+  Check 'a file that is not a WAV is refused' $threw
+} finally { Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue }
 
 if ($fails -gt 0) { Write-Host "$fails failed"; exit 1 }
 Write-Host 'SpeedBilingual tests passed'

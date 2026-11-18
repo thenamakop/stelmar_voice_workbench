@@ -224,12 +224,12 @@
     },
     {
       "id": "speed-bilingual",
-      "title": "Speed with and without per-chunk language detection (rolling and night, English + Hindi), on the quick check's own cell",
+      "title": "Speed with and without per-chunk language detection on the same audio (rolling and night, English + Hindi), on the quick check's own cell",
       "priority": "P2", "order": 5, "script": "gates/speed-bilingual.ps1", "group": "any",
       "needs": { "ac": true }, "interactive": false,
-      "est_minutes": { "low": 15, "mid": 12 },
-      "quick": { "minutes": 8, "note": "each measurement once (full mode: twice, both reported with the median)" },
-      "threshold": "information only, no bar: RTF on bench-hi with the language fixed and on bench-codeswitch with detection on every chunk, for rolling and for night, on the engine build, device, threads and rolling models the quick check chose; the slowdown factor, detections and seconds per detection are read out for the owner",
+      "est_minutes": { "low": 35, "mid": 28 },
+      "quick": { "minutes": 10, "note": "looped input of 2 min (rolling) and 1 min (night), each measurement once; full mode: 5 min and 2 min, twice, both reported with the median" },
+      "threshold": "information only, no bar: bench-codeswitch looped (rolling 5 min full / 2 min quick, night 2 min full / 1 min quick) decoded with the language fixed to hi and with en+hi and detection on every chunk, on the engine build, device, threads and rolling models the quick check chose; RTF fixed and with detection, the factor, the detection count and seconds per detection (negative or within noise: no extra time seen) are read out for the owner; bench-hi is a reference line",
       "depends_on": [ "quick-check" ],
       "ledger": []
     },
