@@ -124,6 +124,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--smoke", action="store_true", help="three short sessions for the smoke run")
     ap.add_argument("--long", action="store_true", help="one 14-minute Hindi-heavy session (second smoke: a unit decoded before Stop, a night pass that can finish)")
+    ap.add_argument("--minutes", type=float, default=14.0, help="with --long: the session's length in minutes (14 for the second smoke, 22 for the fourth, owner 18 Nov 2026)")
     ap.add_argument("--out", default="")
     args = ap.parse_args()
     if not (args.smoke or args.long):
@@ -144,7 +145,7 @@ def main() -> int:
         # ends): about 14 minutes, so the first unit (about 5 minutes) is cut and decoded while the session records.
         BLOCK.update({"fleurs-hi": 4, "fleurs-en": 1})
         sessions.append(
-            build("Long Hindi", ["en", "hi"], 21, 840.0, [("fleurs-hi", hi[200:500], "hi"), ("fleurs-en", en[200:500], "en")])
+            build("Long Hindi", ["en", "hi"], 21, args.minutes * 60.0, [("fleurs-hi", hi[200:500], "hi"), ("fleurs-en", en[200:500], "en")])
         )
     else:
         # Disjoint slices: English session from the front of the English list, the mixed one from the back, and so on.

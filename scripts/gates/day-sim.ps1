@@ -45,6 +45,8 @@ param(
   [string]$ProfileData = 'D:\STELMAR-Gate\system-check\full-emu-low\data',
   [string]$Audio = 'D:\STELMAR-Gate\day-sim\smoke',
   [int]$NightMinutes = 8,
+  # Longest the whole run may take (the app's start to the stop); a longer session or night box needs more.
+  [int]$MaxMinutes = 100,
   # Names the run folder and the evidence file: smoke (the first smoke) or a second smoke with other audio.
   [string]$Tag = 'smoke',
   [int]$PartSeconds = 120,
@@ -298,12 +300,13 @@ try {
     $players = @()
     $kill = $null
     $started = Get-Date
-    $hardLimit = $started.AddMinutes(100)
+    $hardLimit = $started.AddMinutes($MaxMinutes)
     $lines = 0
     $startedTitles = @{}
     $allRecorded = $null
     $nightPlanned = $null
     $nightSkipped = $null
+    $nightDone = $null
     $lastProgress = Get-Date
     $lastSample = Get-Date
     $sampleFile = Join-Path $run 'process-samples.csv'
@@ -331,6 +334,7 @@ try {
           }
           if ($l -match 'every session of the plan was recorded') { $allRecorded = Get-Date; $progress.Add("$(Get-Date -Format 'HH:mm:ss') all sessions recorded") }
           if ($l -match 'night pass planned') { $nightPlanned = Get-Date; $progress.Add("$(Get-Date -Format 'HH:mm:ss') $l") }
+          if ($l -match 'post-2 transcript complete') { $nightDone = Get-Date; $progress.Add("$(Get-Date -Format 'HH:mm:ss') $l") }
           if ($l -match 'night pass skipped') { $nightSkipped = Get-Date; $progress.Add("$(Get-Date -Format 'HH:mm:ss') $l") }
         }
         $lines = $ref.Value
@@ -353,10 +357,11 @@ try {
 
         # End of the run: a short night pass, or the reason there is none.
         $stop = $false
-        if ($nightPlanned -and ((Get-Date) - $nightPlanned).TotalMinutes -ge $NightMinutes) { $stop = $true; $progress.Add("$(Get-Date -Format 'HH:mm:ss') night pass time box of $NightMinutes min reached: stopping") }
+        if ($nightDone -and ((Get-Date) - $nightDone).TotalSeconds -ge 30) { $stop = $true; $progress.Add("$(Get-Date -Format 'HH:mm:ss') the night pass is complete: stopping") }
+        elseif ($nightPlanned -and ((Get-Date) - $nightPlanned).TotalMinutes -ge $NightMinutes) { $stop = $true; $progress.Add("$(Get-Date -Format 'HH:mm:ss') night pass time box of $NightMinutes min reached: stopping") }
         elseif ($nightSkipped -and ((Get-Date) - $nightSkipped).TotalSeconds -ge 30) { $stop = $true }
         elseif ($allRecorded -and -not $nightPlanned -and ((Get-Date) - $allRecorded).TotalMinutes -ge 40) { $stop = $true; $progress.Add("$(Get-Date -Format 'HH:mm:ss') no night decision within 40 min of the last session: stopping") }
-        elseif ((Get-Date) -gt $hardLimit) { $stop = $true; $progress.Add("$(Get-Date -Format 'HH:mm:ss') hard limit of 100 min: stopping") }
+        elseif ((Get-Date) -gt $hardLimit) { $stop = $true; $progress.Add("$(Get-Date -Format 'HH:mm:ss') hard limit of $MaxMinutes min: stopping") }
         if ($stop -and -not (Test-Path -LiteralPath $stopFile)) { Set-Content -LiteralPath $stopFile -Value 'stop' -Encoding ascii }
 
         if (((Get-Date) - $lastSample).TotalSeconds -ge 10) {

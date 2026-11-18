@@ -31,7 +31,9 @@ param(
   [double]$IdleCpuMax = 10,
   [int]$IdleSeconds = 60,
   [int]$IdleWaitMin = 30,
-  [string[]]$Runs = @('P1', 'Q', 'R', 'P2', 'N2', 'N1')
+  [string[]]$Runs = @('P1', 'Q', 'R', 'P2', 'N2', 'N1'),
+  # Earlier figures to compare with, e.g. 'P1=0.708,P2=0.709,Q=1.011' (the recheck of 18 Nov 2026, after Wallpaper Engine was quit).
+  [string]$Compare = ''
 )
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -196,6 +198,8 @@ $lines += "audio and requests: the second smoke's session folder (units of post-
 $lines += "engine: wb-engine vulkan build (the app's), sha256 $engSha; wb-emulate $EmuProfile; engine at below-normal priority as the queue runs it; one process per run"
 $lines | Set-Content -LiteralPath $header -Encoding utf8
 $report = Join-Path $Work 'report.txt'
-& $python -X utf8 -I (Join-Path $here 'speed_diag.py') report $Work $report --header $header | Out-Null
+$reportArgs = @('report', $Work, $report, '--header', $header)
+if ($Compare) { $reportArgs += @('--compare', $Compare) }
+& $python -X utf8 -I (Join-Path $here 'speed_diag.py') @reportArgs | Out-Null
 Write-WbEvidence -Path $OutFile -Lines @(Get-Content -LiteralPath $report -Encoding UTF8) -MachineLabel $Machine
 Write-Host "evidence: $OutFile"

@@ -214,6 +214,18 @@ def report(a) -> int:
         x = rtf_of(k)
         if x:
             lines.append(f"  {k} against the profile's 0.696 for this cell: {x / 0.696:.2f}")
+    if a.compare:
+        lines.append("")
+        lines.append("Against the earlier runs (a run more than 5% faster than its earlier figure means the earlier figure was slowed by something that is now gone)")
+        for item in a.compare.split(","):
+            k, _, v = item.partition("=")
+            k = k.strip()
+            x = rtf_of(k)
+            if x is None or not v:
+                continue
+            earlier = float(v)
+            diff = (x - earlier) / earlier * 100
+            lines.append(f"  {k}: {x:.3f} now against {earlier:.3f} earlier = {diff:+.1f}% ({'MORE THAN 5% FASTER' if diff < -5 else 'within 5% or slower'})")
     text = "\n".join(lines) + "\n"
     Path(a.out).write_text(text, encoding="utf8")
     sys.stdout.reconfigure(encoding="utf8")
@@ -232,6 +244,7 @@ def main() -> int:
     p.add_argument("work")
     p.add_argument("out")
     p.add_argument("--header", default="")
+    p.add_argument("--compare", default="", help="earlier RTFs, e.g. P1=0.708,P2=0.709,Q=1.011")
     a = ap.parse_args()
     return prep(a) if a.cmd == "prep" else report(a)
 
