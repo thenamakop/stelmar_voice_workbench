@@ -34,6 +34,9 @@ Before you start (5 minutes)
     be on the same disk, and a USB drive is slower and gives wrong answers.
  2. Close these programs if they are open (they disturb the measurements): LatencyMon, RTSS (RivaTuner),
     MSI Afterburner, Steam, Nahimic and any other "audio booster", game overlay or screen recorder.
+    Also close animated-wallpaper programs (Wallpaper Engine, Lively Wallpaper): on 18 Nov 2026
+    Wallpaper Engine kept 45 to 90 percent of a laptop's integrated graphics busy with nothing else
+    running, which makes every speed number wrong. Use a plain still wallpaper while the pack runs.
     ALSO switch off their "start with Windows" setting BEFORE the restart (Steam: Settings, Interface,
     "Run Steam when my computer starts"; Task Manager, Startup apps, for the others). Otherwise they
     start again when you log in after the restart. The pack lists the programs it finds when you start
@@ -75,6 +78,9 @@ What it does, in order
      25-minute test, then asks you to switch it back ON. Do not forget to switch it back on.
 
  Day 2 (about 11 to 13 hours per laptop; see "Two laptops" below):
+   - A speed check with and without language detection (English and Hindi, for the daytime and the night
+     pass, on the settings this laptop's own quick check chose): about 15 minutes in a full run, about
+     8 minutes in a short test run. It needs no cable and gives numbers only, no pass or fail.
    - More recorder checks (cold-cache hashing, background decoding), the speed tables on the
      processor, a full system check, and, if this pack has it, the 2.5-hour microphone test in a quiet room.
 

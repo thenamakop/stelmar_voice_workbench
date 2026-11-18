@@ -520,11 +520,13 @@ function Test-PackIdle {
 }
 
 # Programs that must be closed before the recorder gates (they steal the processor or sit in the audio
-# path). The gate scripts refuse on their own; this tells the person at the start. -Names is for tests.
+# path, or keep the graphics chip busy: Wallpaper Engine used 45 to 90 percent of an integrated GPU's 3D engine with the machine idle,
+# found 18 Nov 2026; Lively Wallpaper, another animated-wallpaper app, and OBS Studio, a screen recorder, are listed too). The gate scripts refuse on their own; this tells
+# the person at the start. -Names is for tests.
 function Get-PackBlockingPrograms {
   param([string[]]$Names = $null)
   if ($null -eq $Names) { $Names = @(Get-Process -ErrorAction SilentlyContinue | ForEach-Object { $_.ProcessName }) }
-  $rx = '^(LatMon|LatencyMon|RTSS|RTSSHooksLoader.*|MSIAfterburner|Steam|steamwebhelper|NahimicService|NahimicSvc.*|NahimicSmartAudio|A-Volute.*|AVolute.*|WavesSvc.*|DolbyDAX.*|SonicStudio.*)$'
+  $rx = '^(LatMon|LatencyMon|RTSS|RTSSHooksLoader.*|MSIAfterburner|Steam|steamwebhelper|NahimicService|NahimicSvc.*|NahimicSmartAudio|A-Volute.*|AVolute.*|WavesSvc.*|DolbyDAX.*|SonicStudio.*|wallpaper32|wallpaper64|wallpaperservice32|webwallpaper32|webwallpaper64|Lively|obs32|obs64)$'
   @($Names | Where-Object { $_ -match $rx } | Sort-Object -Unique)
 }
 

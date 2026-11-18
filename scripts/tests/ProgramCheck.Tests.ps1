@@ -69,6 +69,9 @@ Check 'unattended: a wait of 0 minutes does not sleep at all' ($script:slept.Cou
 # --- the names the check looks for ---
 Check 'Steam, steamwebhelper, LatencyMon and RTSS are disturbing programs; an ordinary one is not' ((@(Get-PackBlockingPrograms -Names @('Steam', 'steamwebhelper', 'LatencyMon', 'RTSS', 'notepad', 'chrome')) -join ',') -eq 'LatencyMon,RTSS,Steam,steamwebhelper')
 
+Check 'Wallpaper Engine (wallpaper32, wallpaper64, its service and web helpers) is a disturbing program, found 18 Nov 2026 using 45 to 90 percent of the iGPU 3D engine' ((@(Get-PackBlockingPrograms -Names @('wallpaper32', 'wallpaper64', 'wallpaperservice32', 'webwallpaper32', 'webwallpaper64', 'Wallpaper', 'wallpaper_other')) -join ',') -eq 'wallpaper32,wallpaper64,wallpaperservice32,webwallpaper32,webwallpaper64')
+Check 'Lively Wallpaper and OBS Studio are listed; a name that merely starts like one is not' ((@(Get-PackBlockingPrograms -Names @('Lively', 'obs64', 'obs32', 'obscure', 'LivelyX')) -join ',') -eq 'Lively,obs32,obs64')
+
 # --- the drive prompt ---
 $pr = Get-PackBackupPrompt
 Check 'the drive prompt does not end with a colon (Read-Host adds its own, which made "C::")' (-not $pr.TrimEnd().EndsWith(':') -and $pr -match 'press Enter to use C$')
@@ -80,6 +83,7 @@ Check 'the runner calls the program check, records the result in the state and i
 Check 'after a restart (-Resumed) and with -Unattended the check is unattended' ($runner -match '-Attended \(-not \(\$Unattended -or \$Resumed\)\)')
 $readme = [IO.File]::ReadAllText((Join-Path $repo 'scripts\gate-pack\README.txt'))
 Check 'the README tells the helper to switch off auto-start before the restart' ($readme -match 'start with Windows' -and $readme -match 'BEFORE the restart' -and $readme -match 'up to 10 minutes')
+Check 'the README names Wallpaper Engine and Lively Wallpaper and says why' ($readme -match 'Wallpaper Engine' -and $readme -match 'Lively Wallpaper' -and $readme -match '45 to 90 percent')
 Check 'the README is plain ASCII' (-not ($readme.ToCharArray() | Where-Object { [int]$_ -gt 126 }))
 
 if ($fails -gt 0) { Write-Host "$fails failed"; exit 1 }
