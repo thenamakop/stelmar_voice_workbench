@@ -1,0 +1,7 @@
+Speed table, igpu part, recomputed from results.jsonl (no audio, no text)
+cells: 1; ok 1; other 0
+devices named by the engine: vulkan: Intel(R) RaptorLake-S Mobile Graphics Controller (driver versions are in the evidence of the gate itself)
+model | clip | mode | threads | recorded median | recomputed median | runs | note
+small | bench-en.wav | rolling | 2 | 0.150 | 0.150 | 1 | 
+slowest cells: small bench-en.wav 0.15
+consistency: recorded medians equal the medians of the timed runs

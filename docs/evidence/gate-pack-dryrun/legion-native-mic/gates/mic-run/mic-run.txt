@@ -1,0 +1,25 @@
+Microphone run (gate pack)
+machine: LENOVO-83DF-b8384c; profile: laptop; date: 2026-11-17 04:58; 15 minutes (QUICK: the full run is 120 minutes)
+microphone: Microphone Array (Realtek(R) Audio); format the recorder opens: 48000 Hz, 2 channel(s), f32; speakers: Speakers (Realtek(R) Audio)
+  audio software running: RtkAudUService64
+  audio devices of interest: Intel® Smart Sound Technology BUS; Intel® Smart Sound Technology OED; Microphone Array (Realtek(R) Audio); Realtek Audio Effects Component; Realtek Audio Universal Service; Realtek(R) Audio; Speakers (Realtek(R) Audio)
+  Windows audio enhancements: not exposed to the pack; the format the recorder opened is below
+  speaker volume set to 50 percent (put back at the end)
+windows (source clock): digital mute 300 s for 60 s; room silence 540 s for 60 s
+  window log: mute on at 300.3 s (done)
+  window log: mute off at 360.8 s (done)
+recorder: overrun samples 0, xruns 0
+  app against the cpal reference: equal
+  app against the WASAPI reference: equal
+  cpal reference against the WASAPI reference: DIFFERENT
+reference verdict: PASS (both-equal): the app equals both independent references sample for sample
+  detector zero_gap: 0 firing(s) inside the scripted windows are left out of the rates (see the per-window lines)
+  detector zero_gap: fired 0 time(s) (0.00 per hour); matched by a reference 0, by both 0; false alarms 0; real dropouts the detector missed 0; built-in microphone 'Microphone Array (Realtek(R) Audio)'; machine LENOVO-83DF-b8384c
+  detector repeated_block: 0 firing(s) inside the scripted windows are left out of the rates (see the per-window lines)
+  detector repeated_block: fired 0 time(s) (0.00 per hour); matched by a reference 0, by both 0; false alarms 0; real dropouts the detector missed 0; built-in microphone 'Microphone Array (Realtek(R) Audio)'; machine LENOVO-83DF-b8384c
+what each detector did in each scripted window:
+  digital mute (app time 304 s to 364 s): zero_gap fired 0 time(s), repeated_block fired 0 time(s)
+  room silence (app time 544 s to 604 s): zero_gap fired 0 time(s), repeated_block fired 0 time(s)
+  outside both windows (the rest of the recording): zero_gap fired 0 time(s), repeated_block fired 0 time(s)
+audio and reports: D:\STELMAR-Gate\mic-work\audio\mic-20261117-044336 (not in the repository; the known-speech recording stays on this laptop and is not in the zip)
+verdict: PASS

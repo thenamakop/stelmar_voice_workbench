@@ -1,0 +1,52 @@
+{
+    "id":  "hashing-1",
+    "status":  "PASS",
+    "headline":  "PASS (PROVISIONAL: emulated)",
+    "measured":  {
+                     "rig":  "vb-cable",
+                     "minutes":  4,
+                     "exit_code":  0,
+                     "run_dir":  "D:\\STELMAR-Gate\\dryrun-hash\\audio\\hashing-emu-low-20261117-173025",
+                     "shared_breaks":  0,
+                     "app_only_breaks":  0,
+                     "detectors":  {
+                                       "zero_gap":  {
+                                                        "Firings":  0,
+                                                        "Matched":  0,
+                                                        "MatchedBoth":  0,
+                                                        "FalseAlarms":  0,
+                                                        "RealMissed":  0,
+                                                        "ReferenceFindings":  0,
+                                                        "PerHour":  0
+                                                    },
+                                       "repeated_block":  {
+                                                              "Firings":  0,
+                                                              "Matched":  0,
+                                                              "MatchedBoth":  0,
+                                                              "FalseAlarms":  0,
+                                                              "RealMissed":  0,
+                                                              "ReferenceFindings":  0,
+                                                              "PerHour":  0
+                                                          }
+                                   },
+                     "hash_mb_per_s":  906.56729377024192,
+                     "raw_read_mb_per_s":  1627.5029617369055,
+                     "after_restart":  true,
+                     "hashed_files":  6
+                 },
+    "threshold":  "the app hashed at least 1 GB of model files in background mode while recording; models and recording on the same disk; the run followed a restart; recording equals both references",
+    "rig":  "VB-CABLE",
+    "rig_detail":  "",
+    "shared_breaks":  0,
+    "evidence":  [
+                     "D:\\STELMAR-Gate\\dryrun-hash\\gates\\hashing-1\\evidence\\hashing-emu-low.txt",
+                     "D:\\STELMAR-Gate\\dryrun-hash\\gates\\hashing-1\\hashing-1-additions.txt",
+                     "D:\\STELMAR-Gate\\dryrun-hash\\gates\\hashing-1\\hashing-1-additions.txt"
+                 ],
+    "notes":  [
+
+              ],
+    "quick":  true,
+    "not_at_full_length":  false,
+    "finished":  "2026-11-17T17:34:46.2891075+05:30"
+}

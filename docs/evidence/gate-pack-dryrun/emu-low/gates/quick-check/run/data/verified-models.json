@@ -1,0 +1,34 @@
+{
+  "files": {
+    "converted/ggml-hinglish-q5_0.bin": {
+      "size": 1081140203,
+      "mtime_ns": 1794311236720880600,
+      "sha256": "ec99a44643648ae7a4c0da658af838b8923a6372e1e06c080e527fe694e07e6e"
+    },
+    "ggml-large-v3-q5_0.bin": {
+      "size": 1081140203,
+      "mtime_ns": 1794307593318904300,
+      "sha256": "d75795ecff3f83b5faa89d1900604ad8c780abd5739fae406de19f23ecd98ad1"
+    },
+    "ggml-large-v3-turbo-q5_0.bin": {
+      "size": 574041195,
+      "mtime_ns": 1794307532978868600,
+      "sha256": "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2"
+    },
+    "ggml-medium.bin": {
+      "size": 1533763059,
+      "mtime_ns": 1794307496875047400,
+      "sha256": "6c14d5adee5f86394037b4e4e8b59f1673b6cee10e3cf0b11bbdbee79c156208"
+    },
+    "ggml-silero-v6.2.0.bin": {
+      "size": 885098,
+      "mtime_ns": 1794307498886678000,
+      "sha256": "2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987"
+    },
+    "ggml-small.bin": {
+      "size": 487601967,
+      "mtime_ns": 1794307494907247700,
+      "sha256": "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b"
+    }
+  }
+}

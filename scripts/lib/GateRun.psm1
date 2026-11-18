@@ -34,6 +34,21 @@ $script:BuildLockPath = 'D:\Projects\stelmar-build.lock'
 $script:BuildProcessNames = @('cargo', 'rustc', 'cl', 'link', 'cmake', 'ninja', 'nvcc', 'glslc', 'MSBuild', 'cicc', 'ptxas', 'fatbinary', 'nvlink')
 $script:Current = $null
 
+# Gate pack on a laptop (scripts/gate-pack): there is no D:\Projects and a 16 GB laptop never has
+# 14 GB free, so the pack sets these variables before it starts a gate. Unset = today's behaviour.
+# The gate pack's dry run on the Legion sets WB_PACK_LOCK_DIR=D:\Projects, so it takes the real lock.
+if ($env:WB_PACK_LOCK_DIR) {
+  $script:LockPath = Join-Path $env:WB_PACK_LOCK_DIR 'stelmar-gate.lock'
+  $script:TrackBBusyPath = Join-Path $env:WB_PACK_LOCK_DIR 'stelmar-eval-busy.lock'
+  $script:BuildLockPath = Join-Path $env:WB_PACK_LOCK_DIR 'stelmar-build.lock'
+}
+if ($env:WB_PACK_MIN_FREE_RAM_GB) {
+  $packRam = 0.0
+  if ([double]::TryParse($env:WB_PACK_MIN_FREE_RAM_GB, [System.Globalization.NumberStyles]::Float, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$packRam) -and $packRam -gt 0) {
+    $script:MinFreeRamGB = $packRam
+  }
+}
+
 function Get-WbOverlayTools {
   @(Get-Process -Name $script:OverlayNames -ErrorAction SilentlyContinue | ForEach-Object { "$($_.ProcessName).exe (pid $($_.Id))" })
 }
@@ -100,7 +115,7 @@ function Invoke-WbGate {
   $trackBWait = $(if ($waited) { "waited $waitedMin min for $TrackBBusyPath to clear" } else { "$TrackBBusyPath absent at start" })
   $freeStart = Get-WbFreeRamGB
   if ($freeStart -lt $MinFreeRamGB) {
-    throw "Only $freeStart GB of RAM free; gate $Name needs at least $MinFreeRamGB GB (the 11 GiB emulation job plus headroom). Close other programs and run it again."
+    throw "Only $freeStart GB of RAM free; gate $Name needs at least $MinFreeRamGB GB (on the Legion: the 11 GiB emulation job plus headroom; in the gate pack: the amount the pack was started with). Close other programs and run it again."
   }
   if (Test-Path -LiteralPath $LockPath) {
     $held = (Get-Content -LiteralPath $LockPath -Raw)
@@ -108,6 +123,8 @@ function Invoke-WbGate {
   }
   $started = Get-Date
   $lockText = "gate=$Name`r`nstarted=$($started.ToString('o'))`r`npid=$PID`r`n"
+  $lockDir = Split-Path -Parent $LockPath
+  if ($lockDir -and -not (Test-Path -LiteralPath $lockDir)) { New-Item -ItemType Directory -Force -Path $lockDir | Out-Null }
   Set-Content -LiteralPath $LockPath -Value $lockText -Encoding ascii
   $script:Current = [pscustomobject]@{ Name = $Name; Started = $started; LockPath = $LockPath; OverlayAtEnd = $null; BuildsAtEnd = $null; BuildLockPath = $BuildLockPath; TrackBWait = $trackBWait; FreeRamStart = $freeStart; FreeRamEnd = $null; Error = $null; Note = $null }
   try {
@@ -172,14 +189,21 @@ function Get-WbGateHeader {
   # git -C the repository root, so it works from any folder. If git fails the evidence still gets
   # written (the build hashes identify the code) and says so, instead of losing a finished run.
   $root = Get-WbRepoRoot
-  $rev = Invoke-WbNative -FilePath 'git' -ArgumentList @('-C', $root, 'rev-parse', '--short', 'HEAD')
-  if ($rev.ExitCode -eq 0 -and $rev.Output.Count -gt 0) {
-    $st = Invoke-WbNative -FilePath 'git' -ArgumentList @('-C', $root, 'status', '--porcelain')
-    $dirty = ($st.ExitCode -eq 0 -and $st.Output.Count -gt 0)
-    $lines += "source: commit $($rev.Output[0])$(if ($dirty) { ' with uncommitted or untracked changes (the build hashes below identify the code)' } else { '' })"
+  $packManifest = Join-Path $root 'PACK-MANIFEST.json'
+  if ($env:WB_PACK_ROOT -and (Test-Path -LiteralPath $packManifest)) {
+    # Gate pack: there is no git on the laptop; the pack's own manifest names the commit it was built from.
+    $pm = Get-Content -LiteralPath $packManifest -Raw | ConvertFrom-Json
+    $lines += "source: gate pack built from commit $($pm.source_commit) on $($pm.built_at); every file's SHA-256 is in PACK-MANIFEST.json"
   } else {
-    $why = (@($rev.Error) + @($rev.Output)) -join ' '
-    $lines += "source: commit unknown (git failed in the repository: $why); the build hashes below identify the code"
+    $rev = Invoke-WbNative -FilePath 'git' -ArgumentList @('-C', $root, 'rev-parse', '--short', 'HEAD')
+    if ($rev.ExitCode -eq 0 -and $rev.Output.Count -gt 0) {
+      $st = Invoke-WbNative -FilePath 'git' -ArgumentList @('-C', $root, 'status', '--porcelain')
+      $dirty = ($st.ExitCode -eq 0 -and $st.Output.Count -gt 0)
+      $lines += "source: commit $($rev.Output[0])$(if ($dirty) { ' with uncommitted or untracked changes (the build hashes below identify the code)' } else { '' })"
+    } else {
+      $why = (@($rev.Error) + @($rev.Output)) -join ' '
+      $lines += "source: commit unknown (git failed in the repository: $why); the build hashes below identify the code"
+    }
   }
   foreach ($b in $Builds) {
     if ($b -and (Test-Path -LiteralPath $b)) {

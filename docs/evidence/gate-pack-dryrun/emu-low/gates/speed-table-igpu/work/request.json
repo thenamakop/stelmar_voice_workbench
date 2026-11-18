@@ -1,0 +1,21 @@
+{
+    "type":  "bench",
+    "model":  {
+                  "id":  "small",
+                  "path":  "D:\\STELMAR-Gate\\pack\\models\\ggml-small.bin"
+              },
+    "vad_model":  {
+                      "id":  "silero-v6.2.0",
+                      "path":  "D:\\STELMAR-Gate\\pack\\models\\ggml-silero-v6.2.0.bin"
+                  },
+    "lang":  "en",
+    "clip":  "D:\\STELMAR-Gate\\pack\\resources\\bench\\bench-en.wav",
+    "mode":  "rolling",
+    "device":  {
+                   "kind":  "gpu",
+                   "index":  0
+               },
+    "threads":  2,
+    "runs":  1,
+    "single_run_above_rtf":  2
+}

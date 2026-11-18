@@ -1,0 +1,13 @@
+Batch check: public FLEURS clips per language through medium, right script (gate pack)
+machine: LENOVO-83DF-b8384c; profile: emu-low; clips per language: 1; model: medium; threads: 4; date: 2026-11-15 12:55
+pass rule: exit 0, a done event, at least one segment, no U+FFFD, no run of ? characters, at least 90% of letters and combining marks in the language's script; counts only, no transcript text
+== CPU (avx2)
+avx2 | en | 1003119935936341070 | exit 0 | segments 1 | letters and marks 78 | Latin share 100% | broken text no | 37.6 s | ok
+avx2 | hi | 10011266027513218401 | exit 0 | segments 1 | letters and marks 98 | Devanagari share 100% | broken text no | 54.6 s | ok
+avx2 | ur | 10032188829272002643 | exit 0 | segments 1 | letters and marks 144 | Arabic script share 100% | broken text no | 52 s | ok
+== Intel(R) RaptorLake-S Mobile Graphics Controller (vulkan device 0, driver 32.0.101.7092)
+vulkan | en | 1003119935936341070 | exit 0 | segments 1 | letters and marks 78 | Latin share 100% | broken text no | 8.3 s | ok
+vulkan | hi | 10011266027513218401 | exit 0 | segments 1 | letters and marks 98 | Devanagari share 100% | broken text no | 13.6 s | ok
+vulkan | ur | 10032188829272002643 | exit 0 | segments 1 | letters and marks 144 | Arabic script share 100% | broken text no | 13.7 s | ok
+runs: 6; problems: 0
+verdict: PASS

@@ -1,0 +1,37 @@
+{
+    "id":  "hashing-2-10",
+    "status":  "INFO",
+    "headline":  "every run kept the recorder clean, but only 0 of the 1 purged runs counted as cold (warm rate 1,410 MB/s)",
+    "measured":  {
+                     "runs":  4,
+                     "cold_runs":  0,
+                     "warm_rate_mb_s":  1409.5295393957347,
+                     "shared_breaks_purged":  2,
+                     "shared_breaks_warm":  1,
+                     "extra_purged_runs":  2,
+                     "rig":  "vb-cable"
+                 },
+    "threshold":  "every run: zero overruns and no gap while the models are hashed in background mode (at least 1 GB, 10 s inside the recording); recording equals both references; a purged run counts as cold only at most 0.6 times the warm-cache rate of this laptop",
+    "rig":  "VB-CABLE",
+    "rig_detail":  "",
+    "shared_breaks":  3,
+    "evidence":  [
+                     "D:\\STELMAR-Gate\\dryrun-hash\\gates\\hashing-2-10\\evidence\\hashing-emu-low-run2.txt",
+                     "D:\\STELMAR-Gate\\dryrun-hash\\gates\\hashing-2-10\\hashing-2-10-run2-additions.txt",
+                     "D:\\STELMAR-Gate\\dryrun-hash\\gates\\hashing-2-10\\evidence\\hashing-emu-low-run3.txt",
+                     "D:\\STELMAR-Gate\\dryrun-hash\\gates\\hashing-2-10\\hashing-2-10-run3-additions.txt",
+                     "D:\\STELMAR-Gate\\dryrun-hash\\gates\\hashing-2-10\\evidence\\hashing-emu-low-extra1.txt",
+                     "D:\\STELMAR-Gate\\dryrun-hash\\gates\\hashing-2-10\\hashing-2-10-extra1-additions.txt",
+                     "D:\\STELMAR-Gate\\dryrun-hash\\gates\\hashing-2-10\\evidence\\hashing-emu-low-extra2.txt",
+                     "D:\\STELMAR-Gate\\dryrun-hash\\gates\\hashing-2-10\\hashing-2-10-extra2-additions.txt",
+                     "D:\\STELMAR-Gate\\dryrun-hash\\gates\\hashing-2-10\\hashing-2-10-summary.txt"
+                 ],
+    "notes":  [
+                  "run2: the app read the models at 925 MB/s, 0.66 times the warm rate of 1,410 MB/s (limit 0.6): the read cannot be shown to be cold (on a fast disk it runs at about the warm rate), so this run does not count as cold",
+                  "extra1: the app read the models at 886 MB/s, 0.63 times the warm rate of 1,410 MB/s (limit 0.6): the read cannot be shown to be cold (on a fast disk it runs at about the warm rate), so this run does not count as cold",
+                  "extra2: the app read the models at 910 MB/s, 0.65 times the warm rate of 1,410 MB/s (limit 0.6): the read cannot be shown to be cold (on a fast disk it runs at about the warm rate), so this run does not count as cold"
+              ],
+    "quick":  true,
+    "not_at_full_length":  false,
+    "finished":  "2026-11-17T17:59:05.3557644+05:30"
+}

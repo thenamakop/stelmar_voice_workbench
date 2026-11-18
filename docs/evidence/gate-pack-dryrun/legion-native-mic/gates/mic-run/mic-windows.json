@@ -1,0 +1,40 @@
+{
+    "plan":  {
+                 "Seconds":  900,
+                 "MuteAtS":  300,
+                 "MuteForS":  60,
+                 "SilenceAtS":  540,
+                 "SilenceForS":  60,
+                 "Quick":  true
+             },
+    "windows":  [
+                    {
+                        "Name":  "digital mute",
+                        "Kind":  "mute",
+                        "StartMs":  300000,
+                        "EndMs":  360000
+                    },
+                    {
+                        "Name":  "room silence",
+                        "Kind":  "silence",
+                        "StartMs":  540000,
+                        "EndMs":  600000
+                    }
+                ],
+    "log":  [
+                {
+                    "event":  "mute on",
+                    "ok":  true,
+                    "elapsed_s":  300.3,
+                    "at":  "2026-11-17T04:48:43.2076429+05:30"
+                },
+                {
+                    "event":  "mute off",
+                    "ok":  true,
+                    "elapsed_s":  360.8,
+                    "at":  "2026-11-17T04:49:43.7072324+05:30"
+                }
+            ],
+    "microphone":  "Microphone Array (Realtek(R) Audio)",
+    "speakers":  "Speakers (Realtek(R) Audio)"
+}

@@ -1,0 +1,6 @@
+{"event":"ready","device":{"kind":"cpu"},"device_name":"CPU","threads":4,"models":["medium"],"load_s":1.7945404}
+{"event":"segment","unit":0,"chunk":0,"start_ms":540,"end_ms":8650,"text":"कुछ अड़ोंगों में आर्सत्र केंद्रक होता है जिसका मतलब यहां की उन्में थोड़े या बिना किसी जट्के से तूटने की प्रवत्ती होती है","lang":"hi","lang_prob":1.0,"mixed":false,"dir":"ltr","avg_logprob":-0.18357834,"no_speech_prob":0.000019289579,"compression_ratio":1.2,"model":"medium","decoded_both_ways":false,"detection":[{"lang":"hi","prob":1.0}],"flags":[],"truncated":false}
+{"event":"progress","unit":0,"committed_until_ms":8650,"unit_end_ms":9120}
+{"event":"stats","unit":0,"chunks":1,"audio_ms":9120,"decode_s":51.7865898,"rtf":5.678354155701755,"peak_working_set_bytes":2202996736,"detections":0,"both_ways":0}
+{"event":"progress","unit":0,"committed_until_ms":9120,"unit_end_ms":9120}
+{"event":"done","segments":1,"chunks":1,"audio_ms":9120,"truncated_chunks":0,"elapsed_s":53.5897499,"retried_chunks":0,"unclear_chunks":0,"low_coverage_chunks":0}

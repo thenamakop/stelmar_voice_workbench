@@ -1,0 +1,66 @@
+{
+    "id":  "mic-run",
+    "status":  "PASS",
+    "headline":  "the app equals both independent references sample for sample (microphone run, 15 minutes)",
+    "measured":  {
+                     "minutes":  15,
+                     "microphone":  "Microphone Array (Realtek(R) Audio)",
+                     "overrun_samples":  0,
+                     "xruns":  0,
+                     "reference_class":  "both-equal",
+                     "windows":  [
+                                     {
+                                         "window":  "digital mute",
+                                         "zero_gap":  0,
+                                         "repeated_block":  0
+                                     },
+                                     {
+                                         "window":  "room silence",
+                                         "zero_gap":  0,
+                                         "repeated_block":  0
+                                     },
+                                     {
+                                         "window":  "outside both windows",
+                                         "zero_gap":  0,
+                                         "repeated_block":  0
+                                     }
+                                 ],
+                     "detectors":  {
+                                       "zero_gap":  {
+                                                        "Firings":  0,
+                                                        "Matched":  0,
+                                                        "MatchedBoth":  0,
+                                                        "FalseAlarms":  0,
+                                                        "RealMissed":  0,
+                                                        "ReferenceFindings":  0,
+                                                        "PerHour":  0
+                                                    },
+                                       "repeated_block":  {
+                                                              "Firings":  0,
+                                                              "Matched":  0,
+                                                              "MatchedBoth":  0,
+                                                              "FalseAlarms":  0,
+                                                              "RealMissed":  0,
+                                                              "ReferenceFindings":  0,
+                                                              "PerHour":  0
+                                                          }
+                                   }
+                 },
+    "threshold":  "the app equals both independent references of the built-in microphone sample for sample; the recorder counted no overrun; detector firings, false alarms and the two scripted windows are reported as information",
+    "rig":  "built-in microphone: Microphone Array (Realtek(R) Audio)",
+    "rig_detail":  "",
+    "shared_breaks":  null,
+    "evidence":  [
+                     "D:\\STELMAR-Gate\\mic-work\\gates\\mic-run\\mic-run.txt",
+                     "D:\\STELMAR-Gate\\mic-work\\gates\\mic-run\\mic-windows.json"
+                 ],
+    "notes":  [
+                  "audio software running: RtkAudUService64",
+                  "audio devices of interest: Intel® Smart Sound Technology BUS; Intel® Smart Sound Technology OED; Microphone Array (Realtek(R) Audio); Realtek Audio Effects Component; Realtek Audio Universal Service; Realtek(R) Audio; Speakers (Realtek(R) Audio)",
+                  "Windows audio enhancements: not exposed to the pack; the format the recorder opened is below",
+                  "speaker volume set to 50 percent (put back at the end)"
+              ],
+    "quick":  true,
+    "not_at_full_length":  false,
+    "finished":  "2026-11-17T04:58:51.6251364+05:30"
+}

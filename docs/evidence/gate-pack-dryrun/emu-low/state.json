@@ -1,0 +1,202 @@
+{
+    "pack_version":  1,
+    "role":  "low",
+    "profile":  "emu-low",
+    "quick":  true,
+    "created":  "2026-11-15T11:51:26.5915911+05:30",
+    "restart":  {
+                    "requested_at":  "2026-11-17T13:44:11.0243411+05:30",
+                    "boot_time_before":  "2026-11-17T10:33:38.3704336+05:30",
+                    "resumed_at":  "2026-11-17T13:45:58.1051193+05:30",
+                    "uptime_at_resume_min":  1.1
+                },
+    "gates":  {
+                  "full-check":  {
+                                     "attempts":  0,
+                                     "ended":  "2026-11-15T11:51:28.3937024+05:30",
+                                     "status":  "SKIPPED",
+                                     "reason":  "skipped under -Quick"
+                                 },
+                  "engines-info":  {
+                                       "attempts":  1,
+                                       "result_file":  "D:\\STELMAR-Gate\\dryrun-work\\gates\\engines-info\\result.json",
+                                       "status":  "PASS",
+                                       "started":  "2026-11-15T11:51:54.5696112+05:30",
+                                       "reason":  "avx2 exit 0; avx512 exit 3; vulkan exit 0",
+                                       "ended":  "2026-11-15T11:52:02.7289693+05:30",
+                                       "minutes":  0.1
+                                   },
+                  "quick-check":  {
+                                      "attempts":  1,
+                                      "result_file":  "D:\\STELMAR-Gate\\dryrun-work\\gates\\quick-check\\result.json",
+                                      "status":  "PASS",
+                                      "started":  "2026-11-15T11:52:29.365093+05:30",
+                                      "reason":  "the quick check took 414 s (bar 480 s); recorder safety run passed; tier C",
+                                      "ended":  "2026-11-15T11:59:29.185513+05:30",
+                                      "minutes":  7
+                                  },
+                  "speed-table-igpu":  {
+                                           "attempts":  1,
+                                           "result_file":  "D:\\STELMAR-Gate\\dryrun-work\\gates\\speed-table-igpu\\result.json",
+                                           "status":  "INFO",
+                                           "started":  "2026-11-15T11:59:55.5533652+05:30",
+                                           "reason":  "1 of 1 cells measured; slowest RTF 0.150; information only",
+                                           "ended":  "2026-11-15T12:00:21.6972205+05:30",
+                                           "minutes":  0.4
+                                       },
+                  "soak":  {
+                               "attempts":  1,
+                               "result_file":  "D:\\STELMAR-Gate\\dryrun-work\\gates\\soak\\result.json",
+                               "status":  "PASS",
+                               "started":  "2026-11-15T12:00:48.4301531+05:30",
+                               "reason":  "PASS (PROVISIONAL: emulated)",
+                               "ended":  "2026-11-15T12:12:23.4168541+05:30",
+                               "minutes":  11.6
+                           },
+                  "load-settled":  {
+                                       "attempts":  1,
+                                       "result_file":  "D:\\STELMAR-Gate\\dryrun-work\\gates\\load-settled\\result.json",
+                                       "status":  "PASS",
+                                       "started":  "2026-11-15T12:12:49.7876844+05:30",
+                                       "reason":  "PASS (PROVISIONAL: emulated)",
+                                       "ended":  "2026-11-15T12:18:57.9180004+05:30",
+                                       "minutes":  6.1
+                                   },
+                  "panic":  {
+                                "attempts":  1,
+                                "result_file":  "D:\\STELMAR-Gate\\dryrun-work\\gates\\panic\\result.json",
+                                "status":  "PASS",
+                                "started":  "2026-11-15T12:19:16.4543372+05:30",
+                                "reason":  "PASS (PROVISIONAL: emulated)",
+                                "ended":  "2026-11-15T12:23:45.5908147+05:30",
+                                "minutes":  4.5
+                            },
+                  "webview":  {
+                                  "attempts":  1,
+                                  "result_file":  "D:\\STELMAR-Gate\\dryrun-work\\gates\\webview\\result.json",
+                                  "status":  "PASS",
+                                  "started":  "2026-11-15T12:24:03.9649186+05:30",
+                                  "reason":  "PASS (PROVISIONAL: emulated)",
+                                  "ended":  "2026-11-15T12:28:07.0924956+05:30",
+                                  "minutes":  4.1
+                              },
+                  "kill":  {
+                               "attempts":  1,
+                               "result_file":  "D:\\STELMAR-Gate\\dryrun-work\\gates\\kill\\result.json",
+                               "status":  "PASS",
+                               "started":  "2026-11-15T12:28:25.13928+05:30",
+                               "reason":  "PASS (PROVISIONAL: emulated)",
+                               "ended":  "2026-11-15T12:33:58.8169901+05:30",
+                               "minutes":  5.6
+                           },
+                  "live-batch-safety":  {
+                                            "attempts":  1,
+                                            "result_file":  "D:\\STELMAR-Gate\\dryrun-work\\gates\\live-batch-safety\\result.json",
+                                            "status":  "PASS",
+                                            "started":  "2026-11-15T12:34:17.7013383+05:30",
+                                            "reason":  "PASS (PROVISIONAL: emulated) [beside the recorder: live engine (voice detection) and batch engine on CPU (avx2), model large-v3-turbo-q5_0 (the quick check\u0027s rolling model for English); batch 2 threads, live 2 threads]",
+                                            "ended":  "2026-11-15T12:40:23.2470018+05:30",
+                                            "minutes":  6.1
+                                        },
+                  "bg-decode-info":  {
+                                         "attempts":  1,
+                                         "result_file":  "D:\\STELMAR-Gate\\dryrun-work\\gates\\bg-decode-info\\result.json",
+                                         "status":  "INFO",
+                                         "started":  "2026-11-15T12:40:41.1301853+05:30",
+                                         "reason":  "shared upstream breaks over 5 minutes: 0 without a background decode, 0 with one (CPU (avx2), model large-v3-turbo-q5_0 (the quick check\u0027s rolling model for English); batch 2 threads, live 2 threads); breaks only in the app: 0 and 0",
+                                         "ended":  "2026-11-15T12:52:52.5104529+05:30",
+                                         "minutes":  12.2
+                                     },
+                  "speed-table-cpu":  {
+                                          "attempts":  1,
+                                          "result_file":  "D:\\STELMAR-Gate\\dryrun-work\\gates\\speed-table-cpu\\result.json",
+                                          "status":  "INFO",
+                                          "started":  "2026-11-15T12:53:10.9488036+05:30",
+                                          "reason":  "1 of 1 cells measured; slowest RTF 1.087; information only",
+                                          "ended":  "2026-11-15T12:55:27.4769169+05:30",
+                                          "minutes":  2.3
+                                      },
+                  "batch-scripts":  {
+                                        "attempts":  1,
+                                        "result_file":  "D:\\STELMAR-Gate\\dryrun-work\\gates\\batch-scripts\\result.json",
+                                        "status":  "PASS",
+                                        "started":  "2026-11-15T12:55:45.5234092+05:30",
+                                        "reason":  "6 runs on 2 device(s) (Intel(R) RaptorLake-S Mobile Graphics Controller), 0 problem(s)",
+                                        "ended":  "2026-11-15T12:58:48.2099826+05:30",
+                                        "minutes":  3
+                                    },
+                  "network-off":  {
+                                      "attempts":  4,
+                                      "status":  "PASS",
+                                      "reason":  "engines and the release app made no network connection with the network off; no shipped executable imports Winsock, WinHTTP or WinINet",
+                                      "started":  "2026-11-15T15:44:38.5649362+05:30",
+                                      "result_file":  "D:\\STELMAR-Gate\\dryrun-work\\gates\\network-off\\result.json",
+                                      "minutes":  7.1,
+                                      "ended":  "2026-11-15T15:51:46.2566758+05:30"
+                                  },
+                  "rename-engines":  {
+                                         "attempts":  1,
+                                         "status":  "PASS",
+                                         "reason":  "PASS (PROVISIONAL: emulated)",
+                                         "result_file":  "D:\\STELMAR-Gate\\dryrun-work\\gates\\rename-engines\\result.json",
+                                         "started":  "2026-11-15T15:53:31.30188+05:30",
+                                         "minutes":  21.2,
+                                         "ended":  "2026-11-15T16:14:44.6245644+05:30"
+                                     },
+                  "mic-run":  {
+                                  "attempts":  0,
+                                  "status":  "PENDING",
+                                  "reason":  "needs a person at the keyboard (running unattended)"
+                              },
+                  "hashing-1":  {
+                                    "attempts":  1,
+                                    "result_file":  "D:\\STELMAR-Gate\\dryrun-work\\gates\\hashing-1\\result.json",
+                                    "status":  "FAIL",
+                                    "started":  "2026-11-17T10:37:41.9721263+05:30",
+                                    "reason":  "FAIL",
+                                    "ended":  "2026-11-17T10:43:21.7763812+05:30",
+                                    "minutes":  5.7
+                                },
+                  "hashing-2-10":  {
+                                       "attempts":  1,
+                                       "result_file":  "D:\\STELMAR-Gate\\dryrun-work\\gates\\hashing-2-10\\result.json",
+                                       "status":  "FAIL",
+                                       "started":  "2026-11-17T12:07:24.7325246+05:30",
+                                       "reason":  "1 of 1 hashing runs failed (run2)",
+                                       "ended":  "2026-11-17T12:13:16.4627196+05:30",
+                                       "minutes":  5.9
+                                   },
+                  "load-cold":  {
+                                    "attempts":  1,
+                                    "result_file":  "D:\\STELMAR-Gate\\dryrun-work\\gates\\load-cold\\result.json",
+                                    "status":  "PASS",
+                                    "started":  "2026-11-17T13:46:18.0394929+05:30",
+                                    "reason":  "PASS (PROVISIONAL: emulated)",
+                                    "ended":  "2026-11-17T13:53:24.4422769+05:30",
+                                    "minutes":  7.1
+                                }
+              },
+    "order_used":  [
+                       "engines-info",
+                       "quick-check",
+                       "speed-table-igpu",
+                       "soak",
+                       "load-settled",
+                       "panic",
+                       "webview",
+                       "kill",
+                       "live-batch-safety",
+                       "bg-decode-info",
+                       "speed-table-cpu",
+                       "batch-scripts",
+                       "network-off",
+                       "network-off",
+                       "network-off",
+                       "network-off",
+                       "rename-engines",
+                       "hashing-1",
+                       "hashing-2-10",
+                       "load-cold"
+                   ],
+    "backup_root":  "C:\\STELMAR-Gate-Backup"
+}

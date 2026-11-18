@@ -1,0 +1,47 @@
+{
+    "id":  "webview",
+    "status":  "PASS",
+    "headline":  "PASS (PROVISIONAL: emulated)",
+    "measured":  {
+                     "rig":  "vb-cable",
+                     "minutes":  3,
+                     "exit_code":  0,
+                     "run_dir":  "D:\\STELMAR-Gate\\dryrun-work\\audio\\webview-emu-low-20261115-122452",
+                     "shared_breaks":  0,
+                     "app_only_breaks":  0,
+                     "detectors":  {
+                                       "zero_gap":  {
+                                                        "Firings":  0,
+                                                        "Matched":  0,
+                                                        "MatchedBoth":  0,
+                                                        "FalseAlarms":  0,
+                                                        "RealMissed":  0,
+                                                        "ReferenceFindings":  0,
+                                                        "PerHour":  0
+                                                    },
+                                       "repeated_block":  {
+                                                              "Firings":  0,
+                                                              "Matched":  0,
+                                                              "MatchedBoth":  0,
+                                                              "FalseAlarms":  0,
+                                                              "RealMissed":  0,
+                                                              "ReferenceFindings":  0,
+                                                              "PerHour":  0
+                                                          }
+                                   }
+                 },
+    "threshold":  "display recovers; no gap; equals both references",
+    "rig":  "VB-CABLE",
+    "rig_detail":  "",
+    "shared_breaks":  0,
+    "evidence":  [
+                     "D:\\STELMAR-Gate\\dryrun-work\\gates\\webview\\evidence\\webview-emu-low.txt",
+                     "D:\\STELMAR-Gate\\dryrun-work\\gates\\webview\\webview-additions.txt"
+                 ],
+    "notes":  [
+
+              ],
+    "quick":  true,
+    "not_at_full_length":  false,
+    "finished":  "2026-11-15T12:28:06.8868747+05:30"
+}

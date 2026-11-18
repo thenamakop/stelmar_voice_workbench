@@ -1,0 +1,51 @@
+{
+    "id":  "live-batch-safety",
+    "status":  "PASS",
+    "headline":  "PASS (PROVISIONAL: emulated) [beside the recorder: live engine (voice detection) and batch engine on CPU (avx2), model large-v3-turbo-q5_0 (the quick check\u0027s rolling model for English); batch 2 threads, live 2 threads]",
+    "measured":  {
+                     "rig":  "vb-cable",
+                     "minutes":  5,
+                     "exit_code":  0,
+                     "run_dir":  "D:\\STELMAR-Gate\\dryrun-work\\audio\\soak-emu-low-20261115-123508",
+                     "shared_breaks":  0,
+                     "app_only_breaks":  0,
+                     "detectors":  {
+                                       "zero_gap":  {
+                                                        "Firings":  0,
+                                                        "Matched":  0,
+                                                        "MatchedBoth":  0,
+                                                        "FalseAlarms":  0,
+                                                        "RealMissed":  0,
+                                                        "ReferenceFindings":  0,
+                                                        "PerHour":  0
+                                                    },
+                                       "repeated_block":  {
+                                                              "Firings":  0,
+                                                              "Matched":  0,
+                                                              "MatchedBoth":  0,
+                                                              "FalseAlarms":  0,
+                                                              "RealMissed":  0,
+                                                              "ReferenceFindings":  0,
+                                                              "PerHour":  0
+                                                          }
+                                   },
+                     "beside":  {
+                                    "live":  "wb-engine live, voice detection only, 2 threads, normal priority",
+                                    "batch":  "wb-engine batch, CPU (avx2), model large-v3-turbo-q5_0 (the quick check\u0027s rolling model for English); batch 2 threads, live 2 threads, below-normal priority; the batch thread count is halved while a live session runs, as in the app"
+                                }
+                 },
+    "threshold":  "zero overruns, xruns and dropped samples; recording equals both references while wb-engine live (voice detection only until Phase 7) and a batch engine run beside the recorder",
+    "rig":  "VB-CABLE",
+    "rig_detail":  "",
+    "shared_breaks":  0,
+    "evidence":  [
+                     "D:\\STELMAR-Gate\\dryrun-work\\gates\\live-batch-safety\\evidence\\soak-emu-low.txt",
+                     "D:\\STELMAR-Gate\\dryrun-work\\gates\\live-batch-safety\\live-batch-safety-additions.txt"
+                 ],
+    "notes":  [
+                  "the live engine decodes nothing yet (Phase 7); run this gate again when decoding lands"
+              ],
+    "quick":  true,
+    "not_at_full_length":  false,
+    "finished":  "2026-11-15T12:40:23.1588892+05:30"
+}

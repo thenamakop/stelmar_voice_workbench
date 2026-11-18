@@ -1,0 +1,3 @@
+  raw read of 128 MB from the end of ggml-large-v3-q5_0.bin before the app started: 1,628 MB/s (the disk's own speed with a cold cache; 128 MB of this model is now warm)
+  the app hashed 6 files at 907 MB/s while recording
+  started after a restart: yes (the run counts as cold only then)

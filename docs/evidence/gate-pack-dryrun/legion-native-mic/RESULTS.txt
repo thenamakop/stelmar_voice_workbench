@@ -1,0 +1,3 @@
+Gate pack run: low laptop, machine LENOVO-83DF-b8384c, created 2026-11-16T23:29:00Z
+Pack commit 65e05bfa108888260febc6f6f98d979e827e5254; dry run: native on the Legion (legion-native-mic), not a laptop; -Quick, not at full length
+PASS     mic-run              the app equals both independent references sample for sample (microphone run, 15 minutes)

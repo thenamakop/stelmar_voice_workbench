@@ -1,0 +1,37 @@
+Quick system check (gate pack)
+machine: LENOVO-83DF-b8384c; profile: emu-low
+date: 2026-11-15 11:59
+the gate build exited 0 after 7.0 min
+
+check time: 414 s against the 480 s bar: within
+partial: yes (expected on a low laptop: the processor cells and the night model are left for the full check)
+recorder safety, hybrid gpu 0: passed; 209 s, 0 overruns, 0 driver xruns
+recorder safety, gpu 0: passed; 209 s, 0 overruns, 0 driver xruns
+tier: C; transcribes on: Intel(R) UHD Graphics (Vulkan)
+  en: large-v3-turbo-q5_0, RTF 0.475, meets the bar: yes, ready about 4.8 min after Stop
+  hi: large-v3-turbo-q5_0, RTF 0.687, meets the bar: yes, ready about 6.9 min after Stop
+  ur: large-v3-turbo-q5_0, RTF 0.655, meets the bar: yes, ready about 6.6 min after Stop
+  verdict line: Record + post-process. Live text is off by default and not offered on this machine.
+  verdict line: Transcribing runs on Intel(R) UHD Graphics (Vulkan).
+  verdict line: English: large-v3-turbo-q5_0, about 5 minutes after Stop.
+  verdict line: Hindi (Devanagari): large-v3-turbo-q5_0, about 7 minutes after Stop.
+  verdict line: Urdu (Nastaliq): large-v3-turbo-q5_0, about 7 minutes after Stop.
+  verdict line: The code-switching (Hinglish) model is too slow to run on every chunk here.
+  verdict line: Some measurements are still to come: this verdict is partial.
+  verdict line: The model choice is provisional until the models have been checked for accuracy.
+graphics adapter on Hindi: worst RTF 0.687; slower than 1.5x real time: no
+engine cells seen by the process watcher: 9
+  11:52:33  small en on gpu, 2 threads, rolling, excerpt-bench-en-0-10.wav: 6.3 s
+  11:52:40  large-v3-turbo-q5_0 en on gpu, 2 threads, rolling, excerpt-bench-en-0-30.wav: 30.8 s
+  11:53:11  large-v3-turbo-q5_0 hi on gpu, 2 threads, rolling, excerpt-bench-hi-0-60.wav: 84.5 s
+  11:54:35  large-v3-turbo-q5_0 ur on gpu, 2 threads, rolling, excerpt-bench-ur-0-60.wav: 80.9 s
+  11:55:56  large-v3-turbo-q5_0 hi on gpu, 2 threads, rolling, excerpt-bench-hi-0-30.wav: 51.5 s
+  11:56:48  large-v3-turbo-q5_0 hi on cpu, 1 threads, rolling, excerpt-bench-hi-30-10.wav: 120.5 s
+  11:56:51  large-v3-turbo-q5_0 hi on gpu, 2 threads, rolling, excerpt-bench-hi-0-30.wav: 52.0 s
+  11:57:43  large-v3-turbo-q5_0 hi on gpu, 2 threads, rolling, excerpt-bench-hi-0-30.wav: 51.2 s
+  11:58:34  large-v3-turbo-q5_0 hi on gpu, 2 threads, rolling, excerpt-bench-hi-0-30.wav: 51.5 s
+cells together: 529 s (128% of the check; the rest is the recorder safety run, the hybrid test and waiting); longest cell: 121 s
+hybrid test: none recorded (the configuration chosen has no CPU-plus-graphics test)
+the whole check took 414 s; 66 s of the 480 s bar remained
+
+QUICK-CHECK RESULT: PASS

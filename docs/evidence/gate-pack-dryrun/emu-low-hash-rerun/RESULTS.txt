@@ -1,0 +1,5 @@
+Gate pack run: low laptop, machine LENOVO-83DF-b8384c, created 2026-11-17T12:29:45Z
+Pack commit 6b68837b2fd1c1a7d4d0954276e5a25b44f2ee42; EMULATED (emu-low), not a laptop; -Quick, not at full length
+PASS     engines-info         avx2 exit 0; avx512 exit 3; vulkan exit 0
+PASS     hashing-1            PASS (PROVISIONAL: emulated)
+INFO     hashing-2-10         every run kept the recorder clean, but only 0 of the 1 purged runs counted as cold (warm rate 1,410 MB/s)

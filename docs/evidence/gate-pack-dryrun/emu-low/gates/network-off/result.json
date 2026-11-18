@@ -1,0 +1,26 @@
+{
+    "id":  "network-off",
+    "status":  "PASS",
+    "headline":  "engines and the release app made no network connection with the network off; no shipped executable imports Winsock, WinHTTP or WinINet",
+    "measured":  {
+                     "static_control":  true,
+                     "static_findings":  [
+
+                                         ],
+                     "engines":  "NETWORK-OFF RESULT: PASS (every engine ran with the network off: info and a short decode, no non-loopback socket)"
+                 },
+    "threshold":  "no non-loopback socket in any engine or app process tree with the network off; no Winsock, WinHTTP or WinINet import in a shipped executable",
+    "rig":  "",
+    "rig_detail":  "",
+    "shared_breaks":  null,
+    "evidence":  [
+                     "D:\\STELMAR-Gate\\dryrun-work\\gates\\network-off\\network-off.txt",
+                     "D:\\STELMAR-Gate\\dryrun-work\\gates\\network-off\\evidence\\network-off-engines.txt"
+                 ],
+    "notes":  [
+
+              ],
+    "quick":  true,
+    "not_at_full_length":  false,
+    "finished":  "2026-11-15T15:51:45.3981654+05:30"
+}

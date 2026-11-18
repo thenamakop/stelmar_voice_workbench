@@ -1,0 +1,675 @@
+{
+    "pack_version":  1,
+    "source_commit":  "6b68837b2fd1c1a7d4d0954276e5a25b44f2ee42",
+    "machine":  "LENOVO-83DF-b8384c",
+    "role":  "low",
+    "emulated":  "emu-low",
+    "quick":  true,
+    "run_label":  "dryrun-hash",
+    "created":  "2026-11-17T17:59:45.7423843+05:30",
+    "restart":  {
+                    "requested_at":  "2026-11-17T17:26:39.4011404+05:30",
+                    "boot_time_before":  "2026-11-17T13:44:50.4395553+05:30",
+                    "resumed_at":  "2026-11-17T17:28:30.1074893+05:30",
+                    "uptime_at_resume_min":  1.2
+                },
+    "order_used":  [
+                       "engines-info",
+                       "hashing-1",
+                       "hashing-2-10"
+                   ],
+    "gates":  [
+                  {
+                      "id":  "engines-info",
+                      "priority":  "P1",
+                      "status":  "PASS",
+                      "attempts":  1,
+                      "started":  "2026-11-17T17:22:18.0034375+05:30",
+                      "ended":  "2026-11-17T17:22:30.1555015+05:30",
+                      "minutes":  0.2,
+                      "headline":  "avx2 exit 0; avx512 exit 3; vulkan exit 0",
+                      "measured":  {
+                                       "variants":  {
+                                                        "avx2":  {
+                                                                     "exit":  0,
+                                                                     "error_code":  "",
+                                                                     "devices":  [
+                                                                                     {
+                                                                                         "backend":  "CPU",
+                                                                                         "description":  "Intel(R) Core(TM) i9-14900HX",
+                                                                                         "kind":  "cpu",
+                                                                                         "driver":  ""
+                                                                                     }
+                                                                                 ],
+                                                                     "imports_not_in_system32":  [
+
+                                                                                                 ]
+                                                                 },
+                                                        "avx512":  {
+                                                                       "exit":  3,
+                                                                       "error_code":  "cpu_features",
+                                                                       "devices":  [
+
+                                                                                   ],
+                                                                       "imports_not_in_system32":  [
+
+                                                                                                   ]
+                                                                   },
+                                                        "vulkan":  {
+                                                                       "exit":  0,
+                                                                       "error_code":  "",
+                                                                       "devices":  [
+                                                                                       {
+                                                                                           "backend":  "Vulkan",
+                                                                                           "description":  "Intel(R) RaptorLake-S Mobile Graphics Controller",
+                                                                                           "kind":  "igpu",
+                                                                                           "driver":  "32.0.101.7092"
+                                                                                       },
+                                                                                       {
+                                                                                           "backend":  "Vulkan",
+                                                                                           "description":  "NVIDIA GeForce RTX 4070 Laptop GPU",
+                                                                                           "kind":  "gpu",
+                                                                                           "driver":  "32.0.16.2114"
+                                                                                       },
+                                                                                       {
+                                                                                           "backend":  "CPU",
+                                                                                           "description":  "Intel(R) Core(TM) i9-14900HX",
+                                                                                           "kind":  "cpu",
+                                                                                           "driver":  ""
+                                                                                       }
+                                                                                   ],
+                                                                       "imports_not_in_system32":  [
+
+                                                                                                   ]
+                                                                   }
+                                                    },
+                                       "cpu":  "Intel(R) Core(TM) i9-14900HX",
+                                       "avx512f":  false,
+                                       "avx512_applicable":  false,
+                                       "avx512_features_present":  [
+
+                                                                   ],
+                                       "avx512_engine_message":  "This engine build (avx512) needs CPU features this computer does not have: avx512f, avx512cd, avx512vl, avx512dq, avx512bw. Use the avx2 build, or run the system check, which picks a build that fits.",
+                                       "gpus":  [
+                                                    {
+                                                        "name":  "NVIDIA GeForce RTX 4070 Laptop GPU",
+                                                        "driver":  "32.0.16.2114",
+                                                        "driver_date":  "2026-10-27",
+                                                        "integrated":  false
+                                                    },
+                                                    {
+                                                        "name":  "Intel(R) UHD Graphics",
+                                                        "driver":  "32.0.101.7092",
+                                                        "driver_date":  "2026-09-03",
+                                                        "integrated":  true
+                                                    }
+                                                ]
+                                   },
+                      "threshold":  "avx2 exit 0; avx512 exit 0 only with AVX-512 else 3 with a message; vulkan exit 0 and each adapter once",
+                      "rig":  "",
+                      "rig_detail":  "",
+                      "shared_breaks":  null,
+                      "evidence":  "D:\\STELMAR-Gate\\dryrun-hash\\gates\\engines-info\\engines-info.txt",
+                      "notes":  {
+
+                                },
+                      "quick":  true,
+                      "not_at_full_length":  false,
+                      "ledger":  [
+                                     {
+                                         "table":  "gates",
+                                         "match":  "`wb-engine-avx2 info` succeeds from an engines-only folder",
+                                         "kind":  "verdict"
+                                     },
+                                     {
+                                         "table":  "gates",
+                                         "match":  "`wb-engine-avx512 info` exits with code 3",
+                                         "kind":  "verdict"
+                                     },
+                                     {
+                                         "table":  "gates",
+                                         "match":  "`wb-engine-vulkan info` lists the Intel UHD once",
+                                         "kind":  "verdict"
+                                     },
+                                     {
+                                         "table":  "gates",
+                                         "match":  "Portable builds (`GGML_NATIVE=OFF`) run on a CPU other than",
+                                         "kind":  "verdict",
+                                         "needs_avx512":  true
+                                     },
+                                     {
+                                         "table":  "gates",
+                                         "match":  "Vulkan on the laptops\u0027 own integrated GPUs and drivers",
+                                         "kind":  "verdict"
+                                     }
+                                 ]
+                  },
+                  {
+                      "id":  "hashing-1",
+                      "priority":  "P1",
+                      "status":  "PASS",
+                      "attempts":  1,
+                      "started":  "2026-11-17T17:29:02.0780981+05:30",
+                      "ended":  "2026-11-17T17:34:47.8173409+05:30",
+                      "minutes":  5.8,
+                      "headline":  "PASS (PROVISIONAL: emulated)",
+                      "measured":  {
+                                       "rig":  "vb-cable",
+                                       "minutes":  4,
+                                       "exit_code":  0,
+                                       "run_dir":  "D:\\STELMAR-Gate\\dryrun-hash\\audio\\hashing-emu-low-20261117-173025",
+                                       "shared_breaks":  0,
+                                       "app_only_breaks":  0,
+                                       "detectors":  {
+                                                         "zero_gap":  {
+                                                                          "Firings":  0,
+                                                                          "Matched":  0,
+                                                                          "MatchedBoth":  0,
+                                                                          "FalseAlarms":  0,
+                                                                          "RealMissed":  0,
+                                                                          "ReferenceFindings":  0,
+                                                                          "PerHour":  0
+                                                                      },
+                                                         "repeated_block":  {
+                                                                                "Firings":  0,
+                                                                                "Matched":  0,
+                                                                                "MatchedBoth":  0,
+                                                                                "FalseAlarms":  0,
+                                                                                "RealMissed":  0,
+                                                                                "ReferenceFindings":  0,
+                                                                                "PerHour":  0
+                                                                            }
+                                                     },
+                                       "hash_mb_per_s":  906.56729377024192,
+                                       "raw_read_mb_per_s":  1627.5029617369055,
+                                       "after_restart":  true,
+                                       "hashed_files":  6
+                                   },
+                      "threshold":  "the app hashed at least 1 GB of model files in background mode while recording; models and recording on the same disk; the run followed a restart; recording equals both references",
+                      "rig":  "VB-CABLE",
+                      "rig_detail":  "",
+                      "shared_breaks":  0,
+                      "evidence":  [
+                                       "D:\\STELMAR-Gate\\dryrun-hash\\gates\\hashing-1\\evidence\\hashing-emu-low.txt",
+                                       "D:\\STELMAR-Gate\\dryrun-hash\\gates\\hashing-1\\hashing-1-additions.txt",
+                                       "D:\\STELMAR-Gate\\dryrun-hash\\gates\\hashing-1\\hashing-1-additions.txt"
+                                   ],
+                      "notes":  {
+
+                                },
+                      "quick":  true,
+                      "not_at_full_length":  false,
+                      "ledger":  [
+                                     {
+                                         "table":  "open",
+                                         "match":  "R5 (owner\u0027s decision, 12 Nov 2026): CLOSED on the Legion under `emu-low`",
+                                         "kind":  "verdict"
+                                     },
+                                     {
+                                         "table":  "open",
+                                         "match":  "Hashing and upstream breaks (13 Nov 2026)",
+                                         "kind":  "verdict"
+                                     }
+                                 ]
+                  },
+                  {
+                      "id":  "hashing-2-10",
+                      "priority":  "P2",
+                      "status":  "INFO",
+                      "attempts":  1,
+                      "started":  "2026-11-17T17:35:27.4815461+05:30",
+                      "ended":  "2026-11-17T17:59:05.9785585+05:30",
+                      "minutes":  23.6,
+                      "headline":  "every run kept the recorder clean, but only 0 of the 1 purged runs counted as cold (warm rate 1,410 MB/s)",
+                      "measured":  {
+                                       "runs":  4,
+                                       "cold_runs":  0,
+                                       "warm_rate_mb_s":  1409.5295393957347,
+                                       "shared_breaks_purged":  2,
+                                       "shared_breaks_warm":  1,
+                                       "extra_purged_runs":  2,
+                                       "rig":  "vb-cable"
+                                   },
+                      "threshold":  "every run: zero overruns and no gap while the models are hashed in background mode (at least 1 GB, 10 s inside the recording); recording equals both references; a purged run counts as cold only at most 0.6 times the warm-cache rate of this laptop",
+                      "rig":  "VB-CABLE",
+                      "rig_detail":  "",
+                      "shared_breaks":  3,
+                      "evidence":  [
+                                       "D:\\STELMAR-Gate\\dryrun-hash\\gates\\hashing-2-10\\evidence\\hashing-emu-low-run2.txt",
+                                       "D:\\STELMAR-Gate\\dryrun-hash\\gates\\hashing-2-10\\hashing-2-10-run2-additions.txt",
+                                       "D:\\STELMAR-Gate\\dryrun-hash\\gates\\hashing-2-10\\evidence\\hashing-emu-low-run3.txt",
+                                       "D:\\STELMAR-Gate\\dryrun-hash\\gates\\hashing-2-10\\hashing-2-10-run3-additions.txt",
+                                       "D:\\STELMAR-Gate\\dryrun-hash\\gates\\hashing-2-10\\evidence\\hashing-emu-low-extra1.txt",
+                                       "D:\\STELMAR-Gate\\dryrun-hash\\gates\\hashing-2-10\\hashing-2-10-extra1-additions.txt",
+                                       "D:\\STELMAR-Gate\\dryrun-hash\\gates\\hashing-2-10\\evidence\\hashing-emu-low-extra2.txt",
+                                       "D:\\STELMAR-Gate\\dryrun-hash\\gates\\hashing-2-10\\hashing-2-10-extra2-additions.txt",
+                                       "D:\\STELMAR-Gate\\dryrun-hash\\gates\\hashing-2-10\\hashing-2-10-summary.txt"
+                                   ],
+                      "notes":  [
+                                    "run2: the app read the models at 925 MB/s, 0.66 times the warm rate of 1,410 MB/s (limit 0.6): the read cannot be shown to be cold (on a fast disk it runs at about the warm rate), so this run does not count as cold",
+                                    "extra1: the app read the models at 886 MB/s, 0.63 times the warm rate of 1,410 MB/s (limit 0.6): the read cannot be shown to be cold (on a fast disk it runs at about the warm rate), so this run does not count as cold",
+                                    "extra2: the app read the models at 910 MB/s, 0.65 times the warm rate of 1,410 MB/s (limit 0.6): the read cannot be shown to be cold (on a fast disk it runs at about the warm rate), so this run does not count as cold"
+                                ],
+                      "quick":  true,
+                      "not_at_full_length":  false,
+                      "ledger":  [
+                                     {
+                                         "table":  "open",
+                                         "match":  "Hashing and upstream breaks (13 Nov 2026)",
+                                         "kind":  "verdict"
+                                     },
+                                     {
+                                         "table":  "open",
+                                         "match":  "VB-CABLE uses the whole upstream-break allowance",
+                                         "kind":  "info"
+                                     }
+                                 ]
+                  },
+                  {
+                      "id":  "full-check",
+                      "priority":  "P2",
+                      "status":  "SKIPPED",
+                      "attempts":  0,
+                      "started":  null,
+                      "ended":  "2026-11-17T17:21:43.9051124+05:30",
+                      "minutes":  null,
+                      "headline":  "skipped under -Quick",
+                      "measured":  null,
+                      "threshold":  "the check completes within the 120 minute limit; quick against full RTFs reported with the 10% flag",
+                      "rig":  "",
+                      "rig_detail":  "",
+                      "shared_breaks":  null,
+                      "evidence":  {
+
+                                   },
+                      "notes":  {
+
+                                },
+                      "quick":  true,
+                      "not_at_full_length":  false,
+                      "ledger":  [
+                                     {
+                                         "table":  "gates",
+                                         "match":  "One full check under `emu-low` and the validity check",
+                                         "kind":  "info"
+                                     }
+                                 ]
+                  }
+              ],
+    "pending":  [
+                    {
+                        "id":  "quick-check",
+                        "priority":  "P1",
+                        "title":  "System check (quick) with per-cell times, graphics-alone run against the 480 s bar",
+                        "reason":  "not run",
+                        "ledger":  [
+                                       {
+                                           "table":  "gates",
+                                           "match":  "Quick check under 8 minutes; the verdict follows the measured numbers",
+                                           "kind":  "verdict"
+                                       },
+                                       {
+                                           "table":  "gates",
+                                           "match":  "Verdicts and tiers on the real laptops",
+                                           "kind":  "info"
+                                       },
+                                       {
+                                           "table":  "gates",
+                                           "match":  "Quick-check time on the real low-baseline laptop",
+                                           "kind":  "verdict"
+                                       },
+                                       {
+                                           "table":  "open",
+                                           "match":  "PR #6 review round 2, decision 2 (owner, 14 Nov 2026): the graphics-alone run",
+                                           "kind":  "info"
+                                       }
+                                   ]
+                    },
+                    {
+                        "id":  "speed-table-igpu",
+                        "priority":  "P1",
+                        "title":  "Speed table on the real integrated graphics (driver versions recorded), five models, English and Hindi",
+                        "reason":  "not run",
+                        "ledger":  [
+                                       {
+                                           "table":  "gates",
+                                           "match":  "Speed tables: `wb-engine bench`, four models",
+                                           "kind":  "info"
+                                       },
+                                       {
+                                           "table":  "open",
+                                           "match":  "Hinglish (a large-v3 model) ran at about RTF 2.5 to 3.7 on the Legion at 8 threads",
+                                           "kind":  "info"
+                                       },
+                                       {
+                                           "table":  "open",
+                                           "match":  "Speed-table notes for the tiers (owner, 11 Nov 2026",
+                                           "kind":  "info"
+                                       }
+                                   ]
+                    },
+                    {
+                        "id":  "soak",
+                        "priority":  "P1",
+                        "title":  "2-hour soak on the loopback, with the thermal sampler",
+                        "reason":  "not run",
+                        "ledger":  [
+                                       {
+                                           "table":  "gates",
+                                           "match":  "Soak: 2 hours from VB-CABLE",
+                                           "kind":  "verdict"
+                                       },
+                                       {
+                                           "table":  "gates",
+                                           "match":  "Thermal behaviour during the 2-hour soak on a thin laptop",
+                                           "kind":  "info"
+                                       },
+                                       {
+                                           "table":  "gates",
+                                           "match":  "Mirror SHA-256 equals the originals after Stop",
+                                           "kind":  "verdict"
+                                       },
+                                       {
+                                           "table":  "open",
+                                           "match":  "Laptop gate pack: add a reference capture that does not use cpal",
+                                           "kind":  "info"
+                                       },
+                                       {
+                                           "table":  "open",
+                                           "match":  "Re-run Phase 1 on both laptops with a hardware audio interface",
+                                           "kind":  "verdict",
+                                           "needs_hardware_interface":  true
+                                       },
+                                       {
+                                           "table":  "open",
+                                           "match":  "Measure the `zero_gap` and `repeated_block` rates of the recorder on real audio",
+                                           "kind":  "info",
+                                           "needs_hardware_interface":  true
+                                       },
+                                       {
+                                           "table":  "open",
+                                           "match":  "Validate `repeated_block` on real audio",
+                                           "kind":  "info",
+                                           "needs_hardware_interface":  true
+                                       }
+                                   ]
+                    },
+                    {
+                        "id":  "load-cold",
+                        "priority":  "P1",
+                        "title":  "30-minute load gate within an hour of a restart",
+                        "reason":  "not run",
+                        "ledger":  [
+                                       {
+                                           "table":  "gates",
+                                           "match":  "Load test: 30 minutes with every logical CPU of the job busy",
+                                           "kind":  "verdict"
+                                       },
+                                       {
+                                           "table":  "open",
+                                           "match":  "Load gate on the laptops, two conditions",
+                                           "kind":  "verdict"
+                                       }
+                                   ]
+                    },
+                    {
+                        "id":  "load-settled",
+                        "priority":  "P1",
+                        "title":  "30-minute load gate on a settled, idle laptop (up over 3 hours)",
+                        "reason":  "not run",
+                        "ledger":  [
+                                       {
+                                           "table":  "gates",
+                                           "match":  "Load test: 30 minutes with every logical CPU of the job busy",
+                                           "kind":  "verdict"
+                                       },
+                                       {
+                                           "table":  "open",
+                                           "match":  "Load gate on the laptops, two conditions",
+                                           "kind":  "verdict"
+                                       }
+                                   ]
+                    },
+                    {
+                        "id":  "panic",
+                        "priority":  "P1",
+                        "title":  "Recorder survives panics (command, plain thread, recorder thread)",
+                        "reason":  "not run",
+                        "ledger":  [
+                                       {
+                                           "table":  "gates",
+                                           "match":  "Recorder survives panics (in a command, on a plain thread, inside the recorder thread)",
+                                           "kind":  "verdict"
+                                       }
+                                   ]
+                    },
+                    {
+                        "id":  "webview",
+                        "priority":  "P1",
+                        "title":  "WebView2 browser process killed while recording",
+                        "reason":  "not run",
+                        "ledger":  [
+                                       {
+                                           "table":  "gates",
+                                           "match":  "WebView2 browser process killed while recording",
+                                           "kind":  "verdict"
+                                       }
+                                   ]
+                    },
+                    {
+                        "id":  "kill",
+                        "priority":  "P1",
+                        "title":  "Force-kill the app 5 times mid-recording, with the capture margin of every run",
+                        "reason":  "not run",
+                        "ledger":  [
+                                       {
+                                           "table":  "gates",
+                                           "match":  "Kill test, 5 times: `taskkill /F` mid-recording",
+                                           "kind":  "verdict"
+                                       },
+                                       {
+                                           "table":  "open",
+                                           "match":  "Print the capture margin in the kill gate (13 Nov 2026)",
+                                           "kind":  "verdict"
+                                       }
+                                   ]
+                    },
+                    {
+                        "id":  "network-off",
+                        "priority":  "P1",
+                        "title":  "Network off: engines, static import check, the release app\u0027s quick check",
+                        "reason":  "not run",
+                        "ledger":  [
+                                       {
+                                           "table":  "gates",
+                                           "match":  "Engines run with the network adapters off",
+                                           "kind":  "verdict"
+                                       },
+                                       {
+                                           "table":  "open",
+                                           "match":  "Network-off checker follow-ups (offline audit, 12 Nov 2026)",
+                                           "kind":  "verdict"
+                                       }
+                                   ]
+                    },
+                    {
+                        "id":  "live-batch-safety",
+                        "priority":  "P2",
+                        "title":  "Recorder safety with a live engine and a batch engine running beside it",
+                        "reason":  "not run",
+                        "ledger":  [
+                                       {
+                                           "table":  "open",
+                                           "match":  "PR #6 review round 2, decision 2 (owner, 14 Nov 2026): the graphics-alone run",
+                                           "kind":  "info"
+                                       }
+                                   ]
+                    },
+                    {
+                        "id":  "bg-decode-info",
+                        "priority":  "P2",
+                        "title":  "Information: break counts with and without a background decode",
+                        "reason":  "not run",
+                        "ledger":  [
+                                       {
+                                           "table":  "open",
+                                           "match":  "Shared upstream breaks in the recording rig are unexplained",
+                                           "kind":  "info",
+                                           "needs_hardware_interface":  true
+                                       }
+                                   ]
+                    },
+                    {
+                        "id":  "rename-engines",
+                        "priority":  "P2",
+                        "title":  "Every engine renamed away: the app still records and shows its message",
+                        "reason":  "not run",
+                        "ledger":  [
+                                       {
+                                           "table":  "gates",
+                                           "match":  "Every engine renamed away: the app still records",
+                                           "kind":  "verdict"
+                                       }
+                                   ]
+                    },
+                    {
+                        "id":  "speed-table-cpu",
+                        "priority":  "P2",
+                        "title":  "Speed table on the CPU (AVX2, and AVX-512 where the CPU has it)",
+                        "reason":  "not run",
+                        "ledger":  [
+                                       {
+                                           "table":  "gates",
+                                           "match":  "Speed tables: `wb-engine bench`, four models",
+                                           "kind":  "info"
+                                       },
+                                       {
+                                           "table":  "open",
+                                           "match":  "Hinglish (a large-v3 model) ran at about RTF 2.5 to 3.7 on the Legion at 8 threads",
+                                           "kind":  "info"
+                                       },
+                                       {
+                                           "table":  "open",
+                                           "match":  "The choice of a night (and rolling) model for code-switched sessions",
+                                           "kind":  "info"
+                                       }
+                                   ]
+                    },
+                    {
+                        "id":  "batch-scripts",
+                        "priority":  "P2",
+                        "title":  "Three FLEURS clips per language through medium: right script, no broken text",
+                        "reason":  "not run",
+                        "ledger":  [
+                                       {
+                                           "table":  "gates",
+                                           "match":  "`batch`: three FLEURS clips per language (en, hi, ur)",
+                                           "kind":  "verdict"
+                                       }
+                                   ]
+                    },
+                    {
+                        "id":  "mic-run",
+                        "priority":  "P2",
+                        "title":  "Built-in microphone run: detector rates, mute and room-silence windows, known speech kept local",
+                        "reason":  "not run",
+                        "ledger":  [
+                                       {
+                                           "table":  "open",
+                                           "match":  "Measure the `zero_gap` and `repeated_block` rates of the recorder on real audio",
+                                           "kind":  "info"
+                                       },
+                                       {
+                                           "table":  "open",
+                                           "match":  "Validate `repeated_block` on real audio",
+                                           "kind":  "info"
+                                       }
+                                   ]
+                    }
+                ],
+    "not_in_pack":  [
+                        {
+                            "id":  "supervisor-kill",
+                            "priority":  "P3",
+                            "title":  "Batch engine killed at 5 random points (low value: Phase 4\u0027s supervisor replaces it)",
+                            "reason":  "not in this pack",
+                            "ledger":  [
+                                           {
+                                               "table":  "gates",
+                                               "match":  "Batch engine killed at 5 random points",
+                                               "kind":  "verdict"
+                                           },
+                                           {
+                                               "table":  "gates",
+                                               "match":  "Speed after the heartbeat callbacks",
+                                               "kind":  "verdict"
+                                           }
+                                       ]
+                        }
+                    ],
+    "still_changed":  [
+
+                      ],
+    "fingerprint":  {
+                        "machine":  "LENOVO-83DF-b8384c",
+                        "maker":  "LENOVO",
+                        "model":  "83DF",
+                        "cpu":  "Intel(R) Core(TM) i9-14900HX",
+                        "physical_cores":  24,
+                        "logical_processors":  32,
+                        "max_clock_mhz":  2200,
+                        "avx2":  true,
+                        "avx512f":  false,
+                        "ram_gb":  31.7,
+                        "windows":  "Microsoft Windows 11 Home Single Language build 26200",
+                        "gpus":  [
+                                     {
+                                         "name":  "NVIDIA GeForce RTX 4070 Laptop GPU",
+                                         "driver":  "32.0.16.2114",
+                                         "driver_date":  "2026-10-27",
+                                         "integrated":  false
+                                     },
+                                     {
+                                         "name":  "Intel(R) UHD Graphics",
+                                         "driver":  "32.0.101.7092",
+                                         "driver_date":  "2026-09-03",
+                                         "integrated":  true
+                                     }
+                                 ],
+                        "has_battery":  true,
+                        "power_plan":  "(Balanced)",
+                        "fast_startup":  1,
+                        "audio_endpoints":  [
+                                                "CABLE In 16 Ch (3- VB-Audio Virtual Cable)",
+                                                "CABLE Input (3- VB-Audio Virtual Cable)",
+                                                "CABLE Output (3- VB-Audio Virtual Cable)",
+                                                "Microphone (Steam Streaming Microphone)",
+                                                "Microphone (tranScreen Audio)",
+                                                "Microphone Array (Realtek(R) Audio)",
+                                                "Speakers (Realtek(R) Audio)",
+                                                "Speakers (Steam Streaming Microphone)",
+                                                "Speakers (Steam Streaming Speakers)",
+                                                "Speakers (tranScreen Audio)"
+                                            ],
+                        "audio_effects_software":  [
+                                                       "process IntelAudioService",
+                                                       "process RtkAudUService64",
+                                                       "service IntelAudioService",
+                                                       "service RtkAudioUniversalService"
+                                                   ],
+                        "work_disk":  {
+                                          "Letter":  "D",
+                                          "Disk":  1,
+                                          "BusType":  "NVMe",
+                                          "MediaType":  "SSD"
+                                      },
+                        "backup_disk":  {
+                                            "Letter":  "C",
+                                            "Disk":  0,
+                                            "BusType":  "NVMe",
+                                            "MediaType":  "SSD"
+                                        },
+                        "mirror_on_same_disk":  false,
+                        "taken":  "2026-11-17T17:22:26.8399062+05:30"
+                    }
+}

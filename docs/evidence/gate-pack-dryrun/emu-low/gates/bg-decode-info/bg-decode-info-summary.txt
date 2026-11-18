@@ -1,0 +1,5 @@
+bg-decode-info: the same recording twice, without and with a batch engine decoding in the background
+  minutes per run: 5; batch engine: wb-engine avx2 on CPU (avx2), model large-v3-turbo-q5_0 (the quick check's rolling model for English); batch 2 threads, live 2 threads, model medium, below-normal priority
+  without a decode: PASS (rig vb-cable); shared upstream breaks 0; app-only breaks 0
+  with a decode:    PASS (rig vb-cable); shared upstream breaks 0; app-only breaks 0
+  information only: two runs are too few to say a decode raises or lowers the number; the owner reads the counts next to the earlier rig runs

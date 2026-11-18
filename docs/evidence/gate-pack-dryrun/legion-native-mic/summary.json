@@ -1,0 +1,498 @@
+{
+  "pack_version": 1,
+  "source_commit": "65e05bfa108888260febc6f6f98d979e827e5254",
+  "machine": "LENOVO-83DF-b8384c",
+  "role": "low",
+  "emulated": null,
+  "quick": true,
+  "run_label": "dryrun-mic2",
+  "created": "2026-11-17T04:59:00.8152184+05:30",
+  "restart": {
+    "requested_at": null,
+    "boot_time_before": null,
+    "resumed_at": null,
+    "uptime_at_resume_min": null
+  },
+  "order_used": [
+    "mic-run",
+    "mic-run",
+    "mic-run",
+    "mic-run",
+    "mic-run"
+  ],
+  "gates": [
+    {
+      "id": "full-check",
+      "priority": "P2",
+      "status": "SKIPPED",
+      "attempts": 0,
+      "started": null,
+      "ended": "2026-11-16T00:27:28.1889591+05:30",
+      "minutes": null,
+      "headline": "skipped under -Quick",
+      "measured": null,
+      "threshold": "the check completes within the 120 minute limit; quick against full RTFs reported with the 10% flag",
+      "rig": "",
+      "rig_detail": "",
+      "shared_breaks": null,
+      "evidence": null,
+      "notes": null,
+      "quick": true,
+      "not_at_full_length": false,
+      "ledger": [
+        {
+          "table": "gates",
+          "match": "One full check under `emu-low` and the validity check",
+          "kind": "info"
+        }
+      ]
+    },
+    {
+      "id": "mic-run",
+      "priority": "P2",
+      "status": "PASS",
+      "attempts": 5,
+      "started": "2026-11-17T04:43:03.5201342+05:30",
+      "ended": "2026-11-17T04:58:51.8585732+05:30",
+      "minutes": 15.8,
+      "headline": "the app equals both independent references sample for sample (microphone run, 15 minutes)",
+      "measured": {
+        "minutes": 15,
+        "microphone": "Microphone Array (Realtek(R) Audio)",
+        "overrun_samples": 0,
+        "xruns": 0,
+        "reference_class": "both-equal",
+        "windows": [
+          {
+            "window": "digital mute",
+            "zero_gap": 0,
+            "repeated_block": 0
+          },
+          {
+            "window": "room silence",
+            "zero_gap": 0,
+            "repeated_block": 0
+          },
+          {
+            "window": "outside both windows",
+            "zero_gap": 0,
+            "repeated_block": 0
+          }
+        ],
+        "detectors": {
+          "zero_gap": {
+            "Firings": 0,
+            "Matched": 0,
+            "MatchedBoth": 0,
+            "FalseAlarms": 0,
+            "RealMissed": 0,
+            "ReferenceFindings": 0,
+            "PerHour": 0
+          },
+          "repeated_block": {
+            "Firings": 0,
+            "Matched": 0,
+            "MatchedBoth": 0,
+            "FalseAlarms": 0,
+            "RealMissed": 0,
+            "ReferenceFindings": 0,
+            "PerHour": 0
+          }
+        }
+      },
+      "threshold": "the app equals both independent references of the built-in microphone sample for sample; the recorder counted no overrun; detector firings, false alarms and the two scripted windows are reported as information",
+      "rig": "built-in microphone: Microphone Array (Realtek(R) Audio)",
+      "rig_detail": "",
+      "shared_breaks": null,
+      "evidence": [
+        "D:\\STELMAR-Gate\\mic-work\\gates\\mic-run\\mic-run.txt",
+        "D:\\STELMAR-Gate\\mic-work\\gates\\mic-run\\mic-windows.json"
+      ],
+      "notes": [
+        "audio software running: RtkAudUService64",
+        "audio devices of interest: Intel® Smart Sound Technology BUS; Intel® Smart Sound Technology OED; Microphone Array (Realtek(R) Audio); Realtek Audio Effects Component; Realtek Audio Universal Service; Realtek(R) Audio; Speakers (Realtek(R) Audio)",
+        "Windows audio enhancements: not exposed to the pack; the format the recorder opened is below",
+        "speaker volume set to 50 percent (put back at the end)"
+      ],
+      "quick": true,
+      "not_at_full_length": false,
+      "ledger": [
+        {
+          "table": "open",
+          "match": "Measure the `zero_gap` and `repeated_block` rates of the recorder on real audio",
+          "kind": "info"
+        },
+        {
+          "table": "open",
+          "match": "Validate `repeated_block` on real audio",
+          "kind": "info"
+        }
+      ]
+    }
+  ],
+  "pending": [
+    {
+      "id": "engines-info",
+      "priority": "P1",
+      "title": "Machine fingerprint, engine info for every variant, driver versions",
+      "reason": "not run",
+      "ledger": [
+        {
+          "table": "gates",
+          "match": "`wb-engine-avx2 info` succeeds from an engines-only folder",
+          "kind": "verdict"
+        },
+        {
+          "table": "gates",
+          "match": "`wb-engine-avx512 info` exits with code 3",
+          "kind": "verdict"
+        },
+        {
+          "table": "gates",
+          "match": "`wb-engine-vulkan info` lists the Intel UHD once",
+          "kind": "verdict"
+        },
+        {
+          "table": "gates",
+          "match": "Portable builds (`GGML_NATIVE=OFF`) run on a CPU other than",
+          "kind": "verdict",
+          "needs_avx512": true
+        },
+        {
+          "table": "gates",
+          "match": "Vulkan on the laptops' own integrated GPUs and drivers",
+          "kind": "verdict"
+        }
+      ]
+    },
+    {
+      "id": "quick-check",
+      "priority": "P1",
+      "title": "System check (quick) with per-cell times, graphics-alone run against the 480 s bar",
+      "reason": "not run",
+      "ledger": [
+        {
+          "table": "gates",
+          "match": "Quick check under 8 minutes; the verdict follows the measured numbers",
+          "kind": "verdict"
+        },
+        {
+          "table": "gates",
+          "match": "Verdicts and tiers on the real laptops",
+          "kind": "info"
+        },
+        {
+          "table": "gates",
+          "match": "Quick-check time on the real low-baseline laptop",
+          "kind": "verdict"
+        },
+        {
+          "table": "open",
+          "match": "PR #6 review round 2, decision 2 (owner, 14 Nov 2026): the graphics-alone run",
+          "kind": "info"
+        }
+      ]
+    },
+    {
+      "id": "speed-table-igpu",
+      "priority": "P1",
+      "title": "Speed table on the real integrated graphics (driver versions recorded), five models, English and Hindi",
+      "reason": "not run",
+      "ledger": [
+        {
+          "table": "gates",
+          "match": "Speed tables: `wb-engine bench`, four models",
+          "kind": "info"
+        },
+        {
+          "table": "open",
+          "match": "Hinglish (a large-v3 model) ran at about RTF 2.5 to 3.7 on the Legion at 8 threads",
+          "kind": "info"
+        },
+        {
+          "table": "open",
+          "match": "Speed-table notes for the tiers (owner, 11 Nov 2026",
+          "kind": "info"
+        }
+      ]
+    },
+    {
+      "id": "soak",
+      "priority": "P1",
+      "title": "2-hour soak on the loopback, with the thermal sampler",
+      "reason": "not run",
+      "ledger": [
+        {
+          "table": "gates",
+          "match": "Soak: 2 hours from VB-CABLE",
+          "kind": "verdict"
+        },
+        {
+          "table": "gates",
+          "match": "Thermal behaviour during the 2-hour soak on a thin laptop",
+          "kind": "info"
+        },
+        {
+          "table": "gates",
+          "match": "Mirror SHA-256 equals the originals after Stop",
+          "kind": "verdict"
+        },
+        {
+          "table": "open",
+          "match": "Laptop gate pack: add a reference capture that does not use cpal",
+          "kind": "info"
+        },
+        {
+          "table": "open",
+          "match": "Re-run Phase 1 on both laptops with a hardware audio interface",
+          "kind": "verdict",
+          "needs_hardware_interface": true
+        },
+        {
+          "table": "open",
+          "match": "Measure the `zero_gap` and `repeated_block` rates of the recorder on real audio",
+          "kind": "info",
+          "needs_hardware_interface": true
+        },
+        {
+          "table": "open",
+          "match": "Validate `repeated_block` on real audio",
+          "kind": "info",
+          "needs_hardware_interface": true
+        }
+      ]
+    },
+    {
+      "id": "load-cold",
+      "priority": "P1",
+      "title": "30-minute load gate within an hour of a restart",
+      "reason": "not run",
+      "ledger": [
+        {
+          "table": "gates",
+          "match": "Load test: 30 minutes with every logical CPU of the job busy",
+          "kind": "verdict"
+        },
+        {
+          "table": "open",
+          "match": "Load gate on the laptops, two conditions",
+          "kind": "verdict"
+        }
+      ]
+    },
+    {
+      "id": "load-settled",
+      "priority": "P1",
+      "title": "30-minute load gate on a settled, idle laptop (up over 3 hours)",
+      "reason": "not run",
+      "ledger": [
+        {
+          "table": "gates",
+          "match": "Load test: 30 minutes with every logical CPU of the job busy",
+          "kind": "verdict"
+        },
+        {
+          "table": "open",
+          "match": "Load gate on the laptops, two conditions",
+          "kind": "verdict"
+        }
+      ]
+    },
+    {
+      "id": "panic",
+      "priority": "P1",
+      "title": "Recorder survives panics (command, plain thread, recorder thread)",
+      "reason": "not run",
+      "ledger": [
+        {
+          "table": "gates",
+          "match": "Recorder survives panics (in a command, on a plain thread, inside the recorder thread)",
+          "kind": "verdict"
+        }
+      ]
+    },
+    {
+      "id": "webview",
+      "priority": "P1",
+      "title": "WebView2 browser process killed while recording",
+      "reason": "not run",
+      "ledger": [
+        {
+          "table": "gates",
+          "match": "WebView2 browser process killed while recording",
+          "kind": "verdict"
+        }
+      ]
+    },
+    {
+      "id": "kill",
+      "priority": "P1",
+      "title": "Force-kill the app 5 times mid-recording, with the capture margin of every run",
+      "reason": "not run",
+      "ledger": [
+        {
+          "table": "gates",
+          "match": "Kill test, 5 times: `taskkill /F` mid-recording",
+          "kind": "verdict"
+        },
+        {
+          "table": "open",
+          "match": "Print the capture margin in the kill gate (13 Nov 2026)",
+          "kind": "verdict"
+        }
+      ]
+    },
+    {
+      "id": "hashing-1",
+      "priority": "P1",
+      "title": "Cold-cache model hashing while recording starts: run 1, right after a real restart",
+      "reason": "not run",
+      "ledger": [
+        {
+          "table": "open",
+          "match": "R5 (owner's decision, 12 Nov 2026): CLOSED on the Legion under `emu-low`",
+          "kind": "verdict"
+        },
+        {
+          "table": "open",
+          "match": "Hashing and upstream breaks (13 Nov 2026)",
+          "kind": "verdict"
+        }
+      ]
+    },
+    {
+      "id": "network-off",
+      "priority": "P1",
+      "title": "Network off: engines, static import check, the release app's quick check",
+      "reason": "not run",
+      "ledger": [
+        {
+          "table": "gates",
+          "match": "Engines run with the network adapters off",
+          "kind": "verdict"
+        },
+        {
+          "table": "open",
+          "match": "Network-off checker follow-ups (offline audit, 12 Nov 2026)",
+          "kind": "verdict"
+        }
+      ]
+    },
+    {
+      "id": "hashing-2-10",
+      "priority": "P2",
+      "title": "Model hashing runs 2 to 10: four purged-cold, five warm",
+      "reason": "not run",
+      "ledger": [
+        {
+          "table": "open",
+          "match": "Hashing and upstream breaks (13 Nov 2026)",
+          "kind": "verdict"
+        },
+        {
+          "table": "open",
+          "match": "VB-CABLE uses the whole upstream-break allowance",
+          "kind": "info"
+        }
+      ]
+    },
+    {
+      "id": "live-batch-safety",
+      "priority": "P2",
+      "title": "Recorder safety with a live engine and a batch engine running beside it",
+      "reason": "not run",
+      "ledger": [
+        {
+          "table": "open",
+          "match": "PR #6 review round 2, decision 2 (owner, 14 Nov 2026): the graphics-alone run",
+          "kind": "info"
+        }
+      ]
+    },
+    {
+      "id": "bg-decode-info",
+      "priority": "P2",
+      "title": "Information: break counts with and without a background decode",
+      "reason": "not run",
+      "ledger": [
+        {
+          "table": "open",
+          "match": "Shared upstream breaks in the recording rig are unexplained",
+          "kind": "info",
+          "needs_hardware_interface": true
+        }
+      ]
+    },
+    {
+      "id": "rename-engines",
+      "priority": "P2",
+      "title": "Every engine renamed away: the app still records and shows its message",
+      "reason": "not run",
+      "ledger": [
+        {
+          "table": "gates",
+          "match": "Every engine renamed away: the app still records",
+          "kind": "verdict"
+        }
+      ]
+    },
+    {
+      "id": "speed-table-cpu",
+      "priority": "P2",
+      "title": "Speed table on the CPU (AVX2, and AVX-512 where the CPU has it)",
+      "reason": "not run",
+      "ledger": [
+        {
+          "table": "gates",
+          "match": "Speed tables: `wb-engine bench`, four models",
+          "kind": "info"
+        },
+        {
+          "table": "open",
+          "match": "Hinglish (a large-v3 model) ran at about RTF 2.5 to 3.7 on the Legion at 8 threads",
+          "kind": "info"
+        },
+        {
+          "table": "open",
+          "match": "The choice of a night (and rolling) model for code-switched sessions",
+          "kind": "info"
+        }
+      ]
+    },
+    {
+      "id": "batch-scripts",
+      "priority": "P2",
+      "title": "Three FLEURS clips per language through medium: right script, no broken text",
+      "reason": "not run",
+      "ledger": [
+        {
+          "table": "gates",
+          "match": "`batch`: three FLEURS clips per language (en, hi, ur)",
+          "kind": "verdict"
+        }
+      ]
+    }
+  ],
+  "not_in_pack": [
+    {
+      "id": "supervisor-kill",
+      "priority": "P3",
+      "title": "Batch engine killed at 5 random points (low value: Phase 4's supervisor replaces it)",
+      "reason": "not in this pack",
+      "ledger": [
+        {
+          "table": "gates",
+          "match": "Batch engine killed at 5 random points",
+          "kind": "verdict"
+        },
+        {
+          "table": "gates",
+          "match": "Speed after the heartbeat callbacks",
+          "kind": "verdict"
+        }
+      ]
+    }
+  ],
+  "still_changed": [],
+  "fingerprint": null
+}

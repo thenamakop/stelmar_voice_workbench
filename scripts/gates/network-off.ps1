@@ -34,7 +34,12 @@ param(
   [string]$Model = 'small',
   [string]$Machine = 'Legion',
   [string]$FactsFile,   # test only: network facts from this JSON file instead of the machine
-  [switch]$DryRun   # development only: skips the refusal and writes a file that is marked NOT EVIDENCE
+  [switch]$DryRun,   # development only: skips the refusal and writes a file that is marked NOT EVIDENCE
+  # Gate pack (laptops): the test clip comes with the pack instead of eval\data, avx512 is expected to
+  # run (exit 0) only where this CPU has AVX-512, and no emulator is needed when the profile is native.
+  [string]$Clip = '',
+  [double]$ClipSeconds = 0,
+  [switch]$Avx512Present
 )
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -44,6 +49,9 @@ if (-not $Emulate) { $Emulate = Join-Path $repo 'target\release\wb-emulate.exe' 
 Import-Module (Join-Path $repo 'scripts\lib\PsEnv.psm1') -Force
 Set-WbCleanPSModulePath
 Set-WbInvariantCulture
+# A comma list given with -File arrives as one string (the gate pack passes -Variants a,b,c).
+$Variants = Split-WbList $Variants
+$Profiles = Split-WbList $Profiles
 Import-Module (Join-Path $repo 'scripts\lib\NetworkState.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Redact.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\ProcessTree.psm1') -Force
@@ -75,12 +83,21 @@ $sys32 = Join-Path $env:SystemRoot 'System32'
 $minPath = "$sys32;$env:SystemRoot"
 $manifest = Join-Path $repo 'models\manifest.json'
 $modelsDir = Join-Path $repo 'models'
-if (-not (Test-Path (Join-Path $repo 'eval\data\fleurs-en\manifest.jsonl'))) { throw 'eval\data\fleurs-en is missing: the test clip comes from there (run this on the development machine)' }
-if (-not (Test-Path $Emulate)) { throw "wb-emulate not built: $Emulate (cargo build --release -p wb-emulate)" }
-$clipRec = Get-Content (Join-Path $repo 'eval\data\fleurs-en\manifest.jsonl') -Encoding UTF8 |
-  ForEach-Object { $_ | ConvertFrom-Json } | Where-Object { $_.duration_s -ge 6 -and $_.duration_s -le 12 } | Sort-Object id | Select-Object -First 1
-$clip = Join-Path $repo ('eval\data\fleurs-en\' + ($clipRec.audio -replace '/', '\'))
-if (-not (Test-Path $clip)) { throw "test clip not found: $clip" }
+if ($Profiles | Where-Object { $_ -ne 'native' }) {
+  if (-not (Test-Path $Emulate)) { throw "wb-emulate not built: $Emulate (cargo build --release -p wb-emulate)" }
+}
+if ($Clip) {
+  # Gate pack: the clip is a file of the pack.
+  if (-not (Test-Path -LiteralPath $Clip)) { throw "test clip not found: $Clip" }
+  $clipRec = [pscustomobject]@{ duration_s = $(if ($ClipSeconds -gt 0) { $ClipSeconds } else { 0 }) }
+} else {
+  if (-not (Test-Path (Join-Path $repo 'eval\data\fleurs-en\manifest.jsonl'))) { throw 'eval\data\fleurs-en is missing: the test clip comes from there (run this on the development machine)' }
+  $clipRec = Get-Content (Join-Path $repo 'eval\data\fleurs-en\manifest.jsonl') -Encoding UTF8 |
+    ForEach-Object { $_ | ConvertFrom-Json } | Where-Object { $_.duration_s -ge 6 -and $_.duration_s -le 12 } | Sort-Object id | Select-Object -First 1
+  $Clip = Join-Path $repo ('eval\data\fleurs-en\' + ($clipRec.audio -replace '/', '\'))
+  if (-not (Test-Path $Clip)) { throw "test clip not found: $Clip" }
+}
+$clip = $Clip
 
 # Runs a command and watches its process tree for sockets. Returns exit code, output and the sockets.
 function Invoke-Watched([string]$File, [string[]]$ArgumentList, [string]$Tag) {
@@ -172,7 +189,7 @@ foreach ($v in $Variants) {
     $r = Invoke-Watched -File $fileInfo -ArgumentList $argsInfo -Tag "$v-$p-info"
     $ev = Get-Events $r.Out
     $info = $ev | Where-Object { $_.event -eq 'info' } | Select-Object -First 1
-    $expect = $(if ($v -eq 'avx512') { 3 } else { 0 })
+    $expect = $(if ($v -eq 'avx512' -and -not $Avx512Present) { 3 } else { 0 })
     $okInfo = ($r.Exit -eq $expect)
     if (-not $okInfo) { $problems += "$v/$p info: exit $($r.Exit), expected $expect" }
     $totalNonLoop += $r.NonLoopback.Count
@@ -183,7 +200,7 @@ foreach ($v in $Variants) {
     $rows += [pscustomobject]@{ Variant = $v; Profile = $p; Step = 'info'; Exit = $r.Exit; Ok = $okInfo; NonLoop = $r.NonLoopback.Count }
 
     # Devices to decode on: the CPU always (except avx512 on this CPU), and for vulkan and cuda the first GPU device.
-    if ($v -eq 'avx512') {
+    if ($v -eq 'avx512' -and -not $Avx512Present) {
       $lines += "-- $p batch : not run (this CPU has no AVX-512: info exits 3 by design; the avx512 decode is a laptop gate)"
       continue
     }

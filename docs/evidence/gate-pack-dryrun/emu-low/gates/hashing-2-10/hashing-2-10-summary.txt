@@ -1,0 +1,6 @@
+hashing runs 2 to 10 (purged = the standby file cache was emptied before the run; counts as cold only at most 0.6 of the warm rate)
+  warm-cache rate of this laptop (median of the warm runs): not measured
+  run | kind | purge done | recorder verdict | app hash MB/s | counts as cold | shared breaks | app-only breaks | note
+  run2 | purged | True | FAIL | 914 | False | 0 | 0 | the run did not pass (FAIL)
+  caveat: a rate above 0.6 of the warm rate cannot be shown to be cold, so that run is not counted as cold; a rate below it is consistent with a cold cache but is not proof, because SHA-256 can itself be slower than the disk
+  shared upstream breaks: 0 in the purged runs, 0 in the warm runs

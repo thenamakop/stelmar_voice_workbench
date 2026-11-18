@@ -72,8 +72,29 @@ $g = Get-Content -LiteralPath (Join-Path $here '..\gates\recorder-gate.ps1') -Ra
 Check 'recorder-gate.ps1 has -Sample and -DiagnosticNote' ($g -match '\[switch\]\$Sample' -and $g -match '\[string\]\$DiagnosticNote')
 Check 'a diagnostic run says DIAGNOSTIC, NOT A VERDICT in the evidence' ($g -match 'verdict: DIAGNOSTIC, NOT A VERDICT')
 Check 'a diagnostic run never exits with the gate''s FAIL code' ($g -match 'if \(\$DiagnosticNote\) \{ exit 0 \}')
-Check 'the sampler is stopped by the cleanup after an error too' ($g -match 'Stop-WbRigLeftovers -Process @\(\$emu, \$play, \$refProc, \$hostStress, \$sampler\)')
+Check 'the sampler is stopped by the cleanup after an error too' ($g -match 'Stop-WbRigLeftovers -Process @\(\$emu, \$play, \$refProc, (\$ref2Proc, )?\$hostStress, \$sampler(, \$beside)?\)')
 Check 'machine state (uptime, power plan, mains) is written for every run' ($g -match 'Get-WbMachineStateLines' -and $g -match 'MachineState')
+Check 'recorder-gate.ps1 takes -BesideScript and -BesideConfig and stops the beside process in its cleanup' ($g -match '\[string\]\$BesideScript' -and $g -match '\[string\]\$BesideConfig' -and $g -match '\$beside')
+
+# The beside-load script and the pack gates that use it.
+$lib = Join-Path $here '..\lib'
+$bl = Get-Content -LiteralPath (Join-Path $lib 'beside-load.ps1') -Raw
+Check 'beside-load.ps1 tags the live request with its type (the protocol rejects one without)' ($bl -cmatch "type = 'live'")
+Check 'beside-load.ps1 starts a live and a batch engine below the recorder and writes result.json' ($bl -match 'result\.json' -and $bl -match 'live' -and $bl -match 'batch' -and $bl -match 'BelowNormal')
+$rg = Get-Content -LiteralPath (Join-Path $lib 'RecorderGates.psm1') -Raw
+Check 'Invoke-PackRecorderGate has -Beside and -RunTag, and counts shared and app-only breaks' ($rg -match '\[hashtable\]\$Beside' -and $rg -match '\[string\]\$RunTag' -and $rg -match 'app_only_breaks')
+foreach ($id in 'hashing-2-10', 'live-batch-safety', 'bg-decode-info') {
+  $s = Get-Content -LiteralPath (Join-Path $here "..\gate-pack\gates\$id.ps1") -Raw
+  Check "$id.ps1 uses the gate contract and the beside or hashing helpers" ($s -match "Invoke-PackGateBody -Ctx \`$ctx -Id '$id'" -and $s -match 'Invoke-PackRecorderGate')
+}
+
+# rename-engines runs in the pack with the pack's own programs; batch-scripts reads its clips from the pack.
+$re = Get-Content -LiteralPath (Join-Path $here '..\gates\rename-engines.ps1') -Raw
+Check 'rename-engines.ps1 takes the laptop profile and the pack paths and passes the rig choice on' ($re -match "'native', 'laptop'" -and $re -match '\[string\]\$Exe' -and $re -match '\[string\]\$Testbench' -and $re -match '-RigPrefer')
+$bs = Get-Content -LiteralPath (Join-Path $here '..\gate-pack\gates\batch-scripts.ps1') -Raw
+Check 'batch-scripts.ps1 reads data\batch-clips and judges the script share without keeping text' ($bs -match 'batch-clips' -and $bs -match '0\.9' -and $bs -match 'counts only')
+Check 'batch-scripts.ps1 is ASCII only (script ranges are written as escapes)' (-not ($bs -cmatch '[^\x00-\x7F]'))
+Check 'rename-engines gate wrapper wraps the legacy script' ((Get-Content -LiteralPath (Join-Path $here '..\gate-pack\gates\rename-engines.ps1') -Raw) -match "Invoke-PackLegacyGate -Ctx \`$ctx -Script 'rename-engines.ps1'")
 
 if ($fails) { Write-Host "$fails failed"; exit 1 }
 Write-Host 'XrunCorrelate tests passed'

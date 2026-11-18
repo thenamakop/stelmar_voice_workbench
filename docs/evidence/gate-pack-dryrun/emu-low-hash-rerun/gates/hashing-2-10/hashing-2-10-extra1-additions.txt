@@ -1,0 +1,5 @@
+
+gate pack additions:
+  rig: vb-cable
+  detector zero_gap: fired 1 time(s) (14.78 per hour); matched by a reference 1, by both 1; false alarms 0; real dropouts the detector missed 0; rig vb-cable; machine LENOVO-83DF-b8384c
+  detector repeated_block: fired 0 time(s) (0.00 per hour); matched by a reference 0, by both 0; false alarms 0; real dropouts the detector missed 0; rig vb-cable; machine LENOVO-83DF-b8384c

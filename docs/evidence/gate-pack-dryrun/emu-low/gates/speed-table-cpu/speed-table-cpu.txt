@@ -1,0 +1,13 @@
+Speed table, cpu part (gate pack)
+machine: LENOVO-83DF-b8384c; profile: emu-low; QUICK: one model, one clip (not the full table)
+engines: avx2 sha256 fb190b5b786cc10420d5fcdec9651cd9036b2a8b00ca5c24ce2161e67b8a6d32
+whisper.cpp printed by the engine: 1.9.5-dev commit d1be6fde11ac6e0407606b4e42fe72d34add8037 tree e736b4c9a5be2bc0e9b294102e261fe69c2a439976652ff6107b0c361f8667fb
+method: wb-engine bench, the 60 s FLEURS test clips of the app (resources\bench), beam 5 with temperature fallback and 15 s VAD chunks ('rolling') except the near-live rows (greedy); 1 warm-up, then the median of 3 timed runs, a single timed run when the warm-up RTF is above 2; RTF = processing time / clip length, load time reported apart; the engine runs from a folder with only the engine and PATH reduced to the Windows folders; Silero VAD v6.2.0 on the CPU
+information only: Phase 2 sets no speed bar. Every row names its adapter and driver version, so the numbers can be compared across laptops and driver updates.
+
+== CPU avx2, 3 threads
+model | clip | mode | threads | RTF median (runs) | warm-up RTF | load s | peak working set GiB | peak commit GiB | GPU local / shared GiB | segments | truncated chunks
+small | bench-en.wav | rolling | 3 | 1.087 (1.087) | 1.086 | 0.6 | 0.77 | 1.32 | n/a | 5 | 0
+
+cells: 1 (ok 1, does not fit 0, failed 0, single-run 0)
+The Hinglish model is large-v3 sized; its code-switched row uses bench-codeswitch.wav (English and Hindi utterances alternating), the others the single-language clips.

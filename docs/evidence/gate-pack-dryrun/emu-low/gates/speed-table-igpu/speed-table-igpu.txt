@@ -1,0 +1,17 @@
+Speed table, igpu part (gate pack)
+machine: LENOVO-83DF-b8384c; profile: emu-low; QUICK: one model, one clip (not the full table)
+engines: vulkan sha256 312de4131d96fa1be83d8fb0fd7cf4f6469b17498a05d00665d48987e63e8137
+whisper.cpp printed by the engine: 1.9.5-dev commit d1be6fde11ac6e0407606b4e42fe72d34add8037 tree e736b4c9a5be2bc0e9b294102e261fe69c2a439976652ff6107b0c361f8667fb
+method: wb-engine bench, the 60 s FLEURS test clips of the app (resources\bench), beam 5 with temperature fallback and 15 s VAD chunks ('rolling') except the near-live rows (greedy); 1 warm-up, then the median of 3 timed runs, a single timed run when the warm-up RTF is above 2; RTF = processing time / clip length, load time reported apart; the engine runs from a folder with only the engine and PATH reduced to the Windows folders; Silero VAD v6.2.0 on the CPU
+information only: Phase 2 sets no speed bar. Every row names its adapter and driver version, so the numbers can be compared across laptops and driver updates.
+
+== vulkan on Intel(R) RaptorLake-S Mobile Graphics Controller (device 0, driver 32.0.101.7092), 2 CPU threads
+model | clip | mode | threads | RTF median (runs) | warm-up RTF | load s | peak working set GiB | peak commit GiB | GPU local / shared GiB | segments | truncated chunks
+small | bench-en.wav | rolling | 2 | 0.150 (0.150) | 0.156 | 0.7 | 0.95 | 1.42 | 0.82/0.00 | 5 | 0
+
+cells: 1 (ok 1, does not fit 0, failed 0, single-run 0)
+The Hinglish model is large-v3 sized; its code-switched row uses bench-codeswitch.wav (English and Hindi utterances alternating), the others the single-language clips.
+
+graphics adapters seen by wb-engine-vulkan info:
+  device 0: Vulkan / Intel(R) RaptorLake-S Mobile Graphics Controller / igpu / driver 32.0.101.7092
+  device 1: CPU / Intel(R) Core(TM) i9-14900HX / cpu / driver 
