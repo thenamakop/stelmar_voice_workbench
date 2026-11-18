@@ -244,6 +244,54 @@ def main() -> int:
     P("")
 
     # ------------------------------------------------------------------ path 5: pause and resume; path 6: kill; path 7: night
+    # ------------------------------------------------------------------ who used the machine during each unit
+    P("UNIT WINDOWS  CPU (percent of the whole host) and GPU (percent of one engine) by process, from process-samples.csv (a row every 10 s; the sampler is part of the script's own cost)")
+    sf = run / "process-samples.csv"
+    off = notes.get("clock_offset_s")
+    if not sf.exists() or off is None:
+        P("  no process-samples.csv (the run predates the sampler)")
+    else:
+        import csv
+        samples = []
+        with open(sf, encoding="ascii") as fh:
+            for r in csv.DictReader(fh):
+                try:
+                    samples.append({k: (float(v) if k not in ("gpu_by_adapter",) else v) for k, v in r.items()})
+                except ValueError:
+                    pass
+        cols = ["host_cpu", "engine_cpu", "app_cpu", "webview_cpu", "player_cpu", "script_cpu", "other_cpu", "engine_gpu", "app_gpu", "webview_gpu", "other_gpu"]
+        P(f"  {len(samples)} samples")
+        P("  unit                         wall s   rows | CPU: host engine app webview player sampler other | GPU: engine app webview other | the engine's adapter: engine app webview other")
+        for l in app_log:
+            m = re.match(r"^(\d+) (.+?): unit (\d+) of (post-\d+) done in ([\d.]+) s on (\w+)", l)
+            if not m:
+                continue
+            end = int(m.group(1)) / 1000 - off
+            took = float(m.group(5))
+            win = [x for x in samples if end - took <= x["unix_s"] <= end]
+            if not win:
+                P(f"  {m.group(2)} unit {m.group(3)} of {m.group(4)}: no samples in its window")
+                continue
+            mean = {c: sum(x[c] for x in win) / len(win) for c in cols}
+            # The adapter the engine ran on: the one where the engine's GPU share is highest.
+            best, best_v = None, -1.0
+            acc = {}
+            for x in win:
+                for part in str(x["gpu_by_adapter"]).split(";"):
+                    if "=" not in part:
+                        continue
+                    k, v = part.split("=", 1)
+                    vals = [float(t) for t in v.split("/")]
+                    a = acc.setdefault(k, [0.0] * 4)
+                    for i in range(4):
+                        a[i] += vals[i] / len(win)
+            for k, a in acc.items():
+                if a[0] > best_v:
+                    best, best_v = k, a[0]
+            ad = f"{best}: " + " ".join(f"{v:.0f}" for v in acc[best]) if best else "-"
+            P(f"  {m.group(2)} unit {m.group(3)} of {m.group(4)}  {took:7.1f}  {len(win):5d} | " + " ".join(f"{mean[c]:5.1f}" for c in cols[:7]) + " | " + " ".join(f"{mean[c]:5.1f}" for c in cols[7:]) + f" | {ad}")
+    P("")
+
     P("ESTIMATES  the first 'ready by' after Stop and the night plan, with the basis each rests on (the provisional emu-low detection allowance until a unit of a session with several languages has finished)")
     q = report.get("queue", {})
     for l in qlog + app_log:
