@@ -36,6 +36,8 @@ param(
   [string]$Compare = ''
 )
 $ErrorActionPreference = 'Stop'
+# `-File` hands -Runs P1,P2,Q over as one string: split it.
+$Runs = @($Runs | ForEach-Object { $_ -split ',' } | Where-Object { $_ })
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repo = (Resolve-Path (Join-Path $here '..\..')).Path
 if (-not $OutFile) { $OutFile = Join-Path $repo 'docs\evidence\phase-4\speed-diagnosis-emu-low.txt' }

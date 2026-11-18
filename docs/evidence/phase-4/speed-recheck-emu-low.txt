@@ -1,0 +1,41 @@
+﻿Speed and memory diagnosis under emu-low (owner, 17 Nov 2026, steps 2 and 3): the profile cell against the queue
+date: 2026-11-18 15:23 (IST on the Legion)
+machine: Legion, profile emu-low (4 logical processors, 11 GiB job limit)
+command: powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\gates\speed-diagnosis.ps1
+source: 0c25187
+audio and requests: the second smoke's session folder (units of post-1 and post-2), copied requests in the work folder; {"gpu": {"kind": "gpu", "index": 0}, "threads": 2, "files": ["req-N1.json", "req-N2.json", "req-P.json", "req-Q.json", "req-R.json"]}
+engine: wb-engine vulkan build (the app's), sha256 312de4131d96fa1be83d8fb0fd7cf4f6469b17498a05d00665d48987e63e8137; wb-emulate emu-low; engine at below-normal priority as the queue runs it; one process per run
+
+Idle checks before each run (total CPU of the host averaged over 60 s must be under 10%, and no other pwsh, cargo, robocopy, python or wb-* process busy)
+  P1: 2026-11-18 15:13:39 host CPU 6.4% (max 11%) over 60 s, attempts 1, busy none; top: PerformanceMonitor 30.5 CPU-s, dwm 9.1 CPU-s, System 8.3 CPU-s, MsMpEng 4.8 CPU-s; free RAM 17.8 GB -> IDLE
+  Q: 2026-11-18 15:18:31 host CPU 6.5% (max 12%) over 60 s, attempts 1, busy none; top: PerformanceMonitor 30.0 CPU-s, dwm 10.0 CPU-s, System 9.4 CPU-s, MsMpEng 4.3 CPU-s; free RAM 17.8 GB -> IDLE
+  P2: 2026-11-18 15:16:06 host CPU 6.6% (max 12%) over 60 s, attempts 1, busy none; top: PerformanceMonitor 29.8 CPU-s, dwm 10.6 CPU-s, System 8.9 CPU-s, MsMpEng 4.9 CPU-s; free RAM 17.7 GB -> IDLE
+
+Runs (every one under wb-emulate --profile emu-low; the engine is the app's Vulkan build; engine process at below-normal priority like the queue's)
+  P1  profile cell: bench, Hindi 60 s clip, turbo q5_0, Vulkan UHD, 2 threads, rolling (first)
+      exit 0, wall 87.0 s, started 2026-11-18 15:13:39, engine sha256 312de4131d96fa1b
+      bench: RTF 0.713 (warm-up 0.692), clip 60.0 s, load 1.0 s, 5 segments, peak commit 1524 MiB, working set 1091 MiB, device Intel(R) RaptorLake-S Mobile Graphics Controller
+      trace (86 samples, 1 per second): peak commit 1522 MiB, peak working set 1089 MiB, 90% of the peak commit reached at 3 s (3% of the run); commit at 25/50/75/100% of the run 1519/1520/1520/1521 MiB; slope over the last 70% +1.1 MiB/min (commit), +0.4 MiB/min (working set)
+      CPU: engine 47% of one core on average (max 119%), host total 8.0% on average (max 16%) during the run
+  Q   queue's rolling unit: batch, en+hi with detection on every chunk, 288 s, the request post-1 unit 1 ran
+      exit 0, wall 291.0 s, started 2026-11-18 15:18:32, engine sha256 312de4131d96fa1b
+      ready: models ['large-v3-turbo-q5_0'], load 0.7 s, device Intel(R) RaptorLake-S Mobile Graphics Controller, threads 2
+      stats: unit 1, 25 chunks, audio 287.9 s, unit time 288.8 s, RTF 1.003 (engine reports 1.003), detections 25, both ways 0, peak working set 1099 MiB
+      done: segments 25, chunks 25, retried 0, unclear 0, low coverage 0, truncated 0, elapsed 289.5006704
+      trace (290 samples, 1 per second): peak commit 1537 MiB, peak working set 1097 MiB, 90% of the peak commit reached at 2 s (1% of the run); commit at 25/50/75/100% of the run 1446/1533/1535/1262 MiB; slope over the last 70% +14.8 MiB/min (commit), +28.9 MiB/min (working set)
+      CPU: engine 36% of one core on average (max 159%), host total 7.7% on average (max 17%) during the run
+  P2  profile cell again (drift check)
+      exit 0, wall 85.0 s, started 2026-11-18 15:16:06, engine sha256 312de4131d96fa1b
+      bench: RTF 0.684 (warm-up 0.700), clip 60.0 s, load 0.7 s, 5 segments, peak commit 1524 MiB, working set 1078 MiB, device Intel(R) RaptorLake-S Mobile Graphics Controller
+      trace (84 samples, 1 per second): peak commit 1522 MiB, peak working set 1075 MiB, 90% of the peak commit reached at 2 s (2% of the run); commit at 25/50/75/100% of the run 1519/1521/1522/1522 MiB; slope over the last 70% +2.4 MiB/min (commit), +2.1 MiB/min (working set)
+      CPU: engine 47% of one core on average (max 116%), host total 8.1% on average (max 14%) during the run
+
+Arithmetic (no reading; the reading goes in a note that names its author)
+  P1 / P2: 0.713 / 0.684 = 1.04   (drift of the bench between the first and the last run)
+  P1 against the profile's 0.696 for this cell: 1.02
+  P2 against the profile's 0.696 for this cell: 0.98
+
+Against the earlier runs (a run more than 5% faster than its earlier figure means the earlier figure was slowed by something that is now gone)
+  P1: 0.713 now against 0.708 earlier = +0.7% (within 5% or slower)
+  P2: 0.684 now against 0.709 earlier = -3.6% (within 5% or slower)
+  Q: 1.003 now against 1.011 earlier = -0.8% (within 5% or slower)
