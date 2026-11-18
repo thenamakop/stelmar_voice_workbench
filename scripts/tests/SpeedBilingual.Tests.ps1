@@ -119,6 +119,9 @@ Check 'no detections: no division by zero, extra seconds per detection is empty'
 $head = Format-BilingualHeadline -Rolling $part -Night $night -Where (Format-BilingualWhere -Hi $hi -En $en)
 Check 'the result line reads like the spec''s example' ($head -match '^rolling RTF 0\.75 fixed-hi / 1\.01 en\+hi with detection \(x1\.34; 14 detections, 1\.1 s each\); night 1\.50 / 1\.87 \(x1\.25\); vulkan gpu 1, hi large-v3-turbo-q5_0 / en medium, 2 threads$')
 $head2 = Format-BilingualHeadline -Rolling $part -Night $none -Where 'w' -NotMeasured @('night-detect-en-hi: out of memory')
+$fast = Get-BilingualPart -FixedRuns @((Run 0.84 60 0)) -DetectRuns @((Run 0.80 60 4))
+$headFast = Format-BilingualHeadline -Rolling $fast -Night $night -Where 'w'
+Check 'a detect run that is not slower than the fixed RTF predicts (the clips differ): factor shown, no negative time per detection in the line, the number kept in the evidence' ($fast.ExtraPerDetection -lt 0 -and $headFast -match 'x0\.95; 4 detections, no extra time seen per detection' -and $headFast -notmatch '-\d')
 Check 'a part that could not be measured says so and why' ($head2 -match 'night not measured' -and $head2 -match 'out of memory')
 
 # --- the evidence text: counts and numbers, no transcript ---
@@ -140,6 +143,13 @@ Check 'the script and the module are ASCII only' (-not ($sb.ToCharArray() | Wher
 Check 'the script reads the quick check''s kept capability.json and hard-codes no model, device or thread count for the rolling cell' ($sb -match "gates\\quick-check\\capability\.json" -and $sb -notmatch "'(small|medium)'" -and $sb -notmatch 'Threads\s*=\s*\d')
 Check 'the script writes one JSON per measurement into the evidence' ($sb -match "measurement-\{0\}\.json")
 Check 'the script runs the engine''s batch command with the queue-style request file and does not change an engine' ($sb -match "'batch', '--request'" -and $sb -notmatch 'cargo')
+Check 'the script hands plain arrays (ToArray) to Get-BilingualPart, never @() around a generic List (that failed with "Argument types do not match" in the dry run of 18 Nov 2026)' ($sb -match 'RunsOf' -and $sb -notmatch "-FixedRuns @\(\`$runs\[" -and $sb -notmatch "-DetectRuns @\(\`$runs\[")
+# The same call as the gate makes, on lists built the way the gate builds them.
+$lst = New-Object System.Collections.Generic.List[object]; $lst.Add((Run 0.8 60 0))
+$hh = @{ 'k' = $lst }
+function RunsOf2([string]$Key) { if ($hh.ContainsKey($Key)) { return , @($hh[$Key].ToArray()) } else { return , @() } }
+Check 'a part is computed from runs kept in generic lists, via ToArray' ((Get-BilingualPart -FixedRuns (RunsOf2 'k') -DetectRuns (RunsOf2 'k')).Ok)
+Check 'a measurement that was never planned gives an empty pair, not an error' (-not (Get-BilingualPart -FixedRuns (RunsOf2 'k') -DetectRuns (RunsOf2 'missing')).Ok)
 Check 'the script takes the gate lock like the other measuring gates' ($sb -match "Invoke-WbGate -Name 'speed-bilingual'")
 Check 'no transcript text is kept: the engine output file is overwritten per run and only counts are written' ($sb -notmatch '\.text\b' -and $mod -notmatch '\.text\b')
 $readme = [IO.File]::ReadAllText((Join-Path $repo 'scripts\gate-pack\README.txt'))

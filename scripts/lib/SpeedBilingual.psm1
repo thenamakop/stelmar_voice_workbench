@@ -183,7 +183,10 @@ function Format-BilingualHeadline {
   $parts = New-Object System.Collections.Generic.List[string]
   if ($Rolling -and $Rolling.Ok) {
     $each = ''
-    if ($null -ne $Rolling.ExtraPerDetection) { $each = ', {0} s each' -f (Format-BilingualNum $Rolling.ExtraPerDetection '0.0') }
+    # A negative figure means the detect run was not slower than the fixed run's RTF predicts (the two clips differ):
+    # the evidence keeps the number, the line does not print a negative time per detection.
+    if ($null -ne $Rolling.ExtraPerDetection -and $Rolling.ExtraPerDetection -gt 0) { $each = ', {0} s each' -f (Format-BilingualNum $Rolling.ExtraPerDetection '0.0') }
+    elseif ($null -ne $Rolling.ExtraPerDetection) { $each = ', no extra time seen per detection' }
     $parts.Add(('rolling RTF {0} fixed-hi / {1} en+hi with detection (x{2}; {3} detections{4})' -f (Format-BilingualNum $Rolling.FixedRtf), (Format-BilingualNum $Rolling.DetectRtf), (Format-BilingualNum $Rolling.Factor), $Rolling.Detections, $each))
   } else { $parts.Add('rolling not measured') }
   if ($Night -and $Night.Ok) { $parts.Add(('night {0} / {1} (x{2})' -f (Format-BilingualNum $Night.FixedRtf), (Format-BilingualNum $Night.DetectRtf), (Format-BilingualNum $Night.Factor))) } else { $parts.Add('night not measured') }

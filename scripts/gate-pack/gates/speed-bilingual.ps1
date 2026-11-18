@@ -118,8 +118,10 @@ Invoke-PackGateBody -Ctx $ctx -Id 'speed-bilingual' -ResultFile $ResultFile -Bod
     Write-PackJson -Path $jp -Value $j
     $evFiles.Add($jp)
   }
-  $rolling = Get-BilingualPart -FixedRuns @($runs['rolling-fixed-hi']) -DetectRuns @($runs['rolling-detect-en-hi'])
-  $night = Get-BilingualPart -FixedRuns @($runs['night-fixed-hi']) -DetectRuns @($runs['night-detect-en-hi'])
+  # Plain arrays, not the generic lists: @() around a List makes the next call fail with "Argument types do not match" (found in the dry run of 18 Nov 2026).
+  function RunsOf([string]$Key) { if ($runs.ContainsKey($Key)) { return , @($runs[$Key].ToArray()) } else { return , @() } }
+  $rolling = Get-BilingualPart -FixedRuns (RunsOf 'rolling-fixed-hi') -DetectRuns (RunsOf 'rolling-detect-en-hi')
+  $night = Get-BilingualPart -FixedRuns (RunsOf 'night-fixed-hi') -DetectRuns (RunsOf 'night-detect-en-hi')
   $lines = @(Get-BilingualReportLines -Records @($records.ToArray()) -Rolling $rolling -Night $night -Machine ([string]$ctx.machine) -Profile $profile -Quick $quick -Hi $hi -En $en -Notes @($notes.ToArray()))
   $evidence = Join-Path $gdir 'speed-bilingual.txt'
   Write-WbEvidence -Path $evidence -Lines $lines -MachineLabel ([string]$ctx.machine)
