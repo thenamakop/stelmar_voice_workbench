@@ -215,7 +215,11 @@ function Read-NewLines([string]$Path, [ref]$Count) {
 # $FallbackAfterMin minutes of failed checks the run goes on when the host CPU is under $FallbackCpuMax percent and
 # nothing named is busy, and the file says so (verdict 'fallback'); after $GiveUpMin minutes the run is refused.
 function Wait-WbQuiet {
-  param([string]$Out, [double]$CpuMax = 10, [double]$FallbackCpuMax = 15, [int]$FallbackAfterMin = 15, [int]$GiveUpMin = 120, [int]$Seconds = 60)
+  param([string]$Out, [double]$CpuMax = 10, [double]$FallbackCpuMax = 15, [int]$FallbackAfterMin = 15, [int]$GiveUpMin = 180, [int]$Seconds = 60)
+  # The owner's own programs (19 Nov 2026): Steam and Wallpaper Engine (with its service) must not be running at a check; if
+  # they are, that is recorded and the run waits for the owner to close them. They are never stopped from here, and the
+  # 15% fallback does not override them.
+  $ownerRx = '^(steam|steamwebhelper|steamservice|wallpaper32|wallpaper64|wallpaperservice32|webwallpaper32|ui32)$'
   $busyRx = '^(pwsh|powershell|cargo|rustc|robocopy|python|git|link|cl|msbuild|cmake|ninja|node|wb-.*|stelmar.*)$'
   $parentId = 0
   try { $parentId = [int](Get-CimInstance Win32_Process -Filter "ProcessId = $PID").ParentProcessId } catch { $parentId = 0 }
@@ -246,14 +250,15 @@ function Wait-WbQuiet {
     $avg = ($samples | Measure-Object -Average).Average
     $max = ($samples | Measure-Object -Maximum).Maximum
     $elapsed = ((Get-Date) - $began).TotalMinutes
-    $ok = ($avg -lt $CpuMax -and $busy.Count -eq 0)
-    $fallback = ((-not $ok) -and $elapsed -ge $FallbackAfterMin -and $avg -lt $FallbackCpuMax -and $busy.Count -eq 0)
+    $owner = @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -match $ownerRx } | ForEach-Object { $_.ProcessName } | Sort-Object -Unique)
+    $ok = ($avg -lt $CpuMax -and $busy.Count -eq 0 -and $owner.Count -eq 0)
+    $fallback = ((-not $ok) -and $elapsed -ge $FallbackAfterMin -and $avg -lt $FallbackCpuMax -and $busy.Count -eq 0 -and $owner.Count -eq 0)
     $free = [math]::Round((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory / 1MB, 1)
     $attempts += [pscustomobject]@{
-      at = (Get-Date).ToString('o'); cpu_avg = [math]::Round($avg, 1); cpu_max = [math]::Round($max, 0); busy = @($busy)
+      at = (Get-Date).ToString('o'); cpu_avg = [math]::Round($avg, 1); cpu_max = [math]::Round($max, 0); busy = @($busy); owner_programs = @($owner)
       top = @($top | Sort-Object cpu_s -Descending | Select-Object -First 8); free_ram_gb = $free
     }
-    Write-Host ("{0} quiet check {1}: host CPU {2:F1}% (max {3:F0}%), busy: {4}, free RAM {5} GB -> {6}" -f (Get-Date -Format 'HH:mm:ss'), $attempts.Count, $avg, $max, $(if ($busy.Count) { $busy -join '; ' } else { 'none' }), $free, $(if ($ok) { 'IDLE' } elseif ($fallback) { 'NOT IDLE, going on (under the fallback limit after the wait)' } else { 'NOT IDLE' }))
+    Write-Host ("{0} quiet check {1}: host CPU {2:F1}% (max {3:F0}%), busy: {4}, owner's programs running: {7}, free RAM {5} GB -> {6}" -f (Get-Date -Format 'HH:mm:ss'), $attempts.Count, $avg, $max, $(if ($busy.Count) { $busy -join '; ' } else { 'none' }), $free, $(if ($ok) { 'IDLE' } elseif ($fallback) { 'NOT IDLE, going on (under the fallback limit after the wait)' } else { 'NOT IDLE' }), $(if ($owner.Count) { $owner -join ', ' } else { 'none' }))
     $verdict = $(if ($ok) { 'idle' } elseif ($fallback) { 'fallback' } elseif ($elapsed -ge $GiveUpMin) { 'refused' } else { 'waiting' })
     Write-Utf8 $Out ((@{
           verdict = $verdict; cpu_max_limit = $CpuMax; fallback_cpu_limit = $FallbackCpuMax; fallback_after_min = $FallbackAfterMin
@@ -393,12 +398,14 @@ try {
     if (Test-Path -LiteralPath (Join-Path $ProfileData 'verified-models.json')) { Copy-Item -LiteralPath (Join-Path $ProfileData 'verified-models.json') -Destination $data }
     Write-Host "$(Get-Date -Format 'HH:mm:ss') run folder $run"
     # Room for the recordings, their mirror and the work files before four sessions of 90 minutes start.
-    $needGb = @{ smoke = 4; day = 30; rehearse = 3; kill = 12 }[$mode]
-    foreach ($root in @($rec, $backup)) {
-      $drive = (Get-Item -LiteralPath (Split-Path -Qualifier $root) -ErrorAction Stop).PSDrive
+    # The recordings (and the work files, the night pass's copies and imports) are on the run drive, their mirror on the backup drive.
+    $needRec = @{ smoke = 4; day = 14; rehearse = 2; kill = 8 }[$mode]
+    $needMirror = @{ smoke = 2; day = 6; rehearse = 1; kill = 3 }[$mode]
+    foreach ($pair in @(@($rec, $needRec), @($backup, $needMirror))) {
+      $drive = (Get-Item -LiteralPath (Split-Path -Qualifier $pair[0]) -ErrorAction Stop).PSDrive
       $freeGb = [math]::Round($drive.Free / 1GB, 1)
-      Write-Host "$(Get-Date -Format 'HH:mm:ss') free space on $($drive.Name): $freeGb GB (this run needs about $needGb GB)"
-      if ($freeGb -lt $needGb) { throw "only $freeGb GB free on $($drive.Name): ; the $mode run needs about $needGb GB" }
+      Write-Host "$(Get-Date -Format 'HH:mm:ss') free space on $($drive.Name): $freeGb GB (this run needs about $($pair[1]) GB there)"
+      if ($freeGb -lt $pair[1]) { throw "only $freeGb GB free on $($drive.Name): ; the $mode run needs about $($pair[1]) GB there" }
     }
     # The quiet-machine rule, with the gate lock held: nothing starts on a busy machine.
     $quiet = Wait-WbQuiet -Out (Join-Path $run 'idle-check.json')

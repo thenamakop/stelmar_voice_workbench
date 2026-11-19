@@ -194,7 +194,7 @@ def main() -> int:
     P(f"run folder: {run.name}")
     P(f"profile in force: {notes.get('profile')}")
     P(f"app exit code {notes.get('emu_exit')}; scheduler clock offset {notes.get('clock_offset_s')} s (the first session of the plan maps to 10:00 IST); parts of {notes.get('part_seconds')} s; night time box {notes.get('night_minutes')} min")
-    P(f"quiet-machine rule: {notes.get('quiet')} (idle-check.json: {len(idle.get('attempts', []))} attempt(s), waited {idle.get('waited_min')} min; the last: host CPU {(idle.get('attempts') or [{}])[-1].get('cpu_avg')}% over {idle.get('seconds')} s, busy {(idle.get('attempts') or [{}])[-1].get('busy')})")
+    P(f"quiet-machine rule: {notes.get('quiet')} (idle-check.json: {len(idle.get('attempts', []))} attempt(s), waited {idle.get('waited_min')} min; the last: host CPU {(idle.get('attempts') or [{}])[-1].get('cpu_avg')}% over {idle.get('seconds')} s, busy {(idle.get('attempts') or [{}])[-1].get('busy')}, the owner's programs running {(idle.get('attempts') or [{}])[-1].get('owner_programs')})")
     P(f"configuration the queue worked in: {q.get('configuration')}; forced hybrid: {report.get('forced_hybrid')}")
     P("")
     P("Script notes (progress):")
