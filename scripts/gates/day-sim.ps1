@@ -55,6 +55,10 @@ param(
   [switch]$Kill,
   [ValidateSet('emu-low', 'emu-mid')] [string]$Profile = 'emu-low',
   [string]$Machine = 'Legion',
+  # With -FromRun: the run is a PARTIAL one (the app was stopped before its plan ended, so it wrote no report). The sessions
+  # are judged from what is in the run folder, and the evidence carries this text as an INVALID-as-a-day-simulation banner.
+  [string]$Partial = '',
+  [string]$EvidenceName = '',
   [string]$WorkRoot = 'D:\STELMAR-Gate\day-sim',
   [string]$BackupRoot = 'C:\STELMAR-Gate-Backup',
   [string]$ProfileData = 'D:\STELMAR-Gate\system-check-19nov\full-emu-low\data',
@@ -280,18 +284,21 @@ function Write-SmokeEvidence([string]$Run) {
   $svg = Join-Path $Run 'timeline.svg'
   Remove-Item -LiteralPath $tmp, $svg -Force -ErrorAction SilentlyContinue
   $reportPy = $(if ($mode -eq 'smoke') { 'day_sim_report.py' } else { 'day_report.py' })
+  if ($Partial) { Write-Utf8 (Join-Path $Run 'partial-note.txt') $Partial }
   $reportArgs = @('-X', 'utf8', (Join-Path $repo "scripts\gates\$reportPy"), $Run, $tmp)
   if ($mode -ne 'smoke') { $reportArgs += @('--mode', $mode) }
   $rep = Invoke-WbNative -FilePath $python -ArgumentList $reportArgs
   if (-not (Test-Path -LiteralPath $tmp)) { throw "the report was not written: $((@($rep.Error) + @($rep.Output)) -join ' ')" }
   $body = @([IO.File]::ReadAllLines($tmp, [Text.Encoding]::UTF8))
   $base = $(if ($mode -eq 'smoke') { "day-sim-$Tag-$Profile" } elseif ($mode -eq 'day') { "day-sim-$Profile" } elseif ($mode -eq 'rehearse') { "day-sim-rehearsal-$Profile" } else { "queue-kill-$Profile" })
+  if ($EvidenceName) { $base = $EvidenceName }
   $out = Join-Path $OutDir "$base.txt"
   $switch = @{ smoke = '-Smoke'; day = '-Day'; rehearse = '-Rehearse'; kill = '-Kill' }[$mode]
   $purpose = $(if ($mode -eq 'smoke') { 'NOT A GATE (a smoke run of the queue paths)' } elseif ($mode -eq 'rehearse') { 'NOT A GATE (the whole schedule compressed, to prove the script end to end)' } else { 'PROVISIONAL (emulation profile; the real laptops repeat it)' })
+  if ($Partial) { $purpose = 'INVALID as a day simulation (a partial run, kept as information)' }
   $header = @(
     "date: $(Get-Date -Format 'yyyy-MM-dd HH:mm') (IST on the Legion)",
-    "command: powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\gates\day-sim.ps1 $switch -Profile $Profile -Tag $Tag -Audio $Audio -NightMinutes $NightMinutes -MaxMinutes $MaxMinutes -DecisionMinutes $DecisionMinutes",
+    "command: powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\gates\day-sim.ps1 $switch $(if ($FromRun) { '-FromRun <run folder> ' })-Profile $Profile -Tag $Tag -Audio $Audio -NightMinutes $NightMinutes -MaxMinutes $MaxMinutes -DecisionMinutes $DecisionMinutes",
     "machine: $Machine, emulation profile $Profile; the gate build target\gate\stelmar-voice-workbench.exe, WB_GATE_DAY_PLAN; $purpose",
     "source: $((Invoke-WbNative -FilePath 'git' -ArgumentList @('-C', $repo, 'rev-parse', '--short', 'HEAD')).Output -join '')",
     "build: $(Split-Path -Leaf $Exe) sha256 $((Get-FileHash -LiteralPath $Exe -Algorithm SHA256).Hash.ToLowerInvariant())",
@@ -305,6 +312,31 @@ function Write-SmokeEvidence([string]$Run) {
 if ($FromRun) {
   $fr = (Resolve-Path $FromRun).Path
   # A day or rehearsal run: judge the sessions again too (the judging reads only files in the run folder and the audio).
+  if ($fidelity -and $Partial -and -not (Test-Path -LiteralPath (Join-Path $fr 'report.json')) -and (Test-Path -LiteralPath (Join-Path $Audio 'day-audio.json'))) {
+    # No report from the app: the sessions come from the day plan and the session folders (the counters from the closing
+    # event of a session the app closed; a session it did not close has none, and is judged by the comparison alone).
+    $m = Read-Json (Join-Path $Audio 'day-audio.json')
+    $plan = Read-Json (Join-Path $fr 'day-plan.json')
+    $dirs = @(Get-ChildItem -LiteralPath (Join-Path $fr 'rec') -Recurse -Filter 'session.json' -ErrorAction SilentlyContinue | ForEach-Object { $_.Directory.FullName })
+    $synth = @()
+    $refsPartial = @()
+    $n = 0
+    foreach ($ps in @($plan.sessions | Sort-Object { [int]$_.at_s })) {
+      $n++
+      $entry = @(@($m.sessions) | Where-Object { $_.title -eq $ps.title })[0]
+      $refsPartial += [pscustomobject]@{ Index = $n; Title = $ps.Title; Dir = (Join-Path $fr "reference-$n"); Source = (Join-Path $Audio $entry.file) }
+      $dir = $dirs | Where-Object { (Read-Json (Join-Path $_ 'session.json')).title -eq $ps.title } | Select-Object -First 1
+      if (-not $dir) { continue }
+      $meta = Read-Json (Join-Path $dir 'session.json')
+      $closed = @($meta.events | Where-Object { $_.kind -eq 'closed' }) | Select-Object -Last 1
+      $stopped = $null
+      if ($closed -and "$($closed.detail)" -match 'overrun_samples=(\d+) xruns=(\d+) dropped_samples=(\d+)') {
+        $stopped = [pscustomobject]@{ recorder = [pscustomobject]@{ overrun_samples = [int64]$Matches[1]; xruns = [int64]$Matches[2]; dropped_samples = [int64]$Matches[3] } }
+      }
+      $synth += [pscustomobject]@{ title = $ps.title; dir = $dir; started_ist = "$($meta.opened_at)"; stopped = $stopped }
+    }
+    $null = Invoke-FidelityJudging -Run $fr -Refs $refsPartial -ReportJson ([pscustomobject]@{ sessions = $synth })
+  }
   if ($fidelity -and (Test-Path -LiteralPath (Join-Path $fr 'report.json')) -and (Test-Path -LiteralPath (Join-Path $Audio 'day-audio.json'))) {
     $m = Read-Json (Join-Path $Audio 'day-audio.json')
     $rep = Read-Json (Join-Path $fr 'report.json')

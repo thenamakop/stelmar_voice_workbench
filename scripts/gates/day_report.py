@@ -194,8 +194,15 @@ def main() -> int:
     app_log = q.get("log", [])
     qlog = read_qlog(run)
     audio_dir = Path(notes["audio_dir"]) if notes.get("audio_dir") else None
+    pn = run / "partial-note.txt"
+    partial = pn.read_text(encoding="utf-8-sig").strip() if pn.exists() else ""
 
     title = {"day": "FULL DAY SIMULATION", "rehearse": "DAY-SIMULATION REHEARSAL (not a gate: the whole schedule compressed, to prove the script end to end)", "kill": "ENGINE-KILL TEST"}[mode]
+    if partial:
+        P("DAY-SIMULATION PARTIAL RUN 1: INVALID as a day simulation, kept as information")
+        for pl in partial.splitlines():
+            P("  " + pl)
+        P("")
     P(title + (" (PROVISIONAL: emulation profile, the real laptops repeat it)" if mode != "rehearse" else ""))
     P(f"run folder: {run.name}")
     P(f"profile in force: {notes.get('profile')}")
@@ -226,7 +233,7 @@ def main() -> int:
                 "name": d.name,
                 "dir": d,
                 "title": meta.get("title", rep.get("title", d.name)),
-                "imported": d.name.endswith("-copy") or not rep,
+                "imported": d.name.endswith("-copy") or (not rep and not partial),
                 "audio_ms": sum(p.get("duration_ms", 0) for p in parts),
                 "parts": len(parts),
                 "report": rep,
@@ -234,10 +241,11 @@ def main() -> int:
                 "post2_complete": bool(revs.get("post-2") and revs["post-2"][1]),
                 "default": next((r[0] for r in revs.values() if r[2]), None),
                 "index": None,
+                "opened": meta.get("opened_at", ""),
             }
         )
     recorded = [s for s in sess if not s["imported"]]
-    for i, r in enumerate(sorted(recorded, key=lambda s: s["report"].get("started_ist", "")), start=1):
+    for i, r in enumerate(sorted(recorded, key=lambda s: s["report"].get("started_ist") or s.get("opened", "")), start=1):
         r["index"] = i
     names = {s["name"]: s for s in sess}
 
@@ -289,6 +297,11 @@ def main() -> int:
 
     # ---------------------------------------------------------------- (2) rolling estimates against what happened
     P("ROLLING ESTIMATES  the 'ready by' recorded at each Stop against the moment everything that was outstanding at that Stop had finished")
+    started_at: dict[str, float] = {}
+    for t, text in qlog:
+        m = re.match(r'^DAY: started "(.+?)" in (.+)$', text)
+        if m:
+            started_at[Path(m.group(2).strip().replace("\\", "/")).name] = t
     est_rows = []
     for t, text in qlog:
         m = re.match(r"^(\S+): stopped\. All transcripts ready by (\d{1,2}:\d{2}) IST", text)
@@ -296,7 +309,8 @@ def main() -> int:
             continue
         name = m.group(1)
         rb = ready_by(text, t)
-        outstanding = [n for n, s in names.items() if not s["imported"] and n != name and complete_at.get((n, "post-1"), 1e12) > t]
+        # Only the sessions that had been started by this Stop can be outstanding (a later session's transcript is not).
+        outstanding = [n for n, s in names.items() if not s["imported"] and n != name and started_at.get(n, 1e12) <= t and complete_at.get((n, "post-1"), 1e12) > t]
         outstanding.append(name)
         done = [complete_at.get((n, "post-1")) for n in outstanding]
         finished = max(done) if all(d is not None for d in done) else None
@@ -546,6 +560,8 @@ def main() -> int:
     P("")
     if notes.get("drivers_changed"):
         P("VERDICT: INVALID (the display driver changed during the run; no verdict)")
+    elif partial:
+        P(f"VERDICT: INVALID as a day simulation (partial run 1, kept as information; the checks above are of what ran: {len(checks) - failed - info} passed, {failed} failed, {info} information)")
     else:
         P(f"VERDICT: {'PASS' if failed == 0 and not info else ('FAIL' if failed else 'INCOMPLETE (a session was INVALID or is information only: see the lines above)')} ({len(checks) - failed - info} passed, {failed} failed, {info} information or invalid)")
     P("Speed, 'ready by' and 10% differences on the emulation profile are low-tier findings with numbers, not code failures (owner, 17 and 18 Nov 2026); the real laptops repeat the run.")

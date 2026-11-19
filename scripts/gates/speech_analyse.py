@@ -10,12 +10,16 @@ It writes reference-analysis.json in the schema Get-WbUpstreamBreaks / Get-WbRun
 
 Method (all in channel 0 at 8 kHz, a decimation by 6 of the 48 kHz audio; positions reported in 48 kHz frames):
   1. The first loud second of the source is searched in the first minute of the reference (normalised cross-correlation);
-     that gives the alignment offset (reference position minus source position).
+     that gives the alignment offset (reference position minus source position). The offset is then made exact at the full
+     48 kHz rate, and the reference is decimated again from the phase that offset has (a decimation that starts on another
+     phase than the source's turns a copy into a different signal above 4 kHz, and a second of fricatives then correlated
+     at 0.6 in the first version: a false break of 1 s found in the 90-minute run of 19 Nov 2026).
   2. Every later block with speech (RMS above a floor) is matched near the expected position, +-0.4 s (then +-2.0 s if
      that fails). A peak at or above MATCH is accepted. When the peak is more than JUMP_MS from the expected offset,
      that is a discontinuity: source frames skipped (the offset fell) or repeated (it rose). A block with no peak at or
-     above MATCH is an unmatched stretch. Silent blocks are skipped (no alignment can be read in silence), so a break
-     inside silence shows at the next block with speech.
+     above MATCH is looked at again at the full 48 kHz rate (+-0.4 s; a copy correlates at 1.0 there, MATCH48 0.9); only a
+     block that fails that too is an unmatched stretch. Silent blocks are skipped (no alignment can be read in silence),
+     so a break inside silence shows at the next block with speech.
 Breaks shorter than JUMP_MS (1 ms) are not reported; the cable path is bit-exact in the Phase 1 gates, so a real break
 is several milliseconds or more.
 """
@@ -35,16 +39,20 @@ BLOCK = 8000  # one second at 8 kHz
 NEAR = 3200  # +-0.4 s
 FAR = 16000  # +-2.0 s
 MATCH = 0.6
+MATCH48 = 0.9  # at the full rate a copy correlates at 1.0
+FAR48 = 19200  # +-0.4 s at 48 kHz
 JUMP_MS = 1.0
 SILENT_RMS = 150.0  # 16-bit units; speech is far above, the digital silence between utterances is 0
 
 
-def read_channel0(path: Path) -> np.ndarray:
-    """Channel 0 of a 16-bit WAV, decimated by DEC with an average (a crude low pass), as float32."""
+def read_channel0(path: Path, phase: int = 0) -> np.ndarray:
+    """Channel 0 of a 16-bit WAV, decimated by DEC with an average (a crude low pass), as float32; starts at frame `phase`."""
     w = wave.open(str(path), "rb")
     ch, width, n = w.getnchannels(), w.getsampwidth(), w.getnframes()
     if width != 2:
         raise SystemExit(f"{path}: only 16-bit WAV is supported")
+    w.setpos(min(phase, n))
+    n -= min(phase, n)
     out = np.empty(n // DEC, dtype=np.float32)
     step = DEC * 48000  # frames per read: one second times DEC keeps the reshape exact
     pos = 0
@@ -61,11 +69,33 @@ def read_channel0(path: Path) -> np.ndarray:
     return out[:pos]
 
 
-def read_reference(session: Path) -> tuple[np.ndarray, int, int]:
+def read_reference(session: Path, phase: int = 0) -> tuple[np.ndarray, int, int]:
     parts = json.loads((session / "parts.json").read_text(encoding="utf-8-sig"))["parts"]
-    chunks = [read_channel0(session / p["file"]) for p in sorted(parts, key=lambda p: p["part"])]
+    parts = sorted(parts, key=lambda p: p["part"])
+    chunks = [read_channel0(session / p["file"], phase if i == 0 else 0) for i, p in enumerate(parts)]
     frames = sum(int(p["frames"]) for p in parts)
     return np.concatenate(chunks), frames, len(parts)
+
+
+class Raw:
+    """Channel 0 at the full 48 kHz rate of a WAV or of a reference session's parts, read at random (bounds clipped)."""
+
+    def __init__(self, files: list[tuple[Path, int]]):
+        self.files = files  # (path, frames)
+
+    def get(self, start: int, n: int) -> np.ndarray:
+        out = np.zeros(n, dtype=np.float32)
+        acc = 0
+        for path, frames in self.files:
+            lo, hi = max(start, acc), min(start + n, acc + frames)
+            if lo < hi:
+                with wave.open(str(path), "rb") as w:
+                    ch = w.getnchannels()
+                    w.setpos(lo - acc)
+                    raw = np.frombuffer(w.readframes(hi - lo), dtype="<i2")
+                    out[lo - start : hi - start] = raw[: (len(raw) // ch) * ch].reshape(-1, ch)[:, 0].astype(np.float32)
+            acc += frames
+        return out
 
 
 def ncc(block: np.ndarray, window: np.ndarray) -> tuple[int, float]:
@@ -98,6 +128,9 @@ def main() -> int:
     ref, ref_frames, nparts = read_reference(session)
     with wave.open(a.source, "rb") as w:
         src_frames, rate = w.getnframes(), w.getframerate()
+    parts_tab = sorted(json.loads((session / "parts.json").read_text(encoding="utf-8-sig"))["parts"], key=lambda p: p["part"])
+    raw_ref = Raw([(session / p["file"], int(p["frames"])) for p in parts_tab])
+    raw_src = Raw([(Path(a.source), src_frames)])
     rms = lambda x: float(np.sqrt(np.mean(x.astype(np.float64) ** 2)))  # noqa: E731
 
     nblocks = len(src) // BLOCK
@@ -111,7 +144,21 @@ def main() -> int:
     k0, c0 = ncc(src[first * BLOCK : (first + 1) * BLOCK], head)
     if c0 < MATCH:
         raise SystemExit(f"the source was not found in the reference (best correlation {c0:.2f})")
-    offset = k0 - first * BLOCK  # reference position minus source position, in 8 kHz samples
+    # The coarse offset (8 kHz samples, so within +-6 frames) made exact at 48 kHz, then the reference decimated again
+    # from the phase the exact offset has, so that source and reference are decimated on the same phase.
+    coarse48 = (k0 - first * BLOCK) * DEC
+    blk48 = raw_src.get(first * BLOCK * DEC, BLOCK * DEC)
+    lo48 = max(0, coarse48 + first * BLOCK * DEC - 2 * DEC)
+    win48 = raw_ref.get(lo48, BLOCK * DEC + 4 * DEC)
+    k48, c48 = ncc(blk48, win48)
+    if c48 < MATCH48:
+        raise SystemExit(f"the source was found at 8 kHz (correlation {c0:.2f}) but not at 48 kHz (best {c48:.2f})")
+    exact48 = lo48 + k48 - first * BLOCK * DEC  # reference frame minus source frame
+    phase = exact48 % DEC
+    if phase:
+        ref, _, _ = read_reference(session, phase)
+    offset = (exact48 - phase) // DEC  # 8 kHz samples; ref[offset + i] is the source's sample i, decimated alike
+    exact_offset48 = exact48
 
     discontinuities, unmatched, correlations = [], [], []
     last_matched_end = None
@@ -131,6 +178,17 @@ def main() -> int:
                 found = (lo + k - i * BLOCK, c)
                 break
         if found is None:
+            # Looked at again at the full rate: a copy correlates at 1.0 there however the decimation phase fell.
+            s48 = raw_src.get(i * BLOCK * DEC, BLOCK * DEC)
+            lo48 = max(0, exact_offset48 + i * BLOCK * DEC - FAR48)
+            hi48 = exact_offset48 + (i + 1) * BLOCK * DEC + FAR48
+            w48 = raw_ref.get(lo48, hi48 - lo48)
+            kf, cf = ncc(s48, w48)
+            if cf >= MATCH48:
+                new48 = lo48 + kf - i * BLOCK * DEC
+                found = ((new48 - phase) // DEC, cf)
+                exact_offset48 = new48
+        if found is None:
             src_ms = i * BLOCK / 8.0
             if unmatched and abs(src_ms - (unmatched[-1]["source_ms"] + unmatched[-1]["ms"])) < 1.0:
                 unmatched[-1]["ms"] += 1000.0
@@ -138,6 +196,8 @@ def main() -> int:
                 unmatched.append({"source_ms": src_ms, "ms": 1000.0})
             continue
         new_offset, c = found
+        if abs(new_offset - offset) * 1000.0 / 8000.0 >= JUMP_MS:
+            exact_offset48 = new_offset * DEC + phase  # a shifted match: exact to the decimation step
         correlations.append(c)
         shift = new_offset - offset  # samples at 8 kHz; positive: the reference moved on (source frames repeated)
         if abs(shift) * 1000.0 / 8000.0 >= JUMP_MS:
