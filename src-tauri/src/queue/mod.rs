@@ -227,6 +227,9 @@ struct OpenSession {
     ended_ms: Option<u64>,
     /// The night pass has been planned for this session (or skipped, with the reason logged).
     night_handled: bool,
+    /// The night pass planned for this session was cancelled because another session started (its job is held,
+    /// with the units it committed); it goes on when the pass is planned again after the last session.
+    night_cancelled: bool,
 }
 
 pub struct Queue {
@@ -369,9 +372,48 @@ impl Queue {
             finished: false,
             ended_ms: None,
             night_handled: false,
+            night_cancelled: false,
         });
         self.ensure_slots(profile);
         Ok(())
+    }
+
+    /// A session started. A night pass planned before it is cancelled and planned again after the last session
+    /// (owner, 19 Nov 2026: the programme had no entry for the day and the pass had been planned between two
+    /// sessions): a night job that is not finished is held with the units it committed, and a night plan that was
+    /// skipped is reconsidered with the new session's audio. A finished night pass stays.
+    fn cancel_night_plans(&self, new_name: &str) {
+        let now = clock_ms();
+        let mut held: Vec<String> = Vec::new();
+        let mut open = plock(&self.open);
+        for s in open.iter_mut().filter(|s| s.name != new_name) {
+            if !s.night_handled {
+                continue;
+            }
+            let night = plock(&s.handle.queue)
+                .jobs()
+                .unwrap_or_default()
+                .into_iter()
+                .find(|j| j.kind == JobKind::Night);
+            match night {
+                Some(j) if j.state == JobState::Done => {}
+                Some(_) => {
+                    if matches!(plock(&s.handle.queue).hold_night_job(now), Ok(true)) {
+                        s.night_cancelled = true;
+                        s.night_handled = false;
+                        held.push(s.name.clone());
+                    }
+                }
+                None => s.night_handled = false,
+            }
+        }
+        drop(open);
+        if !held.is_empty() {
+            self.core.push_log(format!(
+                "night pass cancelled: {new_name} started after it was planned; it is planned again after the last session (held: {})",
+                held.join(", ")
+            ));
+        }
     }
 
     /// Hands every closed part not yet seen to the planner, and, once Stop was seen, asks for the final cut.
@@ -706,7 +748,18 @@ impl Queue {
                 .map(|j| j.state)
             {
                 Some(JobState::Done) => {
-                    if !s.night_handled && !jobs.iter().any(|j| j.kind == JobKind::Night) {
+                    // A session whose night job was held for a new session is planned again with the rest (a held job
+                    // whose last unit committed meanwhile is Done and needs nothing).
+                    let night = jobs
+                        .iter()
+                        .find(|j| j.kind == JobKind::Night)
+                        .map(|j| j.state);
+                    let wants_night = match night {
+                        None => true,
+                        Some(JobState::Paused) => s.night_cancelled,
+                        Some(_) => false,
+                    };
+                    if !s.night_handled && wants_night {
                         candidates.push(i);
                     }
                 }
@@ -716,10 +769,11 @@ impl Queue {
         }
         // The pass waits for the programme's last session to transcribe on the day of the last recorded session,
         // not only for the sessions that happened to be recorded (a 30-minute gap between two sessions must not
-        // start it early). A day the programme does not list (a rehearsal) goes by the recorded sessions alone.
-        if let Some(day_end) = night::programme_day_end_ms(PROGRAMME_JSON, last_end) {
-            last_end = last_end.max(day_end);
-        }
+        // start it early). A day the programme does not list goes by the recorded sessions alone, but not before
+        // 20:00 IST (a session that ended at midday does not end the day); a programme entry overrides that.
+        // The gate builds' shortened wait (`WB_GATE_NIGHT_WAIT_S`) turns the 20:00 rule off.
+        let last_end =
+            night::day_end_reference_ms(PROGRAMME_JSON, last_end, night_wait_shift_ms() == 0);
         if candidates.is_empty()
             || !night::may_start(
                 now.saturating_add(night_wait_shift_ms()),
@@ -790,6 +844,9 @@ impl Queue {
                             "{}: the night pass could not be planned: {e}",
                             s.name
                         ));
+                    } else if s.night_cancelled {
+                        // Planned again: the held night job goes on from the units it has not committed.
+                        let _ = plock(&s.handle.queue).resume_night_job(now);
                     }
                 }
                 let basis = match (measured, multi) {
@@ -817,6 +874,7 @@ impl Queue {
         }
         for i in candidates {
             open[i].night_handled = true;
+            open[i].night_cancelled = false;
         }
     }
 
@@ -853,13 +911,21 @@ pub fn on_session_started(app: &AppHandle, dir: &str, expected: &[String], scrip
         ));
         return;
     }
-    if let Err(e) = queue.register(dir, &languages, &profile) {
-        let _ = app.state::<AppState>().events.send(Notice::event(
-            NoticeLevel::Warning,
-            "queue",
-            e.clone(),
-        ));
-        queue.core.push_log(e);
+    let name = dir
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("session")
+        .to_owned();
+    match queue.register(dir, &languages, &profile) {
+        Ok(()) => queue.cancel_night_plans(&name),
+        Err(e) => {
+            let _ = app.state::<AppState>().events.send(Notice::event(
+                NoticeLevel::Warning,
+                "queue",
+                e.clone(),
+            ));
+            queue.core.push_log(e);
+        }
     }
 }
 

@@ -8,7 +8,7 @@
 //! | `WB_GATE_CLOCK_OFFSET_S=<n>` | Moves the scheduler's clock by n seconds (so a short run stands for the day: the first session maps to 10:00 IST); read in `queue::clock_ms` |
 //! | `WB_GATE_FORCE_HYBRID=1` | The queue works as if the profile had chosen a hybrid (processor and graphics engines at once). For the kill test only: neither emulation profile chose a hybrid, so the report labels the run as forced |
 //! | `WB_GATE_QUEUE_LOG=<path>` | Every line of the scheduler log is also appended to this file, with the scheduler's IST time |
-//! | `WB_GATE_NIGHT_WAIT_S=<n>` | The night pass waits n seconds (not 30 minutes) after the last session ended; for the smoke run only |
+//! | `WB_GATE_NIGHT_WAIT_S=<n>` | The night pass waits n seconds (not 30 minutes) after the last session ended; for the smoke run only (it also turns off the 20:00 IST rule for a day the programme does not list) |
 //!
 //! The day plan may also carry `actions` (see [`PlanAction`]): the operator's pause and resume, a language lock
 //! and an import of a copy of a finished session, each fired at a time relative to a session's start or stop. They
@@ -43,6 +43,28 @@ pub fn night_wait_shift_ms() -> u64 {
         .map_or(0, |wait| {
             30u64.saturating_mul(60).saturating_sub(wait) * 1_000
         })
+}
+
+/// The programme's entry, as the app itself reads it, for the day the scheduler's clock shows now (with
+/// `WB_GATE_CLOCK_OFFSET_S` applied). The day simulation's pre-flight check (`WB_GATE_CHECK=programme`) refuses to
+/// start unless this lists the four sessions of the day.
+pub fn programme_day_report() -> serde_json::Value {
+    let now = super::clock_ms();
+    let date = wb_queue::night::ist_date(now);
+    match wb_queue::night::programme_day(super::PROGRAMME_JSON, now) {
+        Some(day) => serde_json::json!({
+            "date": date,
+            "sessions": day.titles.len(),
+            "titles": day.titles,
+            "last_end_ist": wb_queue::estimate::format_ist_hhmm(day.last_end_ms),
+        }),
+        None => serde_json::json!({
+            "date": date,
+            "sessions": 0,
+            "titles": [],
+            "last_end_ist": null,
+        }),
+    }
 }
 
 /// Appends a scheduler log line to `WB_GATE_QUEUE_LOG`.

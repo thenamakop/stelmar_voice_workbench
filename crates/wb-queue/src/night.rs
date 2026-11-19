@@ -14,6 +14,9 @@ use crate::{DAY_MS, IST_OFFSET_MS};
 pub const DEADLINE_HOUR_IST: u64 = 8;
 /// The night pass starts this long after the day's last session ends (and never while recording).
 pub const START_AFTER_LAST_SESSION_MS: u64 = 30 * 60_000;
+/// When the programme has no entry for the day, the night pass does not start before this hour (IST) either: a
+/// session that ends at midday does not mean the day is over (owner, 19 Nov 2026).
+pub const EVENING_HOUR_IST: u64 = 20;
 
 /// One session of the day with its audio by language.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -147,6 +150,8 @@ struct ProgrammeSession {
     date: String,
     end: String,
     #[serde(default)]
+    title: String,
+    #[serde(default)]
     transcribe: bool,
 }
 
@@ -156,16 +161,87 @@ struct ProgrammeSession {
 /// None when the programme does not parse or has no such session that day (a rehearsal, another date):
 /// the caller then goes by the recorded sessions alone.
 pub fn programme_day_end_ms(programme_json: &str, reference_ms: u64) -> Option<u64> {
+    programme_day(programme_json, reference_ms).map(|d| d.last_end_ms)
+}
+
+/// What the programme lists, for transcription, on one IST day.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProgrammeDay {
+    /// The titles of the sessions marked for transcription, in the order the programme lists them.
+    pub titles: Vec<String>,
+    /// The end of the last of them (epoch ms).
+    pub last_end_ms: u64,
+}
+
+/// The programme's entry for the IST day that contains `reference_ms` (the sessions marked for transcription), or
+/// None when the programme does not parse or lists none that day. Gate script: the pre-flight check of the day
+/// simulation reads this through the app (`WB_GATE_CHECK=programme`), so the script cannot disagree with the app.
+pub fn programme_day(programme_json: &str, reference_ms: u64) -> Option<ProgrammeDay> {
     let programme: Programme = serde_json::from_str(programme_json).ok()?;
     let local = reference_ms.checked_add(IST_OFFSET_MS)?;
     let day_start = local - local % DAY_MS - IST_OFFSET_MS;
-    programme
-        .sessions
-        .iter()
-        .filter(|s| s.transcribe)
-        .filter_map(|s| ist_epoch_ms(&s.date, &s.end))
-        .filter(|end| *end > day_start && *end <= day_start + DAY_MS)
-        .max()
+    let mut titles = Vec::new();
+    let mut last_end_ms = 0u64;
+    for s in programme.sessions.iter().filter(|s| s.transcribe) {
+        let Some(end) = ist_epoch_ms(&s.date, &s.end) else {
+            continue;
+        };
+        if end > day_start && end <= day_start + DAY_MS {
+            titles.push(s.title.clone());
+            last_end_ms = last_end_ms.max(end);
+        }
+    }
+    (!titles.is_empty()).then_some(ProgrammeDay {
+        titles,
+        last_end_ms,
+    })
+}
+
+/// The IST calendar date (`YYYY-MM-DD`) of an epoch time in ms (Howard Hinnant's civil-from-days).
+pub fn ist_date(ms: u64) -> String {
+    let days = i64::try_from(ms.saturating_add(IST_OFFSET_MS) / DAY_MS).unwrap_or(0);
+    let z = days + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let year = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    format!(
+        "{:04}-{:02}-{:02}",
+        if month <= 2 { year + 1 } else { year },
+        month,
+        day
+    )
+}
+
+/// 20:00 IST of the event day that contains `end_ms`. An event day runs from 08:00 to 08:00 (the night pass's own
+/// deadline is 08:00), so a session that ends at 01:00 belongs to the day before and its 20:00 has long passed.
+pub fn evening_ms(end_ms: u64) -> u64 {
+    let local = end_ms.saturating_add(IST_OFFSET_MS);
+    let shifted = local.saturating_sub(DEADLINE_HOUR_IST * 3_600_000);
+    let day_start = shifted - shifted % DAY_MS;
+    (day_start + EVENING_HOUR_IST * 3_600_000).saturating_sub(IST_OFFSET_MS)
+}
+
+/// The moment the day counts as ended, for the 30-minute rule of [`may_start`]: the end of the last session
+/// recorded or, when the programme lists the day, of its last session to transcribe if that is later. When the
+/// programme has no entry for the day the pass also waits for 20:00 IST (`evening_floor`; the gate builds'
+/// shortened wait turns it off). A programme entry overrides the evening rule: it is the better knowledge of
+/// when the day ends.
+pub fn day_end_reference_ms(
+    programme_json: &str,
+    last_recorded_end_ms: u64,
+    evening_floor: bool,
+) -> u64 {
+    match programme_day_end_ms(programme_json, last_recorded_end_ms) {
+        Some(day_end) => last_recorded_end_ms.max(day_end),
+        None if evening_floor => last_recorded_end_ms
+            .max(evening_ms(last_recorded_end_ms).saturating_sub(START_AFTER_LAST_SESSION_MS)),
+        None => last_recorded_end_ms,
+    }
 }
 
 /// May the night pass start now? Nothing is recording, every rolling job of the day is done, and the last
@@ -251,6 +327,78 @@ mod tests {
         let end =
             programme_day_end_ms(shipped, at(11, 30)).expect("day 1 has sessions to transcribe");
         assert!(end > at(11, 30) && end <= at(24, 0));
+    }
+
+    /// A programme without an entry for the day (a rehearsal, another date).
+    const NO_ENTRY_PROGRAMME: &str = r#"{"sessions":[
+        {"date":"2027-03-01","end":"11:30","transcribe":true}]}"#;
+
+    #[test]
+    fn with_no_programme_entry_a_midday_session_does_not_start_the_night_before_20_00() {
+        // The last recorded session ended at 12:00; the day is not over: 20:00 is the earliest start.
+        let reference = day_end_reference_ms(NO_ENTRY_PROGRAMME, at(12, 0), true);
+        assert!(
+            !may_start(at(12, 30), false, false, reference),
+            "30 minutes after the session is too early"
+        );
+        assert!(!may_start(at(19, 59), false, false, reference));
+        assert!(may_start(at(20, 0), false, false, reference));
+        // Without the evening floor (the gate builds' shortened wait) the 30-minute rule alone applies.
+        let plain = day_end_reference_ms(NO_ENTRY_PROGRAMME, at(12, 0), false);
+        assert!(may_start(at(12, 30), false, false, plain));
+    }
+
+    #[test]
+    fn with_no_programme_entry_an_evening_session_waits_only_30_minutes_after_it() {
+        // Ended at 21:00, past 20:00: the later of the two is 30 minutes after the session.
+        let reference = day_end_reference_ms(NO_ENTRY_PROGRAMME, at(21, 0), true);
+        assert!(!may_start(at(21, 29), false, false, reference));
+        assert!(may_start(at(21, 30), false, false, reference));
+        // A session that ended at 01:00 belongs to the day before: its 20:00 passed long ago.
+        let late = day_end_reference_ms(NO_ENTRY_PROGRAMME, at(24 + 1, 0), true);
+        assert!(!may_start(at(24 + 1, 29), false, false, late));
+        assert!(may_start(at(24 + 1, 30), false, false, late));
+        // The event day runs 08:00 to 08:00: 07:59 is still the day before, 08:01 the new one.
+        assert_eq!(evening_ms(at(7, 59)), at(20, 0) - DAY_MS);
+        assert_eq!(evening_ms(at(8, 1)), at(20, 0));
+    }
+
+    #[test]
+    fn a_programme_entry_overrides_the_evening_rule_as_before() {
+        // The programme's last session to transcribe ends 18:15: the pass may start 18:45, not 20:00.
+        let reference = day_end_reference_ms(PROGRAMME, at(11, 30), true);
+        assert!(!may_start(at(18, 44), false, false, reference));
+        assert!(may_start(at(18, 45), false, false, reference));
+        // Sessions recorded past the programme's end push the reference later, never earlier.
+        let late = day_end_reference_ms(PROGRAMME, at(19, 0), true);
+        assert!(!may_start(at(19, 29), false, false, late));
+        assert!(may_start(at(19, 30), false, false, late));
+    }
+
+    #[test]
+    fn the_ist_date_of_an_epoch_time() {
+        assert_eq!(ist_date(at(0, 0)), "2027-02-09");
+        assert_eq!(ist_date(at(0, 0) - 1), "2027-02-08");
+        assert_eq!(ist_date(at(23, 59)), "2027-02-09");
+        assert_eq!(ist_date(0), "1970-01-01");
+        // 2028 is a leap year.
+        assert_eq!(
+            ist_date(ist_epoch_ms("2028-02-29", "12:00").unwrap()),
+            "2028-02-29"
+        );
+    }
+
+    #[test]
+    fn the_programme_day_lists_the_sessions_to_transcribe_for_the_pre_flight_check() {
+        let day = programme_day(PROGRAMME, at(11, 30)).expect("an entry for the day");
+        assert_eq!(day.titles.len(), 2);
+        assert_eq!(day.last_end_ms, at(18, 15));
+        assert_eq!(programme_day(NO_ENTRY_PROGRAMME, at(11, 30)), None);
+        let shipped = include_str!("../../../docs/programme.json");
+        // 2027-02-08: the four sessions of the day simulation (Inaugural, Parallel I, Parallel II, Panel).
+        let day1 = programme_day(shipped, at(11, 30) - DAY_MS).expect("day 1");
+        assert_eq!(day1.titles.len(), 4);
+        assert_eq!(day1.last_end_ms, at(17, 30) - DAY_MS);
     }
 
     #[test]

@@ -375,6 +375,45 @@ impl SessionQueue {
         Ok(id)
     }
 
+    /// The night pass of this session is cancelled because another session started after it was planned (owner,
+    /// 19 Nov 2026): the night job is held, with every unit it already committed, until the pass is planned again
+    /// after the last session. True when a night job that had not finished was held.
+    pub fn hold_night_job(&mut self, now_ms: u64) -> Result<bool> {
+        let Some(night) = self
+            .transcript
+            .store()
+            .jobs()?
+            .into_iter()
+            .find(|j| j.kind == JobKind::Night)
+        else {
+            return Ok(false);
+        };
+        if !matches!(night.state, JobState::Queued | JobState::Running) {
+            return Ok(false);
+        }
+        self.set_paused(night.id, true, now_ms)?;
+        Ok(true)
+    }
+
+    /// The night job held by [`Self::hold_night_job`] goes on when the pass is planned again: its committed units
+    /// are not decoded twice. True when a held night job was resumed.
+    pub fn resume_night_job(&mut self, now_ms: u64) -> Result<bool> {
+        let Some(night) = self
+            .transcript
+            .store()
+            .jobs()?
+            .into_iter()
+            .find(|j| j.kind == JobKind::Night)
+        else {
+            return Ok(false);
+        };
+        if night.state != JobState::Paused {
+            return Ok(false);
+        }
+        self.set_paused(night.id, false, now_ms)?;
+        Ok(true)
+    }
+
     pub fn set_paused(&mut self, job: i64, paused: bool, now_ms: u64) -> Result<()> {
         let j = self
             .transcript
@@ -1143,6 +1182,82 @@ mod tests {
         );
         // The rolling transcript is still there.
         assert_eq!(q.transcript().store().segment_count("post-1").unwrap(), 2);
+    }
+
+    #[test]
+    fn a_night_job_held_for_a_new_session_keeps_its_units_and_goes_on_when_planned_again() {
+        let (mut q, job, _dir) = queue_with_units("night-held", 2);
+        for _ in 0..2 {
+            let c = q.claim(Device::Cpu, 1).unwrap().unwrap();
+            stage(
+                &c,
+                &[ev(
+                    c.unit.idx,
+                    0,
+                    c.unit.start_ms + 10,
+                    c.unit.end_ms - 10,
+                    "r",
+                )],
+            );
+            q.complete(&c, "t", 2).unwrap();
+        }
+        q.add_part(1, 0, 20_000, 48_000, &no_pauses()).unwrap();
+        q.plan_units(job, true).unwrap();
+        assert!(
+            !q.hold_night_job(2).unwrap(),
+            "no night job yet: nothing to hold"
+        );
+        let night = q
+            .create_night_job("s", serde_json::json!({"hi": "big"}), vec!["hi".into()], 3)
+            .unwrap();
+        // One night unit is committed, then another session starts: the planned night pass is cancelled.
+        let c = q.claim(Device::Cpu, 4).unwrap().unwrap();
+        stage(
+            &c,
+            &[ev(
+                c.unit.idx,
+                0,
+                c.unit.start_ms + 10,
+                c.unit.end_ms - 10,
+                "n",
+            )],
+        );
+        q.complete(&c, "t", 5).unwrap();
+        assert!(q.hold_night_job(6).unwrap());
+        assert!(
+            q.claim(Device::Cpu, 7).unwrap().is_none(),
+            "a held night job gives no unit while the new session records"
+        );
+        assert!(!q.hold_night_job(8).unwrap(), "already held");
+        // Planned again after the last session: the same job (never a second one), resumed.
+        let again = q
+            .create_night_job("s", serde_json::json!({"hi": "big"}), vec!["hi".into()], 9)
+            .unwrap();
+        assert_eq!(again, night);
+        assert!(q.resume_night_job(10).unwrap());
+        let c = q.claim(Device::Cpu, 11).unwrap().unwrap();
+        assert_eq!(c.job.id, night);
+        assert_eq!(c.unit.idx, 1, "the committed unit is not decoded again");
+        stage(
+            &c,
+            &[ev(
+                c.unit.idx,
+                0,
+                c.unit.start_ms + 10,
+                c.unit.end_ms - 10,
+                "n",
+            )],
+        );
+        q.complete(&c, "t", 12).unwrap();
+        assert_eq!(
+            q.transcript()
+                .store()
+                .default_revision()
+                .unwrap()
+                .as_deref(),
+            Some("post-2")
+        );
+        assert_eq!(q.transcript().store().segment_count("post-2").unwrap(), 2);
     }
 
     #[test]
