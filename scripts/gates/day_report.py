@@ -45,8 +45,10 @@ class Clock:
         self.day = 0
 
     def parse(self, text: str) -> float:
-        h, m, s = (int(t) for t in text.split(":"))
-        v = h * 3600 + m * 60 + s + self.day * 86400
+        parts = [int(t) for t in text.split(":")]
+        h, m = parts[0], parts[1]
+        sec = parts[2] if len(parts) > 2 else 0  # the scheduler log has minutes only
+        v = h * 3600 + m * 60 + sec + self.day * 86400
         while v < self.last - 43200:  # a time far before the last one: the clock passed midnight
             self.day += 1
             v += 86400
@@ -61,7 +63,7 @@ def read_qlog(run: Path) -> list[tuple[float, str]]:
     clock = Clock()
     out = []
     for raw in p.read_text(encoding="utf-8", errors="replace").splitlines():
-        m = re.match(r"^(\d{1,2}:\d{2}:\d{2})\t(.*)$", raw)
+        m = re.match(r"^(\d{1,2}:\d{2}(?::\d{2})?)\t(.*)$", raw)
         if m:
             out.append((clock.parse(m.group(1)), m.group(2)))
     return out
@@ -112,16 +114,20 @@ def wer_numbers(mode_sessions: list[dict], run: Path, audio_dir: Path | None, P)
         w, c = metrics.wer(sc), metrics.cer(sc)
         P(f"  {s['title']} ({rev}): reference words {len(sc[0].ref.split())}, hypothesis words {len(sc[0].hyp.split())}, WER {'n/a' if w is None else f'{100 * w:.1f}%'}, CER {'n/a' if c is None else f'{100 * c:.1f}%'}")
         # Per dataset: each utterance's window, shifted by where the source content starts in the app's recording.
-        analysis = jload(run / f"fid-{s['index']}" / "analysis.json") if s.get("index") else None
-        shift = (analysis or {}).get("content_start_ms")
-        if shift is None:
+        # Where the source starts in the app's recording: where it starts in the reference capture (speech_analyse.py) plus
+        # the one fixed offset between the app and the reference (compare.json: an app frame is a reference frame plus it).
+        ra = jload(run / f"fid-{s['index']}" / "reference-analysis.json") if s.get("index") else None
+        cmp_ = jload(run / f"fid-{s['index']}" / "compare.json") if s.get("index") else None
+        segs0 = (cmp_ or {}).get("segments") or []
+        if ra is None or not segs0 or segs0[0].get("offset_frames") is None:
             continue
+        shift = float(ra["content_start_ms"]) + float(segs0[0]["offset_frames"]) * 1000.0 / 48000.0
         for u in ref_s["utterances"]:
             lo, hi = u["start_s"] * 1000.0 + shift, u["end_s"] * 1000.0 + shift
             hyp = " ".join(x["text"] for x in segs if lo <= (x["start_ms"] + x["end_ms"]) / 2.0 <= hi)
             per_set[u["dataset"]].append(metrics.prepare(u["id"], u["text"], hyp, u["lang"], bool(u.get("mixed"))))
     if per_set:
-        P("  per dataset, utterance by utterance, each utterance's window from the content start the analysis found (information; a window can be off by a second or so):")
+        P("  per dataset, utterance by utterance, each utterance's window from where the source starts in the app's recording (reference capture start plus the fixed offset), information:")
         for name in sorted(per_set):
             items = per_set[name]
             w, c = metrics.wer(items), metrics.cer(items)
@@ -267,9 +273,9 @@ def main() -> int:
         for s in sorted(recorded, key=lambda s: s["index"] or 0):
             f = fid.get(s["title"], {})
             P(f"  {s['title']}: {f.get('verdict', 'NO VERDICT')}; {f.get('audio_minutes')} min; upstream breaks {f.get('upstream_breaks')}, counted {f.get('counted_breaks')} of at most {f.get('break_limit')}; differing frames {f.get('differing_frames')}; runs of the app {f.get('runs_of_the_app')}; dropped samples {f.get('dropped_samples')}, ring overrun samples {f.get('overrun_samples')}, xruns {f.get('xruns')}")
-            for r in f.get("invalid_reasons") or []:
+            for r in ([f["invalid_reasons"]] if isinstance(f.get("invalid_reasons"), str) else (f.get("invalid_reasons") or [])):
                 P(f"      INVALID: {r}")
-            for r in f.get("fail_reasons") or []:
+            for r in ([f["fail_reasons"]] if isinstance(f.get("fail_reasons"), str) else (f.get("fail_reasons") or [])):
                 P(f"      FAIL: {r}")
             ftxt = run / f"fidelity-{s['index']}.txt"
             if ftxt.exists():
@@ -534,7 +540,8 @@ def main() -> int:
     for name, ok, detail in checks:
         mark = "PASS" if ok else ("INFO" if ok is None else "FAIL")
         failed += 1 if ok is False else 0
-        info += 1 if ok is None else 0
+        # The estimate lines of the rehearsal are information by design (two-minute sessions): they do not make it incomplete.
+        info += 1 if (ok is None and not (mode == "rehearse" and name.startswith("rolling transcripts outstanding"))) else 0
         P(f"  [{mark}] {name}" + (f": {detail}" if detail else ""))
     P("")
     if notes.get("drivers_changed"):

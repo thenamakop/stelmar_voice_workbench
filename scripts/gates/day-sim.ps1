@@ -225,9 +225,11 @@ function Invoke-FidelityJudging {
       continue
     }
     $sessionDir = [string]$sess.dir
-    $null = Invoke-WbAnalyse -Testbench $Testbench -Session $sessionDir -Source $r.Source -Report (Join-Path $fid 'analysis.json')
-    $null = Invoke-WbAnalyse -Testbench $Testbench -Session $r.Dir -Source $r.Source -Report (Join-Path $fid 'reference-analysis.json')
+    # The app against the reference capture first (one fixed offset, sample for sample), then the reference capture against
+    # the speech source: wb-testbench analyse only knows its seeded noise, so speech_analyse.py does that part (upstream breaks).
     $cmp = Invoke-WbCompare -Testbench $Testbench -SessionDir $sessionDir -ReferenceDir $r.Dir -RunDir $fid
+    $sa = Invoke-WbNative -FilePath $python -ArgumentList @('-I', (Join-Path $repo 'scripts\gates\speech_analyse.py'), '--reference', $r.Dir, '--source', $r.Source, '--out', (Join-Path $fid 'reference-analysis.json'))
+    Write-Utf8 (Join-Path $fid 'speech-analyse.txt') ((@($sa.Output) + @($sa.Error)) -join "`r`n")
     $compare = Read-Json (Join-Path $fid 'compare.json')
     $refAnalysis = Read-Json (Join-Path $fid 'reference-analysis.json')
     $play = Read-Json (Join-Path $Run "play-$($r.Index).json")
@@ -250,6 +252,10 @@ function Invoke-FidelityJudging {
       $lines = @("the verdict could not be worked out: $($_.Exception.Message)")
     }
     Write-Utf8 (Join-Path $Run "fidelity-$($r.Index).txt") ($lines -join "`r`n")
+    # Arrays kept as arrays for ConvertTo-Json (a one-element array inside $(if ...) would come out as a string).
+    $invalidReasons = @()
+    $failReasons = @()
+    if ($verdict) { $invalidReasons = @($verdict.InvalidReasons | ForEach-Object { "$_" }); $failReasons = @($verdict.FailReasons | ForEach-Object { "$_" }) }
     $results += [ordered]@{
       title = $r.Title; index = $r.Index
       verdict = $(if ($verdict) { $verdict.Verdict } else { 'NO VERDICT' })
@@ -257,8 +263,8 @@ function Invoke-FidelityJudging {
       upstream_breaks = $(if ($verdict) { @($verdict.Breaks).Count } else { $null })
       counted_breaks = $(if ($verdict) { @($verdict.CountedBreaks).Count } else { $null })
       break_limit = $(if ($verdict) { $verdict.BreakLimit } else { $null })
-      invalid_reasons = $(if ($verdict) { @($verdict.InvalidReasons) } else { @() })
-      fail_reasons = $(if ($verdict) { @($verdict.FailReasons) } else { @() })
+      invalid_reasons = $invalidReasons
+      fail_reasons = $failReasons
       compare_aligned = $(if ($compare) { [bool]$compare.aligned } else { $null })
       runs_of_the_app = $(if ($compare) { @($compare.segments).Count } else { $null })
       differing_frames = $(if ($compare) { [int64]$compare.differing_frames } else { $null })
@@ -297,7 +303,22 @@ function Write-SmokeEvidence([string]$Run) {
 }
 
 if ($FromRun) {
-  Write-SmokeEvidence (Resolve-Path $FromRun).Path
+  $fr = (Resolve-Path $FromRun).Path
+  # A day or rehearsal run: judge the sessions again too (the judging reads only files in the run folder and the audio).
+  if ($fidelity -and (Test-Path -LiteralPath (Join-Path $fr 'report.json')) -and (Test-Path -LiteralPath (Join-Path $Audio 'day-audio.json'))) {
+    $m = Read-Json (Join-Path $Audio 'day-audio.json')
+    $rep = Read-Json (Join-Path $fr 'report.json')
+    $order = @($rep.sessions | Sort-Object started_ist)
+    $refsAgain = @()
+    $n = 0
+    foreach ($s in $order) {
+      $n++
+      $entry = @(@($m.sessions) | Where-Object { $_.title -eq $s.title })[0]
+      $refsAgain += [pscustomobject]@{ Index = $n; Title = $s.title; Dir = (Join-Path $fr "reference-$n"); Source = (Join-Path $Audio $entry.file) }
+    }
+    $null = Invoke-FidelityJudging -Run $fr -Refs $refsAgain -ReportJson $rep
+  }
+  Write-SmokeEvidence $fr
   return
 }
 
