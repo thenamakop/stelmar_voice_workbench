@@ -401,14 +401,18 @@ try {
     # 2. The plan.
     $at = 0
     $planSessions = @()
-    $prevEnd = -1
+    $prevEnd = -20
     foreach ($s in $sessions) {
       $dur = [int][math]::Ceiling([double]$s.seconds) + 25
       if ($mode -eq 'day' -or $mode -eq 'rehearse') {
         # The programme's times (10:00, 12:00, 14:30 and 16:00 on the scheduler's clock; compressed in the rehearsal).
-        if ([int]$s.at_s -lt $prevEnd) { throw "the sessions overlap: '$($s.title)' starts at $($s.at_s) s, the one before it ends at $prevEnd s" }
-        $planSessions += [ordered]@{ title = $s.title; hall = $s.hall; at_s = [int]$s.at_s; duration_s = $dur; languages = @($s.languages); script = $s.script; device = $capName }
-        $prevEnd = [int]$s.at_s + $dur
+        # A session whose audio ran a little past the programme slot (a 90-minute slot with a 91-minute recording) pushes the
+        # next one back by the overlap plus 20 s, never more than 5 minutes; the plan file records the programme time.
+        $atEff = [int]$s.at_s
+        if ($atEff -lt $prevEnd + 20) { $atEff = $prevEnd + 20 }
+        if ($atEff - [int]$s.at_s -gt 300) { throw "the sessions overlap: '$($s.title)' is due at $($s.at_s) s, the one before it ends at $prevEnd s" }
+        $planSessions += [ordered]@{ title = $s.title; hall = $s.hall; at_s = $atEff; programme_at_s = [int]$s.at_s; duration_s = $dur; languages = @($s.languages); script = $s.script; device = $capName }
+        $prevEnd = $atEff + $dur
       } else {
         $planSessions += [ordered]@{ title = $s.title; at_s = $at; duration_s = $dur; languages = @($s.languages); device = $capName }
         $at += $dur + 30
