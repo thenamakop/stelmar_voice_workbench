@@ -394,11 +394,18 @@ def main() -> int:
     # ---------------------------------------------------------------- (6) the night pass
     P("NIGHT PASS")
     night_lines = [(t, x) for t, x in qlog if "night" in x.lower() or "post-2" in x]
-    planned = next(((t, x) for t, x in qlog if "night pass planned" in x), None)
+    cancelled_lines = [(t, x) for t, x in qlog if "night pass cancelled" in x]
+    # The last plan counts: a plan made before a later session started is cancelled and made again (19 Nov 2026).
+    planned = next(((t, x) for t, x in reversed(qlog) if "night pass planned" in x), None)
     skipped = next(((t, x) for t, x in qlog if "night pass skipped" in x), None)
     n_complete = {n: t for (n, rv), t in complete_at.items() if rv == "post-2"}
     if planned:
         pt, px = planned
+        n_complete = {n: t for n, t in n_complete.items() if t >= pt}
+        if cancelled_lines:
+            P(f"  {len(cancelled_lines)} earlier plan(s) cancelled because a session started after it was planned and planned again after the last session:")
+            for ct, cx in cancelled_lines:
+                P(f"    {hms(ct)} {cx}")
         mm = re.search(r"for (\d+) session", px)
         expected = int(mm.group(1)) if mm else 0
         rb = ready_by(px, pt)

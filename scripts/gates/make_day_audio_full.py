@@ -229,7 +229,9 @@ def main() -> int:
         names = ["Inaugural", "Parallel I", "Parallel II", "Panel"]
         built = [build_day_session(out, n, target, rehearse) for n in names]
         # The programme: 10:00, 12:00, 14:30 and 16:00 (seconds after 10:00); compressed for the rehearsal.
-        at_s = [0, 170, 340, 510] if rehearse else [0, 7200, 16200, 21600]
+        # The rehearsal leaves a long gap before its third session so that the night pass is planned (60 s after the second
+        # session's transcript is ready) and then cancelled by that session, which exercises the re-plan (19 Nov 2026).
+        at_s = [0, 170, 700, 870] if rehearse else [0, 7200, 16200, 21600]
         specs = [(n, a, h) for n, a, h in zip(names, at_s, ["Main Hall", "Hall A", "Hall B", "Main Hall"])]
 
     manifest = {"mode": mode, "rate": RATE_OUT, "channels": 2, "restricted": RESTRICTED, "sessions": []}

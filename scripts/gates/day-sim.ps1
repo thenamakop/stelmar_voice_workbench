@@ -9,7 +9,7 @@
                About 11 h. Audio: make_day_audio_full.py --day. Judged by the Phase 1 recording rule per session
                (Fidelity.psm1) and the queue checks of the plan; evidence by day_report.py.
     -Rehearse  the same schedule compressed (four sessions of 2 minutes, a night box of 8 minutes): proves the script
-               end to end in under 30 minutes. NOT a gate. Audio: make_day_audio_full.py --rehearse.
+               end to end in about 35 minutes (its third session starts late so that the night pass is planned and then cancelled by it). NOT a gate. Audio: make_day_audio_full.py --rehearse.
     -Kill      the engine-kill test (queue-kill.ps1 calls it).
   The quiet-machine rule is checked with the gate lock held (Wait-WbQuiet; idle-check.json in the run folder).
 
@@ -92,10 +92,10 @@ if (-not $PSBoundParameters.ContainsKey('Tag')) { $Tag = $mode }
 if (-not $PSBoundParameters.ContainsKey('Audio')) {
   $Audio = @{ smoke = 'D:\STELMAR-Gate\day-sim\smoke'; day = 'D:\STELMAR-Gate\day-sim\day-audio'; rehearse = 'D:\STELMAR-Gate\day-sim\day-audio-rehearse'; kill = 'D:\STELMAR-Gate\day-sim\kill-audio' }[$mode]
 }
-if (-not $PSBoundParameters.ContainsKey('NightMinutes')) { $NightMinutes = @{ smoke = 8; day = 120; rehearse = 8; kill = 0 }[$mode] }
+if (-not $PSBoundParameters.ContainsKey('NightMinutes')) { $NightMinutes = @{ smoke = 8; day = 120; rehearse = 14; kill = 0 }[$mode] }
 if (-not $PSBoundParameters.ContainsKey('PartSeconds') -and $mode -eq 'rehearse') { $PartSeconds = 60 }
-if ($MaxMinutes -le 0) { $MaxMinutes = @{ smoke = 100; day = 900; rehearse = 45; kill = 240 }[$mode] }
-if ($DecisionMinutes -le 0) { $DecisionMinutes = @{ smoke = 40; day = 360; rehearse = 20; kill = 240 }[$mode] }
+if ($MaxMinutes -le 0) { $MaxMinutes = @{ smoke = 100; day = 900; rehearse = 55; kill = 240 }[$mode] }
+if ($DecisionMinutes -le 0) { $DecisionMinutes = @{ smoke = 40; day = 360; rehearse = 25; kill = 240 }[$mode] }
 if (-not $OutDir) { $OutDir = Join-Path $repo 'docs\evidence\phase-4' }
 if (-not $Exe) { $Exe = Join-Path $repo 'target\gate\stelmar-voice-workbench.exe' }
 if (-not $Testbench) { $Testbench = Join-Path $repo 'target\release\wb-testbench.exe' }
@@ -430,6 +430,29 @@ try {
     Write-Host ("{0} profile: tier {1}, config {2}, cpu threads {3}, process while recording {4}, fingerprint changes: {5}" -f (Get-Date -Format 'HH:mm:ss'), $d.tier, ($d.config.config | ConvertTo-Json -Compress), $d.config.cpu_threads, $d.process_while_recording, $changes.Count)
     if ($changes.Count -gt 0) { throw "the saved profile no longer matches this build (fingerprint changes: $($changes -join '; ')); run the full check again (scripts\gates\system-check-gate.ps1 -Runs full-emu-low)" }
 
+    # 1b. The pre-flight check of the programme (owner, 19 Nov 2026): the app's own lookup, for the date its clock will show,
+    # must list the four sessions of the day. The day simulation maps its first session to 10:00 IST on 8 Feb 2027, Day 1 of
+    # the programme (Inaugural 10:00, Parallel I 12:00, Parallel II 14:30, Panel 16:00): the first 19 Nov 2026 run had no
+    # entry for its date, the app planned the night pass between two sessions and the run could not finish. The rehearsal and
+    # the kill test keep today's date (no entry; the shortened night wait turns the 20:00 rule off).
+    function Get-SimTen {
+      if ($mode -eq 'day') { Get-Date -Year 2027 -Month 2 -Day 8 -Hour 10 -Minute 0 -Second 0 -Millisecond 0 }
+      else { Get-Date -Hour 10 -Minute 0 -Second 0 -Millisecond 0 }
+    }
+    $env:WB_GATE_CHECK = 'programme'
+    $env:WB_GATE_REPORT = Join-Path $run 'programme-check.json'
+    $env:WB_GATE_CLOCK_OFFSET_S = "$([int]((Get-SimTen) - (Get-Date)).TotalSeconds)"
+    $pcProc = Start-Emulated 'programme' 2
+    if (-not $pcProc.WaitForExit(180000)) { Stop-Process -Id $pcProc.Id -Force; throw 'the programme check did not finish within 3 minutes' }
+    Remove-Item Env:\WB_GATE_CHECK, Env:\WB_GATE_CLOCK_OFFSET_S -ErrorAction SilentlyContinue
+    $programmeCheck = Read-Json (Join-Path $run 'programme-check.json')
+    if (-not $programmeCheck -or -not $programmeCheck.programme) { throw "the app did not report its programme lookup (see $run\programme-check.json)" }
+    $programmeSessions = [int]$programmeCheck.programme.sessions
+    Write-Host ("{0} programme lookup of the app for {1}: {2} session(s) to transcribe, the last ends {3} IST" -f (Get-Date -Format 'HH:mm:ss'), $programmeCheck.programme.date, $programmeSessions, $programmeCheck.programme.last_end_ist)
+    if ($mode -eq 'day' -and $programmeSessions -ne 4) {
+      throw "REFUSED: the app's programme lookup for $($programmeCheck.programme.date) lists $programmeSessions session(s) to transcribe, not the four of the day simulation; the day would not be the day (see $run\programme-check.json)"
+    }
+
     # 2. The plan.
     $at = 0
     $planSessions = @()
@@ -479,7 +502,7 @@ try {
 
     # 3. The run: the first session of the plan is 10:00 IST on the scheduler's clock.
     $nowIst = Get-Date
-    $ten = (Get-Date -Hour 10 -Minute 0 -Second 0 -Millisecond 0)
+    $ten = Get-SimTen
     $offset = [int](($ten - $nowIst).TotalSeconds)
     $stopFile = Join-Path $run 'STOP'
     $queueLog = Join-Path $run 'queue.log'
@@ -562,7 +585,20 @@ try {
             $progress.Add("$(Get-Date -Format 'HH:mm:ss') $l")
           }
           if ($l -match 'every session of the plan was recorded') { $allRecorded = Get-Date; $progress.Add("$(Get-Date -Format 'HH:mm:ss') all sessions recorded") }
-          if ($l -match 'night pass planned for (\d+) session') { $nightPlanned = Get-Date; $nightExpected = [int]$Matches[1]; $progress.Add("$(Get-Date -Format 'HH:mm:ss') $l") }
+          # The night box starts only once every session is recorded AND the app has planned the night after the last one
+          # (owner, 19 Nov 2026): a plan made earlier is cancelled by the next session and planned again.
+          if ($l -match 'night pass planned for (\d+) session') {
+            if ($allRecorded) {
+              $nightPlanned = Get-Date; $nightExpected = [int]$Matches[1]; $nightCompleted = 0; $nightDone = $null
+              $progress.Add("$(Get-Date -Format 'HH:mm:ss') $l")
+            } else {
+              $progress.Add("$(Get-Date -Format 'HH:mm:ss') $l (planned before the last session: the night time box has not started)")
+            }
+          }
+          if ($l -match 'night pass cancelled') {
+            $nightPlanned = $null; $nightExpected = 0; $nightCompleted = 0; $nightDone = $null
+            $progress.Add("$(Get-Date -Format 'HH:mm:ss') $l")
+          }
           if ($l -match 'post-1 transcript complete') { $rollingCompleted++; $progress.Add("$(Get-Date -Format 'HH:mm:ss') $l") }
           if ($l -match 'post-2 transcript complete') {
             $nightCompleted++
@@ -677,7 +713,7 @@ try {
     if (-not $driverChange -and $driversEnd -ne $driversStart) { $driverChange = "display drivers changed during the run: $driversStart -> $driversEnd" }
     Write-Utf8 (Join-Path $run 'script-notes.json') ((@{
           drivers_start = $driversStart; drivers_end = $driversEnd; drivers_changed = [bool]$driverChange; driver_change = $driverChange
-          started = $started.ToString('o'); ended = (Get-Date).ToString('o'); emu_exit = $emu.ExitCode; clock_offset_s = $offset
+          started = $started.ToString('o'); ended = (Get-Date).ToString('o'); emu_exit = $emu.ExitCode; clock_offset_s = $offset; programme_sessions = $programmeSessions; programme_date = "$($programmeCheck.programme.date)"
           mode = $mode; quiet = $quiet; kill = $kill; kills = @($kills); night_expected = $nightExpected; night_completed = $nightCompleted; progress = @($progress.ToArray()); profile = @{ tier = "$($d.tier)"; config = ($d.config.config | ConvertTo-Json -Compress); cpu_threads = $d.config.cpu_threads; process_while_recording = $d.process_while_recording }
           night_minutes = $NightMinutes; part_seconds = $PartSeconds; audio_dir = $Audio; cable = @{ play = $playName; capture = $capName }
         } | ConvertTo-Json -Depth 6))
