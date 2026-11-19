@@ -57,7 +57,7 @@ param(
   [string]$Machine = 'Legion',
   [string]$WorkRoot = 'D:\STELMAR-Gate\day-sim',
   [string]$BackupRoot = 'C:\STELMAR-Gate-Backup',
-  [string]$ProfileData = 'D:\STELMAR-Gate\system-check\full-emu-low\data',
+  [string]$ProfileData = 'D:\STELMAR-Gate\system-check-19nov\full-emu-low\data',
   [string]$Audio = 'D:\STELMAR-Gate\day-sim\smoke',
   [int]$NightMinutes = 8,
   # Longest the whole run may take (the app's start to the stop); a longer session or night box needs more.
@@ -105,6 +105,7 @@ Import-Module (Join-Path $repo 'scripts\lib\AppProcess.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Rig.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\CableRig.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Fidelity.psm1') -Force
+Import-Module (Join-Path $repo 'scripts\lib\Quiet.psm1') -Force
 $python = Join-Path $repo 'eval\.venv\Scripts\python.exe'
 New-Item -ItemType Directory -Force -Path $OutDir, $WorkRoot | Out-Null
 
@@ -207,67 +208,6 @@ function Read-NewLines([string]$Path, [ref]$Count) {
   $new = @($all | Select-Object -Skip $Count.Value)
   $Count.Value = $all.Count
   $new
-}
-
-# The quiet-machine rule (owner, 17 Nov 2026), checked with the gate lock held: host CPU under $CpuMax percent averaged
-# over 60 s and no other heavy process (pwsh, cargo, robocopy, python, wb-* and the like) busy. A machine that does not
-# become quiet is waited for; every attempt, with the top processes by CPU, goes to idle-check.json. After
-# $FallbackAfterMin minutes of failed checks the run goes on when the host CPU is under $FallbackCpuMax percent and
-# nothing named is busy, and the file says so (verdict 'fallback'); after $GiveUpMin minutes the run is refused.
-function Wait-WbQuiet {
-  param([string]$Out, [double]$CpuMax = 10, [double]$FallbackCpuMax = 15, [int]$FallbackAfterMin = 15, [int]$GiveUpMin = 180, [int]$Seconds = 60)
-  # The owner's own programs (19 Nov 2026): Steam and Wallpaper Engine (with its service) must not be running at a check; if
-  # they are, that is recorded and the run waits for the owner to close them. They are never stopped from here, and the
-  # 15% fallback does not override them.
-  $ownerRx = '^(steam|steamwebhelper|steamservice|wallpaper32|wallpaper64|wallpaperservice32|webwallpaper32|ui32)$'
-  $busyRx = '^(pwsh|powershell|cargo|rustc|robocopy|python|git|link|cl|msbuild|cmake|ninja|node|wb-.*|stelmar.*)$'
-  $parentId = 0
-  try { $parentId = [int](Get-CimInstance Win32_Process -Filter "ProcessId = $PID").ParentProcessId } catch { $parentId = 0 }
-  $counter = New-Object System.Diagnostics.PerformanceCounter('Processor', '% Processor Time', '_Total')
-  $null = $counter.NextValue()
-  $began = Get-Date
-  $attempts = @()
-  while ($true) {
-    $before = @{}
-    foreach ($p in @(Get-Process -ErrorAction SilentlyContinue)) {
-      $t = $null
-      try { $t = $p.TotalProcessorTime.TotalSeconds } catch { $t = $null }
-      if ($null -ne $t) { $before[$p.Id] = $t }
-    }
-    $samples = New-Object System.Collections.Generic.List[double]
-    for ($i = 0; $i -lt $Seconds; $i++) { Start-Sleep -Seconds 1; $samples.Add([double]$counter.NextValue()) }
-    $busy = @()
-    $top = @()
-    foreach ($p in @(Get-Process -ErrorAction SilentlyContinue)) {
-      if ($p.Id -eq $PID -or $p.Id -eq $parentId -or -not $before.ContainsKey($p.Id)) { continue }
-      $t = $null
-      try { $t = $p.TotalProcessorTime.TotalSeconds } catch { $t = $null }
-      if ($null -eq $t) { continue }
-      $d = $t - $before[$p.Id]
-      if ($d -ge 0.5) { $top += [pscustomobject]@{ name = $p.ProcessName; cpu_s = [math]::Round($d, 1) } }
-      if ($d -ge 3 -and $p.ProcessName -match $busyRx) { $busy += ('{0} {1:F1} CPU-s' -f $p.ProcessName, $d) }
-    }
-    $avg = ($samples | Measure-Object -Average).Average
-    $max = ($samples | Measure-Object -Maximum).Maximum
-    $elapsed = ((Get-Date) - $began).TotalMinutes
-    $owner = @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -match $ownerRx } | ForEach-Object { $_.ProcessName } | Sort-Object -Unique)
-    $ok = ($avg -lt $CpuMax -and $busy.Count -eq 0 -and $owner.Count -eq 0)
-    $fallback = ((-not $ok) -and $elapsed -ge $FallbackAfterMin -and $avg -lt $FallbackCpuMax -and $busy.Count -eq 0 -and $owner.Count -eq 0)
-    $free = [math]::Round((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory / 1MB, 1)
-    $attempts += [pscustomobject]@{
-      at = (Get-Date).ToString('o'); cpu_avg = [math]::Round($avg, 1); cpu_max = [math]::Round($max, 0); busy = @($busy); owner_programs = @($owner)
-      top = @($top | Sort-Object cpu_s -Descending | Select-Object -First 8); free_ram_gb = $free
-    }
-    Write-Host ("{0} quiet check {1}: host CPU {2:F1}% (max {3:F0}%), busy: {4}, owner's programs running: {7}, free RAM {5} GB -> {6}" -f (Get-Date -Format 'HH:mm:ss'), $attempts.Count, $avg, $max, $(if ($busy.Count) { $busy -join '; ' } else { 'none' }), $free, $(if ($ok) { 'IDLE' } elseif ($fallback) { 'NOT IDLE, going on (under the fallback limit after the wait)' } else { 'NOT IDLE' }), $(if ($owner.Count) { $owner -join ', ' } else { 'none' }))
-    $verdict = $(if ($ok) { 'idle' } elseif ($fallback) { 'fallback' } elseif ($elapsed -ge $GiveUpMin) { 'refused' } else { 'waiting' })
-    Write-Utf8 $Out ((@{
-          verdict = $verdict; cpu_max_limit = $CpuMax; fallback_cpu_limit = $FallbackCpuMax; fallback_after_min = $FallbackAfterMin
-          seconds = $Seconds; waited_min = [math]::Round($elapsed, 1); attempts = @($attempts)
-        } | ConvertTo-Json -Depth 6))
-    if ($ok -or $fallback) { return $verdict }
-    if ($elapsed -ge $GiveUpMin) { throw "the machine did not become quiet within $GiveUpMin minutes (see $Out)" }
-    Start-Sleep -Seconds 20
-  }
 }
 
 # Each recorded session judged by the Phase 1 recording rule (scripts\lib\Fidelity.psm1, docs/PLAN.md section 12):
@@ -410,6 +350,12 @@ try {
     # The quiet-machine rule, with the gate lock held: nothing starts on a busy machine.
     $quiet = Wait-WbQuiet -Out (Join-Path $run 'idle-check.json')
     Write-Host "$(Get-Date -Format 'HH:mm:ss') quiet-machine rule: $quiet"
+    # The driver guard (owner, 19 Nov 2026): the Intel and NVIDIA display drivers are recorded at the start and the end
+    # and checked every minute; a change stops the run and marks it INVALID (a profile is only valid for one driver).
+    $driversStart = Get-WbGpuDrivers
+    $driverChange = $null
+    $lastDriverCheck = Get-Date
+    Write-Host "$(Get-Date -Format 'HH:mm:ss') display drivers at the start: $driversStart"
 
     function Start-Emulated([string]$Mode, [int]$LimitMinutes) {
       $emu = Start-Process -FilePath $Emulate -ArgumentList @('--profile', $Profile, '--log', (Q (Join-Path $run "emulate-$Mode.log")), '--', (Q $Exe)) -PassThru -WindowStyle Hidden
@@ -616,6 +562,16 @@ try {
           }
         }
 
+        if (-not $driverChange -and ((Get-Date) - $lastDriverCheck).TotalSeconds -ge 60) {
+          $lastDriverCheck = Get-Date
+          $driversNow = Get-WbGpuDrivers
+          if ($driversNow -ne $driversStart) {
+            $driverChange = "display drivers changed during the run: $driversStart -> $driversNow"
+            $progress.Add("$(Get-Date -Format 'HH:mm:ss') ${driverChange}: the run is INVALID, stopping")
+            if (-not (Test-Path -LiteralPath $stopFile)) { Set-Content -LiteralPath $stopFile -Value 'stop' -Encoding ascii }
+          }
+        }
+
         # End of the run: a short night pass, or the reason there is none.
         $stop = $false
         if ($mode -eq 'kill') {
@@ -660,7 +616,10 @@ try {
         Remove-Item "Env:\$v" -ErrorAction SilentlyContinue
       }
     }
+    $driversEnd = Get-WbGpuDrivers
+    if (-not $driverChange -and $driversEnd -ne $driversStart) { $driverChange = "display drivers changed during the run: $driversStart -> $driversEnd" }
     Write-Utf8 (Join-Path $run 'script-notes.json') ((@{
+          drivers_start = $driversStart; drivers_end = $driversEnd; drivers_changed = [bool]$driverChange; driver_change = $driverChange
           started = $started.ToString('o'); ended = (Get-Date).ToString('o'); emu_exit = $emu.ExitCode; clock_offset_s = $offset
           mode = $mode; quiet = $quiet; kill = $kill; kills = @($kills); night_expected = $nightExpected; night_completed = $nightCompleted; progress = @($progress.ToArray()); profile = @{ tier = "$($d.tier)"; config = ($d.config.config | ConvertTo-Json -Compress); cpu_threads = $d.config.cpu_threads; process_while_recording = $d.process_while_recording }
           night_minutes = $NightMinutes; part_seconds = $PartSeconds; audio_dir = $Audio; cable = @{ play = $playName; capture = $capName }
@@ -673,6 +632,11 @@ try {
   }
   $runDir = @($result)[-1]
   Write-SmokeEvidence $runDir
+  $finalNotes = Read-Json (Join-Path $runDir 'script-notes.json')
+  if ($finalNotes -and $finalNotes.drivers_changed) {
+    Write-Host "RUN INVALID: $($finalNotes.driver_change)"
+    exit 3
+  }
 } catch {
   $failed = $_
   Write-Host "FAIL: the smoke run did not complete: $($_.Exception.Message)"

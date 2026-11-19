@@ -18,7 +18,7 @@
 [CmdletBinding()]
 param(
   [ValidateSet('emu-low', 'emu-mid')] [string]$Profile = 'emu-low',
-  [string]$ProfileData = 'D:\STELMAR-Gate\system-check\full-emu-low\data',
+  [string]$ProfileData = 'D:\STELMAR-Gate\system-check-19nov\full-emu-low\data',
   [string]$Audio = 'D:\STELMAR-Gate\day-sim\kill-audio'
 )
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path

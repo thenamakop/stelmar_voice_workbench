@@ -15,6 +15,7 @@ import argparse
 import csv
 import glob
 import json
+import os
 import statistics
 import sys
 from pathlib import Path
@@ -209,11 +210,12 @@ def report(a) -> int:
         x, y = rtf_of(a_), rtf_of(b_)
         if x and y:
             lines.append(f"  {a_} / {b_}: {x:.3f} / {y:.3f} = {x / y:.2f}   ({what})")
-    prof = {"P1": 0.696, "P2": 0.696}
+    cell = float(os.environ.get("WB_PROFILE_CELL", "0.696"))  # the saved profile's figure for this cell
+    prof = {"P1": cell, "P2": cell}
     for k in ("P1", "P2"):
         x = rtf_of(k)
         if x:
-            lines.append(f"  {k} against the profile's 0.696 for this cell: {x / 0.696:.2f}")
+            lines.append(f"  {k} against the profile's {cell:.3f} for this cell: {x / cell:.2f}")
     if a.compare:
         lines.append("")
         lines.append("Against the earlier runs (a run more than 5% faster than its earlier figure means the earlier figure was slowed by something that is now gone)")

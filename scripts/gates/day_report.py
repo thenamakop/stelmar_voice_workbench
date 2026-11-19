@@ -195,6 +195,9 @@ def main() -> int:
     P(f"profile in force: {notes.get('profile')}")
     P(f"app exit code {notes.get('emu_exit')}; scheduler clock offset {notes.get('clock_offset_s')} s (the first session of the plan maps to 10:00 IST); parts of {notes.get('part_seconds')} s; night time box {notes.get('night_minutes')} min")
     P(f"quiet-machine rule: {notes.get('quiet')} (idle-check.json: {len(idle.get('attempts', []))} attempt(s), waited {idle.get('waited_min')} min; the last: host CPU {(idle.get('attempts') or [{}])[-1].get('cpu_avg')}% over {idle.get('seconds')} s, busy {(idle.get('attempts') or [{}])[-1].get('busy')}, the owner's programs running {(idle.get('attempts') or [{}])[-1].get('owner_programs')})")
+    P(f"display drivers: at the start {notes.get('drivers_start')}; at the end {notes.get('drivers_end')}")
+    if notes.get("drivers_changed"):
+        P(f"RUN INVALID: {notes.get('driver_change')} (a profile is only valid for the driver it was made with; the run must be repeated)")
     P(f"configuration the queue worked in: {q.get('configuration')}; forced hybrid: {report.get('forced_hybrid')}")
     P("")
     P("Script notes (progress):")
@@ -534,7 +537,10 @@ def main() -> int:
         info += 1 if ok is None else 0
         P(f"  [{mark}] {name}" + (f": {detail}" if detail else ""))
     P("")
-    P(f"VERDICT: {'PASS' if failed == 0 and not info else ('FAIL' if failed else 'INCOMPLETE (a session was INVALID or is information only: see the lines above)')} ({len(checks) - failed - info} passed, {failed} failed, {info} information or invalid)")
+    if notes.get("drivers_changed"):
+        P("VERDICT: INVALID (the display driver changed during the run; no verdict)")
+    else:
+        P(f"VERDICT: {'PASS' if failed == 0 and not info else ('FAIL' if failed else 'INCOMPLETE (a session was INVALID or is information only: see the lines above)')} ({len(checks) - failed - info} passed, {failed} failed, {info} information or invalid)")
     P("Speed, 'ready by' and 10% differences on the emulation profile are low-tier findings with numbers, not code failures (owner, 17 and 18 Nov 2026); the real laptops repeat the run.")
     P("")
     P("Scheduler log (every line, IST time first):")

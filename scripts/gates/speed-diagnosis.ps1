@@ -47,6 +47,7 @@ Set-WbCleanPSModulePath
 Set-WbInvariantCulture
 Import-Module (Join-Path $repo 'scripts\lib\GateRun.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Redact.psm1') -Force
+Import-Module (Join-Path $repo 'scripts\lib\Quiet.psm1') -Force
 $python = Join-Path $repo 'eval\.venv\Scripts\python.exe'
 $triple = 'x86_64-pc-windows-msvc'
 $minPath = "$env:SystemRoot\System32;$env:SystemRoot"
@@ -173,6 +174,7 @@ function Invoke-Traced([string]$Label, [string[]]$EngineArgs, [int]$TimeoutMin) 
   $meta
 }
 
+$driversStart = Get-WbGpuDrivers   # the driver guard (owner, 19 Nov 2026)
 Invoke-WbGate -Name 'speed-diagnosis' -Body {
   $cmd = @{
     P1 = @('bench', '--request', ('"' + (Join-Path $Work 'req-P.json') + '"'))
@@ -189,10 +191,12 @@ Invoke-WbGate -Name 'speed-diagnosis' -Body {
   }
 } | Out-Null
 
+$driversEnd = Get-WbGpuDrivers
 $header = Join-Path $Work 'header.txt'
 $lines = @()
 $lines += 'Speed and memory diagnosis under emu-low (owner, 17 Nov 2026, steps 2 and 3): the profile cell against the queue'
 $lines += "date: $(Get-Date -Format 'yyyy-MM-dd HH:mm') (IST on the Legion)"
+$lines += "display drivers: at the start $driversStart; at the end $driversEnd" + $(if ($driversStart -ne $driversEnd) { ' -- RUN INVALID: the driver changed during the run' } else { '' })
 $lines += "machine: $Machine, profile $EmuProfile (4 logical processors, 11 GiB job limit)"
 $lines += "command: powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\gates\speed-diagnosis.ps1"
 $lines += "source: $((Invoke-WbNative -FilePath 'git' -ArgumentList @('-C', $repo, 'rev-parse', '--short', 'HEAD')).Output -join '')"
