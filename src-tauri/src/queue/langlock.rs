@@ -62,6 +62,25 @@ pub fn read(session_dir: &Path) -> Vec<LangLogEntry> {
         .collect()
 }
 
+/// The locks as the job decodes them. Hindi and Urdu are one spoken language with an output script the organiser
+/// chose (13 Nov 2026), and the job carries only that one of the two: a lock on the other (Alt+3 in a Devanagari
+/// session, Alt+2 in a Nastaliq one) is a lock on the job's Hindi/Urdu language, never a switch of the script (ASR
+/// audit of 20 Nov 2026: the engine would otherwise fall back to the catch-all model and write the other script).
+pub fn for_job(entries: Vec<LangLogEntry>, job_languages: &[String]) -> Vec<LangLogEntry> {
+    let own = ["hi", "ur"]
+        .into_iter()
+        .find(|l| job_languages.iter().any(|j| j == l));
+    entries
+        .into_iter()
+        .map(|mut e| {
+            if let (Some(own), Some("hi" | "ur")) = (own, e.lang.as_deref()) {
+                e.lang = Some(own.to_owned());
+            }
+            e
+        })
+        .collect()
+}
+
 /// A lock language the session accepts: one of its expected languages.
 pub fn accepted(lang: &str, session_languages: &[String]) -> bool {
     session_languages.iter().any(|l| l == lang)
@@ -103,6 +122,32 @@ mod tests {
                 },
             ]
         );
+    }
+
+    #[test]
+    fn a_lock_on_hindi_or_urdu_means_the_language_the_organiser_chose_the_script_for() {
+        let e = |ms, l: Option<&str>| LangLogEntry {
+            audio_ms: ms,
+            lang: l.map(str::to_owned),
+        };
+        let log = vec![e(1, Some("ur")), e(2, Some("en")), e(3, Some("hi")), e(4, None)];
+        // A Devanagari session carries `hi`: Alt+3 (Urdu) locks Hindi, in Devanagari.
+        let devanagari = vec!["en".to_owned(), "hi".to_owned()];
+        let got = for_job(log.clone(), &devanagari);
+        assert_eq!(
+            got.iter().map(|x| x.lang.as_deref()).collect::<Vec<_>>(),
+            vec![Some("hi"), Some("en"), Some("hi"), None]
+        );
+        // A Nastaliq session carries `ur`: Alt+2 (Hindi) locks Urdu, in Nastaliq.
+        let nastaliq = vec!["en".to_owned(), "ur".to_owned()];
+        let got = for_job(log.clone(), &nastaliq);
+        assert_eq!(
+            got.iter().map(|x| x.lang.as_deref()).collect::<Vec<_>>(),
+            vec![Some("ur"), Some("en"), Some("ur"), None]
+        );
+        // A session with neither (English only) leaves the log as it is: the engine drops what no model serves.
+        let english = vec!["en".to_owned()];
+        assert_eq!(for_job(log.clone(), &english), log);
     }
 
     #[test]

@@ -151,16 +151,17 @@ impl AppExecutor {
             wb_queue::store::JobKind::Night => "night",
             _ => "rolling",
         };
+        let languages = if info.languages.is_empty() {
+            claim.job.languages.clone()
+        } else {
+            info.languages.clone()
+        };
         Ok(UnitContext {
             session_dir: info.dir.clone(),
             models_by_lang,
             vad_model: self.model_ref(VAD_ID)?,
-            languages: if info.languages.is_empty() {
-                claim.job.languages.clone()
-            } else {
-                info.languages.clone()
-            },
-            lang_log: super::langlock::read(&info.dir),
+            lang_log: super::langlock::for_job(super::langlock::read(&info.dir), &languages),
+            languages,
             settings: Settings {
                 role: role.into(),
                 glossary: info.glossary.clone(),

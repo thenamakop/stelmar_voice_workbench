@@ -47,6 +47,15 @@ impl<T> OrderBuffer<T> {
         Some((idx, end_ms, payload))
     }
 
+    /// A unit taken by [`Self::pop_ready`] could not be committed: it goes back, with the cursor it had, so the next
+    /// pop returns it again and no later unit is committed before it (a failed commit must never lose a unit or let
+    /// the cursor pass it).
+    pub fn put_back(&mut self, idx: u32, end_ms: u64, payload: T, cursor_before: u64) {
+        self.next = idx;
+        self.cursor_ms = cursor_before;
+        self.waiting.insert(idx, (end_ms, payload));
+    }
+
     /// Every unit that may be committed now, in audio order.
     pub fn drain_ready(&mut self) -> Vec<(u32, u64, T)> {
         std::iter::from_fn(|| self.pop_ready()).collect()
@@ -88,6 +97,21 @@ mod tests {
             "the cursor does not skip over the unit that is missing"
         );
         o.finished(0, 300, "a").unwrap();
+        assert_eq!(o.drain_ready(), vec![(0, 300, "a"), (1, 600, "b")]);
+        assert_eq!(o.cursor_ms(), 600);
+    }
+
+    #[test]
+    fn a_unit_that_could_not_be_committed_goes_back_and_comes_first_again() {
+        let mut o = OrderBuffer::new(0, 0);
+        o.finished(0, 300, "a").unwrap();
+        o.finished(1, 600, "b").unwrap();
+        let before = o.cursor_ms();
+        let (idx, end, payload) = o.pop_ready().unwrap();
+        // Its commit failed: it goes back and the unit after it was never taken.
+        o.put_back(idx, end, payload, before);
+        assert_eq!(o.cursor_ms(), 0, "the cursor did not pass the failed unit");
+        assert_eq!(o.next_idx(), 0);
         assert_eq!(o.drain_ready(), vec![(0, 300, "a"), (1, 600, "b")]);
         assert_eq!(o.cursor_ms(), 600);
     }

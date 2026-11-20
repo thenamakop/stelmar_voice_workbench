@@ -156,9 +156,29 @@ fn copy_dir_files(src: &Path, dst: &Path) -> Result<()> {
     Ok(())
 }
 
+/// The app never opens a network connection (AGENTS.md, non-negotiable 1): reading a session from a network share
+/// (`\\server\share\...`, `//server/share/...`, `\\?\UNC\...`) would make Windows open one on its behalf. A local
+/// extended-length path (`\\?\C:\...`) is fine. The operator copies the folder to this computer first (ASR and offline
+/// audit of 20 Nov 2026).
+pub fn refuse_network_path(src: &Path) -> Result<()> {
+    let text = src.to_string_lossy().replace('/', "\\");
+    // `\\?\C:\...`: a drive letter and a colon after the extended-length prefix.
+    let local_extended = text.starts_with(r"\\?\")
+        && text.as_bytes().get(4).is_some_and(u8::is_ascii_alphabetic)
+        && text.as_bytes().get(5) == Some(&b':');
+    if text.starts_with("\\\\") && !local_extended {
+        return Err(Error::Invalid(
+            "This folder is on a network share. Copy it to this computer first: the app never reads from the network."
+                .into(),
+        ));
+    }
+    Ok(())
+}
+
 /// Copies a valid session folder to `dest` (which must not exist), checks the copy, and moves it into place.
 /// Returns what the copy holds. Nothing at `dest` changes if anything fails.
 pub fn import_session(src: &Path, dest: &Path) -> Result<Validated> {
+    refuse_network_path(src)?;
     validate(src)?;
     if dest.exists() {
         return Err(Error::Invalid(format!(
@@ -211,6 +231,33 @@ pub fn refuse_on_record_only(record_only: bool) -> Result<()> {
 mod tests {
     use super::*;
     use crate::testutil::temp;
+
+    #[test]
+    fn a_session_on_a_network_share_is_refused_before_anything_is_read() {
+        for p in [
+            r"\\server\share\session",
+            "//server/share/session",
+            r"\\?\UNC\server\share\session",
+            r"\\.\pipe\x",
+        ] {
+            assert!(
+                refuse_network_path(Path::new(p)).is_err(),
+                "{p} must be refused"
+            );
+        }
+        for p in [
+            r"C:\recordings\session",
+            r"\\?\C:\recordings\session",
+            "relative/session",
+            r"D:\a\b",
+        ] {
+            assert!(refuse_network_path(Path::new(p)).is_ok(), "{p} is local");
+        }
+        // The import itself refuses it too (it would otherwise reach the share through `validate`).
+        let dest = temp("unc-dest").join("s");
+        assert!(import_session(Path::new(r"\\server\share\s"), &dest).is_err());
+        assert!(!dest.exists());
+    }
 
     /// A small valid session folder: two parts of 10 minutes (the audio bytes are stand-ins).
     fn make_session(dir: &Path, closed: bool) {

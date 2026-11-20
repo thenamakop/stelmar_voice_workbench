@@ -624,6 +624,28 @@ impl Manager {
                             "{}: could not commit unit {}: {e}",
                             session.name, claim.unit.idx
                         ));
+                        // What could not be committed stays in the buffer, in order. Try again a few times so the
+                        // last unit of a job is not left waiting for a unit that will never finish (a full disk
+                        // that was cleared, a file another program held for a moment).
+                        for attempt in 1..=3u64 {
+                            std::thread::sleep(Duration::from_millis(500 * attempt));
+                            let retried = lock(&session.queue).flush_ready(claim.job.id, now);
+                            if let Ok(c) = retried {
+                                if !c.segments.is_empty() {
+                                    self.events.committed(&session.name, &c.segments);
+                                }
+                                if c.job_done {
+                                    self.events.log(
+                                        LogLevel::Info,
+                                        &format!(
+                                            "{}: {} transcript complete",
+                                            session.name, claim.job.revision
+                                        ),
+                                    );
+                                }
+                                break;
+                            }
+                        }
                     }
                 }
             }

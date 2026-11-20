@@ -395,6 +395,28 @@ impl SessionQueue {
         Ok(true)
     }
 
+    /// The night pass was held for a new session and the plan made after the last session does not run it (the
+    /// pass does not fit): the held job is parked with the reason, so it does not stay Paused with nobody to resume it.
+    /// What it committed stays; the rolling transcript remains the default revision. True when a held job was parked.
+    pub fn park_held_night_job(&mut self, reason: &str, now_ms: u64) -> Result<bool> {
+        let Some(night) = self
+            .transcript
+            .store()
+            .jobs()?
+            .into_iter()
+            .find(|j| j.kind == JobKind::Night)
+        else {
+            return Ok(false);
+        };
+        if night.state != JobState::Paused {
+            return Ok(false);
+        }
+        self.transcript
+            .store_mut()
+            .set_job_state(night.id, JobState::Parked, Some(reason), now_ms)?;
+        Ok(true)
+    }
+
     /// The night job held by [`Self::hold_night_job`] goes on when the pass is planned again: its committed units
     /// are not decoded twice. True when a held night job was resumed.
     pub fn resume_night_job(&mut self, now_ms: u64) -> Result<bool> {
@@ -730,24 +752,63 @@ impl SessionQueue {
         order
             .finished(claim.unit.idx, claim.unit.end_ms, (segments, gaps))
             .map_err(Error::from)?;
-        let ready = order.drain_ready();
+        self.flush_ready(job_id, now_ms)
+    }
+
+    /// Commits every unit of the job that is ready, in audio order, one at a time. A unit leaves the buffer only
+    /// when its segments are in the JSONL (fsynced), its gaps are stored, the cursor has moved over it and its state
+    /// says Committed; when any of that fails the unit goes back into the buffer, nothing after it is taken, the
+    /// cursor stays and the error is returned, so the next call (the next unit to finish, or a retry) commits it first.
+    /// A failed commit must never lose a unit or let the cursor pass it (ASR audit of 20 Nov 2026).
+    pub fn flush_ready(&mut self, job_id: i64, now_ms: u64) -> Result<Completed> {
+        let revision = match self.transcript.store().job(job_id)? {
+            Some(j) => j.revision,
+            None => return Ok(Completed::default()),
+        };
         let mut out = Completed::default();
-        let revision = claim.job.revision.clone();
-        for (idx, end_ms, (segs, gaps)) in ready {
-            let committed = self.transcript.commit(&revision, &segs)?;
-            out.refused += committed.refused;
-            for g in &gaps {
-                self.transcript.store_mut().add_gap(g)?;
+        while let Some(order) = self.orders.get_mut(&job_id) {
+            let cursor_before = order.cursor_ms();
+            let Some((idx, end_ms, (segs, gaps))) = order.pop_ready() else {
+                break;
+            };
+            match self.commit_unit(job_id, &revision, idx, end_ms, &segs, &gaps) {
+                Ok(refused) => {
+                    out.refused += refused;
+                    out.committed_units.push(idx);
+                    out.segments.extend(segs);
+                }
+                Err(e) => {
+                    if let Some(order) = self.orders.get_mut(&job_id) {
+                        order.put_back(idx, end_ms, (segs, gaps), cursor_before);
+                    }
+                    return Err(e);
+                }
             }
-            self.transcript.store_mut().advance_cursor(job_id, end_ms)?;
-            self.transcript
-                .store_mut()
-                .set_unit_state(job_id, idx, UnitState::Committed, None)?;
-            out.committed_units.push(idx);
-            out.segments.extend(segs);
         }
         out.job_done = self.finalize_if_complete(job_id, now_ms)?;
         Ok(out)
+    }
+
+    /// One unit's commit; the segments are refused as repeats (counted) when the revision already holds them, and the
+    /// gaps are replaced rather than added, so doing it again after a failure is safe.
+    fn commit_unit(
+        &mut self,
+        job_id: i64,
+        revision: &str,
+        idx: u32,
+        end_ms: u64,
+        segs: &[Segment],
+        gaps: &[Gap],
+    ) -> Result<usize> {
+        let committed = self.transcript.commit(revision, segs)?;
+        for g in gaps {
+            self.transcript.store_mut().add_gap(g)?;
+        }
+        self.transcript.store_mut().advance_cursor(job_id, end_ms)?;
+        self.transcript
+            .store_mut()
+            .set_unit_state(job_id, idx, UnitState::Committed, None)?;
+        Ok(committed.refused)
     }
 
     /// Marks the job (and its revision) complete when the plan is closed and every unit is committed. A
@@ -899,6 +960,77 @@ mod tests {
         assert_eq!(done.refused, 0);
         assert!(!done.job_done, "the plan is not closed yet");
         let _ = job;
+    }
+
+    #[test]
+    fn a_commit_that_fails_loses_no_unit_and_commits_nothing_out_of_order() {
+        let (mut q, _job, _dir) = queue_with_units("commit-fails", 3);
+        let c0 = q.claim(Device::Cpu, 10).unwrap().unwrap();
+        let c1 = q.claim(Device::Gpu, 11).unwrap().unwrap();
+        stage(&c1, &[ev(1, 0, 10_000, 14_000, "b")]);
+        q.complete(&c1, "t", 20).unwrap();
+        stage(&c0, &[ev(0, 0, 500, 4_000, "a")]);
+        q.transcript.inject_commit_failure_after(0);
+        assert!(
+            q.complete(&c0, "t", 21).is_err(),
+            "the commit of unit 0 fails"
+        );
+        assert_eq!(q.jobs().unwrap()[0].cursor_ms, 0, "the cursor did not move");
+        assert_eq!(q.transcript().store().segment_count("post-1").unwrap(), 0);
+        // The next unit finishes: units 0, 1 and 2 are committed, in audio order, each once. Before the fix units 0
+        // and 1 were gone from the buffer, unit 2 moved the cursor past them and they were never written.
+        let c2 = q.claim(Device::Cpu, 22).unwrap().unwrap();
+        assert_eq!(c2.unit.idx, 2);
+        stage(&c2, &[ev(2, 0, 20_500, 24_000, "c")]);
+        let done = q.complete(&c2, "t", 23).unwrap();
+        assert_eq!(done.committed_units, vec![0, 1, 2]);
+        let texts: Vec<_> = done.segments.iter().map(|s| s.text.as_str()).collect();
+        assert_eq!(texts, vec!["a", "b", "c"]);
+        assert_eq!(q.jobs().unwrap()[0].cursor_ms, 30_000);
+        assert_eq!(q.transcript().store().segment_count("post-1").unwrap(), 3);
+        assert_eq!(done.refused, 0);
+    }
+
+    #[test]
+    fn a_failure_in_the_middle_keeps_the_units_after_it_and_a_retry_needs_no_new_unit() {
+        let (mut q, job, _dir) = queue_with_units("commit-fails-mid", 3);
+        let mut claims = Vec::new();
+        for (i, d) in [Device::Cpu, Device::Gpu, Device::Cpu].into_iter().enumerate() {
+            claims.push(q.claim(d, 10 + i as u64).unwrap().unwrap());
+        }
+        // Units 2 and 1 finish first and wait for unit 0.
+        for idx in [2usize, 1] {
+            let c = &claims[idx];
+            stage(c, &[ev(c.unit.idx, 0, c.unit.start_ms + 100, c.unit.end_ms - 100, "x")]);
+            q.complete(c, "t", 20).unwrap();
+        }
+        // Unit 0 arrives: its commit goes through, then the commit of unit 1 fails.
+        stage(&claims[0], &[ev(0, 0, 100, 9_000, "x")]);
+        q.transcript.inject_commit_failure_after(1);
+        assert!(q.complete(&claims[0], "t", 21).is_err());
+        assert_eq!(q.jobs().unwrap()[0].cursor_ms, 10_000, "only unit 0 is committed");
+        assert_eq!(q.transcript().store().segment_count("post-1").unwrap(), 1);
+        // The retry commits units 1 and 2 in order, once each; the cursor ends at the end of unit 2.
+        let done = q.flush_ready(job, 22).unwrap();
+        assert_eq!(done.committed_units, vec![1, 2]);
+        assert_eq!(q.jobs().unwrap()[0].cursor_ms, 30_000);
+        assert_eq!(q.transcript().store().segment_count("post-1").unwrap(), 3);
+    }
+
+    #[test]
+    fn a_failed_commit_is_retried_by_flush_ready_without_another_unit() {
+        let (mut q, job, _dir) = queue_with_units("commit-retry", 1);
+        let c = q.claim(Device::Cpu, 10).unwrap().unwrap();
+        stage(&c, &[ev(0, 0, 500, 4_000, "a")]);
+        q.transcript.inject_commit_failure_after(0);
+        assert!(q.complete(&c, "t", 11).is_err());
+        assert_eq!(q.jobs().unwrap()[0].cursor_ms, 0);
+        let done = q.flush_ready(job, 12).unwrap();
+        assert_eq!(done.committed_units, vec![0]);
+        assert_eq!(q.jobs().unwrap()[0].cursor_ms, 10_000);
+        assert_eq!(q.transcript().store().segment_count("post-1").unwrap(), 1);
+        // Nothing is left to commit: a second flush does nothing.
+        assert!(q.flush_ready(job, 13).unwrap().committed_units.is_empty());
     }
 
     #[test]
@@ -1258,6 +1390,49 @@ mod tests {
             Some("post-2")
         );
         assert_eq!(q.transcript().store().segment_count("post-2").unwrap(), 2);
+    }
+
+    #[test]
+    fn a_held_night_job_that_the_new_plan_does_not_run_is_parked_with_the_reason() {
+        let (mut q, job, _dir) = queue_with_units("night-parked", 2);
+        for _ in 0..2 {
+            let c = q.claim(Device::Cpu, 1).unwrap().unwrap();
+            stage(
+                &c,
+                &[ev(c.unit.idx, 0, c.unit.start_ms + 10, c.unit.end_ms - 10, "r")],
+            );
+            q.complete(&c, "t", 2).unwrap();
+        }
+        q.add_part(1, 0, 20_000, 48_000, &no_pauses()).unwrap();
+        q.plan_units(job, true).unwrap();
+        assert!(
+            !q.park_held_night_job("x", 3).unwrap(),
+            "no night job yet: nothing to park"
+        );
+        q.create_night_job("s", serde_json::json!({"hi": "big"}), vec!["hi".into()], 3)
+            .unwrap();
+        assert!(
+            !q.park_held_night_job("x", 4).unwrap(),
+            "a night job that is not held is left alone"
+        );
+        assert!(q.hold_night_job(5).unwrap());
+        assert!(q.park_held_night_job("night pass skipped: it does not fit", 6).unwrap());
+        let night = q
+            .jobs()
+            .unwrap()
+            .into_iter()
+            .find(|j| j.kind == JobKind::Night)
+            .unwrap();
+        assert_eq!(night.state, JobState::Parked);
+        assert!(
+            q.claim(Device::Cpu, 7).unwrap().is_none(),
+            "a parked night job gives no unit"
+        );
+        // The rolling transcript stays the default revision.
+        assert_eq!(
+            q.transcript().store().default_revision().unwrap().as_deref(),
+            Some("post-1")
+        );
     }
 
     #[test]

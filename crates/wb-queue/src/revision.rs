@@ -34,6 +34,8 @@ pub struct Transcript {
     dir: PathBuf,
     store: Store,
     revisions: HashMap<String, RevisionFile>,
+    /// A commit that fails on purpose (tests); never set in a real run.
+    fail_after: Option<u32>,
 }
 
 pub fn jsonl_path(dir: &Path, revision: &str) -> PathBuf {
@@ -138,7 +140,15 @@ impl Transcript {
             dir: dir.to_owned(),
             store,
             revisions,
+            fail_after: None,
         })
+    }
+
+    /// The commit after `ok_commits` successful ones fails once, before anything is written (tests of the callers'
+    /// error paths).
+    #[doc(hidden)]
+    pub fn inject_commit_failure_after(&mut self, ok_commits: u32) {
+        self.fail_after = Some(ok_commits);
     }
 
     pub fn store(&self) -> &Store {
@@ -183,6 +193,14 @@ impl Transcript {
     /// before the revision's committed end, writes the rest with one `write_all` and one `sync_data`, then
     /// inserts them into SQLite. Returns what was written and what was refused as a repeat.
     pub fn commit(&mut self, revision: &str, segments: &[Segment]) -> Result<Committed> {
+        match self.fail_after {
+            Some(0) => {
+                self.fail_after = None;
+                return Err(Error::Invalid("commit failure injected by a test".into()));
+            }
+            Some(n) => self.fail_after = Some(n - 1),
+            None => {}
+        }
         let mut accepted: Vec<&Segment> = Vec::new();
         let mut refused = 0;
         {
@@ -217,8 +235,16 @@ impl Transcript {
         let new_end = accepted.iter().map(|s| s.end_ms).max().unwrap_or(0);
         {
             let file = self.revision_file(revision)?;
-            file.file.write_all(&buf).map_err(io(&file.path))?;
-            file.file.sync_data().map_err(io(&file.path))?;
+            let before = file.file.metadata().map_err(io(&file.path))?.len();
+            if let Err(e) = file.file.write_all(&buf).and_then(|()| file.file.sync_data()) {
+                // A torn line would make the whole file unreadable and the next append would land behind it: cut the
+                // file back to the whole lines it held before (best effort; the append handle cannot truncate).
+                let _ = OpenOptions::new()
+                    .write(true)
+                    .open(&file.path)
+                    .and_then(|f| f.set_len(before));
+                return Err(e).map_err(io(&file.path));
+            }
             file.committed_end_ms = new_end;
         }
         let owned: Vec<Segment> = accepted.into_iter().cloned().collect();
