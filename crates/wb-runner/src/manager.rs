@@ -206,6 +206,11 @@ impl Manager {
         self.stop.load(Ordering::SeqCst)
     }
 
+    /// How many engine units are running now (for the log of a session's start: how loaded the queue was).
+    pub fn running_count(&self) -> usize {
+        lock(&self.running).len()
+    }
+
     /// Cancels every running engine (the gate began to refuse): each unit is pending again and resumes from its
     /// staged file.
     pub fn cancel_running(&self, why: &str) {

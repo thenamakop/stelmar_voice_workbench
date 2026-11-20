@@ -997,7 +997,11 @@ pub fn on_session_started(app: &AppHandle, dir: &str, expected: &[String], scrip
             laps.lap("registration");
             queue.cancel_night_plans(&name);
             laps.lap("night plans");
-            log_start_timing(&format!("queue start hook of {name}: {}", laps.text()));
+            log_start_timing(&format!(
+                "queue start hook of {name}: {}; engine units running at the start: {}",
+                laps.text(),
+                queue.manager.running_count()
+            ));
         }
         Err(e) => {
             let _ = app.state::<AppState>().events.send(Notice::event(
