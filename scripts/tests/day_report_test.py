@@ -88,5 +88,17 @@ class OutstandingAtStop(unittest.TestCase):
         self.assertEqual(got, ["main-hall__inaugural", "hall-a__parallel-i"])
 
 
+class EngineDeathCount(unittest.TestCase):
+    def test_counts_supervisor_death_lines_not_the_restarts_of_done_lines(self):
+        log = [
+            (1.0, "hall-a__s: unit 1 of post-1 job 1 on cpu: Died { exit: Some(1), restart: 1, committed_until_ms: 0 }"),
+            (2.0, "hall-a__s: unit 1 of post-1 job 1 on cpu: Died { exit: Some(1), restart: 2, committed_until_ms: 0 }"),
+            (3.0, "hall-a__s: unit 2 of post-1 job 1 on gpu: Died { exit: Some(1), restart: 1, committed_until_ms: 1475350 }"),
+            (4.0, "hall-a__s: unit 1 of post-1 done in 3975.0 s on cpu (1 restart(s), engine peak 1450 MiB against limit 2807 MiB)"),
+            (5.0, "hall-a__s: unit 3 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 2: rescued by step a"),
+        ]
+        self.assertEqual(dr.engine_deaths(log), 3)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

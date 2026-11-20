@@ -70,6 +70,13 @@ def read_qlog(run: Path) -> list[tuple[float, str]]:
     return out
 
 
+def engine_deaths(qlog) -> int:
+    """How many times the supervisor logged an engine death ('unit N of post-M job J on cpu: Died {...}'). The
+    '(N restart(s))' text of a unit's 'done' line is not used for this: it does not count every death (in the kill
+    test of 20 Nov 2026 a unit that died five times says 1)."""
+    return sum(1 for _t, x in qlog if re.search(r": unit \d+ of post-\d+ job \d+ on \w+: Died \{", x))
+
+
 def stop_order_of(qlog: list[tuple[float, str]]) -> dict[str, int]:
     """Session folder name -> index in the scheduler log of its `DAY: stopped` line (the app's own stop of the session)."""
     folder_of: dict[str, str] = {}
@@ -524,14 +531,16 @@ def main() -> int:
             by_kind[k["Kind"]] += 1
             P(f"  kill {k['N']}: {k['Kind']} engine pid {k['Pid']} after {k['AgeS']} s at {k['At']}, taskkill exit {k['Exit']}")
         P(f"  kills made: {len(ks)} ({dict(by_kind)}); target 5 of each kind")
-        restarts = sum(u[6] for u in unit_done)
-        P(f"  restarts the supervisor reported in unit lines: {restarts}")
+        restarts = engine_deaths(qlog)
+        P(f"  engine deaths the supervisor logged (each is followed by a restart of the unit): {restarts}")
+        done_restarts = sum(u[6] for u in unit_done)
+        P(f"  (the unit-done lines report {done_restarts} restart(s): they count since a unit's last death, not all of them)")
         for t, x in qlog:
             if re.search(r"failed on the|failed three times|failed on every|parked|memory-limit death", x):
                 P(f"  {hms(t)} {x}")
         checks.append(("5 CPU (avx2) engines killed", by_kind.get("avx2", 0) >= 5, f"{by_kind.get('avx2', 0)}"))
         checks.append(("5 GPU (vulkan) engines killed", by_kind.get("vulkan", 0) >= 5, f"{by_kind.get('vulkan', 0)}"))
-        checks.append(("every kill was followed by a restart or a retry of the unit (restarts reported at least the kills made)", restarts >= len(ks) - 0, f"{restarts} restarts for {len(ks)} kills"))
+        checks.append(("every kill was followed by a restart or a retry of the unit (engine deaths the supervisor logged at least the kills made)", restarts >= len(ks), f"{restarts} engine deaths logged for {len(ks)} kills"))
         P("")
         P("  Each recorded session against its imported copy decoded by the same queue (the copies are decoded without a kill only when the kills are over; the report states the counts):")
         for s in recorded:
