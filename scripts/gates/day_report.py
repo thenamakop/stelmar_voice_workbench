@@ -28,6 +28,7 @@ from day_sim_report import find_sessions, jload, jsonl, seg_checks, sql  # noqa:
 
 EVAL = Path(__file__).resolve().parents[2] / "eval"
 BAR_MEM = 0.70
+LEAD_IN_BAR_S = 10  # owner, 20 Nov 2026: the harness starts the player within seconds of the recorder
 START_CALL_BAR_MS = 1000  # owner, 20 Nov 2026: the start call returns in under 1 s under load
 NIGHT_DEADLINE_H = 8.0  # 08:00 the next morning, as hours after 00:00 of the first day: 24 + 8
 NIGHT_DEADLINE_CLOCK = 24.0 + NIGHT_DEADLINE_H
@@ -68,6 +69,41 @@ def read_qlog(run: Path) -> list[tuple[float, str]]:
         if m:
             out.append((clock.parse(m.group(1)), m.group(2)))
     return out
+
+
+def lead_in_seconds(run: Path) -> list[tuple[str, float]]:
+    """(session folder name, seconds) from the recorder's `audio_started` event to the player's first frame
+    (play-N.json `started_at`), the sessions and the players paired in the order they began."""
+    import datetime as dt
+    import glob
+    import json
+
+    def when(s: str):
+        try:
+            return dt.datetime.fromisoformat(s)
+        except (TypeError, ValueError):
+            return None
+
+    sessions = []
+    for f in glob.glob(str(run / "rec" / "*" / "*" / "session.json")):
+        try:
+            meta = json.load(open(f, encoding="utf-8-sig"))
+        except (OSError, ValueError):
+            continue
+        ev = [e for e in meta.get("events", []) if e.get("kind") == "audio_started"]
+        if ev and when(ev[0].get("at")):
+            sessions.append((when(ev[0]["at"]), Path(f).parent.name))
+    plays = []
+    for f in glob.glob(str(run / "play-*.json")):
+        try:
+            j = json.load(open(f, encoding="utf-8-sig"))
+        except (OSError, ValueError):
+            continue
+        if when(j.get("started_at")):
+            plays.append(when(j["started_at"]))
+    sessions.sort()
+    plays.sort()
+    return [(n, (p - t).total_seconds()) for (t, n), p in zip(sessions, plays)]
 
 
 def engine_deaths(qlog) -> int:
@@ -393,6 +429,19 @@ def main() -> int:
             f"the start call of every session returned within {START_CALL_BAR_MS} ms of the recorder starting (worst {worst} ms)",
             not over,
             ", ".join(f"{n} {ms} ms" for n, ms in over.items()),
+        ))
+    # The lead-in: the recorder's first audio to the first frame the player wrote into the cable. A late script (the
+    # day of 20 Nov 2026: 90 s) puts the player into the recording late and starts the next session's player before the
+    # last reference capture has stopped.
+    leads = lead_in_seconds(run)
+    for name, lead in leads:
+        P(f"  lead-in of {title_of.get(name, name)}: the player began {lead:.1f} s after the recorder's first audio")
+    slow = [(n, x) for n, x in leads if x > LEAD_IN_BAR_S]
+    if leads:
+        checks.append((
+            f"the player began within {LEAD_IN_BAR_S} s of the recorder's first audio in every session (worst {max(x for _n, x in leads):.1f} s)",
+            not slow,
+            ", ".join(f"{n} {x:.1f} s" for n, x in slow),
         ))
     timer_stops = [x for _t, x in qlog if "was stopped by the safety timer" in x]
     for x in timer_stops:

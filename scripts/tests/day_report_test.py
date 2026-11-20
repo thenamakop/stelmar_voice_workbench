@@ -100,5 +100,26 @@ class EngineDeathCount(unittest.TestCase):
         self.assertEqual(dr.engine_deaths(log), 3)
 
 
+class LeadIn(unittest.TestCase):
+    def test_the_lead_in_is_the_recorders_first_audio_to_the_players_first_frame(self):
+        import json
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as d:
+            run = Path(d)
+            for i, (rec_at, play_at) in enumerate(
+                [("2026-11-20T15:07:03.138+05:30", "2026-11-20T15:07:04.838+05:30"),
+                 ("2026-11-20T19:37:03.138+05:30", "2026-11-20T19:38:32.138+05:30")], start=1):
+                sess = run / "rec" / "2026-11-20" / f"hall-{i}__s"
+                sess.mkdir(parents=True)
+                (sess / "session.json").write_text(json.dumps({"events": [
+                    {"kind": "opened", "at": rec_at}, {"kind": "audio_started", "at": rec_at}]}), encoding="utf-8")
+                (run / f"play-{i}.json").write_text(json.dumps({"started_at": play_at}), encoding="utf-8")
+            got = dr.lead_in_seconds(run)
+            self.assertEqual([n for n, _ in got], ["hall-1__s", "hall-2__s"])
+            self.assertAlmostEqual(got[0][1], 1.7, places=2)
+            self.assertAlmostEqual(got[1][1], 89.0, places=2)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

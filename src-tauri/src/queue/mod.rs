@@ -309,6 +309,20 @@ pub fn stopped_dir(
     Some(dir.to_owned())
 }
 
+/// Whether the open session in `dir` has stopped. Two signals say so: the recorder's `last_stop` names its folder, or
+/// another session is recording now (the machine has one recorder, so every other session has ended). The second one
+/// exists because Start rebuilds the recorder's snapshot and clears `last_stop`: a session started within one poll of
+/// the monitor (5 s) after a Stop hid that Stop for good, so the first session was never finalised and the night pass
+/// waited for it for ever (day simulation of 20 Nov 2026: Parallel II, 3.3 s before Panel).
+pub fn session_has_stopped(
+    stopped: Option<&str>,
+    recording_dir: Option<&str>,
+    dir: &std::path::Path,
+) -> bool {
+    stopped.is_some_and(|d| std::path::Path::new(d) == dir)
+        || recording_dir.is_some_and(|d| std::path::Path::new(d) != dir)
+}
+
 /// The languages a job decodes: `en` stays, Hindi and Urdu become the one language of the organiser's script
 /// (Devanagari `hi`, Nastaliq `ur`).
 pub fn job_languages(expected: &[String], script: Option<&str>) -> Vec<String> {
@@ -474,7 +488,7 @@ impl Queue {
     }
 
     /// Hands every closed part not yet seen to the planner, and, once Stop was seen, asks for the final cut.
-    fn submit_parts(&self, stopped_dir: Option<&str>) {
+    fn submit_parts(&self, stopped_dir: Option<&str>, recording_dir: Option<&str>) {
         let mut open = plock(&self.open);
         let mut just_stopped: Vec<String> = Vec::new();
         for s in open.iter_mut() {
@@ -486,7 +500,7 @@ impl Queue {
                     }
                 }
             }
-            let is_stopped = stopped_dir.is_some_and(|d| std::path::Path::new(d) == s.dir);
+            let is_stopped = session_has_stopped(stopped_dir, recording_dir, &s.dir);
             if is_stopped && !s.finished {
                 s.finished = true;
                 s.ended_ms = Some(clock_ms());
@@ -673,7 +687,8 @@ pub fn init(app: &AppHandle, feed: Arc<Feed>, parts_rx: Receiver<PartRecord>) {
                 if announced || last_parts.elapsed() >= PARTS_RECHECK {
                     last_parts = Instant::now();
                     let stopped = q.stopped_session_dir();
-                    q.submit_parts(stopped.as_deref());
+                    let recording_dir = q.recording_session_dir();
+                    q.submit_parts(stopped.as_deref(), recording_dir.as_deref());
                 }
                 std::thread::sleep(MONITOR_STEP);
             }
@@ -684,6 +699,16 @@ pub fn init(app: &AppHandle, feed: Arc<Feed>, parts_rx: Receiver<PartRecord>) {
 }
 
 impl Queue {
+    /// The folder of the session being recorded now, if any.
+    fn recording_session_dir(&self) -> Option<String> {
+        let st = self.app.state::<AppState>();
+        if !st.recording.load(Ordering::SeqCst) {
+            return None;
+        }
+        let snap = lock(&st.snapshot);
+        snap.session.as_ref().map(|s| s.dir.clone())
+    }
+
     /// The folder of the session whose recording has just ended (Stop was pressed), if one is open here.
     fn stopped_session_dir(&self) -> Option<String> {
         let st = self.app.state::<AppState>();
@@ -1419,7 +1444,7 @@ pub(crate) fn import_now(app: &AppHandle, source: &str) -> Result<String, String
         s.finished = false;
     }
     drop(open);
-    q.submit_parts(Some(&dest.to_string_lossy()));
+    q.submit_parts(Some(&dest.to_string_lossy()), None);
     q.manager.poke();
     Ok(name)
 }
@@ -1666,6 +1691,22 @@ mod tests {
             job_devices(&none, 0, &[]).is_empty(),
             "tier R has no configuration"
         );
+    }
+
+    #[test]
+    fn a_session_that_started_right_after_a_stop_does_not_hide_that_stop() {
+        use std::path::Path;
+        let parallel = Path::new("D:\\rec\\parallel-ii");
+        let panel = "D:\\rec\\panel";
+        // Start cleared `last_stop` and Panel is recording: Parallel II has stopped all the same (the old rule, which
+        // looked at `last_stop` only, said it had not, and the session was never finalised).
+        assert!(session_has_stopped(None, Some(panel), parallel));
+        // The session that is recording has not stopped.
+        assert!(!session_has_stopped(None, Some(panel), Path::new(panel)));
+        // Nothing is recording and no Stop is known: nothing has stopped (a restart resumes such sessions elsewhere).
+        assert!(!session_has_stopped(None, None, parallel));
+        // The recorder's own `last_stop` still counts.
+        assert!(session_has_stopped(Some("D:\\rec\\parallel-ii"), None, parallel));
     }
 
     #[test]
