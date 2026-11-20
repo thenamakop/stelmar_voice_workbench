@@ -47,6 +47,11 @@ Check 'a session pushed by more than 5 minutes is an error' (Throws {
 $seq = @(New-WbDayPlanSessions -Sessions @($day[0], $day[1]) -RunDir 'D:\run' -Device 'd' -Programme $false)
 Check 'without a programme the sessions follow one another from 0 with room for the player' ($seq[0].at_s -eq 0 -and $seq[1].at_s -ge 5412 + 90 + 30)
 
+# The audio manifests of the smoke and kill runs carry no hall and no script: the plan still builds (a property a session
+# does not have is null, strict mode must not throw).
+$bare = @(New-WbDayPlanSessions -Sessions @([pscustomobject]@{ title = 'A'; at_s = 0; seconds = 60; languages = @('en') }) -RunDir 'D:un' -Device 'd' -Programme $false)
+Check 'a session without a hall or a script is planned' ($bare.Count -eq 1 -and $null -eq $bare[0].hall -and $null -eq $bare[0].script)
+
 # ---- the estimate check counts only sessions that had already stopped ----
 $py = Get-Command python -ErrorAction SilentlyContinue
 if ($py) {

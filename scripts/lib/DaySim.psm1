@@ -37,6 +37,15 @@ function Test-WbDayRefStopDue {
   return (($Now - [datetime]$AppStoppedSeenAt).TotalSeconds -ge $DelaySeconds)
 }
 
+# A property of a session object, or null when it has none (the audio manifests of the smoke and kill runs carry no hall
+# or script, and this module runs in strict mode).
+function Get-WbDayProp {
+  param($Object, [string]$Name)
+  $p = $Object.PSObject.Properties[$Name]
+  if ($p) { return $p.Value }
+  return $null
+}
+
 # The plan's sessions: each starts no earlier than its programme time and no earlier than 20 s after the previous one
 # could have ended (the audio, the room for the start call, the stop margin); a push of more than 5 minutes is an error.
 # Each session also carries the path of its stop file and the safety ceiling (the audio plus 15 minutes).
@@ -65,8 +74,8 @@ function New-WbDayPlanSessions {
       if ($i -gt 1) { $atEff = $prevEnd + 30 }
     }
     $planned += [ordered]@{
-      title = $s.title; hall = $s.hall; at_s = $atEff; programme_at_s = [int]$s.at_s; duration_s = $ceiling
-      stop_file = (Join-Path $RunDir "STOP-SESSION-$i"); languages = @($s.languages); script = $s.script; device = $Device
+      title = $s.title; hall = (Get-WbDayProp $s 'hall'); at_s = $atEff; programme_at_s = [int]$s.at_s; duration_s = $ceiling
+      stop_file = (Join-Path $RunDir "STOP-SESSION-$i"); languages = @($s.languages); script = (Get-WbDayProp $s 'script'); device = $Device
     }
     $prevEnd = $atEff + $room
   }
