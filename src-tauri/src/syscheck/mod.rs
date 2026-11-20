@@ -285,8 +285,11 @@ pub fn start_with_mode(
         }
         Some(other) => return Err(format!("Unknown recording mode '{other}'.")),
     };
+    let mut laps = crate::queue::Laps::start();
     cancel_check_for_recording(app);
+    laps.lap("cancel check");
     let info = recording::start_blocking(app, request.base)?;
+    laps.lap("recorder start");
     // The chosen mode goes next to the session's own files. The recorder does not carry it yet.
     let options = serde_json::json!({
         "mode": mode,
@@ -299,6 +302,7 @@ pub fn start_with_mode(
     ) {
         tracing::warn!("start-options.json was not written: {e}");
     }
+    laps.lap("options file");
     // The session's rolling transcription job. A failure is reported and never touches the recording.
     crate::queue::on_session_started(
         app,
@@ -306,6 +310,8 @@ pub fn start_with_mode(
         &languages,
         request.hindi_urdu_script.as_deref(),
     );
+    laps.lap("queue hook");
+    crate::queue::log_start_timing(&format!("start call of {}: {}", info.dir, laps.text()));
     Ok(info)
 }
 

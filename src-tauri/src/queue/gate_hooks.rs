@@ -86,7 +86,8 @@ pub fn queue_log(text: &str) {
     }
 }
 
-/// One session of the day plan: it starts `at_s` seconds after the plan starts and is stopped `duration_s` later.
+/// One session of the day plan: it starts `at_s` seconds after the plan starts (or when the one before it has stopped) and
+/// ends when its `stop_file` appears, or `duration_s` after it started when that is not set or never appears.
 #[derive(Debug, Clone, Deserialize)]
 pub struct PlanSession {
     pub title: String,
@@ -103,6 +104,10 @@ pub struct PlanSession {
     /// Input device whose name contains this text (the VB-CABLE endpoint of the rig).
     #[serde(default)]
     pub device: Option<String>,
+    /// The session ends when this file appears (the day script writes it 15 s after its player has finished playing);
+    /// `duration_s` is then only the safety net for a player that died (20 Nov 2026, see `day_stop`).
+    #[serde(default)]
+    pub stop_file: Option<PathBuf>,
 }
 
 /// One thing the plan does to the queue, `after_s` seconds after the named session started (`on` = `start`, the
@@ -219,8 +224,16 @@ fn run_day(app: &AppHandle, path: &std::path::Path) -> Result<(), String> {
             ev.dirs.insert(s.title.clone(), PathBuf::from(&info.dir));
         }
         let end = Instant::now() + Duration::from_secs(s.duration_s);
-        while Instant::now() < end {
-            std::thread::sleep(Duration::from_millis(500));
+        let reason = super::day_stop::wait_for_stop(
+            s.stop_file.as_deref(),
+            end,
+            Duration::from_millis(500),
+        );
+        if s.stop_file.is_some() && reason == super::day_stop::StopReason::Timer {
+            queue_log(&format!(
+                "DAY: {:?} was stopped by the safety timer: no stop file within {} s",
+                s.title, s.duration_s
+            ));
         }
         let stopped = recording::stop_blocking(app)?;
         let stopped_ist = wb_recorder::util::rfc3339(wb_recorder::util::now_ist());

@@ -110,6 +110,7 @@ Import-Module (Join-Path $repo 'scripts\lib\Rig.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\CableRig.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Fidelity.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Quiet.psm1') -Force
+Import-Module (Join-Path $repo 'scripts\lib\DaySim.psm1') -Force
 $python = Join-Path $repo 'eval\.venv\Scripts\python.exe'
 New-Item -ItemType Directory -Force -Path $OutDir, $WorkRoot | Out-Null
 
@@ -454,25 +455,11 @@ try {
     }
 
     # 2. The plan.
-    $at = 0
-    $planSessions = @()
-    $prevEnd = -20
-    foreach ($s in $sessions) {
-      $dur = [int][math]::Ceiling([double]$s.seconds) + 25
-      if ($mode -eq 'day' -or $mode -eq 'rehearse') {
-        # The programme's times (10:00, 12:00, 14:30 and 16:00 on the scheduler's clock; compressed in the rehearsal).
-        # A session whose audio ran a little past the programme slot (a 90-minute slot with a 91-minute recording) pushes the
-        # next one back by the overlap plus 20 s, never more than 5 minutes; the plan file records the programme time.
-        $atEff = [int]$s.at_s
-        if ($atEff -lt $prevEnd + 20) { $atEff = $prevEnd + 20 }
-        if ($atEff - [int]$s.at_s -gt 300) { throw "the sessions overlap: '$($s.title)' is due at $($s.at_s) s, the one before it ends at $prevEnd s" }
-        $planSessions += [ordered]@{ title = $s.title; hall = $s.hall; at_s = $atEff; programme_at_s = [int]$s.at_s; duration_s = $dur; languages = @($s.languages); script = $s.script; device = $capName }
-        $prevEnd = $atEff + $dur
-      } else {
-        $planSessions += [ordered]@{ title = $s.title; at_s = $at; duration_s = $dur; languages = @($s.languages); device = $capName }
-        $at += $dur + 30
-      }
-    }
+    # The programme's times (10:00, 12:00, 14:30 and 16:00 on the scheduler's clock; compressed in the rehearsal), pushed back
+    # when the audio of a session ran past its slot (a 90-minute slot with a 91-minute recording). The app stops a session
+    # when its stop file appears, which this script writes 15 s after the player has finished playing it; the duration in
+    # the plan is only the app's safety net (the audio plus 15 minutes), never how a session ends (owner, 20 Nov 2026).
+    $planSessions = @(New-WbDayPlanSessions -Sessions $sessions -RunDir $run -Device $capName -Programme ($mode -eq 'day' -or $mode -eq 'rehearse'))
     $first = $sessions[0].title
     # The first smoke (three sessions) also pauses, locks a language and imports; a single long session does none
     # of that: it exists to show a unit decoded before Stop and a night pass that commits post-2. The day and its
@@ -520,6 +507,10 @@ try {
     $emu = $null
     $players = @()
     $refs = @()
+    $playerExit = @{}
+    $sessionStopWritten = @{}
+    $refStopSeen = @{}
+    $refStopWritten = @{}
     $rigConfirmed = $false
     $kill = $null
     $kills = @()
@@ -576,12 +567,14 @@ try {
                 Set-Content -LiteralPath $goFile -Value 'go' -Encoding ascii
               }
               $players += $play
-              $progress.Add("$(Get-Date -Format 'HH:mm:ss') player $i started for $title ($($s.seconds) s)")
+              $progress.Add("$(Get-Date -Format 'HH:mm:ss') player $i started for $title ($($s.seconds) s); this script wrote the go file $([math]::Round(((Get-Date) - $startedTitles[$title]).TotalSeconds, 1)) s after it read the app's start line")
             }
           }
           if ($l -match 'DAY: stopped "(.+?)"') {
             $stoppedTitle = $Matches[1]
-            foreach ($r in @($refs | Where-Object { $_.Title -eq $stoppedTitle })) { Set-Content -LiteralPath $r.Stop -Value 'stop' -Encoding ascii }
+            # The reference capture goes on a few seconds past the app's last frame: the line is written after the recording
+            # was closed, and the stop file follows below, 3 s later (owner, 20 Nov 2026: at least 2 s).
+            foreach ($r in @($refs | Where-Object { $_.Title -eq $stoppedTitle })) { $refStopSeen[$r.Index] = Get-Date }
             $progress.Add("$(Get-Date -Format 'HH:mm:ss') $l")
           }
           if ($l -match 'every session of the plan was recorded') { $allRecorded = Get-Date; $progress.Add("$(Get-Date -Format 'HH:mm:ss') all sessions recorded") }
@@ -608,6 +601,33 @@ try {
           if ($l -match 'night pass skipped') { $nightSkipped = Get-Date; $progress.Add("$(Get-Date -Format 'HH:mm:ss') $l") }
         }
         $lines = $ref.Value
+
+        # Each session is stopped 15 s after its player has finished (the player's own end, never a timer from the start
+        # call), and each reference capture 3 s after the app's stop line (owner, 20 Nov 2026).
+        for ($pi = 0; $pi -lt $players.Count; $pi++) {
+          $n = $pi + 1
+          if ($sessionStopWritten.ContainsKey($n)) { continue }
+          if (-not $playerExit.ContainsKey($n) -and $players[$pi].HasExited) {
+            $playerExit[$n] = Get-Date
+            $progress.Add("$(Get-Date -Format 'HH:mm:ss') player $n has finished playing")
+          }
+          $exitedAt = $null
+          if ($playerExit.ContainsKey($n)) { $exitedAt = $playerExit[$n] }
+          if (Test-WbDaySessionStopDue -PlayerExitedAt $exitedAt -Now (Get-Date) -MarginSeconds (Get-WbDayStopMarginSeconds)) {
+            Set-Content -LiteralPath (Join-Path $run "STOP-SESSION-$n") -Value 'stop' -Encoding ascii
+            $sessionStopWritten[$n] = Get-Date
+            $progress.Add("$(Get-Date -Format 'HH:mm:ss') stop file of session $n written ($(Get-WbDayStopMarginSeconds) s after its player finished)")
+          }
+        }
+        foreach ($r in $refs) {
+          if ($refStopWritten.ContainsKey($r.Index)) { continue }
+          $seen = $null
+          if ($refStopSeen.ContainsKey($r.Index)) { $seen = $refStopSeen[$r.Index] }
+          if (Test-WbDayRefStopDue -AppStoppedSeenAt $seen -Now (Get-Date) -DelaySeconds (Get-WbDayRefStopDelaySeconds)) {
+            Set-Content -LiteralPath $r.Stop -Value 'stop' -Encoding ascii
+            $refStopWritten[$r.Index] = Get-Date
+          }
+        }
 
         # One batch engine killed from outside, once an engine of the second or third session has run 20 s.
         if ($mode -eq 'smoke' -and -not $kill -and $startedTitles.Count -ge 2) {

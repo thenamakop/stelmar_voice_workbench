@@ -28,6 +28,7 @@ from day_sim_report import find_sessions, jload, jsonl, seg_checks, sql  # noqa:
 
 EVAL = Path(__file__).resolve().parents[2] / "eval"
 BAR_MEM = 0.70
+START_CALL_BAR_MS = 1000  # owner, 20 Nov 2026: the start call returns in under 1 s under load
 NIGHT_DEADLINE_H = 8.0  # 08:00 the next morning, as hours after 00:00 of the first day: 24 + 8
 NIGHT_DEADLINE_CLOCK = 24.0 + NIGHT_DEADLINE_H
 
@@ -66,6 +67,43 @@ def read_qlog(run: Path) -> list[tuple[float, str]]:
         m = re.match(r"^(\d{1,2}:\d{2}(?::\d{2})?)\t(.*)$", raw)
         if m:
             out.append((clock.parse(m.group(1)), m.group(2)))
+    return out
+
+
+def stop_order_of(qlog: list[tuple[float, str]]) -> dict[str, int]:
+    """Session folder name -> index in the scheduler log of its `DAY: stopped` line (the app's own stop of the session)."""
+    folder_of: dict[str, str] = {}
+    order: dict[str, int] = {}
+    for k, (_t, text) in enumerate(qlog):
+        m = re.match(r'^DAY: started "(.+?)" in (.+)$', text)
+        if m:
+            folder_of[m.group(1)] = Path(m.group(2).strip().replace("\\", "/")).name
+            continue
+        m = re.match(r'^DAY: stopped "(.+?)"', text)
+        if m and m.group(1) in folder_of:
+            order[folder_of[m.group(1)]] = k
+    return order
+
+
+def outstanding_at_stop(
+    stop_order: dict[str, int],
+    line_no: int,
+    name: str,
+    candidates: list[str],
+    complete_at: dict[tuple[str, str], float],
+    t: float,
+) -> list[str]:
+    """The sessions whose rolling transcript was outstanding at the Stop of `name`, whose 'ready by' is the log line
+    `line_no`: that session itself and every other session that had already stopped (its `DAY: stopped` line comes
+    earlier in the log) and whose rolling transcript was not complete yet. A session that had not stopped is not
+    outstanding, whatever its time: the scheduler log has a resolution of one minute, and Panel, started the minute
+    Parallel II stopped, was counted as outstanding at that Stop (day simulation of 19-20 Nov 2026)."""
+    out = [
+        n
+        for n in candidates
+        if n != name and stop_order.get(n, 1 << 60) < line_no and complete_at.get((n, "post-1"), 1e12) > t
+    ]
+    out.append(name)
     return out
 
 
@@ -297,21 +335,17 @@ def main() -> int:
 
     # ---------------------------------------------------------------- (2) rolling estimates against what happened
     P("ROLLING ESTIMATES  the 'ready by' recorded at each Stop against the moment everything that was outstanding at that Stop had finished")
-    started_at: dict[str, float] = {}
-    for t, text in qlog:
-        m = re.match(r'^DAY: started "(.+?)" in (.+)$', text)
-        if m:
-            started_at[Path(m.group(2).strip().replace("\\", "/")).name] = t
+    stop_order = stop_order_of(qlog)
     est_rows = []
-    for t, text in qlog:
+    for k, (t, text) in enumerate(qlog):
         m = re.match(r"^(\S+): stopped\. All transcripts ready by (\d{1,2}:\d{2}) IST", text)
         if not m:
             continue
         name = m.group(1)
         rb = ready_by(text, t)
-        # Only the sessions that had been started by this Stop can be outstanding (a later session's transcript is not).
-        outstanding = [n for n, s in names.items() if not s["imported"] and n != name and started_at.get(n, 1e12) <= t and complete_at.get((n, "post-1"), 1e12) > t]
-        outstanding.append(name)
+        # Only the sessions that had already stopped at this Stop can be outstanding (by the order of the log lines,
+        # not by their one-minute times; a session that starts after this Stop has nothing to finish yet).
+        outstanding = outstanding_at_stop(stop_order, k, name, [n for n, s in names.items() if not s["imported"]], complete_at, t)
         done = [complete_at.get((n, "post-1")) for n in outstanding]
         finished = max(done) if all(d is not None for d in done) else None
         basis = re.search(r"\((.*)\)\s*$", text)
@@ -331,6 +365,36 @@ def main() -> int:
         checks.append((f"rolling transcripts outstanding at the Stop of '{title_of.get(name, name)}' finished within 10% of the estimate recorded then" + (" (information in the rehearsal: sessions of 2 minutes)" if mode == "rehearse" else ""), (abs(err) <= 0.10) if mode != "rehearse" else None, f"estimate {est / 60:.1f} min, actual {act / 60:.1f} min ({100 * err:+.1f}%)"))
     if not est_rows:
         P("  no 'stopped. All transcripts ready by' line in the log")
+    P("")
+
+    # ---------------------------------------------------------------- (2b) the start call and how each session ended
+    P("START CALLS  how long the app's start call took for each session, step by step (the recorder had begun when it returned)")
+    start_total: dict[str, int] = {}
+    for _t, text in qlog:
+        m = re.match(r"^START: (start call of (.+?): .*total (\d+) ms)$", text)
+        if m:
+            start_total[Path(m.group(2).replace("\\", "/")).name] = int(m.group(3))
+            P(f"  {m.group(1)}")
+        elif text.startswith("START: "):
+            P(f"    {text[7:]}")
+    if not start_total:
+        P("  no start-call timing in the log (an older gate build)")
+    over = {n: ms for n, ms in start_total.items() if ms > START_CALL_BAR_MS}
+    if start_total:
+        worst = max(start_total.values())
+        checks.append((
+            f"the start call of every session returned within {START_CALL_BAR_MS} ms of the recorder starting (worst {worst} ms)",
+            not over,
+            ", ".join(f"{n} {ms} ms" for n, ms in over.items()),
+        ))
+    timer_stops = [x for _t, x in qlog if "was stopped by the safety timer" in x]
+    for x in timer_stops:
+        P(f"  {x}")
+    checks.append((
+        "every session was stopped by its stop file, 15 s after its player finished (no safety timer)",
+        not timer_stops,
+        "; ".join(timer_stops),
+    ))
     P("")
 
     # ---------------------------------------------------------------- (3) hybrid only where the profile chose it

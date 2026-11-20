@@ -7,6 +7,8 @@
 //! events. Nothing here touches the recorder: it reads `parts.json` and the files the recorder wrote.
 
 pub mod core;
+#[cfg(any(test, feature = "gate-hooks"))]
+pub mod day_stop;
 pub mod executor;
 pub mod feed;
 #[cfg(feature = "gate-hooks")]
@@ -39,6 +41,49 @@ use crate::state::{AppState, lock};
 
 fn plock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// The time each step of a start took, for the log. Starting a session must never wait for the queue; when it does,
+/// these numbers say where (20 Nov 2026: in the first full day simulation the player of the rig began 1.8 to 46 s after
+/// the recorder, and nothing said whether the app or the script had been slow).
+pub struct Laps {
+    began: Instant,
+    t: Instant,
+    parts: Vec<String>,
+}
+
+impl Laps {
+    pub fn start() -> Self {
+        let now = Instant::now();
+        Self {
+            began: now,
+            t: now,
+            parts: Vec::new(),
+        }
+    }
+
+    /// Closes the step that began at the last lap (or at the start).
+    pub fn lap(&mut self, label: &str) {
+        self.parts
+            .push(format!("{label} {} ms", self.t.elapsed().as_millis()));
+        self.t = Instant::now();
+    }
+
+    /// The steps and the total, as `a 3 ms, b 12 ms, total 15 ms`.
+    pub fn text(&self) -> String {
+        format!(
+            "{}, total {} ms",
+            self.parts.join(", "),
+            self.began.elapsed().as_millis()
+        )
+    }
+}
+
+/// One line of start timings: the application log and, in a gate build, the scheduler log file of the run.
+pub fn log_start_timing(line: &str) {
+    tracing::info!("{line}");
+    #[cfg(feature = "gate-hooks")]
+    gate_hooks::queue_log(&format!("START: {line}"));
 }
 
 /// How often the monitor re-reads the machine and `parts.json`.
@@ -337,6 +382,7 @@ impl Queue {
         languages: &[String],
         profile: &ProfileView,
     ) -> Result<(), String> {
+        let mut laps = Laps::start();
         let name = dir
             .file_name()
             .and_then(|n| n.to_str())
@@ -345,16 +391,20 @@ impl Queue {
         if plock(&self.open).iter().any(|s| s.name == name) {
             return Ok(());
         }
+        laps.lap("open-sessions lock");
         let models = profile.rolling_models(languages);
         if models.is_empty() {
             return Err(format!(
                 "no transcription model was measured for the languages of {name}; the recording goes on and the session stays untranscribed until a system check covers them"
             ));
         }
+        laps.lap("models");
         let mut queue = SessionQueue::open(&dir).map_err(|e| e.to_string())?;
+        laps.lap("session database");
         let job = queue
             .ensure_rolling_job(&name, models_json(&models), languages.to_vec(), clock_ms())
             .map_err(|e| e.to_string())?;
+        laps.lap("rolling job");
         let work_dir = dir.join("work");
         let handle = Arc::new(SessionHandle {
             name: name.clone(),
@@ -362,6 +412,8 @@ impl Queue {
             work_dir,
         });
         self.manager.add_session(handle.clone());
+        laps.lap("manager");
+        let logged_name = name.clone();
         plock(&self.open).push(OpenSession {
             name,
             dir,
@@ -374,7 +426,13 @@ impl Queue {
             night_handled: false,
             night_cancelled: false,
         });
+        laps.lap("open-sessions list");
         self.ensure_slots(profile);
+        laps.lap("engine slots");
+        log_start_timing(&format!(
+            "queue registration of {logged_name}: {}",
+            laps.text()
+        ));
         Ok(())
     }
 
@@ -387,9 +445,8 @@ impl Queue {
         let mut held: Vec<String> = Vec::new();
         let mut open = plock(&self.open);
         for s in open.iter_mut().filter(|s| s.name != new_name) {
-            if !s.night_handled {
-                continue;
-            }
+            // The night job's own state decides, not `night_handled`: that flag is in memory and a restart resets it
+            // (ASR audit of 20 Nov 2026), and a night job that is running must be held whatever the flag says.
             let night = plock(&s.handle.queue)
                 .jobs()
                 .unwrap_or_default()
@@ -790,12 +847,19 @@ impl Queue {
             let s = &open[i];
             languages.extend(s.languages.iter().cloned());
             let q = plock(&s.handle.queue);
-            let total = q
-                .jobs()
-                .ok()
-                .and_then(|jobs| jobs.into_iter().find(|j| j.kind == JobKind::Rolling))
+            let jobs = q.jobs().unwrap_or_default();
+            let rolling_total = jobs
+                .iter()
+                .find(|j| j.kind == JobKind::Rolling)
                 .and_then(|j| q.units(j.id).ok())
                 .map_or(0, |u| u.iter().map(|u| u.end_ms).max().unwrap_or(0));
+            // A night job held for a later session has committed some units: only the audio it has left counts
+            // (the whole session would make the pass look longer than it is and could skip it).
+            let total = jobs
+                .iter()
+                .find(|j| j.kind == JobKind::Night && j.state == JobState::Paused)
+                .and_then(|j| q.remaining_audio_ms(j.id).ok())
+                .unwrap_or(rolling_total);
             let mix = language_mix(&q, "post-1");
             audio.push(SessionAudio {
                 id: s.name.clone(),
@@ -870,6 +934,16 @@ impl Queue {
             Plan::Skip(reason) => {
                 self.core
                     .push_log(format!("night pass skipped: {}", reason.text()));
+                // A night job held for a later session would stay Paused with nobody to resume it: park it with
+                // the reason (what it committed stays; the rolling transcript is still the default revision).
+                for &i in &candidates {
+                    if open[i].night_cancelled {
+                        let _ = plock(&open[i].handle.queue).park_held_night_job(
+                            &format!("night pass skipped: {}", reason.text()),
+                            now,
+                        );
+                    }
+                }
             }
         }
         for i in candidates {
@@ -893,6 +967,7 @@ pub fn on_session_started(app: &AppHandle, dir: &str, expected: &[String], scrip
         return;
     };
     let queue = state.0.clone();
+    let mut laps = Laps::start();
     let languages = job_languages(expected, script);
     let dir = PathBuf::from(dir);
     let Some(profile) = queue.profile() else {
@@ -916,8 +991,14 @@ pub fn on_session_started(app: &AppHandle, dir: &str, expected: &[String], scrip
         .and_then(|n| n.to_str())
         .unwrap_or("session")
         .to_owned();
+    laps.lap("profile read");
     match queue.register(dir, &languages, &profile) {
-        Ok(()) => queue.cancel_night_plans(&name),
+        Ok(()) => {
+            laps.lap("registration");
+            queue.cancel_night_plans(&name);
+            laps.lap("night plans");
+            log_start_timing(&format!("queue start hook of {name}: {}", laps.text()));
+        }
         Err(e) => {
             let _ = app.state::<AppState>().events.send(Notice::event(
                 NoticeLevel::Warning,
