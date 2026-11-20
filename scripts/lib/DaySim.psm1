@@ -65,16 +65,18 @@ function New-WbDayPlanSessions {
     $audio = [int][math]::Ceiling([double]$s.seconds)
     $ceiling = $audio + $script:CeilingExtraSeconds
     $room = $audio + $script:SpacingExtraSeconds
-    $atEff = [int]$s.at_s
+    $progAt = Get-WbDayProp $s 'at_s'
+    if ($null -eq $progAt) { $progAt = 0 }
+    $atEff = [int]$progAt
     if ($Programme) {
       if ($atEff -lt $prevEnd + 20) { $atEff = $prevEnd + 20 }
-      if ($atEff - [int]$s.at_s -gt 300) { throw "the sessions overlap: '$($s.title)' is due at $($s.at_s) s, the one before it ends at $prevEnd s" }
+      if ($atEff - [int]$progAt -gt 300) { throw "the sessions overlap: '$($s.title)' is due at $progAt s, the one before it ends at $prevEnd s" }
     } else {
       $atEff = 0
       if ($i -gt 1) { $atEff = $prevEnd + 30 }
     }
     $planned += [ordered]@{
-      title = $s.title; hall = (Get-WbDayProp $s 'hall'); at_s = $atEff; programme_at_s = [int]$s.at_s; duration_s = $ceiling
+      title = $s.title; hall = (Get-WbDayProp $s 'hall'); at_s = $atEff; programme_at_s = [int]$progAt; duration_s = $ceiling
       stop_file = (Join-Path $RunDir "STOP-SESSION-$i"); languages = @($s.languages); script = (Get-WbDayProp $s 'script'); device = $Device
     }
     $prevEnd = $atEff + $room

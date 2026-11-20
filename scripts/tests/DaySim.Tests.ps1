@@ -50,6 +50,8 @@ Check 'without a programme the sessions follow one another from 0 with room for 
 # The audio manifests of the smoke and kill runs carry no hall and no script: the plan still builds (a property a session
 # does not have is null, strict mode must not throw).
 $bare = @(New-WbDayPlanSessions -Sessions @([pscustomobject]@{ title = 'A'; at_s = 0; seconds = 60; languages = @('en') }) -RunDir 'D:un' -Device 'd' -Programme $false)
+$bare2 = @(New-WbDayPlanSessions -Sessions @([pscustomobject]@{ title = 'A'; seconds = 60; languages = @('en') }, [pscustomobject]@{ title = 'B'; seconds = 60; languages = @('en') }) -RunDir 'D:un' -Device 'd' -Programme $false)
+Check 'a manifest without start times (the kill test) plans its sessions one after the other' ($bare2.Count -eq 2 -and $bare2[0].at_s -eq 0 -and $bare2[1].at_s -gt 60)
 Check 'a session without a hall or a script is planned' ($bare.Count -eq 1 -and $null -eq $bare[0].hall -and $null -eq $bare[0].script)
 
 # ---- the estimate check counts only sessions that had already stopped ----
