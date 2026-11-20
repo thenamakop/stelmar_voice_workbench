@@ -1,127 +1,159 @@
-﻿date: 2026-11-19 20:08 (IST on the Legion)
+﻿date: 2026-11-20 12:09 (IST on the Legion)
 command: powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\gates\day-sim.ps1 -Rehearse -Profile emu-low -Tag rehearse -Audio D:\STELMAR-Gate\day-sim\day-audio-rehearse -NightMinutes 14 -MaxMinutes 55 -DecisionMinutes 25
 machine: Legion, emulation profile emu-low; the gate build target\gate\stelmar-voice-workbench.exe, WB_GATE_DAY_PLAN; NOT A GATE (the whole schedule compressed, to prove the script end to end)
-source: c59d6e4
-build: stelmar-voice-workbench.exe sha256 ffdb1c179538dc7f58a50b7ef96f6de471871ab15178b07bd13673d905a66804
-run folder: D:\STELMAR-Gate\day-sim\rehearse-emu-low-20261119-194600
+source: 917eca6
+build: stelmar-voice-workbench.exe sha256 6e38411350cbbd81a8882b510d354cc58e404725f0caf9cfd1ba11fa25240296
+run folder: D:\STELMAR-Gate\day-sim\rehearse-emu-low-20261120-114056
 DAY-SIMULATION REHEARSAL (not a gate: the whole schedule compressed, to prove the script end to end)
-run folder: rehearse-emu-low-20261119-194600
+run folder: rehearse-emu-low-20261120-114056
 profile in force: {'config': '{"index":0,"kind":"gpu"}', 'process_while_recording': True, 'tier': 'C', 'cpu_threads': 2}
-app exit code 0; scheduler clock offset -35231 s (the first session of the plan maps to 10:00 IST); parts of 60 s; night time box 14 min
-quiet-machine rule: idle (idle-check.json: 1 attempt(s), waited 1 min; the last: host CPU 4.7% over 60 s, busy [], the owner's programs running None)
+app exit code 0; scheduler clock offset -6123 s (the first session of the plan maps to 10:00 IST); parts of 60 s; night time box 14 min
+quiet-machine rule: idle (idle-check.json: 1 attempt(s), waited 1 min; the last: host CPU 5.1% over 60 s, busy [], the owner's programs running None)
 display drivers: at the start Intel(R) UHD Graphics=32.0.101.6881; NVIDIA GeForce RTX 4070 Laptop GPU=32.0.16.2114; at the end Intel(R) UHD Graphics=32.0.101.6881; NVIDIA GeForce RTX 4070 Laptop GPU=32.0.16.2114
 configuration the queue worked in: Gpu { index: 0 }; forced hybrid: False
 
 Script notes (progress):
-  19:47:14 player 1 started for Inaugural (121.016 s)
-  19:49:51 10:02	DAY: stopped "Inaugural"
-  19:50:11 player 2 started for Parallel I (126.545 s)
-  19:52:01 10:04	main-hall__inaugural: post-1 transcript complete
-  19:52:35 10:05	DAY: stopped "Parallel I"
-  19:55:37 10:08	hall-a__parallel-i: post-1 transcript complete
-  19:55:54 10:08	night pass planned for 1 session(s): about 0.1 h, ready by 10:15 IST (measured speed: 1.84 times the profile's, from 2 finished unit(s)) (planned before the last session: the night time box has not started)
-  19:59:10 10:11	night pass cancelled: hall-b__parallel-ii started after it was planned; it is planned again after the last session (held: hall-a__parallel-i)
-  19:59:11 player 3 started for Parallel II (127.09 s)
-  20:00:07 10:12	hall-a__parallel-i: post-2 transcript complete
-  20:01:33 10:14	DAY: stopped "Parallel II"
-  20:01:54 player 4 started for Panel (133.42 s)
-  20:04:26 10:17	hall-b__parallel-ii: post-1 transcript complete
-  20:04:26 10:17	DAY: stopped "Panel"
-  20:04:26 all sessions recorded
-  20:07:10 10:19	main-hall__panel: post-1 transcript complete
-  20:07:28 10:20	night pass skipped: no audio in a language that has a night model
+  11:42:06 player 1 started for Inaugural (121.016 s); this script wrote the go file 1.4 s after it read the app's start line
+  11:44:12 player 1 has finished playing
+  11:44:49 stop file of session 1 written (15 s after its player finished)
+  11:45:08 10:02	DAY: stopped "Inaugural"
+  11:46:14 player 2 started for Parallel I (126.545 s); this script wrote the go file 1.1 s after it read the app's start line
+  11:47:13 10:04	main-hall__inaugural: post-1 transcript complete
+  11:48:39 player 2 has finished playing
+  11:49:01 stop file of session 2 written (15 s after its player finished)
+  11:49:28 10:06	DAY: stopped "Parallel I"
+  11:51:55 10:09	hall-a__parallel-i: post-1 transcript complete
+  11:52:15 10:10	night pass planned for 2 session(s): about 0.1 h, ready by 10:17 IST (measured speed: 1.56 times the profile's, from 2 finished unit(s)) (planned before the last session: the night time box has not started)
+  11:54:05 10:11	night pass cancelled: hall-b__parallel-ii started after it was planned; it is planned again after the last session (held: main-hall__inaugural, hall-a__parallel-i)
+  11:54:06 player 3 started for Parallel II (127.09 s); this script wrote the go file 1 s after it read the app's start line
+  11:54:32 10:12	main-hall__inaugural: post-2 transcript complete
+  11:56:23 player 3 has finished playing
+  11:56:47 stop file of session 3 written (15 s after its player finished)
+  11:57:06 10:14	DAY: stopped "Parallel II"
+  11:57:53 player 4 started for Panel (133.42 s); this script wrote the go file 1 s after it read the app's start line
+  12:00:05 10:17	hall-b__parallel-ii: post-1 transcript complete
+  12:00:25 player 4 has finished playing
+  12:00:46 stop file of session 4 written (15 s after its player finished)
+  12:01:08 10:18	DAY: stopped "Panel"
+  12:01:08 all sessions recorded
+  12:03:41 10:21	main-hall__panel: post-1 transcript complete
+  12:04:01 10:21	night pass planned for 1 session(s): about 0.1 h, ready by 10:30 IST (measured speed: 1.89 times the profile's, from 5 finished unit(s))
+  12:07:59 10:25	hall-a__parallel-i: post-2 transcript complete
+  12:08:41 the night pass is complete: stopping
 
 Sessions under rec/:
-  hall-a__parallel-i: title 'Parallel I', recorded, 3 parts, 2.5 min of audio, post-1 complete True, post-2 complete True, default revision post-2
-  hall-b__parallel-ii: title 'Parallel II', recorded, 3 parts, 2.6 min of audio, post-1 complete True, post-2 complete False, default revision post-1
-  main-hall__inaugural: title 'Inaugural', recorded, 3 parts, 2.5 min of audio, post-1 complete True, post-2 complete False, default revision post-1
-  main-hall__panel: title 'Panel', recorded, 3 parts, 2.7 min of audio, post-1 complete True, post-2 complete False, default revision post-1
+  hall-a__parallel-i: title 'Parallel I', recorded, 4 parts, 3.1 min of audio, post-1 complete True, post-2 complete True, default revision post-2
+  hall-b__parallel-ii: title 'Parallel II', recorded, 4 parts, 3.0 min of audio, post-1 complete True, post-2 complete False, default revision post-1
+  main-hall__inaugural: title 'Inaugural', recorded, 3 parts, 2.8 min of audio, post-1 complete True, post-2 complete True, default revision post-2
+  main-hall__panel: title 'Panel', recorded, 4 parts, 3.1 min of audio, post-1 complete True, post-2 complete False, default revision post-1
 
 RECORDING FIDELITY  each session against its own independent reference capture of the cable (the Phase 1 rule, docs/PLAN.md section 12)
-  Inaugural: PASS; 2.6 min; upstream breaks 0, counted 0 of at most 1; differing frames 0; runs of the app 1; dropped samples 0, ring overrun samples 0, xruns 0
+  Inaugural: PASS; 3.4 min; upstream breaks 0, counted 0 of at most 1; differing frames 0; runs of the app 1; dropped samples 0, ring overrun samples 0, xruns 0
       recording rule (9 Nov 2026): fidelity decides PASS or FAIL; upstream breaks are reported; a run with limits exceeded is INVALID (docs/PLAN.md section 12)
-      fidelity: app compared with the reference capture over 6,966,720 frames (145.1 s) in 1 run(s) of the app; differing frames 0; reference audio the app has no recording of 0 frame(s); audio only the app has 0 frame(s); restart gaps 0 frame(s)
-        run 1: app frames 0 to 7062720, one fixed offset 96000 frames (found by a stretch of the reference); compared 6966720, differing 0, largest difference 0
-      upstream breaks (between the source and the reference capture; reported, not gated): 0 in 2.6 minutes of audio, 0 counted toward the limit of 1 (breaks in the first 3 s of playback are not counted)
-      player callbacks: longest gap 20.8 ms against a 100 ms output buffer; late callbacks (a gap longer than the buffer) 0
-      validity: valid (limits: a late player callback within 500 ms of a break, more than 250 ms unmatched in a break, more than max(1, floor(minutes / 10)) counted breaks, a missing, misaligned or incomplete reference, or an upstream break without late-callback data)
-  Parallel I: PASS; 2.4 min; upstream breaks 0, counted 0 of at most 1; differing frames 0; runs of the app 1; dropped samples 0, ring overrun samples 0, xruns 0
-      recording rule (9 Nov 2026): fidelity decides PASS or FAIL; upstream breaks are reported; a run with limits exceeded is INVALID (docs/PLAN.md section 12)
-      fidelity: app compared with the reference capture over 6,864,960 frames (143.0 s) in 1 run(s) of the app; differing frames 0; reference audio the app has no recording of 0 frame(s); audio only the app has 0 frame(s); restart gaps 0 frame(s)
-        run 1: app frames 0 to 7302720, one fixed offset 437760 frames (found by a stretch of the reference); compared 6864960, differing 0, largest difference 0
-      upstream breaks (between the source and the reference capture; reported, not gated): 0 in 2.4 minutes of audio, 0 counted toward the limit of 1 (breaks in the first 3 s of playback are not counted)
-      player callbacks: longest gap 21.4 ms against a 100 ms output buffer; late callbacks (a gap longer than the buffer) 0
-      validity: valid (limits: a late player callback within 500 ms of a break, more than 250 ms unmatched in a break, more than max(1, floor(minutes / 10)) counted breaks, a missing, misaligned or incomplete reference, or an upstream break without late-callback data)
-  Parallel II: PASS; 2.4 min; upstream breaks 0, counted 0 of at most 1; differing frames 0; runs of the app 1; dropped samples 0, ring overrun samples 0, xruns 0
-      recording rule (9 Nov 2026): fidelity decides PASS or FAIL; upstream breaks are reported; a run with limits exceeded is INVALID (docs/PLAN.md section 12)
-      fidelity: app compared with the reference capture over 6,427,680 frames (133.9 s) in 1 run(s) of the app; differing frames 0; reference audio the app has no recording of 0 frame(s); audio only the app has 0 frame(s); restart gaps 0 frame(s)
-        run 1: app frames 0 to 7351680, one fixed offset 924000 frames (found by a stretch of the reference); compared 6427680, differing 0, largest difference 0
-      upstream breaks (between the source and the reference capture; reported, not gated): 0 in 2.4 minutes of audio, 0 counted toward the limit of 1 (breaks in the first 3 s of playback are not counted)
+      fidelity: app compared with the reference capture over 7,832,640 frames (163.2 s) in 1 run(s) of the app; differing frames 0; reference audio the app has no recording of 0 frame(s); audio only the app has 0 frame(s); restart gaps 0 frame(s)
+        run 1: app frames 0 to 7932480, one fixed offset 99840 frames (found by a stretch of the reference); compared 7832640, differing 0, largest difference 0
+      upstream breaks (between the source and the reference capture; reported, not gated): 0 in 3.4 minutes of audio, 0 counted toward the limit of 1 (breaks in the first 3 s of playback are not counted)
       player callbacks: longest gap 21.5 ms against a 100 ms output buffer; late callbacks (a gap longer than the buffer) 0
       validity: valid (limits: a late player callback within 500 ms of a break, more than 250 ms unmatched in a break, more than max(1, floor(minutes / 10)) counted breaks, a missing, misaligned or incomplete reference, or an upstream break without late-callback data)
-  Panel: PASS; 2.5 min; upstream breaks 0, counted 0 of at most 1; differing frames 0; runs of the app 1; dropped samples 0, ring overrun samples 0, xruns 0
+  Parallel I: PASS; 3.6 min; upstream breaks 0, counted 0 of at most 1; differing frames 0; runs of the app 1; dropped samples 0, ring overrun samples 0, xruns 0
       recording rule (9 Nov 2026): fidelity decides PASS or FAIL; upstream breaks are reported; a run with limits exceeded is INVALID (docs/PLAN.md section 12)
-      fidelity: app compared with the reference capture over 7,229,280 frames (150.6 s) in 1 run(s) of the app; differing frames 0; reference audio the app has no recording of 0 frame(s); audio only the app has 0 frame(s); restart gaps 0 frame(s)
-        run 1: app frames 0 to 7639680, one fixed offset 410400 frames (found by a stretch of the reference); compared 7229280, differing 0, largest difference 0
-      upstream breaks (between the source and the reference capture; reported, not gated): 0 in 2.5 minutes of audio, 0 counted toward the limit of 1 (breaks in the first 3 s of playback are not counted)
-      player callbacks: longest gap 21.4 ms against a 100 ms output buffer; late callbacks (a gap longer than the buffer) 0
+      fidelity: app compared with the reference capture over 8,028,000 frames (167.3 s) in 1 run(s) of the app; differing frames 0; reference audio the app has no recording of 0 frame(s); audio only the app has 0 frame(s); restart gaps 0 frame(s)
+        run 1: app frames 0 to 8869440, one fixed offset 841440 frames (found by a stretch of the reference); compared 8028000, differing 0, largest difference 0
+      upstream breaks (between the source and the reference capture; reported, not gated): 0 in 3.6 minutes of audio, 0 counted toward the limit of 1 (breaks in the first 3 s of playback are not counted)
+      player callbacks: longest gap 21.7 ms against a 100 ms output buffer; late callbacks (a gap longer than the buffer) 0
+      validity: valid (limits: a late player callback within 500 ms of a break, more than 250 ms unmatched in a break, more than max(1, floor(minutes / 10)) counted breaks, a missing, misaligned or incomplete reference, or an upstream break without late-callback data)
+  Parallel II: PASS; 3.4 min; upstream breaks 0, counted 0 of at most 1; differing frames 0; runs of the app 1; dropped samples 0, ring overrun samples 0, xruns 0
+      recording rule (9 Nov 2026): fidelity decides PASS or FAIL; upstream breaks are reported; a run with limits exceeded is INVALID (docs/PLAN.md section 12)
+      fidelity: app compared with the reference capture over 7,691,040 frames (160.2 s) in 1 run(s) of the app; differing frames 0; reference audio the app has no recording of 0 frame(s); audio only the app has 0 frame(s); restart gaps 0 frame(s)
+        run 1: app frames 0 to 8749440, one fixed offset 1058400 frames (found by a stretch of the reference); compared 7691040, differing 0, largest difference 0
+      upstream breaks (between the source and the reference capture; reported, not gated): 0 in 3.4 minutes of audio, 0 counted toward the limit of 1 (breaks in the first 3 s of playback are not counted)
+      player callbacks: longest gap 21.7 ms against a 100 ms output buffer; late callbacks (a gap longer than the buffer) 0
+      validity: valid (limits: a late player callback within 500 ms of a break, more than 250 ms unmatched in a break, more than max(1, floor(minutes / 10)) counted breaks, a missing, misaligned or incomplete reference, or an upstream break without late-callback data)
+  Panel: PASS; 3.7 min; upstream breaks 0, counted 0 of at most 1; differing frames 0; runs of the app 1; dropped samples 0, ring overrun samples 0, xruns 0
+      recording rule (9 Nov 2026): fidelity decides PASS or FAIL; upstream breaks are reported; a run with limits exceeded is INVALID (docs/PLAN.md section 12)
+      fidelity: app compared with the reference capture over 8,346,720 frames (173.9 s) in 1 run(s) of the app; differing frames 0; reference audio the app has no recording of 0 frame(s); audio only the app has 0 frame(s); restart gaps 0 frame(s)
+        run 1: app frames 0 to 8844480, one fixed offset 497760 frames (found by a stretch of the reference); compared 8346720, differing 0, largest difference 0
+      upstream breaks (between the source and the reference capture; reported, not gated): 0 in 3.7 minutes of audio, 0 counted toward the limit of 1 (breaks in the first 3 s of playback are not counted)
+      player callbacks: longest gap 23.4 ms against a 100 ms output buffer; late callbacks (a gap longer than the buffer) 0
       validity: valid (limits: a late player callback within 500 ms of a break, more than 250 ms unmatched in a break, more than max(1, floor(minutes / 10)) counted breaks, a missing, misaligned or incomplete reference, or an upstream break without late-callback data)
 
 ROLLING ESTIMATES  the 'ready by' recorded at each Stop against the moment everything that was outstanding at that Stop had finished
   no 'stopped. All transcripts ready by' line in the log
 
+START CALLS  how long the app's start call took for each session, step by step (the recorder had begun when it returned)
+    queue registration of main-hall__inaugural: open-sessions lock 0 ms, models 0 ms, session database 9 ms, rolling job 0 ms, manager 0 ms, open-sessions list 0 ms, engine slots 0 ms, total 10 ms
+    queue start hook of main-hall__inaugural: profile read 0 ms, registration 10 ms, night plans 0 ms, total 11 ms; engine units running at the start: 0
+  start call of D:\STELMAR-Gate\day-sim\rehearse-emu-low-20261120-114056\rec\2026-11-20\main-hall__inaugural: cancel check 0 ms, recorder start 183 ms, options file 2 ms, queue hook 11 ms, total 196 ms
+    queue registration of hall-a__parallel-i: open-sessions lock 0 ms, models 0 ms, session database 7 ms, rolling job 0 ms, manager 0 ms, open-sessions list 0 ms, engine slots 0 ms, total 8 ms
+    queue start hook of hall-a__parallel-i: profile read 0 ms, registration 8 ms, night plans 0 ms, total 9 ms; engine units running at the start: 1
+  start call of D:\STELMAR-Gate\day-sim\rehearse-emu-low-20261120-114056\rec\2026-11-20\hall-a__parallel-i: cancel check 0 ms, recorder start 166 ms, options file 1 ms, queue hook 9 ms, total 177 ms
+    queue registration of hall-b__parallel-ii: open-sessions lock 0 ms, models 0 ms, session database 11 ms, rolling job 0 ms, manager 0 ms, open-sessions list 0 ms, engine slots 0 ms, total 11 ms
+    queue start hook of hall-b__parallel-ii: profile read 2 ms, registration 11 ms, night plans 1 ms, total 15 ms; engine units running at the start: 1
+  start call of D:\STELMAR-Gate\day-sim\rehearse-emu-low-20261120-114056\rec\2026-11-20\hall-b__parallel-ii: cancel check 0 ms, recorder start 176 ms, options file 2 ms, queue hook 16 ms, total 195 ms
+    queue registration of main-hall__panel: open-sessions lock 0 ms, models 0 ms, session database 8 ms, rolling job 0 ms, manager 0 ms, open-sessions list 0 ms, engine slots 0 ms, total 9 ms
+    queue start hook of main-hall__panel: profile read 0 ms, registration 9 ms, night plans 0 ms, total 10 ms; engine units running at the start: 1
+  start call of D:\STELMAR-Gate\day-sim\rehearse-emu-low-20261120-114056\rec\2026-11-20\main-hall__panel: cancel check 0 ms, recorder start 171 ms, options file 1 ms, queue hook 10 ms, total 183 ms
+
 DEVICES  hybrid only where the profile chose it
   profile config: {"index":0,"kind":"gpu"}; forced hybrid (labelled, kill test only): False
-  units done by revision and slot: post-1 on gpu: 4, post-2 on gpu: 1
+  units done by revision and slot: post-1 on gpu: 4, post-2 on gpu: 2
 
 ENGINE MEMORY  peak against the limit the queue granted (bar: 70%)
-  worst: 49.3% (1531 of 3106 MiB; hall-a__parallel-i unit 0 of post-1 on gpu)
+  worst: 49.4% (1534 of 3106 MiB; hall-a__parallel-i unit 0 of post-1 on gpu)
   memory-limit deaths (reported apart from other failures): 0
 
 TRANSCRIPT INTEGRITY  (single writer: no overlap, no repeated start, audio order, cursor)
-  hall-a__parallel-i post-1: 16 segments, overlaps 0, duplicate starts 0, appended in audio order True, job cursor 152140 ms vs last segment end 133700 ms, speech 88 s of 152 s, last end 134 s -> ok
-  hall-a__parallel-i post-2: 16 segments, overlaps 0, duplicate starts 0, appended in audio order True, job cursor 152140 ms vs last segment end 133700 ms, speech 88 s of 152 s, last end 134 s -> ok
-  hall-b__parallel-ii post-1: 19 segments, overlaps 0, duplicate starts 0, appended in audio order True, job cursor 153160 ms vs last segment end 140360 ms, speech 115 s of 153 s, last end 140 s -> ok
-  main-hall__inaugural post-1: 13 segments, overlaps 0, duplicate starts 0, appended in audio order True, job cursor 147140 ms vs last segment end 120870 ms, speech 93 s of 147 s, last end 121 s -> ok
-  main-hall__panel post-1: 16 segments, overlaps 0, duplicate starts 0, appended in audio order True, job cursor 159160 ms vs last segment end 139050 ms, speech 97 s of 159 s, last end 139 s -> ok
+  hall-a__parallel-i post-1: 16 segments, overlaps 0, duplicate starts 0, appended in audio order True, job cursor 184780 ms vs last segment end 142120 ms, speech 88 s of 185 s, last end 142 s -> ok
+  hall-a__parallel-i post-2: 16 segments, overlaps 0, duplicate starts 0, appended in audio order True, job cursor 184780 ms vs last segment end 142120 ms, speech 88 s of 185 s, last end 142 s -> ok
+  hall-b__parallel-ii post-1: 20 segments, overlaps 0, duplicate starts 0, appended in audio order True, job cursor 182280 ms vs last segment end 143140 ms, speech 115 s of 182 s, last end 143 s -> ok
+  main-hall__inaugural post-1: 13 segments, overlaps 0, duplicate starts 0, appended in audio order True, job cursor 165260 ms vs last segment end 120930 ms, speech 93 s of 165 s, last end 121 s -> ok
+  main-hall__inaugural post-2: 13 segments, overlaps 0, duplicate starts 0, appended in audio order True, job cursor 165260 ms vs last segment end 120930 ms, speech 93 s of 165 s, last end 121 s -> ok
+  main-hall__panel post-1: 16 segments, overlaps 0, duplicate starts 0, appended in audio order True, job cursor 184260 ms vs last segment end 140900 ms, speech 97 s of 184 s, last end 141 s -> ok
 
 NIGHT PASS
   1 earlier plan(s) cancelled because a session started after it was planned and planned again after the last session:
-    10:11:00 night pass cancelled: hall-b__parallel-ii started after it was planned; it is planned again after the last session (held: hall-a__parallel-i)
-  planned at 10:08:00: night pass planned for 1 session(s): about 0.1 h, ready by 10:15 IST (measured speed: 1.84 times the profile's, from 2 finished unit(s))
-  night units finished: 1; audio 2.5 of 2.5 min; engine time 4.2 min; sessions with a complete post-2: 1 of 1
-  planned 'ready by' 10:15:00
-  night pass finished at 10:12:00 (the pass took 4.0 min from its planning) -> before 08:00
+    10:11:00 night pass cancelled: hall-b__parallel-ii started after it was planned; it is planned again after the last session (held: main-hall__inaugural, hall-a__parallel-i)
+  planned at 10:21:00: night pass planned for 1 session(s): about 0.1 h, ready by 10:30 IST (measured speed: 1.89 times the profile's, from 5 finished unit(s))
+  night units finished: 2; audio 5.8 of 5.8 min; engine time 6.2 min; sessions with a complete post-2: 1 of 1
+  planned 'ready by' 10:30:00
+  night pass finished at 10:25:00 (the pass took 4.0 min from its planning) -> before 08:00
+  10:00:00 START: queue start hook of main-hall__inaugural: profile read 0 ms, registration 10 ms, night plans 0 ms, total 11 ms; engine units running at the start: 0
   10:02:00 main-hall__inaugural: stopped. Nothing is waiting to be transcribed (sessions with several languages: provisional emu-low detection allowance (x1.34 rolling, x1.25 night) until a unit of such a session finishes; sessions with one language: the profile's speed until a unit finishes)
-  10:12:00 hall-a__parallel-i: unit 0 of post-2 done in 252.3 s on gpu (0 restart(s), engine peak 4083 MiB against limit 8675 MiB)
-  10:12:00 hall-a__parallel-i: post-2 transcript complete
+  10:03:00 START: queue start hook of hall-a__parallel-i: profile read 0 ms, registration 8 ms, night plans 0 ms, total 9 ms; engine units running at the start: 1
+  10:11:00 START: queue start hook of hall-b__parallel-ii: profile read 2 ms, registration 11 ms, night plans 1 ms, total 15 ms; engine units running at the start: 1
+  10:12:00 main-hall__inaugural: unit 0 of post-2 done in 124.7 s on gpu (0 restart(s), engine peak 4166 MiB against limit 8675 MiB)
+  10:12:00 main-hall__inaugural: post-2 transcript complete
+  10:15:00 START: queue start hook of main-hall__panel: profile read 0 ms, registration 9 ms, night plans 0 ms, total 10 ms; engine units running at the start: 1
+  10:25:00 hall-a__parallel-i: unit 0 of post-2 done in 250.2 s on gpu (0 restart(s), engine peak 4087 MiB against limit 8675 MiB)
+  10:25:00 hall-a__parallel-i: post-2 transcript complete
 
 ERROR RATES  information only (not a gate); reference text of every utterance is from the local evaluation sets
   per session, whole text: reference words, WER, CER (the final revision: post-2 where complete, else post-1)
-  Parallel I (post-2): reference words 189, hypothesis words 196, WER 22.2%, CER 7.5%
-  Parallel II (post-1): reference words 470, hypothesis words 361, WER 53.4%, CER 40.9%
-  Inaugural (post-1): reference words 233, hypothesis words 204, WER 27.5%, CER 19.5%
-  Panel (post-1): reference words 224, hypothesis words 236, WER 65.2%, CER 47.8%
+  Parallel I (post-2): reference words 189, hypothesis words 196, WER 20.6%, CER 7.2%
+  Parallel II (post-1): reference words 470, hypothesis words 359, WER 53.4%, CER 40.5%
+  Inaugural (post-2): reference words 233, hypothesis words 204, WER 27.5%, CER 19.3%
+  Panel (post-1): reference words 224, hypothesis words 236, WER 65.2%, CER 47.5%
   per dataset, utterance by utterance, each utterance's window from where the source starts in the app's recording (reference capture start plus the fixed offset), information:
-    coshe-eval (CC BY-NC 4.0, local evaluation data: numbers only): 2 utterances, WER 54.5%, CER 41.7%
+    coshe-eval (CC BY-NC 4.0, local evaluation data: numbers only): 2 utterances, WER 54.5%, CER 41.3%
     fleurs-en: 3 utterances, WER 61.6%, CER 59.8%
-    fleurs-hi: 5 utterances, WER 108.1%, CER 84.7%
-    kathbath-hi: 16 utterances, WER 22.2%, CER 7.6%
+    fleurs-hi: 5 utterances, WER 108.1%, CER 84.1%
+    kathbath-hi: 16 utterances, WER 20.6%, CER 7.3%
     kathbath-ur: 3 utterances, WER 28.1%, CER 19.2%
-    svarah: 21 utterances, WER 43.7%, CER 33.4%
+    svarah: 21 utterances, WER 43.7%, CER 33.2%
 
 UNIT SPEED  engine seconds per audio second for every unit (1.0 = real time), by revision
-  Inaugural unit 0 of post-1: 147 s of audio in 122 s on gpu -> 0.83, 0 restart(s), peak 1528 of 3106 MiB, done at 10:04:00
-  Parallel I unit 0 of post-1: 152 s of audio in 163 s on gpu -> 1.07, 0 restart(s), peak 1531 of 3106 MiB, done at 10:08:00
-  Parallel I unit 0 of post-2: 152 s of audio in 252 s on gpu -> 1.66, 0 restart(s), peak 4083 of 8675 MiB, done at 10:12:00
-  Parallel II unit 0 of post-1: 153 s of audio in 171 s on gpu -> 1.12, 0 restart(s), peak 1529 of 3106 MiB, done at 10:17:00
-  Panel unit 0 of post-1: 159 s of audio in 156 s on gpu -> 0.98, 0 restart(s), peak 1531 of 3106 MiB, done at 10:19:00
+  Inaugural unit 0 of post-1: 165 s of audio in 124 s on gpu -> 0.75, 0 restart(s), peak 1529 of 3106 MiB, done at 10:04:00
+  Parallel I unit 0 of post-1: 185 s of audio in 163 s on gpu -> 0.88, 0 restart(s), peak 1534 of 3106 MiB, done at 10:09:00
+  Inaugural unit 0 of post-2: 165 s of audio in 125 s on gpu -> 0.75, 0 restart(s), peak 4166 of 8675 MiB, done at 10:12:00
+  Parallel II unit 0 of post-1: 182 s of audio in 180 s on gpu -> 0.99, 0 restart(s), peak 1530 of 3106 MiB, done at 10:17:00
+  Panel unit 0 of post-1: 184 s of audio in 154 s on gpu -> 0.84, 0 restart(s), peak 1533 of 3106 MiB, done at 10:21:00
+  Parallel I unit 0 of post-2: 185 s of audio in 250 s on gpu -> 1.35, 0 restart(s), peak 4087 of 8675 MiB, done at 10:25:00
 
 MACHINE LOAD  the per-process sampler (rows every 10 s)
-  65 samples over 0.3 h; mean CPU % of the host: host 12.3, engine 0.5, app 0.1, webview 0.1, player 0.0, script 2.7, other 8.8
-  other (outside our processes) above 15% in 0 of 65 samples; highest 11%
+  68 samples over 0.4 h; mean CPU % of the host: host 9.8, engine 0.5, app 0.1, webview 0.1, player 0.0, script 2.8, other 6.3
+  other (outside our processes) above 15% in 0 of 68 samples; highest 14%
 
-timeline: D:\STELMAR-Gate\day-sim\rehearse-emu-low-20261119-194600\timeline.svg (copied next to this file)
+timeline: D:\STELMAR-Gate\day-sim\rehearse-emu-low-20261120-114056\timeline.svg (copied next to this file)
 
 CHECKS
   [PASS] fidelity of 'Inaugural' (one offset per run, 0 dropped, upstream breaks within max(1, floor(minutes/10))): PASS
@@ -132,65 +164,84 @@ CHECKS
   [PASS] recorder counters of 'Parallel II': 0 ring overruns, 0 xruns, 0 dropped samples: dropped 0, overrun 0, xruns 0
   [PASS] fidelity of 'Panel' (one offset per run, 0 dropped, upstream breaks within max(1, floor(minutes/10))): PASS
   [PASS] recorder counters of 'Panel': 0 ring overruns, 0 xruns, 0 dropped samples: dropped 0, overrun 0, xruns 0
+  [PASS] the start call of every session returned within 1000 ms of the recorder starting (worst 196 ms)
+  [PASS] every session was stopped by its stop file, 15 s after its player finished (no safety timer)
   [PASS] hybrid only where the profile chose it: slots used ['gpu'], profile hybrid False
-  [PASS] engine peak memory under 70% of its limit in every unit: worst 49.3%
+  [PASS] engine peak memory under 70% of its limit in every unit: worst 49.4%
   [PASS] no engine died at its memory limit: 0
   [PASS] no segment repeated or overlapping, appended in audio order, cursor at the end, in every revision
   [PASS] rolling transcript of 'Parallel I' complete and its revision the default (until the night pass): post-1 complete True, default post-2
   [PASS] rolling transcript of 'Parallel II' complete and its revision the default (until the night pass): post-1 complete True, default post-1
-  [PASS] rolling transcript of 'Inaugural' complete and its revision the default (until the night pass): post-1 complete True, default post-1
+  [PASS] rolling transcript of 'Inaugural' complete and its revision the default (until the night pass): post-1 complete True, default post-2
   [PASS] rolling transcript of 'Panel' complete and its revision the default (until the night pass): post-1 complete True, default post-1
-  [PASS] night pass finished before 08:00 IST: finished 10:12:00
+  [PASS] night pass finished before 08:00 IST: finished 10:25:00
 
-VERDICT: PASS (17 passed, 0 failed, 0 information or invalid)
+VERDICT: PASS (19 passed, 0 failed, 0 information or invalid)
 Speed, 'ready by' and 10% differences on the emulation profile are low-tier findings with numbers, not code failures (owner, 17 and 18 Nov 2026); the real laptops repeat the run.
 
 Scheduler log (every line, IST time first):
   10:00:00 gpu engine slot started (configuration Gpu { index: 0 }, 2 thread(s))
-  10:00:00 DAY: started "Inaugural" in D:\STELMAR-Gate\day-sim\rehearse-emu-low-20261119-194600\rec\2026-11-19\main-hall__inaugural
+  10:00:00 START: queue registration of main-hall__inaugural: open-sessions lock 0 ms, models 0 ms, session database 9 ms, rolling job 0 ms, manager 0 ms, open-sessions list 0 ms, engine slots 0 ms, total 10 ms
+  10:00:00 START: queue start hook of main-hall__inaugural: profile read 0 ms, registration 10 ms, night plans 0 ms, total 11 ms; engine units running at the start: 0
   10:00:00 paused: processing while recording is not cleared on this computer
+  10:00:00 START: start call of D:\STELMAR-Gate\day-sim\rehearse-emu-low-20261120-114056\rec\2026-11-20\main-hall__inaugural: cancel check 0 ms, recorder start 183 ms, options file 2 ms, queue hook 11 ms, total 196 ms
   10:00:00 gpu: waiting, not processing: processing while recording is not cleared on this computer
+  10:00:00 DAY: started "Inaugural" in D:\STELMAR-Gate\day-sim\rehearse-emu-low-20261120-114056\rec\2026-11-20\main-hall__inaugural
   10:00:00 resumed (was: processing while recording is not cleared on this computer)
   10:00:00 gpu: processing may continue
   10:01:00 main-hall__inaugural: pauses of part 1 found (7 pauses, 0 fallback cuts) in 0.6 s; engine peak 91 MiB against limit 2048 MiB (assumed peak)
-  10:02:00 main-hall__inaugural: pauses of part 2 found (4 pauses, 2 fallback cuts) in 0.7 s; engine peak 91 MiB against limit 1115 MiB (measured peak)
+  10:02:00 main-hall__inaugural: pauses of part 2 found (4 pauses, 2 fallback cuts) in 0.6 s; engine peak 91 MiB against limit 1115 MiB (measured peak)
   10:02:00 DAY: stopped "Inaugural"
   10:02:00 main-hall__inaugural: stopped. Nothing is waiting to be transcribed (sessions with several languages: provisional emu-low detection allowance (x1.34 rolling, x1.25 night) until a unit of such a session finishes; sessions with one language: the profile's speed until a unit finishes)
-  10:02:00 main-hall__inaugural: pauses of part 3 found (1 pauses, 0 fallback cuts) in 0.3 s; engine peak 89 MiB against limit 1115 MiB (measured peak)
+  10:02:00 main-hall__inaugural: pauses of part 3 found (1 pauses, 0 fallback cuts) in 0.5 s; engine peak 90 MiB against limit 1115 MiB (measured peak)
   10:02:00 main-hall__inaugural: session closed, 1 final unit(s) planned
-  10:02:00 DAY: started "Parallel I" in D:\STELMAR-Gate\day-sim\rehearse-emu-low-20261119-194600\rec\2026-11-19\hall-a__parallel-i
-  10:03:00 hall-a__parallel-i: pauses of part 1 found (7 pauses, 0 fallback cuts) in 0.7 s; engine peak 91 MiB against limit 1115 MiB (measured peak)
-  10:04:00 main-hall__inaugural: unit 0 of post-1 done in 122.5 s on gpu (0 restart(s), engine peak 1528 MiB against limit 3106 MiB)
+  10:03:00 START: queue registration of hall-a__parallel-i: open-sessions lock 0 ms, models 0 ms, session database 7 ms, rolling job 0 ms, manager 0 ms, open-sessions list 0 ms, engine slots 0 ms, total 8 ms
+  10:03:00 START: queue start hook of hall-a__parallel-i: profile read 0 ms, registration 8 ms, night plans 0 ms, total 9 ms; engine units running at the start: 1
+  10:03:00 START: start call of D:\STELMAR-Gate\day-sim\rehearse-emu-low-20261120-114056\rec\2026-11-20\hall-a__parallel-i: cancel check 0 ms, recorder start 166 ms, options file 1 ms, queue hook 9 ms, total 177 ms
+  10:03:00 DAY: started "Parallel I" in D:\STELMAR-Gate\day-sim\rehearse-emu-low-20261120-114056\rec\2026-11-20\hall-a__parallel-i
+  10:04:00 main-hall__inaugural: unit 0 of post-1 done in 124.4 s on gpu (0 restart(s), engine peak 1529 MiB against limit 3106 MiB)
   10:04:00 main-hall__inaugural: post-1 transcript complete
-  10:04:00 hall-a__parallel-i: pauses of part 2 found (8 pauses, 0 fallback cuts) in 0.6 s; engine peak 91 MiB against limit 1115 MiB (measured peak)
-  10:05:00 DAY: stopped "Parallel I"
-  10:05:00 hall-a__parallel-i: stopped. Nothing is waiting to be transcribed (sessions with several languages: measured, 2.19 times the profile's, from 1 finished unit(s); sessions with one language: the profile's speed until a unit finishes)
-  10:05:00 hall-a__parallel-i: pauses of part 3 found (3 pauses, 0 fallback cuts) in 0.4 s; engine peak 90 MiB against limit 1115 MiB (measured peak)
-  10:05:00 hall-a__parallel-i: session closed, 1 final unit(s) planned
-  10:08:00 hall-a__parallel-i: unit 0 of post-1 done in 162.9 s on gpu (0 restart(s), engine peak 1531 MiB against limit 3106 MiB)
-  10:08:00 hall-a__parallel-i: post-1 transcript complete
-  10:08:00 night pass planned for 1 session(s): about 0.1 h, ready by 10:15 IST (measured speed: 1.84 times the profile's, from 2 finished unit(s))
-  10:11:00 night pass cancelled: hall-b__parallel-ii started after it was planned; it is planned again after the last session (held: hall-a__parallel-i)
-  10:11:00 DAY: started "Parallel II" in D:\STELMAR-Gate\day-sim\rehearse-emu-low-20261119-194600\rec\2026-11-19\hall-b__parallel-ii
-  10:12:00 hall-b__parallel-ii: pauses of part 1 found (2 pauses, 5 fallback cuts) in 0.6 s; engine peak 91 MiB against limit 1115 MiB (measured peak)
-  10:12:00 hall-a__parallel-i: unit 0 of post-2 done in 252.3 s on gpu (0 restart(s), engine peak 4083 MiB against limit 8675 MiB)
-  10:12:00 hall-a__parallel-i: post-2 transcript complete
+  10:04:00 hall-a__parallel-i: pauses of part 1 found (6 pauses, 0 fallback cuts) in 0.7 s; engine peak 91 MiB against limit 1115 MiB (measured peak)
+  10:05:00 hall-a__parallel-i: pauses of part 2 found (8 pauses, 0 fallback cuts) in 0.6 s; engine peak 91 MiB against limit 1115 MiB (measured peak)
+  10:06:00 hall-a__parallel-i: pauses of part 3 found (3 pauses, 0 fallback cuts) in 0.6 s; engine peak 91 MiB against limit 1115 MiB (measured peak)
+  10:06:00 DAY: stopped "Parallel I"
+  10:07:00 hall-a__parallel-i: stopped. Nothing is waiting to be transcribed (sessions with several languages: measured, 1.89 times the profile's, from 1 finished unit(s); sessions with one language: the profile's speed until a unit finishes)
+  10:07:00 hall-a__parallel-i: pauses of part 4 found (1 pauses, 0 fallback cuts) in 0.2 s; engine peak 88 MiB against limit 1115 MiB (measured peak)
+  10:07:00 hall-a__parallel-i: session closed, 1 final unit(s) planned
+  10:09:00 hall-a__parallel-i: unit 0 of post-1 done in 163.2 s on gpu (0 restart(s), engine peak 1534 MiB against limit 3106 MiB)
+  10:09:00 hall-a__parallel-i: post-1 transcript complete
+  10:10:00 night pass planned for 2 session(s): about 0.1 h, ready by 10:17 IST (measured speed: 1.56 times the profile's, from 2 finished unit(s))
+  10:11:00 START: queue registration of hall-b__parallel-ii: open-sessions lock 0 ms, models 0 ms, session database 11 ms, rolling job 0 ms, manager 0 ms, open-sessions list 0 ms, engine slots 0 ms, total 11 ms
+  10:11:00 night pass cancelled: hall-b__parallel-ii started after it was planned; it is planned again after the last session (held: main-hall__inaugural, hall-a__parallel-i)
+  10:11:00 START: queue start hook of hall-b__parallel-ii: profile read 2 ms, registration 11 ms, night plans 1 ms, total 15 ms; engine units running at the start: 1
+  10:11:00 START: start call of D:\STELMAR-Gate\day-sim\rehearse-emu-low-20261120-114056\rec\2026-11-20\hall-b__parallel-ii: cancel check 0 ms, recorder start 176 ms, options file 2 ms, queue hook 16 ms, total 195 ms
+  10:11:00 DAY: started "Parallel II" in D:\STELMAR-Gate\day-sim\rehearse-emu-low-20261120-114056\rec\2026-11-20\hall-b__parallel-ii
+  10:12:00 main-hall__inaugural: unit 0 of post-2 done in 124.7 s on gpu (0 restart(s), engine peak 4166 MiB against limit 8675 MiB)
+  10:12:00 main-hall__inaugural: post-2 transcript complete
+  10:12:00 hall-b__parallel-ii: pauses of part 1 found (2 pauses, 4 fallback cuts) in 0.6 s; engine peak 91 MiB against limit 1115 MiB (measured peak)
   10:13:00 hall-b__parallel-ii: pauses of part 2 found (4 pauses, 5 fallback cuts) in 0.6 s; engine peak 91 MiB against limit 1115 MiB (measured peak)
+  10:14:00 hall-b__parallel-ii: pauses of part 3 found (2 pauses, 3 fallback cuts) in 0.6 s; engine peak 91 MiB against limit 1115 MiB (measured peak)
   10:14:00 DAY: stopped "Parallel II"
-  10:14:00 hall-b__parallel-ii: stopped. Nothing is waiting to be transcribed (sessions with several languages: measured, 1.49 times the profile's, from 3 finished unit(s); sessions with one language: the profile's speed until a unit finishes)
-  10:14:00 hall-b__parallel-ii: pauses of part 3 found (1 pauses, 3 fallback cuts) in 0.4 s; engine peak 90 MiB against limit 1115 MiB (measured peak)
+  10:14:00 hall-b__parallel-ii: stopped. Nothing is waiting to be transcribed (sessions with several languages: measured, 1.89 times the profile's, from 3 finished unit(s); sessions with one language: the profile's speed until a unit finishes)
+  10:14:00 hall-b__parallel-ii: pauses of part 4 found (1 pauses, 0 fallback cuts) in 0.1 s; engine peak 88 MiB against limit 1115 MiB (measured peak)
   10:14:00 hall-b__parallel-ii: session closed, 1 final unit(s) planned
-  10:14:00 DAY: started "Panel" in D:\STELMAR-Gate\day-sim\rehearse-emu-low-20261119-194600\rec\2026-11-19\main-hall__panel
-  10:15:00 main-hall__panel: pauses of part 1 found (6 pauses, 0 fallback cuts) in 0.6 s; engine peak 91 MiB against limit 1115 MiB (measured peak)
-  10:16:00 main-hall__panel: pauses of part 2 found (7 pauses, 1 fallback cuts) in 0.6 s; engine peak 91 MiB against limit 1115 MiB (measured peak)
-  10:17:00 hall-b__parallel-ii: unit 0 of post-1 done in 171.2 s on gpu (0 restart(s), engine peak 1529 MiB against limit 3106 MiB)
+  10:15:00 START: queue registration of main-hall__panel: open-sessions lock 0 ms, models 0 ms, session database 8 ms, rolling job 0 ms, manager 0 ms, open-sessions list 0 ms, engine slots 0 ms, total 9 ms
+  10:15:00 START: queue start hook of main-hall__panel: profile read 0 ms, registration 9 ms, night plans 0 ms, total 10 ms; engine units running at the start: 1
+  10:15:00 START: start call of D:\STELMAR-Gate\day-sim\rehearse-emu-low-20261120-114056\rec\2026-11-20\main-hall__panel: cancel check 0 ms, recorder start 171 ms, options file 1 ms, queue hook 10 ms, total 183 ms
+  10:15:00 DAY: started "Panel" in D:\STELMAR-Gate\day-sim\rehearse-emu-low-20261120-114056\rec\2026-11-20\main-hall__panel
+  10:16:00 main-hall__panel: pauses of part 1 found (6 pauses, 0 fallback cuts) in 0.6 s; engine peak 91 MiB against limit 1115 MiB (measured peak)
+  10:17:00 main-hall__panel: pauses of part 2 found (6 pauses, 1 fallback cuts) in 0.6 s; engine peak 91 MiB against limit 1115 MiB (measured peak)
+  10:17:00 hall-b__parallel-ii: unit 0 of post-1 done in 180.1 s on gpu (0 restart(s), engine peak 1530 MiB against limit 3106 MiB)
   10:17:00 hall-b__parallel-ii: post-1 transcript complete
-  10:17:00 DAY: stopped "Panel"
-  10:17:00 DAY: every session of the plan was recorded; waiting for the stop file
-  10:17:00 main-hall__panel: stopped. Nothing is waiting to be transcribed (sessions with several languages: measured, 1.84 times the profile's, from 4 finished unit(s); sessions with one language: the profile's speed until a unit finishes)
-  10:17:00 main-hall__panel: pauses of part 3 found (3 pauses, 1 fallback cuts) in 0.4 s; engine peak 90 MiB against limit 1115 MiB (measured peak)
-  10:17:00 main-hall__panel: session closed, 1 final unit(s) planned
-  10:19:00 main-hall__panel: unit 0 of post-1 done in 155.7 s on gpu (0 restart(s), engine peak 1531 MiB against limit 3106 MiB)
-  10:19:00 main-hall__panel: post-1 transcript complete
-  10:20:00 night pass skipped: no audio in a language that has a night model
-  10:20:00 DAY: report written; exiting
+  10:18:00 main-hall__panel: pauses of part 3 found (2 pauses, 1 fallback cuts) in 0.6 s; engine peak 91 MiB against limit 1115 MiB (measured peak)
+  10:18:00 DAY: stopped "Panel"
+  10:18:00 DAY: every session of the plan was recorded; waiting for the stop file
+  10:18:00 main-hall__panel: stopped. Nothing is waiting to be transcribed (sessions with several languages: measured, 1.93 times the profile's, from 4 finished unit(s); sessions with one language: the profile's speed until a unit finishes)
+  10:18:00 main-hall__panel: pauses of part 4 found (1 pauses, 0 fallback cuts) in 0.1 s; engine peak 88 MiB against limit 1115 MiB (measured peak)
+  10:18:00 main-hall__panel: session closed, 1 final unit(s) planned
+  10:21:00 main-hall__panel: unit 0 of post-1 done in 154.4 s on gpu (0 restart(s), engine peak 1533 MiB against limit 3106 MiB)
+  10:21:00 main-hall__panel: post-1 transcript complete
+  10:21:00 night pass planned for 1 session(s): about 0.1 h, ready by 10:30 IST (measured speed: 1.89 times the profile's, from 5 finished unit(s))
+  10:25:00 hall-a__parallel-i: unit 0 of post-2 done in 250.2 s on gpu (0 restart(s), engine peak 4087 MiB against limit 8675 MiB)
+  10:25:00 hall-a__parallel-i: post-2 transcript complete
+  10:26:00 DAY: report written; exiting
