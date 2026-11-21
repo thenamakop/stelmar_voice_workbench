@@ -121,5 +121,50 @@ class LeadIn(unittest.TestCase):
             self.assertAlmostEqual(got[1][1], 89.0, places=2)
 
 
+class LeadInSkipsImportedCopies(unittest.TestCase):
+    def test_a_session_nobody_plays_does_not_shift_the_pairing(self):
+        import json
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as d:
+            run = Path(d)
+            # The kill test: a played session, then an imported copy whose session.json carries the copied events.
+            for name, rec_at in [("hall-a__kill", "2026-11-20T12:14:00+05:30"), ("hall-a__kill-copy", "2026-11-20T12:14:00+05:30"), ("hall-b__other", "2026-11-20T12:20:00+05:30")]:
+                sess = run / "rec" / "2026-11-20" / name
+                sess.mkdir(parents=True)
+                (sess / "session.json").write_text(json.dumps({"events": [{"kind": "audio_started", "at": rec_at}]}), encoding="utf-8")
+            (run / "play-1.json").write_text(json.dumps({"started_at": "2026-11-20T12:14:02+05:30"}), encoding="utf-8")
+            (run / "play-2.json").write_text(json.dumps({"started_at": "2026-11-20T12:20:02+05:30"}), encoding="utf-8")
+            got = dr.lead_in_seconds(run, frozenset({"hall-a__kill-copy"}))
+            self.assertEqual([n for n, _ in got], ["hall-a__kill", "hall-b__other"])
+            self.assertAlmostEqual(got[0][1], 2.0, places=2)
+            self.assertAlmostEqual(got[1][1], 2.0, places=2)
+
+
+class EstimateBar(unittest.TestCase):
+    """Owner, 21 Nov 2026: at most 10% too optimistic (finished later than estimated), at most 30% too pessimistic."""
+
+    def test_late_by_up_to_ten_percent_passes_and_more_fails(self):
+        self.assertTrue(dr.estimate_within_bar(0.0))
+        self.assertTrue(dr.estimate_within_bar(0.10))
+        self.assertFalse(dr.estimate_within_bar(0.101))
+        self.assertFalse(dr.estimate_within_bar(0.65))
+
+    def test_early_by_up_to_thirty_percent_passes_and_more_fails(self):
+        self.assertTrue(dr.estimate_within_bar(-0.25))  # Parallel II of 21 Nov 2026: -25%, passes the new early bar
+        self.assertTrue(dr.estimate_within_bar(-0.30))
+        self.assertFalse(dr.estimate_within_bar(-0.301))
+        self.assertFalse(dr.estimate_within_bar(-0.5))
+
+    def test_the_old_symmetric_bar_would_have_failed_parallel_ii(self):
+        # The recorded run keeps its numbers: -25.0% was a FAIL against the old +-10% and is a PASS against this bar.
+        self.assertFalse(abs(-0.25) <= 0.10)
+        self.assertTrue(dr.estimate_within_bar(-0.25))
+
+    def test_the_estimate_checks_are_information_in_the_kill_test_and_the_rehearsal_only(self):
+        self.assertEqual(set(dr.ESTIMATE_INFO_NOTE), {"rehearse", "kill"})
+        self.assertNotIn("day", dr.ESTIMATE_INFO_NOTE)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

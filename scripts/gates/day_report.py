@@ -30,6 +30,23 @@ EVAL = Path(__file__).resolve().parents[2] / "eval"
 BAR_MEM = 0.70
 LEAD_IN_BAR_S = 10  # owner, 20 Nov 2026: the harness starts the player within seconds of the recorder
 START_CALL_BAR_MS = 1000  # owner, 20 Nov 2026: the start call returns in under 1 s under load
+# Owner, 21 Nov 2026: the rolling estimate may be at most 10% too optimistic (the transcripts finish later than
+# estimated) and at most 30% too pessimistic (they finish earlier). The runs of 19 to 21 Nov 2026 were judged against
+# a symmetric 10% and keep their recorded numbers; Parallel II of 21 Nov (-25%) fails the old bar and passes this one.
+ESTIMATE_LATE_BAR = 0.10
+ESTIMATE_EARLY_BAR = 0.30
+# The estimate checks are information in the rehearsal (sessions of 2 minutes) and in the kill test (owner, 21 Nov
+# 2026: its pass or fail covers only the recovery checks; engines killed on purpose make the estimates meaningless).
+ESTIMATE_INFO_NOTE = {
+    "rehearse": " (information in the rehearsal: sessions of 2 minutes)",
+    "kill": " (information in the kill test: its pass or fail covers only the recovery checks)",
+}
+
+
+def estimate_within_bar(err: float) -> bool:
+    """`err` is (actual - estimate) / estimate: positive when the transcripts finished later than the estimate said."""
+    return -ESTIMATE_EARLY_BAR <= err <= ESTIMATE_LATE_BAR
+
 NIGHT_DEADLINE_H = 8.0  # 08:00 the next morning, as hours after 00:00 of the first day: 24 + 8
 NIGHT_DEADLINE_CLOCK = 24.0 + NIGHT_DEADLINE_H
 
@@ -71,9 +88,10 @@ def read_qlog(run: Path) -> list[tuple[float, str]]:
     return out
 
 
-def lead_in_seconds(run: Path) -> list[tuple[str, float]]:
+def lead_in_seconds(run: Path, skip: set[str] | frozenset[str] = frozenset()) -> list[tuple[str, float]]:
     """(session folder name, seconds) from the recorder's `audio_started` event to the player's first frame
-    (play-N.json `started_at`), the sessions and the players paired in the order they began."""
+    (play-N.json `started_at`), the sessions and the players paired in the order they began. `skip` names the
+    session folders nobody plays (the imported copies of the kill test)."""
     import datetime as dt
     import glob
     import json
@@ -86,6 +104,8 @@ def lead_in_seconds(run: Path) -> list[tuple[str, float]]:
 
     sessions = []
     for f in glob.glob(str(run / "rec" / "*" / "*" / "session.json")):
+        if Path(f).parent.name in skip:
+            continue
         try:
             meta = json.load(open(f, encoding="utf-8-sig"))
         except (OSError, ValueError):
@@ -400,12 +420,12 @@ def main() -> int:
         est = max(60.0, rb - t)
         if finished is None:
             P(f"  {title_of.get(name, name)}: Stop {hms(t)}, estimate ready by {hms(rb)} ({est / 60:.1f} min); the outstanding transcripts did not all finish")
-            checks.append((f"rolling estimate at Stop of '{title_of.get(name, name)}' within 10%", False, "not everything outstanding at Stop finished"))
+            checks.append((f"rolling estimate at Stop of '{title_of.get(name, name)}' within +{ESTIMATE_LATE_BAR:.0%} late / -{ESTIMATE_EARLY_BAR:.0%} early" + ESTIMATE_INFO_NOTE.get(mode, ""), False if mode not in ESTIMATE_INFO_NOTE else None, "not everything outstanding at Stop finished"))
             continue
         act = finished - t
         err = (act - est) / est
         P(f"  {title_of.get(name, name)}: Stop {hms(t)}, estimate {est / 60:.1f} min (ready by {hms(rb)}), actual {act / 60:.1f} min (finished {hms(finished)}), difference {100 * err:+.1f}%, {len(outstanding)} transcript(s) outstanding; basis: {basis}")
-        checks.append((f"rolling transcripts outstanding at the Stop of '{title_of.get(name, name)}' finished within 10% of the estimate recorded then" + (" (information in the rehearsal: sessions of 2 minutes)" if mode == "rehearse" else ""), (abs(err) <= 0.10) if mode != "rehearse" else None, f"estimate {est / 60:.1f} min, actual {act / 60:.1f} min ({100 * err:+.1f}%)"))
+        checks.append((f"rolling transcripts outstanding at the Stop of '{title_of.get(name, name)}' finished within +{ESTIMATE_LATE_BAR:.0%} (late) / -{ESTIMATE_EARLY_BAR:.0%} (early) of the estimate recorded then" + ESTIMATE_INFO_NOTE.get(mode, ""), estimate_within_bar(err) if mode not in ESTIMATE_INFO_NOTE else None, f"estimate {est / 60:.1f} min, actual {act / 60:.1f} min ({100 * err:+.1f}%)"))
     if not est_rows:
         P("  no 'stopped. All transcripts ready by' line in the log")
     P("")
@@ -433,7 +453,7 @@ def main() -> int:
     # The lead-in: the recorder's first audio to the first frame the player wrote into the cable. A late script (the
     # day of 20 Nov 2026: 90 s) puts the player into the recording late and starts the next session's player before the
     # last reference capture has stopped.
-    leads = lead_in_seconds(run)
+    leads = lead_in_seconds(run, frozenset(n for n, s in names.items() if s["imported"]))
     for name, lead in leads:
         P(f"  lead-in of {title_of.get(name, name)}: the player began {lead:.1f} s after the recorder's first audio")
     slow = [(n, x) for n, x in leads if x > LEAD_IN_BAR_S]
@@ -680,11 +700,12 @@ def main() -> int:
     P("CHECKS")
     failed = 0
     info = 0
+    info_rows = sum(1 for _n, ok, _d in checks if ok is None)
     for name, ok, detail in checks:
         mark = "PASS" if ok else ("INFO" if ok is None else "FAIL")
         failed += 1 if ok is False else 0
-        # The estimate lines of the rehearsal are information by design (two-minute sessions): they do not make it incomplete.
-        info += 1 if (ok is None and not (mode == "rehearse" and name.startswith("rolling transcripts outstanding"))) else 0
+        # The estimate lines of the rehearsal and of the kill test are information by design: they do not make it incomplete.
+        info += 1 if (ok is None and not (mode in ESTIMATE_INFO_NOTE and name.startswith(("rolling transcripts outstanding", "rolling estimate at Stop")))) else 0
         P(f"  [{mark}] {name}" + (f": {detail}" if detail else ""))
     P("")
     if notes.get("drivers_changed"):
@@ -692,8 +713,8 @@ def main() -> int:
     elif partial:
         P(f"VERDICT: INVALID as a day simulation (partial run 1, kept as information; the checks above are of what ran: {len(checks) - failed - info} passed, {failed} failed, {info} information)")
     else:
-        P(f"VERDICT: {'PASS' if failed == 0 and not info else ('FAIL' if failed else 'INCOMPLETE (a session was INVALID or is information only: see the lines above)')} ({len(checks) - failed - info} passed, {failed} failed, {info} information or invalid)")
-    P("Speed, 'ready by' and 10% differences on the emulation profile are low-tier findings with numbers, not code failures (owner, 17 and 18 Nov 2026); the real laptops repeat the run.")
+        P(f"VERDICT: {'PASS' if failed == 0 and not info else ('FAIL' if failed else 'INCOMPLETE (a session was INVALID or is information only: see the lines above)')} ({sum(1 for _n, ok, _d in checks if ok)} passed, {failed} failed, {info_rows} information or invalid)")
+    P("Speed and 'ready by' differences on the emulation profile are low-tier findings with numbers, not code failures (owner, 17 and 18 Nov 2026; the estimate bar since 21 Nov 2026 is +10% late and -30% early); the real laptops repeat the run.")
     P("")
     P("Scheduler log (every line, IST time first):")
     for t, x in qlog:

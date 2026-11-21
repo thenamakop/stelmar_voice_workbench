@@ -31,3 +31,8 @@ Correct rendering for Devanagari, right-to-left Nastaliq Urdu and mixed Hindi–
 - The Hinglish model's special token is lost in conversion: keep it for evaluation through `--file` only if its output is still correct, otherwise drop it and note D14's fallback.
 - No candidate meets the near-live bar for a language: near-live stays off for that language (expected for Urdu); record it in the report.
 - If decision D1 meant SeamlessM4T: evaluate it in Python only, report it, and ask before adding a second runtime.
+
+## Carried over from Phase 4 (21 Nov 2026)
+- **Panel WER 67.3%** in the day simulation of 21 Nov 2026 (66.6% on the first day; `docs/evidence/phase-4/day-sim-emu-low.txt`, Panel is an English and Urdu session, rolling pass, `emu-low`). It is a quality finding for this phase, not a Phase 4 gate, and nothing was tuned. Look at it with the Urdu handling (script, normalisation, language detection per chunk) before any model change.
+- The asr-quality-auditor open items 3 and 6 to 18 (`docs/GATES.md`, row 'Reviewer findings of 20 Nov 2026') stay in this phase.
+- Language handling in the queue (`docs/GATES.md`, row 'Close-out of Phase 4, 21 Nov 2026'): the detection allowance and the speed classes use the programme's language count, the night job decodes the whole session although the plan counts only languages with a night model; the proposed fix is waiting for the owner's decision.
