@@ -224,11 +224,8 @@ fn run_day(app: &AppHandle, path: &std::path::Path) -> Result<(), String> {
             ev.dirs.insert(s.title.clone(), PathBuf::from(&info.dir));
         }
         let end = Instant::now() + Duration::from_secs(s.duration_s);
-        let reason = super::day_stop::wait_for_stop(
-            s.stop_file.as_deref(),
-            end,
-            Duration::from_millis(500),
-        );
+        let reason =
+            super::day_stop::wait_for_stop(s.stop_file.as_deref(), end, Duration::from_millis(500));
         if s.stop_file.is_some() && reason == super::day_stop::StopReason::Timer {
             queue_log(&format!(
                 "DAY: {:?} was stopped by the safety timer: no stop file within {} s",

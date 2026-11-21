@@ -211,70 +211,81 @@ impl SessionQueue {
     fn recover(&mut self) -> Result<()> {
         let jobs = self.transcript.store().jobs()?;
         for job in jobs {
-            let units = self.transcript.store().units(job.id)?;
-            // Units the cursor already covers were committed: the crash came between the cursor and the state.
-            for u in &units {
-                if u.end_ms <= job.cursor_ms && u.state != UnitState::Committed {
-                    self.transcript.store_mut().set_unit_state(
-                        job.id,
-                        u.idx,
-                        UnitState::Committed,
-                        None,
-                    )?;
-                }
-            }
-            let units = self.transcript.store().units(job.id)?;
-            let next = units
-                .iter()
-                .find(|u| u.state != UnitState::Committed)
-                .map_or(units.iter().map(|u| u.idx + 1).max().unwrap_or(0), |u| {
-                    u.idx
-                });
-            let mut order = OrderBuffer::new(next, job.cursor_ms);
-            for u in &units {
-                match u.state {
-                    UnitState::Running => {
-                        self.transcript.store_mut().set_unit_state(
-                            job.id,
-                            u.idx,
-                            UnitState::Pending,
-                            None,
-                        )?;
-                    }
-                    UnitState::Decoded => {
-                        let path = staged_path(&self.dir, &job.revision, u.idx);
-                        let device = u.device.unwrap_or(Device::Cpu);
-                        match read_staged(&path) {
-                            Ok(events) if !events.is_empty() || path.exists() => {
-                                let segs: Vec<Segment> = events
-                                    .iter()
-                                    .map(|e| to_segment(e, &job.revision, device, ""))
-                                    .collect();
-                                let gaps = vad_gaps(&job.revision, u.start_ms, u.end_ms, &segs);
-                                // `idx` is at or after `next`: units before it are committed.
-                                if u.idx >= order.next_idx() {
-                                    let _ = order.finished(u.idx, u.end_ms, (segs, gaps));
-                                }
-                            }
-                            _ => {
-                                // The staged file is gone: decode the unit again.
-                                self.transcript.store_mut().set_unit_state(
-                                    job.id,
-                                    u.idx,
-                                    UnitState::Pending,
-                                    None,
-                                )?;
-                            }
-                        }
-                    }
-                    _ => {}
-                }
-            }
+            let order = self.rebuild_order(&job, true)?;
             if matches!(job.state, JobState::Queued | JobState::Running) {
                 self.orders.insert(job.id, order);
             }
         }
         Ok(())
+    }
+
+    /// The order buffer of a job, built from what the store says: its next unit is the first one that is not
+    /// committed, and every unit decoded but not yet committed is reloaded from its staged file. Used at start-up
+    /// (`reset_running`: nothing is running, so a unit left Running is Pending again), when a parked job is resumed,
+    /// and when a unit finishes for a job whose buffer was dropped. A park drops the buffer while the other engine
+    /// may still be decoding; a buffer started at the unit that finishes then would commit it before an earlier unit
+    /// that is not committed, move the cursor past that unit and lose its text (ASR audit of 21 Nov 2026).
+    fn rebuild_order(&mut self, job: &Job, reset_running: bool) -> Result<OrderBuffer<UnitOutput>> {
+        let units = self.transcript.store().units(job.id)?;
+        // Units the cursor already covers were committed: the crash came between the cursor and the state.
+        for u in &units {
+            if u.end_ms <= job.cursor_ms && u.state != UnitState::Committed {
+                self.transcript.store_mut().set_unit_state(
+                    job.id,
+                    u.idx,
+                    UnitState::Committed,
+                    None,
+                )?;
+            }
+        }
+        let units = self.transcript.store().units(job.id)?;
+        let next = units
+            .iter()
+            .find(|u| u.state != UnitState::Committed)
+            .map_or(units.iter().map(|u| u.idx + 1).max().unwrap_or(0), |u| {
+                u.idx
+            });
+        let mut order = OrderBuffer::new(next, job.cursor_ms);
+        for u in &units {
+            match u.state {
+                UnitState::Running if reset_running => {
+                    self.transcript.store_mut().set_unit_state(
+                        job.id,
+                        u.idx,
+                        UnitState::Pending,
+                        None,
+                    )?;
+                }
+                UnitState::Decoded => {
+                    let path = staged_path(&self.dir, &job.revision, u.idx);
+                    let device = u.device.unwrap_or(Device::Cpu);
+                    match read_staged(&path) {
+                        Ok(events) if !events.is_empty() || path.exists() => {
+                            let segs: Vec<Segment> = events
+                                .iter()
+                                .map(|e| to_segment(e, &job.revision, device, ""))
+                                .collect();
+                            let gaps = vad_gaps(&job.revision, u.start_ms, u.end_ms, &segs);
+                            // `idx` is at or after `next`: units before it are committed.
+                            if u.idx >= order.next_idx() {
+                                let _ = order.finished(u.idx, u.end_ms, (segs, gaps));
+                            }
+                        }
+                        _ => {
+                            // The staged file is gone: decode the unit again.
+                            self.transcript.store_mut().set_unit_state(
+                                job.id,
+                                u.idx,
+                                UnitState::Pending,
+                                None,
+                            )?;
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        Ok(order)
     }
 
     pub fn dir(&self) -> &Path {
@@ -411,9 +422,12 @@ impl SessionQueue {
         if night.state != JobState::Paused {
             return Ok(false);
         }
-        self.transcript
-            .store_mut()
-            .set_job_state(night.id, JobState::Parked, Some(reason), now_ms)?;
+        self.transcript.store_mut().set_job_state(
+            night.id,
+            JobState::Parked,
+            Some(reason),
+            now_ms,
+        )?;
         Ok(true)
     }
 
@@ -452,28 +466,27 @@ impl SessionQueue {
             self.transcript
                 .store_mut()
                 .set_job_state(job, next, None, now_ms)?;
-            if next == JobState::Queued && !self.orders.contains_key(&job) {
+            if next == JobState::Queued {
                 self.reopen_order(job)?;
             }
         }
         Ok(())
     }
 
+    /// A job goes back to the queue: its order buffer is rebuilt when a park dropped it (units decoded but not
+    /// committed come back from their staged files), and a unit that failed gets another try (the operator asked
+    /// to resume). The buffer may exist already: a unit that finished after the park rebuilt it.
     fn reopen_order(&mut self, job: i64) -> Result<()> {
         let j = self
             .transcript
             .store()
             .job(job)?
             .ok_or_else(|| Error::Invalid(format!("no job {job}")))?;
+        if !self.orders.contains_key(&job) {
+            let order = self.rebuild_order(&j, false)?;
+            self.orders.insert(job, order);
+        }
         let units = self.transcript.store().units(job)?;
-        let next = units
-            .iter()
-            .find(|u| u.state != UnitState::Committed)
-            .map_or(units.iter().map(|u| u.idx + 1).max().unwrap_or(0), |u| {
-                u.idx
-            });
-        self.orders.insert(job, OrderBuffer::new(next, j.cursor_ms));
-        // A parked unit gets another try (the operator asked to resume).
         for u in units.iter().filter(|u| u.state == UnitState::Failed) {
             self.transcript
                 .store_mut()
@@ -738,17 +751,28 @@ impl SessionQueue {
             claim.unit.end_ms,
             &segments,
         );
+        let job_id = claim.job.id;
+        if !self.orders.contains_key(&job_id) {
+            // The job was parked while this unit was decoding: the buffer starts at the first unit that is not
+            // committed, never at this one (built before this unit is marked Decoded, so it is not loaded twice).
+            let j = self
+                .transcript
+                .store()
+                .job(job_id)?
+                .ok_or_else(|| Error::Invalid(format!("no job {job_id}")))?;
+            let order = self.rebuild_order(&j, false)?;
+            self.orders.insert(job_id, order);
+        }
         self.transcript.store_mut().set_unit_state(
-            claim.job.id,
+            job_id,
             claim.unit.idx,
             UnitState::Decoded,
             Some(claim.device),
         )?;
-        let job_id = claim.job.id;
         let order = self
             .orders
-            .entry(job_id)
-            .or_insert_with(|| OrderBuffer::new(claim.unit.idx, claim.job.cursor_ms));
+            .get_mut(&job_id)
+            .ok_or_else(|| Error::Invalid(format!("no order buffer for job {job_id}")))?;
         order
             .finished(claim.unit.idx, claim.unit.end_ms, (segments, gaps))
             .map_err(Error::from)?;
@@ -992,23 +1016,87 @@ mod tests {
     }
 
     #[test]
+    fn a_unit_that_finishes_after_its_job_was_parked_commits_nothing_before_the_unit_before_it() {
+        let (mut q, job, _dir) = queue_with_units("park-then-finish", 3);
+        let c0 = q.claim(Device::Cpu, 10).unwrap().unwrap();
+        let c1 = q.claim(Device::Gpu, 11).unwrap().unwrap();
+        // Unit 0 is given up and the job is parked while the other engine is still decoding unit 1 (the normal
+        // state of a hybrid). Before the fix unit 1's buffer started at unit 1: it was committed, the cursor passed
+        // unit 0 and unit 0's text was refused as a repeat when it was decoded again.
+        q.park_job(job, "unit 0 failed", 12).unwrap();
+        stage(&c1, &[ev(1, 0, 10_000, 14_000, "b")]);
+        let done = q.complete(&c1, "t", 13).unwrap();
+        assert!(
+            done.committed_units.is_empty() && done.segments.is_empty(),
+            "unit 1 waits for unit 0"
+        );
+        assert_eq!(q.jobs().unwrap()[0].cursor_ms, 0, "the cursor did not move");
+        assert_eq!(q.transcript().store().segment_count("post-1").unwrap(), 0);
+        // The operator resumes and unit 0 is decoded: units 0 and 1 are committed in audio order, once each.
+        q.set_paused(job, false, 14).unwrap();
+        stage(&c0, &[ev(0, 0, 500, 4_000, "a")]);
+        let done = q.complete(&c0, "t", 15).unwrap();
+        assert_eq!(done.committed_units, vec![0, 1]);
+        let texts: Vec<_> = done.segments.iter().map(|s| s.text.as_str()).collect();
+        assert_eq!(texts, vec!["a", "b"]);
+        assert_eq!(done.refused, 0);
+        assert_eq!(q.jobs().unwrap()[0].cursor_ms, 20_000);
+        assert_eq!(q.transcript().store().segment_count("post-1").unwrap(), 2);
+    }
+
+    #[test]
+    fn resuming_a_parked_job_brings_back_the_units_decoded_before_the_park() {
+        let (mut q, job, _dir) = queue_with_units("park-resume-decoded", 3);
+        let c0 = q.claim(Device::Cpu, 10).unwrap().unwrap();
+        let c1 = q.claim(Device::Gpu, 11).unwrap().unwrap();
+        // Unit 1 is decoded and waits for unit 0; then the job is parked, which drops the buffer.
+        stage(&c1, &[ev(1, 0, 10_000, 14_000, "b")]);
+        q.complete(&c1, "t", 12).unwrap();
+        q.park_job(job, "unit 0 failed", 13).unwrap();
+        // Resume: the buffer is rebuilt with unit 1 in it (it is Decoded in the store; nothing would decode it
+        // again). Before the fix the new buffer was empty, unit 1 was never committed and the job never finished.
+        q.set_paused(job, false, 14).unwrap();
+        stage(&c0, &[ev(0, 0, 500, 4_000, "a")]);
+        let done = q.complete(&c0, "t", 15).unwrap();
+        assert_eq!(done.committed_units, vec![0, 1]);
+        assert_eq!(q.jobs().unwrap()[0].cursor_ms, 20_000);
+        assert_eq!(q.transcript().store().segment_count("post-1").unwrap(), 2);
+    }
+
+    #[test]
     fn a_failure_in_the_middle_keeps_the_units_after_it_and_a_retry_needs_no_new_unit() {
         let (mut q, job, _dir) = queue_with_units("commit-fails-mid", 3);
         let mut claims = Vec::new();
-        for (i, d) in [Device::Cpu, Device::Gpu, Device::Cpu].into_iter().enumerate() {
+        for (i, d) in [Device::Cpu, Device::Gpu, Device::Cpu]
+            .into_iter()
+            .enumerate()
+        {
             claims.push(q.claim(d, 10 + i as u64).unwrap().unwrap());
         }
         // Units 2 and 1 finish first and wait for unit 0.
         for idx in [2usize, 1] {
             let c = &claims[idx];
-            stage(c, &[ev(c.unit.idx, 0, c.unit.start_ms + 100, c.unit.end_ms - 100, "x")]);
+            stage(
+                c,
+                &[ev(
+                    c.unit.idx,
+                    0,
+                    c.unit.start_ms + 100,
+                    c.unit.end_ms - 100,
+                    "x",
+                )],
+            );
             q.complete(c, "t", 20).unwrap();
         }
         // Unit 0 arrives: its commit goes through, then the commit of unit 1 fails.
         stage(&claims[0], &[ev(0, 0, 100, 9_000, "x")]);
         q.transcript.inject_commit_failure_after(1);
         assert!(q.complete(&claims[0], "t", 21).is_err());
-        assert_eq!(q.jobs().unwrap()[0].cursor_ms, 10_000, "only unit 0 is committed");
+        assert_eq!(
+            q.jobs().unwrap()[0].cursor_ms,
+            10_000,
+            "only unit 0 is committed"
+        );
         assert_eq!(q.transcript().store().segment_count("post-1").unwrap(), 1);
         // The retry commits units 1 and 2 in order, once each; the cursor ends at the end of unit 2.
         let done = q.flush_ready(job, 22).unwrap();
@@ -1399,7 +1487,13 @@ mod tests {
             let c = q.claim(Device::Cpu, 1).unwrap().unwrap();
             stage(
                 &c,
-                &[ev(c.unit.idx, 0, c.unit.start_ms + 10, c.unit.end_ms - 10, "r")],
+                &[ev(
+                    c.unit.idx,
+                    0,
+                    c.unit.start_ms + 10,
+                    c.unit.end_ms - 10,
+                    "r",
+                )],
             );
             q.complete(&c, "t", 2).unwrap();
         }
@@ -1416,7 +1510,10 @@ mod tests {
             "a night job that is not held is left alone"
         );
         assert!(q.hold_night_job(5).unwrap());
-        assert!(q.park_held_night_job("night pass skipped: it does not fit", 6).unwrap());
+        assert!(
+            q.park_held_night_job("night pass skipped: it does not fit", 6)
+                .unwrap()
+        );
         let night = q
             .jobs()
             .unwrap()
@@ -1430,7 +1527,11 @@ mod tests {
         );
         // The rolling transcript stays the default revision.
         assert_eq!(
-            q.transcript().store().default_revision().unwrap().as_deref(),
+            q.transcript()
+                .store()
+                .default_revision()
+                .unwrap()
+                .as_deref(),
             Some("post-1")
         );
     }

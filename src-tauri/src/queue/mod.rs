@@ -1706,7 +1706,11 @@ mod tests {
         // Nothing is recording and no Stop is known: nothing has stopped (a restart resumes such sessions elsewhere).
         assert!(!session_has_stopped(None, None, parallel));
         // The recorder's own `last_stop` still counts.
-        assert!(session_has_stopped(Some("D:\\rec\\parallel-ii"), None, parallel));
+        assert!(session_has_stopped(
+            Some("D:\\rec\\parallel-ii"),
+            None,
+            parallel
+        ));
     }
 
     #[test]

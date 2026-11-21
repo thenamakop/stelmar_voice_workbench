@@ -236,7 +236,11 @@ impl Transcript {
         {
             let file = self.revision_file(revision)?;
             let before = file.file.metadata().map_err(io(&file.path))?.len();
-            if let Err(e) = file.file.write_all(&buf).and_then(|()| file.file.sync_data()) {
+            if let Err(e) = file
+                .file
+                .write_all(&buf)
+                .and_then(|()| file.file.sync_data())
+            {
                 // A torn line would make the whole file unreadable and the next append would land behind it: cut the
                 // file back to the whole lines it held before (best effort; the append handle cannot truncate).
                 let _ = OpenOptions::new()

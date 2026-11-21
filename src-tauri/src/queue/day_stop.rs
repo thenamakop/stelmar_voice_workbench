@@ -76,7 +76,10 @@ mod tests {
         );
         writer.join().unwrap();
         assert_eq!(r, StopReason::File);
-        assert!(t.elapsed() >= Duration::from_millis(250), "it waited for the file");
+        assert!(
+            t.elapsed() >= Duration::from_millis(250),
+            "it waited for the file"
+        );
         assert!(t.elapsed() < Duration::from_secs(5));
         let _ = std::fs::remove_file(&f);
     }

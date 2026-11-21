@@ -130,7 +130,12 @@ mod tests {
             audio_ms: ms,
             lang: l.map(str::to_owned),
         };
-        let log = vec![e(1, Some("ur")), e(2, Some("en")), e(3, Some("hi")), e(4, None)];
+        let log = vec![
+            e(1, Some("ur")),
+            e(2, Some("en")),
+            e(3, Some("hi")),
+            e(4, None),
+        ];
         // A Devanagari session carries `hi`: Alt+3 (Urdu) locks Hindi, in Devanagari.
         let devanagari = vec!["en".to_owned(), "hi".to_owned()];
         let got = for_job(log.clone(), &devanagari);
