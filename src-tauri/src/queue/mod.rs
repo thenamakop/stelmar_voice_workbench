@@ -1388,9 +1388,22 @@ pub async fn set_language_lock(
     audio_ms: u64,
 ) -> Result<(), String> {
     blocking("set_language_lock", move || {
-        lock_language_now(&app, lang.as_deref(), audio_ms)
+        // Auditor item 13 of 20 Nov 2026: stamp the lock with the recorder's own latest audio time, which the backend
+        // keeps, not with the time the screen last drew (up to one status tick earlier). The screen's value is the
+        // fallback when the backend has no recorder status.
+        let latest = lock(&app.state::<AppState>().snapshot)
+            .recorder
+            .as_ref()
+            .map(|r| r.audio_ms);
+        lock_language_now(&app, lang.as_deref(), lock_audio_ms(latest, audio_ms))
     })
     .await
+}
+
+/// The audio time a language lock is stamped with: the recorder's latest status when there is one, otherwise the
+/// time the screen sent. Never earlier than the screen's, because the backend status is the newer of the two.
+pub(crate) fn lock_audio_ms(recorder_audio_ms: Option<u64>, screen_audio_ms: u64) -> u64 {
+    recorder_audio_ms.map_or(screen_audio_ms, |r| r.max(screen_audio_ms))
 }
 
 /// What the `set_language_lock` command does (the gate hook runs it too).
@@ -1534,6 +1547,19 @@ pub(crate) fn report_json(app: &AppHandle) -> serde_json::Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Auditor item 13: a language lock takes the recorder's latest audio time, and the screen's only when the
+    /// backend has no recorder status.
+    #[test]
+    fn a_language_lock_is_stamped_with_the_recorders_latest_audio_time() {
+        assert_eq!(lock_audio_ms(Some(61_250), 60_900), 61_250);
+        assert_eq!(lock_audio_ms(None, 60_900), 60_900);
+        assert_eq!(
+            lock_audio_ms(Some(60_000), 60_900),
+            60_900,
+            "never earlier than what the screen showed"
+        );
+    }
 
     fn unit(idx: u32, device: Option<Device>, state: UnitState) -> wb_queue::store::Unit {
         wb_queue::store::Unit {
