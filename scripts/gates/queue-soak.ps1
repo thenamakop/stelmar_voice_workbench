@@ -250,13 +250,20 @@ try {
     }
     # The app's own view of the saved profile: a fingerprint change would decide with safe defaults, and a machine whose
     # check did not clear processing while recording correctly does not transcribe during a recording (nothing to measure).
+    # The view pass runs WITHOUT the day plan: the app starts a plan whenever WB_GATE_DAY_PLAN is set, whatever WB_GATE_CHECK
+    # says, and the view process (which exits within a second) would record the first session and die with it (24 Nov 2026:
+    # the first proof run recorded "Queue soak speech" twice, once cut off by the view pass).
     $env:WB_GATE_CHECK = 'view'
     $viewReport = $env:WB_GATE_REPORT
+    $savedDayPlan = $env:WB_GATE_DAY_PLAN; $savedDayStop = $env:WB_GATE_DAY_STOP_FILE
+    Remove-Item Env:\WB_GATE_DAY_PLAN -ErrorAction SilentlyContinue
+    Remove-Item Env:\WB_GATE_DAY_STOP_FILE -ErrorAction SilentlyContinue
     $env:WB_GATE_REPORT = Join-Path $run 'view.json'
     $viewProc = & $startApp 'view'
     if (-not $viewProc.WaitForExit(300000)) { Stop-Process -Id $viewProc.Id -Force; throw 'the profile view did not finish within 5 minutes' }
     Remove-Item Env:\WB_GATE_CHECK -ErrorAction SilentlyContinue
     $env:WB_GATE_REPORT = $viewReport
+    $env:WB_GATE_DAY_PLAN = $savedDayPlan; $env:WB_GATE_DAY_STOP_FILE = $savedDayStop
     $view = Read-Json (Join-Path $run 'view.json')
     if (-not $view -or -not $view.view -or -not $view.view.capability) { throw "the app could not read the saved system check (see $(Join-Path $run 'view.json'))" }
     $changes = @($view.view.fingerprint_changes)

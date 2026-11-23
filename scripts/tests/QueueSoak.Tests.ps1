@@ -342,6 +342,16 @@ try {
   Check 'the module, both scripts and this test are ASCII only' ((& $asciiOnly $gateText) -and (& $asciiOnly $wrap) -and (& $asciiOnly ([IO.File]::ReadAllText((Join-Path $repo 'scripts\lib\QueueSoak.psm1')))))
   Check 'the speech of session 1 is the public FLEURS clips (bench-en.wav, bench-hi.wav), no private audio' ($gateText -match "bench-en\.wav" -and $gateText -match "bench-hi\.wav" -and $gateText -match 'CC BY 4\.0')
   Check 'no night pass runs during the gate (WB_GATE_NIGHT_WAIT_S is long) and no hybrid is forced' ($gateText -match "WB_GATE_NIGHT_WAIT_S = '7200'" -and $gateText -match 'Remove-Item "Env:\\\$v"' -and $gateText -match 'WB_GATE_FORCE_HYBRID')
+  # The view pass must not carry the day plan (the app starts a plan whenever WB_GATE_DAY_PLAN is set; the first proof run on
+  # 24 Nov 2026 recorded session 1 twice because the view process started it). Order in the script text: the plan is removed
+  # from the environment, the view app is started, and only then is the plan put back before the day app starts.
+  $iView = $gateTextAll.IndexOf("`$env:WB_GATE_CHECK = 'view'")
+  $iRemove = $gateTextAll.IndexOf('Remove-Item Env:\WB_GATE_DAY_PLAN')
+  $iViewStart = $gateTextAll.IndexOf("& `$startApp 'view'")
+  $iRestore = $gateTextAll.IndexOf('$env:WB_GATE_DAY_PLAN = $savedDayPlan')
+  $iDayStart = $gateTextAll.IndexOf("& `$startApp 'day'")
+  Check 'the view pass runs without the day plan in the environment, and the plan is put back before the day app starts' ($iView -ge 0 -and $iRemove -gt $iView -and $iViewStart -gt $iRemove -and $iRestore -gt $iViewStart -and $iDayStart -gt $iRestore)
+  Check 'the day plan is set once, before the view pass, from the plan file the gate wrote' ((@([regex]::Matches($gateTextAll, '\$env:WB_GATE_DAY_PLAN = \$planFile')).Count -eq 1) -and $gateTextAll.IndexOf('$env:WB_GATE_DAY_PLAN = $planFile') -lt $iView)
 }
 finally {
   Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
