@@ -11,6 +11,10 @@ use windows::Win32::System::JobObjects::{
     JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectBasicProcessIdList,
     JobObjectExtendedLimitInformation, QueryInformationJobObject,
 };
+use windows::Win32::System::Performance::{
+    PDH_FMT_COUNTERVALUE_ITEM_W, PDH_FMT_LARGE, PDH_HCOUNTER, PDH_HQUERY, PdhAddEnglishCounterW,
+    PdhCloseQuery, PdhCollectQueryData, PdhGetFormattedCounterArrayW, PdhOpenQueryW,
+};
 use windows::Win32::System::ProcessStatus::{GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS};
 use windows::Win32::System::SystemInformation::{
     GetLogicalProcessorInformationEx, GlobalMemoryStatusEx, MEMORYSTATUSEX, RelationProcessorCore,
@@ -19,6 +23,7 @@ use windows::Win32::System::SystemInformation::{
 use windows::Win32::System::Threading::{
     GetCurrentProcess, GetProcessAffinityMask, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
 };
+use windows::core::{PCWSTR, w};
 
 /// This process's affinity mask (processor group 0).
 pub fn process_affinity() -> Option<u64> {
@@ -150,6 +155,104 @@ pub fn job_commit_used() -> Option<u64> {
         }
     }
     read_any.then_some(total)
+}
+
+/// PDH_MORE_DATA: the buffer was too small (the first call of a counter-array read asks for the size).
+const PDH_MORE_DATA: u32 = 0x8000_07D2;
+
+/// Every instance of one performance counter with its value: `(instance name, value)`. None when the counter
+/// does not exist on this machine (no GPU counters in a virtual machine, an old driver) or cannot be read.
+fn counter_array(path: PCWSTR) -> Option<Vec<(String, u64)>> {
+    let mut query = PDH_HQUERY::default();
+    // SAFETY: a null data source means the live system counters; `query` is a live out-pointer.
+    if unsafe { PdhOpenQueryW(PCWSTR::null(), 0, &mut query) } != 0 {
+        return None;
+    }
+    let values = read_counter_array(query, path);
+    // SAFETY: `query` was opened above and is closed exactly once.
+    let _ = unsafe { PdhCloseQuery(query) };
+    values
+}
+
+fn read_counter_array(query: PDH_HQUERY, path: PCWSTR) -> Option<Vec<(String, u64)>> {
+    let mut counter = PDH_HCOUNTER::default();
+    // SAFETY: `query` is open, `path` is a NUL-terminated wide string that outlives the call, and `counter` is a
+    // live out-pointer.
+    if unsafe { PdhAddEnglishCounterW(query, path, 0, &mut counter) } != 0 {
+        return None;
+    }
+    // SAFETY: `query` is open.
+    if unsafe { PdhCollectQueryData(query) } != 0 {
+        return None;
+    }
+    let mut size = 0u32;
+    let mut count = 0u32;
+    // SAFETY: a null buffer with size 0 asks for the size needed; both out-pointers are live.
+    let first = unsafe {
+        PdhGetFormattedCounterArrayW(counter, PDH_FMT_LARGE, &mut size, &mut count, None)
+    };
+    if first != PDH_MORE_DATA || size == 0 {
+        return None;
+    }
+    // u64 storage keeps the items aligned; the instance names are stored after the items, inside this buffer.
+    let mut buf = vec![0u64; (size as usize).div_ceil(8)];
+    // SAFETY: `buf` is at least `size` bytes, as the first call asked, and aligned for the item structure.
+    let status = unsafe {
+        PdhGetFormattedCounterArrayW(
+            counter,
+            PDH_FMT_LARGE,
+            &mut size,
+            &mut count,
+            Some(buf.as_mut_ptr().cast::<PDH_FMT_COUNTERVALUE_ITEM_W>()),
+        )
+    };
+    if status != 0 {
+        return None;
+    }
+    // SAFETY: the call succeeded, so the start of `buf` holds `count` initialised items.
+    let items = unsafe {
+        std::slice::from_raw_parts(
+            buf.as_ptr().cast::<PDH_FMT_COUNTERVALUE_ITEM_W>(),
+            count as usize,
+        )
+    };
+    let mut out = Vec::with_capacity(items.len());
+    for item in items {
+        // SAFETY: `szName` points at a NUL-terminated wide string stored in `buf`, which is alive.
+        let name = unsafe { item.szName.to_string() }.unwrap_or_default();
+        // CStatus 0 (valid) and 1 (new data) carry a value.
+        if item.FmtValue.CStatus > 1 {
+            continue;
+        }
+        // SAFETY: the value was asked for as PDH_FMT_LARGE, so `largeValue` is the member that was written.
+        let value = unsafe { item.FmtValue.Anonymous.largeValue };
+        out.push((name, u64::try_from(value).unwrap_or(0)));
+    }
+    Some(out)
+}
+
+/// GPU memory each process uses, by instance (`pid_<pid>_luid_<hi>_<lo>_phys_<n>`): `(instance, dedicated,
+/// shared)`. The counters are the ones Task Manager's GPU memory columns read.
+pub fn gpu_process_memory() -> Option<Vec<(String, u64, u64)>> {
+    let dedicated = counter_array(w!("\\GPU Process Memory(*)\\Dedicated Usage"))?;
+    let shared = counter_array(w!("\\GPU Process Memory(*)\\Shared Usage")).unwrap_or_default();
+    Some(
+        dedicated
+            .into_iter()
+            .map(|(name, d)| {
+                let s = shared
+                    .iter()
+                    .find(|(n, _)| *n == name)
+                    .map_or(0, |(_, v)| *v);
+                (name, d, s)
+            })
+            .collect(),
+    )
+}
+
+/// The process ids of the calling process's job (the emulation job under `wb-emulate`, none otherwise).
+pub fn job_pids() -> Vec<u32> {
+    job_process_ids()
 }
 
 struct Handle(HANDLE);

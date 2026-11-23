@@ -13,6 +13,10 @@ use std::path::{Path, PathBuf};
 
 use wb_protocol::SegmentEvent;
 
+/// The line that closes a chunk in a staged file: `{"chunk_end_ms":N}`. Everything above the last marker is
+/// committed; anything below it is the start of a chunk that was being written and is cut off on reopening.
+const MARKER_KEY: &str = "chunk_end_ms";
+
 #[derive(Debug)]
 pub struct Committer {
     path: PathBuf,
@@ -20,6 +24,31 @@ pub struct Committer {
     committed_until_ms: u64,
     segments: u64,
     repeats_refused: u64,
+    /// Staged mode: every `commit_chunk` ends with a marker line, and `open_staged` restores the cursor from it.
+    markers: bool,
+}
+
+/// One line of a staged file.
+enum StagedLine {
+    Segment(SegmentEvent),
+    Marker(u64),
+    Bad(String),
+}
+
+fn parse_staged_line(line: &[u8]) -> StagedLine {
+    match serde_json::from_slice::<serde_json::Value>(line) {
+        Ok(v) if v.get(MARKER_KEY).is_some() && v.get("start_ms").is_none() => {
+            match v.get(MARKER_KEY).and_then(serde_json::Value::as_u64) {
+                Some(n) => StagedLine::Marker(n),
+                None => StagedLine::Bad(format!("{MARKER_KEY} is not a number")),
+            }
+        }
+        Ok(v) => match serde_json::from_value::<SegmentEvent>(v) {
+            Ok(seg) => StagedLine::Segment(seg),
+            Err(e) => StagedLine::Bad(e.to_string()),
+        },
+        Err(e) => StagedLine::Bad(e.to_string()),
+    }
 }
 
 impl Committer {
@@ -90,6 +119,85 @@ impl Committer {
             committed_until_ms: committed,
             segments,
             repeats_refused: 0,
+            markers: false,
+        })
+    }
+
+    /// Opens (creating) a STAGED file, the one a work unit writes before its segments are committed to the
+    /// revision. Each chunk ends with a marker line holding the cursor, so the cursor is restored exactly
+    /// (an empty chunk and the end of a unit included: [`Committer::open`] cannot know them) and a chunk that
+    /// was cut short by a crash or a power loss, even half written, is cut off whole, so the chunk is decoded
+    /// again and the join never shows a seam. A bad line above the last marker refuses the file (nothing is
+    /// cut); anything after the last marker is the chunk that was being written and is removed.
+    pub fn open_staged(path: &Path) -> std::io::Result<Self> {
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir)?;
+        }
+        let mut committed = 0u64;
+        let mut segments = 0u64;
+        let mut keep = 0u64;
+        let mut missing_newline = false;
+        if path.is_file() {
+            let data = std::fs::read(path)?;
+            // Split into lines, remembering where each ends.
+            let mut lines: Vec<(usize, usize, StagedLine, bool)> = Vec::new();
+            let mut offset = 0usize;
+            while offset < data.len() {
+                let (end, next, terminated) = match data[offset..].iter().position(|b| *b == b'\n')
+                {
+                    Some(i) => (offset + i, offset + i + 1, true),
+                    None => (data.len(), data.len(), false),
+                };
+                let line = &data[offset..end];
+                if !line.iter().all(u8::is_ascii_whitespace) {
+                    lines.push((offset, next, parse_staged_line(line), terminated));
+                }
+                offset = next;
+            }
+            let last_marker = lines
+                .iter()
+                .rposition(|(_, _, l, _)| matches!(l, StagedLine::Marker(_)));
+            if let Some(m) = last_marker {
+                for (start, _, line, _) in &lines[..=m] {
+                    match line {
+                        StagedLine::Bad(e) => {
+                            return Err(std::io::Error::new(
+                                std::io::ErrorKind::InvalidData,
+                                format!(
+                                    "{}: a line at byte {start} is not a segment or a marker ({e}) and a chunk marker follows it; refusing to cut off committed segments",
+                                    path.display()
+                                ),
+                            ));
+                        }
+                        StagedLine::Segment(seg) => {
+                            segments += 1;
+                            committed = committed.max(seg.end_ms);
+                        }
+                        StagedLine::Marker(n) => committed = committed.max(*n),
+                    }
+                }
+                let (_, next, _, terminated) = &lines[m];
+                keep = *next as u64;
+                missing_newline = !terminated;
+            }
+            if keep < data.len() as u64 {
+                let f = OpenOptions::new().write(true).open(path)?;
+                f.set_len(keep)?;
+                f.sync_all()?;
+            }
+        }
+        let mut file = OpenOptions::new().create(true).append(true).open(path)?;
+        if missing_newline {
+            file.write_all(b"\n")?;
+            file.sync_data()?;
+        }
+        Ok(Self {
+            path: path.to_path_buf(),
+            file,
+            committed_until_ms: committed,
+            segments,
+            repeats_refused: 0,
+            markers: true,
         })
     }
 
@@ -140,11 +248,19 @@ impl Committer {
             n += 1;
             accepted.push(true);
         }
+        let new_cursor = cursor.max(cursor_ms);
+        // Staged mode closes the chunk with a marker in the same write, also when it gave no segment but moved
+        // the cursor.
+        if self.markers && (n > 0 || new_cursor > self.committed_until_ms) {
+            serde_json::to_writer(&mut buf, &serde_json::json!({ MARKER_KEY: new_cursor }))
+                .map_err(std::io::Error::other)?;
+            buf.push(b'\n');
+        }
         if !buf.is_empty() {
             self.file.write_all(&buf)?;
             self.file.sync_data()?;
         }
-        self.committed_until_ms = cursor.max(cursor_ms);
+        self.committed_until_ms = new_cursor;
         self.segments += n;
         Ok(accepted)
     }
@@ -346,5 +462,101 @@ mod tests {
             std::fs::read_to_string(&p).expect("read").lines().count(),
             1
         );
+    }
+
+    // ---- staged mode (chunk-end markers) ----
+
+    #[test]
+    fn the_default_mode_writes_no_markers() {
+        let p = temp("no-markers");
+        let mut c = Committer::open(&p).expect("open");
+        c.commit_chunk(&[seg(0, 4_000, "a")], 4_500).expect("chunk");
+        let text = std::fs::read_to_string(&p).expect("read");
+        assert_eq!(text.lines().count(), 1);
+        assert!(!text.contains(MARKER_KEY));
+    }
+
+    #[test]
+    fn a_staged_file_restores_the_cursor_exactly_including_empty_chunks() {
+        let p = temp("staged-cursor");
+        {
+            let mut c = Committer::open_staged(&p).expect("open");
+            c.commit_chunk(&[seg(0, 4_000, "a")], 4_500).expect("chunk");
+            // A chunk with no segment (too short to decode) still closes with its end.
+            c.commit_chunk(&[], 9_000).expect("empty chunk");
+            assert_eq!(c.committed_until_ms(), 9_000);
+        }
+        let c = Committer::open_staged(&p).expect("reopen");
+        assert_eq!((c.committed_until_ms(), c.segments()), (9_000, 1));
+    }
+
+    #[test]
+    fn a_chunk_cut_short_after_its_first_segment_is_cut_off_whole() {
+        let p = temp("staged-partial");
+        {
+            let mut c = Committer::open_staged(&p).expect("open");
+            c.commit_chunk(&[seg(0, 4_000, "a")], 4_000).expect("chunk");
+        }
+        // A crash in the middle of the next chunk's write: its first segment is complete, its second torn.
+        let mut f = OpenOptions::new().append(true).open(&p).expect("append");
+        let mut first = serde_json::to_vec(&seg(4_000, 6_000, "b1")).expect("json");
+        first.push(b'\n');
+        f.write_all(&first).expect("write");
+        f.write_all(b"{\"unit\":0,\"chunk\":1,\"start_ms\":6000")
+            .expect("torn");
+        drop(f);
+        let mut c = Committer::open_staged(&p).expect("reopen");
+        assert_eq!((c.committed_until_ms(), c.segments()), (4_000, 1));
+        // The chunk is decoded again and committed whole: no seam, no repeat.
+        c.commit_chunk(&[seg(4_000, 6_000, "b1"), seg(6_000, 8_000, "b2")], 8_000)
+            .expect("again");
+        let text = std::fs::read_to_string(&p).expect("read");
+        let segs: Vec<_> = text
+            .lines()
+            .filter_map(|l| serde_json::from_str::<SegmentEvent>(l).ok())
+            .collect();
+        assert_eq!(
+            segs.iter().map(|s| s.start_ms).collect::<Vec<_>>(),
+            vec![0, 4_000, 6_000]
+        );
+        assert_eq!(
+            text.lines().count(),
+            5,
+            "three segments and two markers: {text}"
+        );
+        assert!(text.ends_with('\n'));
+    }
+
+    #[test]
+    fn a_bad_line_above_a_marker_refuses_the_staged_file_and_cuts_nothing() {
+        let p = temp("staged-bad");
+        {
+            let mut c = Committer::open_staged(&p).expect("open");
+            c.commit_chunk(&[seg(0, 4_000, "a")], 4_000).expect("chunk");
+        }
+        let mut f = OpenOptions::new().append(true).open(&p).expect("append");
+        f.write_all(b"{\"future\":true}\n{\"chunk_end_ms\":9000}\n")
+            .expect("write");
+        drop(f);
+        let before = std::fs::read(&p).expect("read");
+        let err = Committer::open_staged(&p).expect_err("refused");
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+        assert_eq!(std::fs::read(&p).expect("read"), before);
+    }
+
+    #[test]
+    fn a_staged_file_with_no_marker_yet_starts_empty() {
+        let p = temp("staged-nomarker");
+        {
+            let mut c = Committer::open_staged(&p).expect("open");
+            c.commit_chunk(&[seg(0, 4_000, "a")], 4_000).expect("chunk");
+        }
+        // Only the segment line of a first chunk survived: no marker, so nothing is committed.
+        let text = std::fs::read_to_string(&p).expect("read");
+        let first = text.lines().next().expect("segment line");
+        std::fs::write(&p, format!("{first}\n")).expect("write");
+        let c = Committer::open_staged(&p).expect("reopen");
+        assert_eq!((c.committed_until_ms(), c.segments()), (0, 0));
+        assert_eq!(std::fs::metadata(&p).expect("meta").len(), 0);
     }
 }

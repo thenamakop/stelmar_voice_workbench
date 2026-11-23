@@ -11,6 +11,7 @@ mod engines;
 #[cfg(feature = "gate-hooks")]
 mod gate;
 mod machine;
+mod queue;
 // `start_session` here is replaced by `syscheck::start_recording` (the command layer that cancels a running
 // system check first); this file stays byte-identical to the Phase 1 gate build, so its old command is unused.
 #[allow(dead_code)]
@@ -91,7 +92,16 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let data_dir = gate::data_dir_override().unwrap_or(data_dir);
     let settings = settings::load(&data_dir, app.path().document_dir().ok());
     let (state, events_rx) = AppState::new(data_dir, settings);
-    state::spawn_forwarder(events_rx, state.snapshot.clone(), state.subscribers.clone());
+    // The queue's tap in the forwarder never blocks it (`queue::feed`); the receiver only prompts the queue to
+    // re-read `parts.json`.
+    let (feed, parts_rx) = queue::feed::Feed::new();
+    let feed = std::sync::Arc::new(feed);
+    state::spawn_forwarder(
+        events_rx,
+        state.snapshot.clone(),
+        state.subscribers.clone(),
+        Some(feed.clone()),
+    );
     app.manage(state);
     app.manage(engines::Registry::default());
     app.manage(syscheck::CheckState::default());
@@ -99,6 +109,9 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     gate::apply_overrides(app.handle());
 
     engines::start(app.handle());
+    queue::init(app.handle(), feed, parts_rx);
+    #[cfg(feature = "gate-hooks")]
+    queue::gate_hooks::start_day_plan(app.handle());
 
     let handle = app.handle().clone();
     std::thread::Builder::new()
@@ -154,6 +167,14 @@ pub fn run() -> Result<(), RunError> {
             syscheck::cancel_system_check,
             syscheck::set_override,
             syscheck::session_plan,
+            queue::queue_snapshot,
+            queue::queue_pause,
+            queue::queue_resume,
+            queue::queue_move_up,
+            queue::queue_change_model,
+            queue::set_language_lock,
+            queue::import_session,
+            queue::session_transcript,
         ])
         .build(tauri::generate_context!())?;
     app.run(|_handle, event| {

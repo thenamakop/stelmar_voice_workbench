@@ -6,10 +6,11 @@
 // &fingerprint=changed (the saved profile no longer matches this machine);
 // &partial=<fixture name> (a partial check kept apart from the complete profile);
 // &check=running (a system check is running right now);
+// &queue=busy|paused|unavailable (the post-processing queue; default: empty);
 // &engines=none (every speech engine renamed away: list_engines finds none).
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { bridge } from "./mockBridge";
-import type { MockState } from "./mockBridge";
+import type { MockQueue, MockState } from "./mockBridge";
 
 const params = new URLSearchParams(window.location.search);
 mockWindows("main");
@@ -21,6 +22,7 @@ mockIPC(
     checkRunning: params.get("check") === "running",
     partialCapability: params.get("partial") ?? undefined,
     fingerprintChange: params.get("fingerprint") === "changed" ? ["the graphics driver changed"] : undefined,
+    queue: (params.get("queue") ?? "none") as MockQueue,
     engines: params.get("engines") === "none" ? "none" : "present",
   }),
 );

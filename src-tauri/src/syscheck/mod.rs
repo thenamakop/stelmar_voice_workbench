@@ -113,7 +113,8 @@ fn load_manifest() -> Result<(PathBuf, Manifest, String), String> {
         engines::locate_models_dir().ok_or("No models folder with a manifest.json was found.")?;
     let path = dir.join("manifest.json");
     let manifest = Manifest::load(&path).map_err(|e| e.to_string())?;
-    let hash = wb_models::sha256_file(&path).map_err(|e| e.to_string())?;
+    // Line endings do not count: a CR LF checkout of the same manifest is the same manifest.
+    let hash = wb_models::sha256_text_file(&path).map_err(|e| e.to_string())?;
     Ok((dir, manifest, hash))
 }
 
@@ -122,8 +123,59 @@ fn now_iso() -> String {
     wb_recorder::util::rfc3339(wb_recorder::util::now_ist())
 }
 
-/// The fingerprint this computer has now, from the engine registry (no new probe).
+/// A value kept for a short time. The queue reads the profile at every scheduling decision; only the hardware
+/// reading behind the fingerprint (the processor, the memory, the graphics adapters, the sound inputs and the
+/// disks) is kept, never the saved profile or the model manifest's hash, which are read again every time.
+struct ShortLived<T> {
+    ttl: std::time::Duration,
+    held: Option<(std::time::Instant, T)>,
+}
+
+impl<T: Clone> ShortLived<T> {
+    const fn new(ttl: std::time::Duration) -> Self {
+        Self { ttl, held: None }
+    }
+
+    /// The kept value while it is younger than the time to live, else the one `fill` makes now.
+    fn get_or_fill(&mut self, now: std::time::Instant, fill: impl FnOnce() -> T) -> T {
+        if let Some((at, v)) = &self.held
+            && now.saturating_duration_since(*at) < self.ttl
+        {
+            return v.clone();
+        }
+        let v = fill();
+        self.held = Some((now, v.clone()));
+        v
+    }
+
+    fn clear(&mut self) {
+        self.held = None;
+    }
+}
+
+/// How long the queue keeps the hardware reading (owner, 17 Nov 2026: at most 30 s). A change of hardware or
+/// driver is noticed within this time; a new check clears the reading, so it takes effect at once.
+const HARDWARE_KEPT: std::time::Duration = std::time::Duration::from_secs(30);
+
+static HARDWARE: Mutex<ShortLived<wb_capability::Hardware>> =
+    Mutex::new(ShortLived::new(HARDWARE_KEPT));
+
+/// Forgets the kept hardware reading: the next queue read probes again.
+fn forget_hardware_reading() {
+    lock(&HARDWARE).clear();
+}
+
+/// The fingerprint this computer has now, from the engine registry, with a new hardware probe.
 fn current_fingerprint(app: &AppHandle) -> Option<wb_capability::Fingerprint> {
+    fingerprint_now(app, false)
+}
+
+/// The same, with the hardware reading of the last 30 seconds when there is one (the queue's reads).
+fn current_fingerprint_kept(app: &AppHandle) -> Option<wb_capability::Fingerprint> {
+    fingerprint_now(app, true)
+}
+
+fn fingerprint_now(app: &AppHandle, keep: bool) -> Option<wb_capability::Fingerprint> {
     let snap = app.state::<Registry>().snapshot();
     if !snap.engines_done
         || !snap
@@ -142,7 +194,12 @@ fn current_fingerprint(app: &AppHandle) -> Option<wb_capability::Fingerprint> {
         backup: None,
     };
     let machine = crate::machine::get();
-    let (hw, _) = probe::hardware(machine, &snap.engines, &roots);
+    let read = || probe::hardware(machine, &snap.engines, &roots).0;
+    let hw = if keep {
+        lock(&HARDWARE).get_or_fill(std::time::Instant::now(), read)
+    } else {
+        read()
+    };
     #[allow(unused_mut)]
     let mut fp = probe::fingerprint(
         &hw,
@@ -156,6 +213,27 @@ fn current_fingerprint(app: &AppHandle) -> Option<wb_capability::Fingerprint> {
         fp.os = format!("{} ({v})", fp.os);
     }
     Some(fp)
+}
+
+/// The profile in use for the queue (`store::in_use`, never the file itself): the profile, which carries safe
+/// defaults after a fingerprint change, and what changed. None when no check has run.
+pub(crate) fn profile_in_use(app: &AppHandle) -> Option<(Capability, Vec<String>)> {
+    // The saved profile and the manifest's hash are read every time; only the hardware reading is kept (30 s).
+    let used = store::in_use(&data_dir(app), current_fingerprint_kept(app).as_ref()).ok()??;
+    Some((used.cap, used.changes))
+}
+
+/// The computer runs on its battery. Unknown counts as mains: the scheduler must not stop the day's work
+/// because a desktop reports nothing.
+pub(crate) fn on_battery() -> bool {
+    #[cfg(windows)]
+    {
+        win::on_mains_power() == Some(false)
+    }
+    #[cfg(not(windows))]
+    {
+        false
+    }
 }
 
 /// What the Start Session dialog sends: the recorder's own request plus the recording mode. `recording.rs`
@@ -207,8 +285,11 @@ pub fn start_with_mode(
         }
         Some(other) => return Err(format!("Unknown recording mode '{other}'.")),
     };
+    let mut laps = crate::queue::Laps::start();
     cancel_check_for_recording(app);
+    laps.lap("cancel check");
     let info = recording::start_blocking(app, request.base)?;
+    laps.lap("recorder start");
     // The chosen mode goes next to the session's own files. The recorder does not carry it yet.
     let options = serde_json::json!({
         "mode": mode,
@@ -221,6 +302,16 @@ pub fn start_with_mode(
     ) {
         tracing::warn!("start-options.json was not written: {e}");
     }
+    laps.lap("options file");
+    // The session's rolling transcription job. A failure is reported and never touches the recording.
+    crate::queue::on_session_started(
+        app,
+        &info.dir,
+        &languages,
+        request.hindi_urdu_script.as_deref(),
+    );
+    laps.lap("queue hook");
+    crate::queue::log_start_timing(&format!("start call of {}: {}", info.dir, laps.text()));
     Ok(info)
 }
 
@@ -449,6 +540,8 @@ fn run_check(
     let cap = assemble(outcome.profile, &env.rankings, &env.options, overrides);
     let file = store::save_routed(&data_dir(app), &cap, current_fingerprint(app).as_ref())
         .map_err(|e| e.to_string())?;
+    // A new profile takes effect at once: the queue's kept hardware reading may be from before it.
+    forget_hardware_reading();
     tracing::info!(
         file = ?file,
         tier = cap.decision.tier.label(),
@@ -569,6 +662,47 @@ pub fn live_allowed(
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
+
+    /// Owner, 17 Nov 2026: the queue may keep the hardware reading for at most 30 seconds; it expires, and a new
+    /// check clears it so the next read is a new one.
+    #[test]
+    fn a_kept_hardware_reading_expires_after_at_most_30_seconds_and_a_new_check_clears_it() {
+        use std::time::{Duration, Instant};
+        assert!(HARDWARE_KEPT <= Duration::from_secs(30));
+        let mut kept = ShortLived::<u32>::new(HARDWARE_KEPT);
+        let t0 = Instant::now();
+        let mut reads = 0;
+        let mut read_at = |c: &mut ShortLived<u32>, secs: u64| {
+            c.get_or_fill(t0 + Duration::from_secs(secs), || {
+                reads += 1;
+                reads
+            })
+        };
+        assert_eq!(read_at(&mut kept, 0), 1, "the first read probes");
+        assert_eq!(read_at(&mut kept, 1), 1, "kept");
+        assert_eq!(read_at(&mut kept, 29), 1, "kept while under 30 s old");
+        assert_eq!(
+            read_at(&mut kept, 30),
+            2,
+            "a reading 30 s old is read again"
+        );
+        assert_eq!(
+            read_at(&mut kept, 45),
+            2,
+            "the new reading is kept from its own time"
+        );
+        kept.clear();
+        assert_eq!(read_at(&mut kept, 46), 3, "a new check clears it at once");
+    }
+
+    #[test]
+    fn a_reading_from_a_later_instant_than_now_is_kept_not_a_panic() {
+        use std::time::{Duration, Instant};
+        let mut kept = ShortLived::<u32>::new(Duration::from_secs(30));
+        let t0 = Instant::now();
+        assert_eq!(kept.get_or_fill(t0 + Duration::from_secs(10), || 1), 1);
+        assert_eq!(kept.get_or_fill(t0, || 2), 1);
+    }
 
     fn dir(name: &str) -> PathBuf {
         let d = std::env::temp_dir().join(format!("wb-mod-{name}-{}", std::process::id()));

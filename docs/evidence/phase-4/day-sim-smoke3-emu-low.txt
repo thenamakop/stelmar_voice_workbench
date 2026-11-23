@@ -1,0 +1,139 @@
+﻿date: 2026-11-18 01:21 (IST on the Legion)
+command: powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\gates\day-sim.ps1 -Smoke -Profile emu-low -Tag smoke3 -Audio D:\STELMAR-Gate\day-sim\smoke-long -NightMinutes 50
+machine: Legion, emulation profile emu-low; the gate build target\gate\stelmar-voice-workbench.exe, WB_GATE_DAY_PLAN; NOT A GATE (a smoke run of the queue paths)
+source: ef641fd
+build: stelmar-voice-workbench.exe sha256 66b107d5609fba1565f60eba4df0bff3fbcbda8a6fee645dc2752fb0a305ee87
+run folder: D:\STELMAR-Gate\day-sim\smoke3-emu-low-20261118-002624
+DAY-SIMULATION SMOKE (not a gate)
+run folder: smoke3-emu-low-20261118-002624
+profile in force: {'config': '{"index":0,"kind":"gpu"}', 'process_while_recording': True, 'tier': 'C', 'cpu_threads': 2}
+app exit code: 0, scheduler clock offset 34412 s (the first session maps to 10:00 IST), parts of 120 s, night pass time box 50 min
+profile reads by the scheduler: 2156, mean 9980 us, slowest 359624 us (the profile in use is read at every scheduling decision, no cache)
+configuration the queue worked in: Gpu { index: 0 }; forced hybrid: False
+
+Script notes (progress):
+  00:26:29 player 1 started for Long Hindi (842.623 s)
+  00:40:58 all sessions recorded
+  00:53:42 10:27	night pass planned for 1 session(s): about 0.6 h, ready by 11:03 IST (measured speed: 1.89 times the profile's, from 3 finished unit(s))
+  01:20:59 no night decision within 40 min of the last session: stopping
+
+Sessions found under rec/:
+  long-hindi  title 'Long Hindi'  parts 8  sample rates [48000]  channels [2]  audio 868.3 s
+
+== long-hindi (Long Hindi)
+  job 1 rolling post-1 state done cursor 868340 ms, started 1794976683872, finished 1794977819025, error None
+    languages ["en","hi"], models {"*":"large-v3-turbo-q5_0","en":"large-v3-turbo-q5_0","hi":"large-v3-turbo-q5_0"}
+    unit 0: 0.0 s to 295.2 s (295.2 s), state committed, device gpu, attempts cpu 0 gpu 0, seam None, last error None
+    unit 1: 295.2 s to 582.9 s (287.7 s), state committed, device gpu, attempts cpu 0 gpu 0, seam None, last error None
+    unit 2: 582.9 s to 868.3 s (285.4 s), state committed, device gpu, attempts cpu 0 gpu 0, seam None, last error None
+  job 2 night post-2 state running cursor 582930 ms, started 1794977833493, finished None, error None
+    languages ["en","hi"], models {"*":"large-v3-q5_0","en":"large-v3-turbo-q5_0","hi":"large-v3-q5_0"}
+    unit 0: 0.0 s to 295.2 s (295.2 s), state committed, device gpu, attempts cpu 0 gpu 0, seam None, last error None
+    unit 1: 295.2 s to 582.9 s (287.7 s), state committed, device gpu, attempts cpu 0 gpu 0, seam None, last error None
+    unit 2: 582.9 s to 868.3 s (285.4 s), state running, device gpu, attempts cpu 0 gpu 0, seam None, last error None
+  part 1: 9 pauses (from wb-engine chunks)
+  part 2: 8 pauses (from wb-engine chunks)
+  part 3: 7 pauses (from wb-engine chunks)
+  part 4: 9 pauses (from wb-engine chunks)
+  part 5: 8 pauses (from wb-engine chunks)
+  part 6: 9 pauses (from wb-engine chunks)
+  part 7: 8 pauses (from wb-engine chunks)
+  part 8: 1 pauses (from wb-engine chunks)
+  post-1.jsonl: 80 segments, overlaps 0, duplicate starts 0, last end 839.9 s of 868.3 s, speech 626.8 s, languages {'hi': 71, 'en': 9}, mixed 5, devices ['gpu'], models ['large-v3-turbo-q5_0']
+    first segment committed at 2026-11-18T00:41:56.2918683+05:30
+  post-2.jsonl: 54 segments, overlaps 0, duplicate starts 0, last end 576.1 s of 868.3 s, speech 419.8 s, languages {'hi': 49, 'en': 5}, mixed 3, devices ['gpu'], models ['large-v3-q5_0', 'large-v3-turbo-q5_0']
+    first segment committed at 2026-11-18T01:04:55.1876143+05:30
+
+PATH 1  wb-engine chunks on a real recorder part (48 kHz)
+  part sample rates: [48000]; parts with pauses found: 8 of 8
+  VERDICT: PASS (pauses found for 8 parts; failures: 0)
+
+PATH 2  the real batch engine through the queue (rolling pass, Stop, the rest cut)
+  long-hindi: Stop at 2026-11-18T00:40:58.1080081+05:30; segments committed before Stop: 0 of 80
+  units planned while the session was still recording: 2
+    10:08	long-hindi: 1 unit(s) planned after part 4
+    10:12	long-hindi: 1 unit(s) planned after part 6
+  units done: 5
+    10:15	long-hindi: unit 0 of post-1 done in 444.4 s on gpu (0 restart(s), engine peak 1546 MiB against limit 3051 MiB)
+    10:21	long-hindi: unit 1 of post-1 done in 339.0 s on gpu (0 restart(s), engine peak 1542 MiB against limit 3051 MiB)
+    10:26	long-hindi: unit 2 of post-1 done in 351.7 s on gpu (0 restart(s), engine peak 1550 MiB against limit 3051 MiB)
+    10:38	long-hindi: unit 0 of post-2 done in 673.7 s on gpu (0 restart(s), engine peak 4095 MiB against limit 8612 MiB)
+    10:47	long-hindi: unit 1 of post-2 done in 570.5 s on gpu (0 restart(s), engine peak 4094 MiB against limit 8612 MiB)
+
+ENGINE MEMORY (peak against the limit the gate granted; the smoke fails above 70%)
+  worst peak/limit over all units: 50.8%  -> PASS
+  memory-limit deaths logged: 0
+
+PATH 3  import_session of a copy of a finished session
+  VERDICT: CHECK (no imported copy found)
+
+PATH 4  set_language_lock: a lock inside a unit reaches that unit's lang_log
+
+ESTIMATES  the first 'ready by' after Stop and the night plan, with the basis each rests on (the provisional emu-low detection allowance until a unit of a session with several languages has finished)
+  10:14	long-hindi: stopped. All transcripts ready by 10:25 IST (sessions with several languages: provisional emu-low detection allowance (x1.34 rolling, x1.25 night) until a unit of such a session finishes; sessions with one language: the profile's speed until a unit finishes)
+  10:27	night pass planned for 1 session(s): about 0.6 h, ready by 11:03 IST (measured speed: 1.89 times the profile's, from 3 finished unit(s))
+  1794977075729 long-hindi: stopped. All transcripts ready by 10:25 IST (sessions with several languages: provisional emu-low detection allowance (x1.34 rolling, x1.25 night) until a unit of such a session finishes; sessions with one language: the profile's speed until a unit finishes)
+  1794977833492 night pass planned for 1 session(s): about 0.6 h, ready by 11:03 IST (measured speed: 1.89 times the profile's, from 3 finished unit(s))
+  at the end: basis 'sessions with several languages: measured, 1.74 times the profile's, from 5 finished unit(s); sessions with one language: the profile's speed until a unit finishes'; several languages: factor 1.7395894870699564 from 5 unit(s); one language: factor None from 0 unit(s); allowances rolling 1.342629482071713, night 1.2469959946595461
+
+PATH 5  queue_pause and queue_resume
+  10:00	paused: processing while recording is not cleared on this computer
+  10:00	gpu: waiting, not processing: processing while recording is not cleared on this computer
+  10:00	resumed (was: processing while recording is not cleared on this computer)
+  10:00	gpu: processing may continue
+
+PATH 6  one engine killed from outside, then resumed
+  script: None
+  10:15	long-hindi: unit 0 of post-1 done in 444.4 s on gpu (0 restart(s), engine peak 1546 MiB against limit 3051 MiB)
+  10:21	long-hindi: unit 1 of post-1 done in 339.0 s on gpu (0 restart(s), engine peak 1542 MiB against limit 3051 MiB)
+  10:26	long-hindi: unit 2 of post-1 done in 351.7 s on gpu (0 restart(s), engine peak 1550 MiB against limit 3051 MiB)
+  10:38	long-hindi: unit 0 of post-2 done in 673.7 s on gpu (0 restart(s), engine peak 4095 MiB against limit 8612 MiB)
+  10:47	long-hindi: unit 1 of post-2 done in 570.5 s on gpu (0 restart(s), engine peak 4094 MiB against limit 8612 MiB)
+
+PATH 7  a short night pass
+  10:14	long-hindi: stopped. All transcripts ready by 10:25 IST (sessions with several languages: provisional emu-low detection allowance (x1.34 rolling, x1.25 night) until a unit of such a session finishes; sessions with one language: the profile's speed until a unit finishes)
+  10:27	night pass planned for 1 session(s): about 0.6 h, ready by 11:03 IST (measured speed: 1.89 times the profile's, from 3 finished unit(s))
+  long-hindi: post-2.jsonl 54 segments
+  long-hindi: revision post-1: complete True, default True
+  long-hindi: revision post-2: complete False, default False
+  long-hindi: night job 2 (revision post-2): state running, committed to 582.9 s
+    night unit 0: 0.0 s to 295.2 s, state committed
+    night unit 1: 295.2 s to 582.9 s, state committed
+    night unit 2: 582.9 s to 868.3 s, state running
+
+Scheduler log (every line, IST time first):
+  10:00	gpu engine slot started (configuration Gpu { index: 0 }, 2 thread(s))
+  10:00	DAY: started "Long Hindi" in D:\STELMAR-Gate\day-sim\smoke3-emu-low-20261118-002624\rec\2026-11-18\long-hindi
+  10:00	paused: processing while recording is not cleared on this computer
+  10:00	gpu: waiting, not processing: processing while recording is not cleared on this computer
+  10:00	resumed (was: processing while recording is not cleared on this computer)
+  10:00	gpu: processing may continue
+  10:02	long-hindi: pauses of part 1 found (9 pauses, 5 fallback cuts) in 1.2 s; engine peak 103 MiB against limit 2048 MiB (assumed peak)
+  10:04	long-hindi: pauses of part 2 found (8 pauses, 4 fallback cuts) in 1.2 s; engine peak 103 MiB against limit 1127 MiB (measured peak)
+  10:06	long-hindi: pauses of part 3 found (7 pauses, 1 fallback cuts) in 1.3 s; engine peak 104 MiB against limit 1127 MiB (measured peak)
+  10:08	long-hindi: pauses of part 4 found (9 pauses, 2 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:08	long-hindi: 1 unit(s) planned after part 4
+  10:10	long-hindi: pauses of part 5 found (8 pauses, 3 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:11	long-hindi: unit 0 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 6 (47745 to 59270 ms) failed a guard (LowCoverage; compression ratio 0.77, 36 characters, 7.9 s of speech); retrying without previous-text context
+  10:11	long-hindi: unit 0 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 6: first half (47745 to 51935 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  10:12	long-hindi: pauses of part 6 found (9 pauses, 1 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:12	long-hindi: 1 unit(s) planned after part 6
+  10:12	long-hindi: unit 0 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 6: rescued by step b (cut at 51935 ms, each half decoded without context)
+  10:12	long-hindi: unit 0 of post-1 job 1 on gpu: engine warning chunk_unclear: chunk 6 (51935 to 59270 ms) could not be decoded cleanly after the retries (TokenLimit); emitted as unclear with no text
+  10:14	long-hindi: pauses of part 7 found (8 pauses, 6 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:14	long-hindi: pauses of part 8 found (1 pauses, 0 fallback cuts) in 0.4 s; engine peak 89 MiB against limit 1128 MiB (measured peak)
+  10:14	DAY: stopped "Long Hindi"
+  10:14	DAY: every session of the plan was recorded; waiting for the stop file
+  10:14	long-hindi: session closed, 1 final unit(s) planned
+  10:14	long-hindi: stopped. All transcripts ready by 10:25 IST (sessions with several languages: provisional emu-low detection allowance (x1.34 rolling, x1.25 night) until a unit of such a session finishes; sessions with one language: the profile's speed until a unit finishes)
+  10:15	long-hindi: unit 0 of post-1 done in 444.4 s on gpu (0 restart(s), engine peak 1546 MiB against limit 3051 MiB)
+  10:21	long-hindi: unit 1 of post-1 done in 339.0 s on gpu (0 restart(s), engine peak 1542 MiB against limit 3051 MiB)
+  10:26	long-hindi: unit 2 of post-1 done in 351.7 s on gpu (0 restart(s), engine peak 1550 MiB against limit 3051 MiB)
+  10:26	long-hindi: post-1 transcript complete
+  10:27	night pass planned for 1 session(s): about 0.6 h, ready by 11:03 IST (measured speed: 1.89 times the profile's, from 3 finished unit(s))
+  10:31	long-hindi: unit 0 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 6 (47745 to 59270 ms) failed a guard (LowCoverage; compression ratio 0.77, 37 characters, 7.9 s of speech); retrying without previous-text context
+  10:32	long-hindi: unit 0 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 6: first half (47745 to 51935 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  10:32	long-hindi: unit 0 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 6: rescued by step b (cut at 51935 ms, each half decoded without context)
+  10:38	long-hindi: unit 0 of post-2 done in 673.7 s on gpu (0 restart(s), engine peak 4095 MiB against limit 8612 MiB)
+  10:47	long-hindi: unit 1 of post-2 done in 570.5 s on gpu (0 restart(s), engine peak 4094 MiB against limit 8612 MiB)
+  10:54	DAY: report written; exiting

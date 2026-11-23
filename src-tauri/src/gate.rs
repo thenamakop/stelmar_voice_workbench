@@ -16,7 +16,7 @@
 //! | `WB_GATE_PART_SECONDS=<n>` | Part length for this run (kill tests aim kills at part rollovers) |
 //! | `WB_GATE_DATA_DIR=<path>` | App data folder for this run (settings, `capability.json`, engine logs), so a gate run never touches the real one |
 //! | `WB_GATE_START_DURING_CHECK=<n>` | With `WB_GATE_CHECK=quick\|full`: n seconds into the check, press Start (the command layer cancels the check and the recording starts); the report holds the time Start took and the partial profile |
-//! | `WB_GATE_CHECK=quick\|full\|view` | Run the system check at launch (`quick` or `full`), or only read the saved profile (`view`); write the result to `WB_GATE_REPORT` and exit |
+//! | `WB_GATE_CHECK=quick\|full\|view\|programme` | Run the system check at launch (`quick` or `full`), or only read the saved profile (`view`), or only read the programme's entry for the day the scheduler's clock shows (`programme`, with `WB_GATE_CLOCK_OFFSET_S`: the day simulation's pre-flight check); write the result to `WB_GATE_REPORT` and exit |
 
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
@@ -53,6 +53,7 @@ fn active() -> bool {
         "WB_GATE_RECOVERY",
         "WB_GATE_STOP_FILE",
         "WB_GATE_CHECK",
+        "WB_GATE_DAY_PLAN",
     ]
     .iter()
     .any(|k| var(k).is_some())
@@ -101,7 +102,7 @@ fn write_report(value: &serde_json::Value) {
     }
 }
 
-fn device_id(part: &str) -> Result<String, String> {
+pub(crate) fn device_id(part: &str) -> Result<String, String> {
     let needle = part.to_lowercase();
     let inputs = wb_recorder::capture::list_inputs().map_err(|e| e.to_string())?;
     inputs
@@ -239,6 +240,15 @@ fn run(app: &AppHandle) -> Result<(), String> {
 fn run_check(app: &AppHandle, mode: &str) -> Result<(), String> {
     let started = Instant::now();
     let started_at = wb_recorder::util::rfc3339(wb_recorder::util::now_ist());
+    if mode == "programme" {
+        write_report(&serde_json::json!({
+            "mode": mode,
+            "started_at": started_at,
+            "programme": crate::queue::gate_hooks::programme_day_report(),
+        }));
+        app.exit(0);
+        return Ok(());
+    }
     if mode == "view" {
         // The registry must have finished its engine scan, or the fingerprint cannot be compared.
         let wait = Instant::now();
@@ -261,7 +271,7 @@ fn run_check(app: &AppHandle, mode: &str) -> Result<(), String> {
         "full" => CheckKind::Full,
         other => {
             return Err(format!(
-                "WB_GATE_CHECK must be quick, full or view, not {other:?}"
+                "WB_GATE_CHECK must be quick, full, view or programme, not {other:?}"
             ));
         }
     };

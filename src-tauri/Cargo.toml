@@ -37,7 +37,9 @@ wb-capability.workspace = true
 wb-machine.workspace = true
 wb-models.workspace = true
 wb-protocol.workspace = true
+wb-queue.workspace = true
 wb-recorder.workspace = true
+wb-runner.workspace = true
 wb-supervisor.workspace = true
 # Same version Tauri uses; only to size the async runtime from the affinity mask.
 tokio = { version = "1", default-features = false, features = ["rt-multi-thread"] }

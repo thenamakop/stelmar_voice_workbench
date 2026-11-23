@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="204" font-family="sans-serif" font-size="11">
+<rect width="1400" height="204" fill="#ffffff"/>
+<text x="10" y="20" font-size="13" font-weight="bold">Day simulation timeline (scheduler clock, IST)</text>
+<line x1="228.4" y1="34" x2="228.4" y2="154" stroke="#dddddd"/>
+<text x="228.4" y="30" text-anchor="middle" fill="#555555">10:00</text>
+<line x1="458.7" y1="34" x2="458.7" y2="154" stroke="#dddddd"/>
+<text x="458.7" y="30" text-anchor="middle" fill="#555555">11:00</text>
+<line x1="689.0" y1="34" x2="689.0" y2="154" stroke="#dddddd"/>
+<text x="689.0" y="30" text-anchor="middle" fill="#555555">12:00</text>
+<line x1="919.4" y1="34" x2="919.4" y2="154" stroke="#dddddd"/>
+<text x="919.4" y="30" text-anchor="middle" fill="#555555">13:00</text>
+<line x1="1149.7" y1="34" x2="1149.7" y2="154" stroke="#dddddd"/>
+<text x="1149.7" y="30" text-anchor="middle" fill="#555555">14:00</text>
+<line x1="1380.0" y1="34" x2="1380.0" y2="154" stroke="#dddddd"/>
+<text x="1380.0" y="30" text-anchor="middle" fill="#555555">15:00</text>
+<text x="8" y="56" fill="#222222">Inaugural</text>
+<rect x="228.4" y="44" width="345.5" height="18" fill="#2a6f4e" opacity="0.85"><title>record 10:00:00 to 11:30:00</title></rect>
+<rect x="255.7" y="44" width="18.8" height="18" fill="#2b5fa8" opacity="0.85"><title>post-1 10:07:06 to 10:12:00</title></rect>
+<rect x="275.2" y="44" width="26.1" height="18" fill="#2b5fa8" opacity="0.85"><title>post-1 10:12:11 to 10:19:00</title></rect>
+<rect x="303.1" y="44" width="25.1" height="18" fill="#2b5fa8" opacity="0.85"><title>post-1 10:19:27 to 10:26:00</title></rect>
+<rect x="326.1" y="44" width="17.4" height="18" fill="#2b5fa8" opacity="0.85"><title>post-1 10:25:27 to 10:30:00</title></rect>
+<rect x="343.5" y="44" width="27.0" height="18" fill="#2b5fa8" opacity="0.85"><title>post-1 10:29:58 to 10:37:00</title></rect>
+<rect x="370.3" y="44" width="15.5" height="18" fill="#2b5fa8" opacity="0.85"><title>post-1 10:36:58 to 10:41:00</title></rect>
+<rect x="386.4" y="44" width="18.6" height="18" fill="#2b5fa8" opacity="0.85"><title>post-1 10:41:09 to 10:46:00</title></rect>
+<rect x="406.8" y="44" width="13.5" height="18" fill="#2b5fa8" opacity="0.85"><title>post-1 10:46:28 to 10:50:00</title></rect>
+<rect x="420.3" y="44" width="23.0" height="18" fill="#2b5fa8" opacity="0.85"><title>post-1 10:50:00 to 10:56:00</title></rect>
+<rect x="443.6" y="44" width="22.8" height="18" fill="#2b5fa8" opacity="0.85"><title>post-1 10:56:03 to 11:02:00</title></rect>
+<rect x="463.5" y="44" width="29.7" height="18" fill="#2b5fa8" opacity="0.85"><title>post-1 11:01:15 to 11:09:00</title></rect>
+<rect x="496.8" y="44" width="15.7" height="18" fill="#2b5fa8" opacity="0.85"><title>post-1 11:09:54 to 11:14:00</title></rect>
+<rect x="510.2" y="44" width="17.6" height="18" fill="#2b5fa8" opacity="0.85"><title>post-1 11:13:24 to 11:18:00</title></rect>
+<rect x="527.1" y="44" width="16.0" height="18" fill="#2b5fa8" opacity="0.85"><title>post-1 11:17:49 to 11:22:00</title></rect>
+<rect x="543.7" y="44" width="22.5" height="18" fill="#2b5fa8" opacity="0.85"><title>post-1 11:22:09 to 11:28:00</title></rect>
+<rect x="564.9" y="44" width="20.5" height="18" fill="#2b5fa8" opacity="0.85"><title>post-1 11:27:39 to 11:33:00</title></rect>
+<rect x="585.9" y="44" width="26.3" height="18" fill="#2b5fa8" opacity="0.85"><title>post-1 11:33:08 to 11:40:00</title></rect>
+<rect x="613.8" y="44" width="21.4" height="18" fill="#2b5fa8" opacity="0.85"><title>post-1 11:40:24 to 11:46:00</title></rect>
+<rect x="1199.6" y="44" width="19.2" height="18" fill="#8a4fa0" opacity="0.85"><title>post-2 14:13:00 to 14:18:00</title></rect>
+<rect x="1219.4" y="44" width="26.2" height="18" fill="#8a4fa0" opacity="0.85"><title>post-2 14:18:10 to 14:25:00</title></rect>
+<rect x="1247.3" y="44" width="25.2" height="18" fill="#8a4fa0" opacity="0.85"><title>post-2 14:25:26 to 14:32:00</title></rect>
+<rect x="1270.3" y="44" width="17.6" height="18" fill="#8a4fa0" opacity="0.85"><title>post-2 14:31:24 to 14:36:00</title></rect>
+<rect x="1291.4" y="44" width="27.2" height="18" fill="#8a4fa0" opacity="0.85"><title>post-2 14:36:54 to 14:44:00</title></rect>
+<path d="M643.0,42 l4,-0 l-4,22 l-4,-22 z" fill="#c0861a"><title>ready by at Stop</title></path>
+<text x="8" y="82" fill="#222222">Parallel I</text>
+<rect x="689.0" y="70" width="345.5" height="18" fill="#2a6f4e" opacity="0.85"><title>record 12:00:00 to 13:30:00</title></rect>
+<rect x="717.0" y="70" width="29.6" height="18" fill="#2b5fa8" opacity="0.85"><title>post-1 12:07:17 to 12:15:00</title></rect>
+<rect x="747.8" y="70" width="25.7" height="18" fill="#2b5fa8" opacity="0.85"><title>post-1 12:15:18 to 12:22:00</title></rect>
+<rect x="775.0" y="70" width="21.5" height="18" fill="#2b5fa8" opacity="0.85"><title>post-1 12:22:24 to 12:28:00</title></rect>
+<rect x="793.7" y="70" width="25.9" height="18" fill="#2b5fa8" opacity="0.85"><title>post-1 12:27:15 to 12:34:00</title></rect>
+<rect x="819.2" y="70" width="27.2" height="18" fill="#2b5fa8" opacity="0.85"><title>post-1 12:33:54 to 12:41:00</title></rect>
+<rect x="847.4" y="70" width="22.1" height="18" fill="#2b5fa8" opacity="0.85"><title>post-1 12:41:14 to 12:47:00</title></rect>
+<rect x="871.0" y="70" width="21.5" height="18" fill="#2b5fa8" opacity="0.85"><title>post-1 12:47:24 to 12:53:00</title></rect>
+<rect x="891.6" y="70" width="23.9" height="18" fill="#2b5fa8" opacity="0.85"><title>post-1 12:52:46 to 12:59:00</title></rect>
+<rect x="913.9" y="70" width="28.5" height="18" fill="#2b5fa8" opacity="0.85"><title>post-1 12:58:35 to 13:06:00</title></rect>
+<rect x="943.4" y="70" width="29.7" height="18" fill="#2b5fa8" opacity="0.85"><title>post-1 13:06:15 to 13:14:00</title></rect>
+<rect x="972.1" y="70" width="31.7" height="18" fill="#2b5fa8" opacity="0.85"><title>post-1 13:13:44 to 13:22:00</title></rect>
+<rect x="1006.7" y="70" width="24.0" height="18" fill="#2b5fa8" opacity="0.85"><title>post-1 13:22:44 to 13:29:00</title></rect>
+<rect x="1028.5" y="70" width="25.2" height="18" fill="#2b5fa8" opacity="0.85"><title>post-1 13:28:25 to 13:35:00</title></rect>
+<rect x="1054.6" y="70" width="26.0" height="18" fill="#2b5fa8" opacity="0.85"><title>post-1 13:35:13 to 13:42:00</title></rect>
+<rect x="1082.3" y="70" width="25.1" height="18" fill="#2b5fa8" opacity="0.85"><title>post-1 13:42:27 to 13:49:00</title></rect>
+<rect x="1107.3" y="70" width="30.9" height="18" fill="#2b5fa8" opacity="0.85"><title>post-1 13:48:57 to 13:57:00</title></rect>
+<rect x="1138.3" y="70" width="30.6" height="18" fill="#2b5fa8" opacity="0.85"><title>post-1 13:57:02 to 14:05:00</title></rect>
+<rect x="1168.4" y="70" width="31.2" height="18" fill="#2b5fa8" opacity="0.85"><title>post-1 14:04:52 to 14:13:00</title></rect>
+<rect x="1198.2" y="70" width="1.5" height="18" fill="#2b5fa8" opacity="0.85"><title>post-1 14:12:38 to 14:13:00</title></rect>
+<path d="M1214.9,68 l4,-0 l-4,22 l-4,-22 z" fill="#c0861a"><title>ready by at Stop</title></path>
+<text x="8" y="108" fill="#222222">Parallel II</text>
+<rect x="1317.9" y="96" width="23.7" height="18" fill="#2b5fa8" opacity="0.85"><title>post-1 14:43:49 to 14:50:00</title></rect>
+<line x1="1199.6" y1="40" x2="1199.6" y2="154" stroke="#b03030" stroke-dasharray="4 3"/>
+<text x="1202.6" y="166" fill="#b03030">night planned</text>
+<rect x="10" y="175" width="12" height="10" fill="#2a6f4e"/><text x="26" y="184" fill="#222222">recording</text>
+<rect x="220" y="175" width="12" height="10" fill="#2b5fa8"/><text x="236" y="184" fill="#222222">rolling unit (post-1)</text>
+<rect x="430" y="175" width="12" height="10" fill="#8a4fa0"/><text x="446" y="184" fill="#222222">night unit (post-2)</text>
+<rect x="640" y="175" width="12" height="10" fill="#c0861a"/><text x="656" y="184" fill="#222222">ready-by estimate at Stop</text>
+</svg>

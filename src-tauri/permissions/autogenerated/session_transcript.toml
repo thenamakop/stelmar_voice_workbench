@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-session-transcript"
+description = "Enables the session_transcript command without any pre-configured scope."
+commands.allow = ["session_transcript"]
+
+[[permission]]
+identifier = "deny-session-transcript"
+description = "Denies the session_transcript command without any pre-configured scope."
+commands.deny = ["session_transcript"]

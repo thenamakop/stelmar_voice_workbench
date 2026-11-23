@@ -6,6 +6,8 @@
 //! reported through the observer (the app turns it into a Toast); none of it reaches the recorder.
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::RecvTimeoutError;
 use std::time::{Duration, Instant};
 
@@ -32,6 +34,10 @@ pub struct Policy {
     /// environment of the engines, whether inherited or listed in `engine_env`. On in release builds, off in
     /// debug builds; the app turns it off for gate builds, which pass them on purpose.
     pub scrub_env: bool,
+    /// The most memory (commit) each engine process may use; `wb_queue::sched::engine_memory_limit` computes
+    /// it from the engine's measured peak. An engine that reaches it dies, which is reported as
+    /// [`Notice::MemoryLimit`] and counts as a failure of the run.
+    pub memory_limit_bytes: Option<u64>,
 }
 
 impl Default for Policy {
@@ -44,7 +50,26 @@ impl Default for Policy {
             priority: Priority::BelowNormal,
             engine_env: Vec::new(),
             scrub_env: !cfg!(debug_assertions),
+            memory_limit_bytes: None,
         }
+    }
+}
+
+/// Asks a running batch to stop: the scheduler's pause (the engine is killed, which frees its memory, and the
+/// work resumes later from the committed cursor) or the operator's Pause. Clones share one flag.
+#[derive(Debug, Clone, Default)]
+pub struct Cancel(Arc<AtomicBool>);
+
+impl Cancel {
+    pub fn new() -> Self {
+        Self::default()
+    }
+    /// Asks the batch to stop. Safe to call from any thread, any number of times.
+    pub fn cancel(&self) {
+        self.0.store(true, Ordering::SeqCst);
+    }
+    pub fn is_cancelled(&self) -> bool {
+        self.0.load(Ordering::SeqCst)
     }
 }
 
@@ -54,6 +79,9 @@ pub trait Observer {
     fn event(&mut self, _e: &Event) {}
     /// A failure or restart the operator should hear about.
     fn notice(&mut self, _n: &Notice) {}
+    /// The engine's peak commit so far, about every 2 seconds while it runs (for the scheduler's memory rules:
+    /// what a running engine may still grow by is its measured peak minus this).
+    fn memory(&mut self, _peak_bytes: u64) {}
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -78,6 +106,12 @@ pub enum Notice {
     NotInJob(String),
     /// Gave up after too many restarts.
     GaveUp { restarts: u32 },
+    /// The engine ended after reaching its memory limit (its peak was within 5% of the limit).
+    MemoryLimit {
+        peak_bytes: u64,
+        limit_bytes: u64,
+        restart: u32,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -86,6 +120,10 @@ pub struct RunReport {
     pub segments_committed: u64,
     pub committed_until_ms: u64,
     pub done: Option<DoneSummary>,
+    /// The largest commit any engine of the run reached, to log next to the limit.
+    pub peak_memory_bytes: Option<u64>,
+    /// How many engines ended at their memory limit (reported apart from other failures).
+    pub memory_limit_deaths: u32,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -104,6 +142,10 @@ pub enum RunError {
     },
     #[error("the engine reported a fatal error that restarting cannot fix: {0}")]
     Fatal(String),
+    /// [`Cancel::cancel`] was called. The engine was killed; nothing of the chunk it was working on was
+    /// committed, so a later run starts from `committed_until_ms` without a gap or a repeat.
+    #[error("cancelled at {committed_until_ms} ms")]
+    Cancelled { committed_until_ms: u64 },
 }
 
 /// Engine errors a restart cannot fix.
@@ -115,14 +157,44 @@ fn unrecoverable(code: &str) -> bool {
 /// request file and the engine's stderr log.
 pub fn run_batch(
     exe: &Path,
-    mut request: BatchRequest,
+    request: BatchRequest,
     committer: &mut Committer,
     work_dir: &Path,
     policy: &Policy,
     observer: &mut dyn Observer,
 ) -> Result<RunReport, RunError> {
+    run_batch_with(
+        exe,
+        request,
+        committer,
+        work_dir,
+        policy,
+        observer,
+        &Cancel::new(),
+    )
+}
+
+/// [`run_batch`] that can be stopped from another thread (the scheduler's pause rules, the operator's Pause).
+/// A cancelled run kills its engine at once, returns [`RunError::Cancelled`] and has committed only whole
+/// chunks, so starting it again resumes from the cursor.
+pub fn run_batch_with(
+    exe: &Path,
+    mut request: BatchRequest,
+    committer: &mut Committer,
+    work_dir: &Path,
+    policy: &Policy,
+    observer: &mut dyn Observer,
+    cancel: &Cancel,
+) -> Result<RunReport, RunError> {
     let mut restarts = 0u32;
+    let mut peak_memory: Option<u64> = None;
+    let mut memory_limit_deaths = 0u32;
     loop {
+        if cancel.is_cancelled() {
+            return Err(RunError::Cancelled {
+                committed_until_ms: committer.committed_until_ms(),
+            });
+        }
         // Resume exactly where the committed transcript ends.
         request.resume_from_ms = committer.committed_until_ms();
         let request_path = work_dir.join(format!("batch-request-{restarts}.json"));
@@ -151,7 +223,7 @@ pub fn run_batch(
             env: policy.engine_env.clone(),
             scrub_env: policy.scrub_env,
         };
-        let mut engine = match EngineProcess::spawn(&spec) {
+        let mut engine = match EngineProcess::spawn_limited(&spec, policy.memory_limit_bytes) {
             Ok(e) => e,
             Err(e) => {
                 observer.notice(&Notice::StartFailed(format!("{}: {e}", exe.display())));
@@ -163,7 +235,11 @@ pub fn run_batch(
                         committed_until_ms: committer.committed_until_ms(),
                     });
                 }
-                std::thread::sleep(backoff(policy, restarts));
+                if sleep_unless_cancelled(backoff(policy, restarts), cancel) {
+                    return Err(RunError::Cancelled {
+                        committed_until_ms: committer.committed_until_ms(),
+                    });
+                }
                 continue;
             }
         };
@@ -181,7 +257,20 @@ pub fn run_batch(
         // committed: an engine killed anywhere inside a chunk loses nothing that was committed and the whole
         // chunk is decoded again. Segments are shown (observer) only after they are committed.
         let mut pending: Vec<wb_protocol::SegmentEvent> = Vec::new();
+        let mut last_memory = Instant::now();
         loop {
+            if last_memory.elapsed() >= Duration::from_secs(2) {
+                last_memory = Instant::now();
+                if let Some(peak) = engine.peak_memory_bytes() {
+                    observer.memory(peak);
+                }
+            }
+            if cancel.is_cancelled() {
+                engine.kill();
+                return Err(RunError::Cancelled {
+                    committed_until_ms: committer.committed_until_ms(),
+                });
+            }
             match engine.events.recv_timeout(Duration::from_millis(500)) {
                 Ok(Line::Event(e)) => {
                     last_event = Instant::now();
@@ -247,21 +336,38 @@ pub fn run_batch(
             }
         }
         let exit = if hung { None } else { engine.wait() };
+        let peak = engine.peak_memory_bytes();
+        peak_memory = peak_memory.max(peak);
         if let Some(summary) = done {
             return Ok(RunReport {
                 restarts,
                 segments_committed: committer.segments(),
                 committed_until_ms: committer.committed_until_ms(),
                 done: Some(summary),
+                peak_memory_bytes: peak_memory,
+                memory_limit_deaths,
             });
         }
+        let hit_limit = match (peak, policy.memory_limit_bytes) {
+            (Some(p), Some(limit)) if u128::from(p) * 100 >= u128::from(limit) * 95 => {
+                memory_limit_deaths += 1;
+                Some((p, limit))
+            }
+            _ => None,
+        };
         if let Some((code, message)) = fatal
             && unrecoverable(&code)
         {
             return Err(RunError::Fatal(format!("{code}: {message}")));
         }
         restarts += 1;
-        if !hung {
+        if let Some((peak_bytes, limit_bytes)) = hit_limit {
+            observer.notice(&Notice::MemoryLimit {
+                peak_bytes,
+                limit_bytes,
+                restart: restarts,
+            });
+        } else if !hung {
             observer.notice(&Notice::Died {
                 exit,
                 restart: restarts,
@@ -275,7 +381,26 @@ pub fn run_batch(
                 committed_until_ms: committer.committed_until_ms(),
             });
         }
-        std::thread::sleep(backoff(policy, restarts));
+        if sleep_unless_cancelled(backoff(policy, restarts), cancel) {
+            return Err(RunError::Cancelled {
+                committed_until_ms: committer.committed_until_ms(),
+            });
+        }
+    }
+}
+
+/// Sleeps `total`, in short slices, and returns true as soon as `cancel` is set.
+fn sleep_unless_cancelled(total: Duration, cancel: &Cancel) -> bool {
+    let end = Instant::now() + total;
+    loop {
+        if cancel.is_cancelled() {
+            return true;
+        }
+        let left = end.saturating_duration_since(Instant::now());
+        if left.is_zero() {
+            return false;
+        }
+        std::thread::sleep(left.min(Duration::from_millis(100)));
     }
 }
 

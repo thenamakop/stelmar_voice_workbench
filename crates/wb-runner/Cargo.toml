@@ -1,0 +1,20 @@
+[package]
+name = "wb-runner"
+description = "Runs the post-processing queue: work units on engine processes, in-order commit, VAD pauses from wb-engine chunks, behind the scheduler's pause rules and the 3 GB start gate (STELMAR Voice Workbench)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+wb-protocol.workspace = true
+wb-queue.workspace = true
+wb-supervisor.workspace = true
+
+[lints]
+workspace = true

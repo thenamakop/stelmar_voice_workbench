@@ -1,0 +1,42 @@
+﻿Speed and memory diagnosis under emu-low (owner, 17 Nov 2026, steps 2 and 3): the profile cell against the queue
+date: 2026-11-19 13:34 (IST on the Legion)
+display drivers: at the start Intel(R) UHD Graphics=32.0.101.6881; NVIDIA GeForce RTX 4070 Laptop GPU=32.0.16.2114; at the end Intel(R) UHD Graphics=32.0.101.6881; NVIDIA GeForce RTX 4070 Laptop GPU=32.0.16.2114
+machine: Legion, profile emu-low (4 logical processors, 11 GiB job limit)
+command: powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\gates\speed-diagnosis.ps1
+source: d1effb1
+audio and requests: the second smoke's session folder (units of post-1 and post-2), copied requests in the work folder; {"gpu": {"kind": "gpu", "index": 0}, "threads": 2, "files": ["req-N1.json", "req-N2.json", "req-P.json", "req-Q.json", "req-R.json"]}
+engine: wb-engine vulkan build (the app's), sha256 312de4131d96fa1be83d8fb0fd7cf4f6469b17498a05d00665d48987e63e8137; wb-emulate emu-low; engine at below-normal priority as the queue runs it; one process per run
+
+Idle checks before each run (total CPU of the host averaged over 60 s must be under 10%, and no other pwsh, cargo, robocopy, python or wb-* process busy)
+  P1: 2026-11-19 13:24:46 host CPU 7.7% (max 12%) over 60 s, attempts 1, busy none; top: CompatTelRunner 56.0 CPU-s, PerformanceMonitor 30.9 CPU-s, System 19.7 CPU-s, dwm 4.7 CPU-s; free RAM 18.6 GB -> IDLE
+  Q: 2026-11-19 13:29:53 host CPU 7.4% (max 12%) over 60 s, attempts 1, busy none; top: CompatTelRunner 55.0 CPU-s, PerformanceMonitor 30.1 CPU-s, System 19.5 CPU-s, dwm 4.9 CPU-s; free RAM 18.7 GB -> IDLE
+  P2: 2026-11-19 13:27:23 host CPU 7.8% (max 12%) over 60 s, attempts 1, busy none; top: CompatTelRunner 54.9 CPU-s, PerformanceMonitor 31.1 CPU-s, System 19.8 CPU-s, Taskmgr 4.4 CPU-s; free RAM 18.8 GB -> IDLE
+
+Runs (every one under wb-emulate --profile emu-low; the engine is the app's Vulkan build; engine process at below-normal priority like the queue's)
+  P1  profile cell: bench, Hindi 60 s clip, turbo q5_0, Vulkan UHD, 2 threads, rolling (first)
+      exit 0, wall 97.0 s, started 2026-11-19 13:24:46, engine sha256 312de4131d96fa1b
+      bench: RTF 0.724 (warm-up 0.836), clip 60.0 s, load 0.7 s, 5 segments, peak commit 1553 MiB, working set 1121 MiB, device Intel(R) RaptorLake-S Mobile Graphics Controller
+      trace (96 samples, 1 per second): peak commit 1539 MiB, peak working set 1104 MiB, 90% of the peak commit reached at 3 s (3% of the run); commit at 25/50/75/100% of the run 1522/1528/1529/797 MiB; slope over the last 70% -51.3 MiB/min (commit), -17.3 MiB/min (working set)
+      CPU: engine 50% of one core on average (max 138%), host total 10.2% on average (max 16%) during the run
+  Q   queue's rolling unit: batch, en+hi with detection on every chunk, 288 s, the request post-1 unit 1 ran
+      exit 0, wall 291.0 s, started 2026-11-19 13:29:53, engine sha256 312de4131d96fa1b
+      ready: models ['large-v3-turbo-q5_0'], load 0.7 s, device Intel(R) RaptorLake-S Mobile Graphics Controller, threads 2
+      stats: unit 1, 25 chunks, audio 287.9 s, unit time 289.0 s, RTF 1.004 (engine reports 1.004), detections 25, both ways 0, peak working set 1120 MiB
+      done: segments 25, chunks 25, retried 0, unclear 0, low coverage 0, truncated 0, elapsed 289.6513452
+      trace (290 samples, 1 per second): peak commit 1544 MiB, peak working set 1111 MiB, 90% of the peak commit reached at 2 s (1% of the run); commit at 25/50/75/100% of the run 1449/1536/1538/1543 MiB; slope over the last 70% +17.5 MiB/min (commit), +31.5 MiB/min (working set)
+      CPU: engine 36% of one core on average (max 169%), host total 10.6% on average (max 18%) during the run
+  P2  profile cell again (drift check)
+      exit 0, wall 89.0 s, started 2026-11-19 13:27:23, engine sha256 312de4131d96fa1b
+      bench: RTF 0.715 (warm-up 0.712), clip 60.0 s, load 0.7 s, 5 segments, peak commit 1527 MiB, working set 1078 MiB, device Intel(R) RaptorLake-S Mobile Graphics Controller
+      trace (88 samples, 1 per second): peak commit 1524 MiB, peak working set 1076 MiB, 90% of the peak commit reached at 2 s (2% of the run); commit at 25/50/75/100% of the run 1521/1522/1524/74 MiB; slope over the last 70% -130.5 MiB/min (commit), -87.6 MiB/min (working set)
+      CPU: engine 46% of one core on average (max 113%), host total 10.7% on average (max 16%) during the run
+
+Arithmetic (no reading; the reading goes in a note that names its author)
+  P1 / P2: 0.724 / 0.715 = 1.01   (drift of the bench between the first and the last run)
+  P1 against the profile's 0.717 for this cell: 1.01
+  P2 against the profile's 0.717 for this cell: 1.00
+
+Against the earlier runs (a run more than 5% faster than its earlier figure means the earlier figure was slowed by something that is now gone)
+  P1: 0.724 now against 0.713 earlier = +1.6% (within 5% or slower)
+  P2: 0.715 now against 0.684 earlier = +4.5% (within 5% or slower)
+  Q: 1.004 now against 1.003 earlier = +0.1% (within 5% or slower)

@@ -59,6 +59,7 @@ Set-WbInvariantCulture
 Import-Module (Join-Path $repo 'scripts\lib\GateRun.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Redact.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\AppProcess.psm1') -Force
+Import-Module (Join-Path $repo 'scripts\lib\Quiet.psm1') -Force
 New-Item -ItemType Directory -Force -Path $WorkRoot, $OutDir | Out-Null
 $python = Join-Path $repo 'eval\.venv\Scripts\python.exe'
 if (-not (Test-Path -LiteralPath $python)) { throw 'the evaluation environment is missing: uv sync --project eval' }
@@ -120,6 +121,7 @@ function Invoke-OneRun([string]$Name) {
 }
 
 $failures = @()
+$driversStart = Get-WbGpuDrivers   # the driver guard (owner, 19 Nov 2026): recorded at the start and the end of the runs
 if (-not $ReportOnly) {
   foreach ($f in @($Exe, $Emulate)) { if (-not (Test-Path -LiteralPath $f)) { throw "Missing $f; build it first (scripts\gates\build-gate.ps1)" } }
   $overlay = @(Get-WbOverlayTools)
@@ -130,6 +132,9 @@ if (-not $ReportOnly) {
   }
 }
 
+$driversEnd = Get-WbGpuDrivers
+if ($ReportOnly) { $driversStart = $driversEnd }
+if ($driversStart -ne $driversEnd) { $failures += @("RUN INVALID: display drivers changed during the runs: $driversStart -> $driversEnd") }
 $tmp = Join-Path $WorkRoot 'report.txt'
 $rep = Invoke-WbNative -FilePath $python -ArgumentList @('-X', 'utf8', (Join-Path $repo 'scripts\gates\system_check_report.py'), $WorkRoot, $tmp)
 if (-not (Test-Path -LiteralPath $tmp)) { throw "the report was not written: $($rep.Error -join ' ')" }
@@ -138,6 +143,7 @@ $header = @(
   "date: $(Get-Date -Format 'yyyy-MM-dd HH:mm') (IST on the Legion)",
   "command: powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\gates\system-check-gate.ps1" + $(if ($ReportOnly) { ' -ReportOnly' } else { " -Runs $($Runs -join ',')" }),
   "machine: $Machine (the RTX 4070 Laptop GPU and the Intel UHD, emulation per run below); the gate build target\gate\stelmar-voice-workbench.exe runs the app's own system check through the WB_GATE_CHECK hook",
+  "display drivers: at the start $driversStart; at the end $driversEnd",
   "source: $((Invoke-WbNative -FilePath 'git' -ArgumentList @('-C', $repo, 'rev-parse', '--short', 'HEAD')).Output -join '')",
   "build: $(Split-Path -Leaf $Exe) sha256 $((Get-FileHash -LiteralPath $Exe -Algorithm SHA256).Hash.ToLowerInvariant())"
 )

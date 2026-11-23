@@ -1,0 +1,52 @@
+﻿Engine spawn smoke (Phase 4), profile emu-low
+source: commit 8dd62f9 with uncommitted or untracked changes (the build hashes below identify the code)
+build: wb-engine-avx2-x86_64-pc-windows-msvc.exe sha256 fb190b5b786cc10420d5fcdec9651cd9036b2a8b00ca5c24ce2161e67b8a6d32 (built 2026-11-13 16:22)
+gate: spawn smoke emu-low
+started: 2026-11-14 21:28:04 +05:30
+machine: Legion
+emulation profile: emu-low
+overlay tools closed: yes (RTSS.exe, MSIAfterburner.exe and LatMon.exe not running when the gate started)
+overlay tools at the end: none running
+engine builds: none running when the gate started (D:\Projects\stelmar-build.lock absent; no cargo.exe, rustc.exe, cl.exe, link.exe, cmake.exe, ninja.exe, nvcc.exe, glslc.exe, MSBuild.exe, cicc.exe, ptxas.exe, fatbinary.exe, nvlink.exe process)
+engine builds at the end: none running
+Track B paused: D:\Projects\stelmar-gate.lock held for the whole run (removed in a finally block)
+Track B busy lock: D:\Projects\stelmar-eval-busy.lock absent at start
+free RAM: 17 GB at start (needs 14 GB), 17.4 GB at end
+
+Why: the spawn path (suspended start, a Job Object per engine, optional memory limit, device variables dropped in release config) changed after the Phase 3 evidence build 6253468.
+
+== 12 restart tests, mock engine, inside the emulation job (11 s, exit 0) ==
+test a_chunk_is_shown_only_after_all_of_it_is_committed ... ok
+test a_chunk_with_no_segment_still_moves_the_cursor_so_nothing_is_decoded_twice ... ok
+test a_clean_run_commits_every_segment_once_with_no_restart ... ok
+test a_hung_engine_is_killed_by_the_watchdog_and_the_job_finishes ... ok
+test a_long_decode_that_sends_heartbeats_is_not_a_hang ... ok
+test a_resumed_job_continues_after_what_an_earlier_run_committed ... ok
+test an_engine_killed_at_several_points_loses_nothing_and_repeats_nothing ... ok
+test an_engine_killed_between_the_two_halves_of_a_split_chunk_loses_and_repeats_no_half ... ok
+test an_engine_that_cannot_be_started_is_reported_and_retried_then_given_up_on ... ok
+test an_engine_that_never_gets_anywhere_is_given_up_on ... ok
+test an_error_a_restart_cannot_fix_stops_the_job_without_restarting ... ok
+test control_a_long_silent_decode_is_a_hang_and_is_restarted ... ok
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 11.03s
+
+== memory-limit tests (mock engine allocates over and under its limit, two engines at once) (3 s, exit 0) ==
+test an_engine_that_reaches_its_memory_limit_dies_and_is_reported_as_a_memory_limit_death ... ok
+test an_engine_under_its_limit_finishes_and_the_run_reports_its_peak ... ok
+test two_engines_at_once_each_have_their_own_limit ... ok
+test without_a_limit_nothing_changes ... ok
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.53s
+
+== real wb-engine bench, Hindi 60 s clip, avx2, small f16, 3 threads, started through the supervisor (361 s, exit 0) ==
+engine: wb-engine avx2 (copy wb-engine-smoke.exe, sha256 fb190b5b786cc10420d5fcdec9651cd9036b2a8b00ca5c24ce2161e67b8a6d32); clip: speed\clip-hi.wav (FLEURS Hindi, 60 s, not committed)
+emulation profile seen by the test: emu-low
+available RAM given to the limit formula: 11264 MiB
+run 1, no limit: 179.5 s, exit Some(0), engine error None, job reports peak 1232 MiB, job warning None
+run 1 bench report: rtf 1.481, engine reports peak commit 1232 MiB, peak working set 755 MiB, 5 segments
+run 2 starts with a limit of 2464 MiB (from the job peak 1232 MiB and 11264 MiB available)
+run 2, limit 2464 MiB: 181.1 s, exit Some(0), engine error None, job peak 1232 MiB = 50.0% of the limit (smoke bar: at most 70%), job warning None, reported: true
+run 2 bench report: rtf 1.495, segments 5
+test a_real_engine_bench_starts_suspended_in_its_own_job_and_reports_its_peak_against_its_limit ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 360.60s
+
+verdict: PASS

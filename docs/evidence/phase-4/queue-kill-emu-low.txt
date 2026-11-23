@@ -1,0 +1,472 @@
+﻿date: 2026-11-21 16:36 (IST on the Legion)
+command: powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\gates\day-sim.ps1 -Kill -FromRun <run folder> -Profile emu-low -Tag kill -Audio D:\STELMAR-Gate\day-sim\kill-audio -NightMinutes 0 -MaxMinutes 240 -DecisionMinutes 240
+machine: Legion, emulation profile emu-low; the gate build target\gate\stelmar-voice-workbench.exe, WB_GATE_DAY_PLAN; PROVISIONAL (emulation profile; the real laptops repeat it)
+source: beb774a
+build: stelmar-voice-workbench.exe sha256 6564558bd59d83eeb93ab6995628be3b6be04627e1efec172f80303f2dc6a922
+run folder: D:\STELMAR-Gate\day-sim\kill-emu-low-20261120-121320
+ENGINE-KILL TEST (PROVISIONAL: emulation profile, the real laptops repeat it)
+run folder: kill-emu-low-20261120-121320
+profile in force: {'config': '{"index":0,"kind":"gpu"}', 'process_while_recording': True, 'tier': 'C', 'cpu_threads': 2}
+app exit code 0; scheduler clock offset -8067 s (the first session of the plan maps to 10:00 IST); parts of 120 s; night time box 0 min
+quiet-machine rule: idle (idle-check.json: 1 attempt(s), waited 1 min; the last: host CPU 4.8% over 60 s, busy [], the owner's programs running None)
+display drivers: at the start Intel(R) UHD Graphics=32.0.101.6881; NVIDIA GeForce RTX 4070 Laptop GPU=32.0.16.2114; at the end Intel(R) UHD Graphics=32.0.101.6881; NVIDIA GeForce RTX 4070 Laptop GPU=32.0.16.2114
+configuration the queue worked in: Hybrid { gpu: 0 }; forced hybrid: True
+
+Script notes (progress):
+  12:14:29 player 1 started for Kill English Hindi (1810.18 s); this script wrote the go file 0.3 s after it read the app's start line
+  12:27:07 kill 1 of 10: avx2 engine pid 32144 after 35 s
+  12:33:03 kill 2 of 10: vulkan engine pid 27128 after 33 s
+  12:35:53 kill 3 of 10: avx2 engine pid 14528 after 525 s
+  12:39:50 kill 4 of 10: vulkan engine pid 30804 after 42 s
+  12:44:05 kill 5 of 10: avx2 engine pid 32772 after 490 s
+  12:44:46 player 1 has finished playing
+  12:45:08 stop file of session 1 written (15 s after its player finished)
+  12:45:28 10:30	DAY: stopped "Kill English Hindi"
+  12:46:48 player 2 started for Kill Code-switched (1810.551 s); this script wrote the go file 0 s after it read the app's start line
+  12:46:49 kill 6 of 10: vulkan engine pid 30868 after 106 s
+  12:49:58 kill 7 of 10: avx2 engine pid 29760 after 348 s
+  12:52:53 kill 8 of 10: vulkan engine pid 15072 after 44 s
+  12:56:02 kill 9 of 10: avx2 engine pid 31840 after 233 s
+  12:59:57 kill 10 of 10: vulkan engine pid 30456 after 35 s
+  13:17:02 player 2 has finished playing
+  13:17:23 stop file of session 2 written (15 s after its player finished)
+  13:17:43 11:02	DAY: stopped "Kill Code-switched"
+  13:17:43 all sessions recorded
+  13:37:24 11:22	hall-b__kill-code-switched: post-1 transcript complete
+  13:58:42 11:43	hall-a__kill-english-hindi: post-1 transcript complete
+  14:39:07 12:24	hall-b__kill-code-switched-copy: post-1 transcript complete
+  15:02:19 12:47	hall-a__kill-english-hindi-copy: post-1 transcript complete
+  15:02:19 all four transcripts are complete (10 engines killed)
+
+Sessions under rec/:
+  hall-a__kill-english-hindi: title 'Kill English Hindi', recorded, 16 parts, 30.7 min of audio, post-1 complete True, post-2 complete False, default revision post-1
+  hall-b__kill-code-switched: title 'Kill Code-switched', recorded, 16 parts, 30.7 min of audio, post-1 complete True, post-2 complete False, default revision post-1
+  hall-a__kill-english-hindi-copy: title 'Kill English Hindi', imported copy, 16 parts, 30.7 min of audio, post-1 complete True, post-2 complete False, default revision post-1
+  hall-b__kill-code-switched-copy: title 'Kill Code-switched', imported copy, 16 parts, 30.7 min of audio, post-1 complete True, post-2 complete False, default revision post-1
+
+ROLLING ESTIMATES  the 'ready by' recorded at each Stop against the moment everything that was outstanding at that Stop had finished
+  Kill English Hindi: Stop 10:30:00, estimate 23.0 min (ready by 10:53:00), actual 73.0 min (finished 11:43:00), difference +217.4%, 1 transcript(s) outstanding; basis: sessions with several languages: measured, 1.83 times the profile's, f
+  Kill Code-switched: Stop 11:02:00, estimate 50.0 min (ready by 11:52:00), actual 41.0 min (finished 11:43:00), difference -18.0%, 2 transcript(s) outstanding; basis: sessions with several languages: measured, 2.23 times the profile's, f
+  Kill English Hindi: Stop 11:17:00, estimate 49.0 min (ready by 12:06:00), actual 90.0 min (finished 12:47:00), difference +83.7%, 3 transcript(s) outstanding; basis: sessions with several languages: measured, 2.73 times the profile's, f
+  Kill Code-switched: Stop 11:18:00, estimate 62.0 min (ready by 12:20:00), actual 66.0 min (finished 12:24:00), difference +6.5%, 3 transcript(s) outstanding; basis: sessions with several languages: measured, 2.73 times the profile's, f
+
+START CALLS  how long the app's start call took for each session, step by step (the recorder had begun when it returned)
+    queue registration of hall-a__kill-english-hindi: open-sessions lock 0 ms, models 0 ms, session database 8 ms, rolling job 0 ms, manager 0 ms, open-sessions list 0 ms, engine slots 0 ms, total 10 ms
+    queue start hook of hall-a__kill-english-hindi: profile read 0 ms, registration 10 ms, night plans 0 ms, total 10 ms; engine units running at the start: 0
+  start call of D:\STELMAR-Gate\day-sim\kill-emu-low-20261120-121320\rec\2026-11-20\hall-a__kill-english-hindi: cancel check 0 ms, recorder start 181 ms, options file 1 ms, queue hook 11 ms, total 194 ms
+    queue registration of hall-b__kill-code-switched: open-sessions lock 0 ms, models 0 ms, session database 7 ms, rolling job 0 ms, manager 0 ms, open-sessions list 0 ms, engine slots 0 ms, total 8 ms
+    queue start hook of hall-b__kill-code-switched: profile read 0 ms, registration 8 ms, night plans 0 ms, total 9 ms; engine units running at the start: 2
+  start call of D:\STELMAR-Gate\day-sim\kill-emu-low-20261120-121320\rec\2026-11-20\hall-b__kill-code-switched: cancel check 0 ms, recorder start 168 ms, options file 1 ms, queue hook 9 ms, total 179 ms
+    queue registration of hall-a__kill-english-hindi-copy: open-sessions lock 0 ms, models 0 ms, session database 8 ms, rolling job 0 ms, manager 0 ms, open-sessions list 0 ms, engine slots 0 ms, total 9 ms
+    queue registration of hall-b__kill-code-switched-copy: open-sessions lock 0 ms, models 0 ms, session database 8 ms, rolling job 0 ms, manager 0 ms, open-sessions list 0 ms, engine slots 0 ms, total 9 ms
+  lead-in of Kill English Hindi: the player began 1.0 s after the recorder's first audio
+  lead-in of Kill Code-switched: the player began 9.4 s after the recorder's first audio
+
+DEVICES  hybrid only where the profile chose it
+  profile config: {"index":0,"kind":"gpu"}; forced hybrid (labelled, kill test only): True
+  units done by revision and slot: post-1 on cpu: 2, post-1 on gpu: 24
+  both slots used (forced hybrid, labelled): ['cpu', 'gpu']
+
+ENGINE MEMORY  peak against the limit the queue granted (bar: 70%)
+  worst: 52.7% (1478 of 2807 MiB; hall-a__kill-english-hindi-copy unit 4 of post-1 on cpu)
+  memory-limit deaths (reported apart from other failures): 0
+
+TRANSCRIPT INTEGRITY  (single writer: no overlap, no repeated start, audio order, cursor)
+  hall-a__kill-english-hindi post-1: 175 segments, overlaps 0, duplicate starts 0, appended in audio order True, job cursor 1840390 ms vs last segment end 1808250 ms, speech 1270 s of 1840 s, last end 1808 s -> ok
+  hall-b__kill-code-switched post-1: 189 segments, overlaps 0, duplicate starts 0, appended in audio order True, job cursor 1844160 ms vs last segment end 1816825 ms, speech 1706 s of 1844 s, last end 1817 s -> ok
+  hall-a__kill-english-hindi-copy post-1: 175 segments, overlaps 0, duplicate starts 0, appended in audio order True, job cursor 1840390 ms vs last segment end 1808250 ms, speech 1270 s of 1840 s, last end 1808 s -> ok
+  hall-b__kill-code-switched-copy post-1: 189 segments, overlaps 0, duplicate starts 0, appended in audio order True, job cursor 1844160 ms vs last segment end 1816825 ms, speech 1706 s of 1844 s, last end 1817 s -> ok
+
+NIGHT PASS
+  no night decision in the log
+  10:00:00 START: queue start hook of hall-a__kill-english-hindi: profile read 0 ms, registration 10 ms, night plans 0 ms, total 10 ms; engine units running at the start: 0
+  10:32:00 START: queue start hook of hall-b__kill-code-switched: profile read 0 ms, registration 8 ms, night plans 0 ms, total 9 ms; engine units running at the start: 2
+
+ENGINE KILLS  the script kills batch engines from outside (taskkill /F); the supervisor restarts them
+  kill 1: avx2 engine pid 32144 after 35.3 s at 2026-11-20T12:27:07.0760011+05:30, taskkill exit 0
+  kill 2: vulkan engine pid 27128 after 32.9 s at 2026-11-20T12:33:03.0086473+05:30, taskkill exit 0
+  kill 3: avx2 engine pid 14528 after 524.9 s at 2026-11-20T12:35:53.2483773+05:30, taskkill exit 0
+  kill 4: vulkan engine pid 30804 after 42.2 s at 2026-11-20T12:39:50.1751635+05:30, taskkill exit 0
+  kill 5: avx2 engine pid 32772 after 490.2 s at 2026-11-20T12:44:05.7591939+05:30, taskkill exit 0
+  kill 6: vulkan engine pid 30868 after 105.9 s at 2026-11-20T12:46:49.7092797+05:30, taskkill exit 0
+  kill 7: avx2 engine pid 29760 after 347.5 s at 2026-11-20T12:49:58.5489416+05:30, taskkill exit 0
+  kill 8: vulkan engine pid 15072 after 44.1 s at 2026-11-20T12:52:53.7655561+05:30, taskkill exit 0
+  kill 9: avx2 engine pid 31840 after 232.7 s at 2026-11-20T12:56:02.2958311+05:30, taskkill exit 0
+  kill 10: vulkan engine pid 30456 after 35.4 s at 2026-11-20T12:59:57.4200246+05:30, taskkill exit 0
+  kills made: 10 ({'avx2': 5, 'vulkan': 5}); target 5 of each kind
+  engine deaths the supervisor logged (each is followed by a restart of the unit): 10
+  (the unit-done lines report 6 restart(s): they count since a unit's last death, not all of them)
+
+  Each recorded session against its imported copy decoded by the same queue (the copies are decoded without a kill only when the kills are over; the report states the counts):
+    Kill English Hindi: killed run 175 segments (1270 s of speech), copy 175 segments (1270 s); identical time ranges 175 of 175; text similarity 0.998 (information: text after a restart may differ in the first chunk)
+    Kill Code-switched: killed run 189 segments (1706 s of speech), copy 189 segments (1706 s); identical time ranges 189 of 189; text similarity 1.000 (information: text after a restart may differ in the first chunk)
+
+UNIT SPEED  engine seconds per audio second for every unit (1.0 = real time), by revision
+  Kill English Hindi unit 0 of post-1: 283 s of audio in 301 s on gpu -> 1.06, 0 restart(s), peak 1545 of 3106 MiB, done at 10:13:00
+  Kill English Hindi unit 2 of post-1: 353 s of audio in 398 s on gpu -> 1.13, 1 restart(s), peak 1612 of 3106 MiB, done at 10:24:00
+  Kill English Hindi unit 3 of post-1: 350 s of audio in 356 s on gpu -> 1.02, 1 restart(s), peak 1554 of 3106 MiB, done at 10:30:00
+  Kill English Hindi unit 4 of post-1: 334 s of audio in 148 s on gpu -> 0.44, 1 restart(s), peak 1559 of 3106 MiB, done at 10:40:00
+  Kill English Hindi unit 5 of post-1: 259 s of audio in 285 s on gpu -> 1.10, 1 restart(s), peak 1540 of 3106 MiB, done at 10:44:00
+  Kill Code-switched unit 0 of post-1: 273 s of audio in 429 s on gpu -> 1.57, 1 restart(s), peak 1545 of 3106 MiB, done at 10:52:00
+  Kill Code-switched unit 1 of post-1: 295 s of audio in 329 s on gpu -> 1.12, 0 restart(s), peak 1550 of 3106 MiB, done at 10:57:00
+  Kill Code-switched unit 2 of post-1: 343 s of audio in 382 s on gpu -> 1.12, 0 restart(s), peak 1593 of 3106 MiB, done at 11:03:00
+  Kill Code-switched unit 3 of post-1: 274 s of audio in 326 s on gpu -> 1.19, 0 restart(s), peak 1544 of 3106 MiB, done at 11:09:00
+  Kill Code-switched unit 4 of post-1: 298 s of audio in 366 s on gpu -> 1.23, 0 restart(s), peak 1560 of 3106 MiB, done at 11:15:00
+  Kill Code-switched unit 5 of post-1: 277 s of audio in 333 s on gpu -> 1.20, 0 restart(s), peak 1543 of 3106 MiB, done at 11:21:00
+  Kill Code-switched unit 6 of post-1: 84 s of audio in 112 s on gpu -> 1.34, 0 restart(s), peak 1529 of 3106 MiB, done at 11:22:00
+  Kill English Hindi unit 0 of post-1: 283 s of audio in 295 s on gpu -> 1.04, 0 restart(s), peak 1543 of 3106 MiB, done at 11:27:00
+  Kill English Hindi unit 1 of post-1: 262 s of audio in 297 s on gpu -> 1.13, 0 restart(s), peak 1540 of 3106 MiB, done at 11:32:00
+  Kill English Hindi unit 2 of post-1: 353 s of audio in 364 s on gpu -> 1.03, 0 restart(s), peak 1611 of 3106 MiB, done at 11:38:00
+  Kill English Hindi unit 1 of post-1: 262 s of audio in 3975 s on cpu -> 15.16, 1 restart(s), peak 1450 of 2807 MiB, done at 11:43:00
+  Kill English Hindi unit 3 of post-1: 350 s of audio in 308 s on gpu -> 0.88, 0 restart(s), peak 1553 of 3106 MiB, done at 11:43:00
+  Kill English Hindi unit 5 of post-1: 259 s of audio in 201 s on gpu -> 0.78, 0 restart(s), peak 1539 of 3106 MiB, done at 11:47:00
+  Kill Code-switched unit 0 of post-1: 273 s of audio in 389 s on gpu -> 1.43, 0 restart(s), peak 1544 of 3106 MiB, done at 11:53:00
+  Kill Code-switched unit 1 of post-1: 295 s of audio in 328 s on gpu -> 1.11, 0 restart(s), peak 1550 of 3106 MiB, done at 11:59:00
+  Kill Code-switched unit 2 of post-1: 343 s of audio in 386 s on gpu -> 1.13, 0 restart(s), peak 1593 of 3106 MiB, done at 12:05:00
+  Kill Code-switched unit 3 of post-1: 274 s of audio in 324 s on gpu -> 1.18, 0 restart(s), peak 1544 of 3106 MiB, done at 12:11:00
+  Kill Code-switched unit 4 of post-1: 298 s of audio in 363 s on gpu -> 1.22, 0 restart(s), peak 1559 of 3106 MiB, done at 12:17:00
+  Kill Code-switched unit 5 of post-1: 277 s of audio in 326 s on gpu -> 1.17, 0 restart(s), peak 1543 of 3106 MiB, done at 12:22:00
+  Kill Code-switched unit 6 of post-1: 84 s of audio in 113 s on gpu -> 1.35, 0 restart(s), peak 1529 of 3106 MiB, done at 12:24:00
+  Kill English Hindi unit 4 of post-1: 334 s of audio in 3828 s on cpu -> 11.46, 0 restart(s), peak 1478 of 2807 MiB, done at 12:47:00
+
+MACHINE LOAD  the per-process sampler (rows every 10 s)
+  516 samples over 2.8 h; mean CPU % of the host: host 15.1, engine 6.3, app 0.0, webview 0.1, player 0.0, script 2.8, other 5.9
+  other (outside our processes) above 15% in 1 of 516 samples; highest 17%
+
+timeline: D:\STELMAR-Gate\day-sim\kill-emu-low-20261120-121320\timeline.svg (copied next to this file)
+
+CHECKS
+  [INFO] rolling transcripts outstanding at the Stop of 'Kill English Hindi' finished within +10% (late) / -30% (early) of the estimate recorded then (information in the kill test: its pass or fail covers only the recovery checks): estimate 23.0 min, actual 73.0 min (+217.4%)
+  [INFO] rolling transcripts outstanding at the Stop of 'Kill Code-switched' finished within +10% (late) / -30% (early) of the estimate recorded then (information in the kill test: its pass or fail covers only the recovery checks): estimate 50.0 min, actual 41.0 min (-18.0%)
+  [INFO] rolling transcripts outstanding at the Stop of 'Kill English Hindi' finished within +10% (late) / -30% (early) of the estimate recorded then (information in the kill test: its pass or fail covers only the recovery checks): estimate 49.0 min, actual 90.0 min (+83.7%)
+  [INFO] rolling transcripts outstanding at the Stop of 'Kill Code-switched' finished within +10% (late) / -30% (early) of the estimate recorded then (information in the kill test: its pass or fail covers only the recovery checks): estimate 62.0 min, actual 66.0 min (+6.5%)
+  [PASS] the start call of every session returned within 1000 ms of the recorder starting (worst 194 ms)
+  [PASS] the player began within 10 s of the recorder's first audio in every session (worst 9.4 s)
+  [PASS] every session was stopped by its stop file, 15 s after its player finished (no safety timer)
+  [PASS] engine peak memory under 70% of its limit in every unit: worst 52.7%
+  [PASS] no segment repeated or overlapping, appended in audio order, cursor at the end, in every revision
+  [PASS] rolling transcript of 'Kill English Hindi' complete and its revision the default (until the night pass): post-1 complete True, default post-1
+  [PASS] rolling transcript of 'Kill Code-switched' complete and its revision the default (until the night pass): post-1 complete True, default post-1
+  [PASS] night pass planned or skipped: no decision
+  [PASS] 5 CPU (avx2) engines killed: 5
+  [PASS] 5 GPU (vulkan) engines killed: 5
+  [PASS] every kill was followed by a restart or a retry of the unit (engine deaths the supervisor logged at least the kills made): 10 engine deaths logged for 10 kills
+  [PASS] 'Kill English Hindi': speech covered in the killed run within 3% of the uninterrupted copy: 1270 s against 1270 s
+  [PASS] 'Kill Code-switched': speech covered in the killed run within 3% of the uninterrupted copy: 1706 s against 1706 s
+
+VERDICT: PASS (13 passed, 0 failed, 4 information or invalid)
+Speed and 'ready by' differences on the emulation profile are low-tier findings with numbers, not code failures (owner, 17 and 18 Nov 2026; the estimate bar since 21 Nov 2026 is +10% late and -30% early); the real laptops repeat the run.
+
+Scheduler log (every line, IST time first):
+  10:00:00 cpu engine slot started (configuration Hybrid { gpu: 0 }, 2 thread(s))
+  10:00:00 gpu engine slot started (configuration Hybrid { gpu: 0 }, 2 thread(s))
+  10:00:00 START: queue registration of hall-a__kill-english-hindi: open-sessions lock 0 ms, models 0 ms, session database 8 ms, rolling job 0 ms, manager 0 ms, open-sessions list 0 ms, engine slots 0 ms, total 10 ms
+  10:00:00 START: queue start hook of hall-a__kill-english-hindi: profile read 0 ms, registration 10 ms, night plans 0 ms, total 10 ms; engine units running at the start: 0
+  10:00:00 gpu: waiting, not processing: processing while recording is not cleared on this computer
+  10:00:00 paused: processing while recording is not cleared on this computer
+  10:00:00 START: start call of D:\STELMAR-Gate\day-sim\kill-emu-low-20261120-121320\rec\2026-11-20\hall-a__kill-english-hindi: cancel check 0 ms, recorder start 181 ms, options file 1 ms, queue hook 11 ms, total 194 ms
+  10:00:00 cpu: waiting, not processing: processing while recording is not cleared on this computer
+  10:00:00 DAY: started "Kill English Hindi" in D:\STELMAR-Gate\day-sim\kill-emu-low-20261120-121320\rec\2026-11-20\hall-a__kill-english-hindi
+  10:00:00 resumed (was: processing while recording is not cleared on this computer)
+  10:00:00 cpu: processing may continue
+  10:00:00 gpu: processing may continue
+  10:02:00 hall-a__kill-english-hindi: pauses of part 1 found (9 pauses, 3 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 2048 MiB (assumed peak)
+  10:04:00 hall-a__kill-english-hindi: pauses of part 2 found (8 pauses, 3 fallback cuts) in 1.0 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:06:00 hall-a__kill-english-hindi: pauses of part 3 found (7 pauses, 8 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:08:00 hall-a__kill-english-hindi: pauses of part 4 found (12 pauses, 2 fallback cuts) in 1.0 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:08:00 hall-a__kill-english-hindi: 1 unit(s) planned after part 4
+  10:10:00 hall-a__kill-english-hindi: pauses of part 5 found (10 pauses, 5 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:12:00 hall-a__kill-english-hindi: pauses of part 6 found (8 pauses, 4 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:12:00 hall-a__kill-english-hindi: 1 unit(s) planned after part 6
+  10:12:00 hall-a__kill-english-hindi: unit 1 of post-1 job 1 on cpu: Died { exit: Some(1), restart: 1, committed_until_ms: 0 }
+  10:13:00 hall-a__kill-english-hindi: unit 0 of post-1 done in 301.0 s on gpu (0 restart(s), engine peak 1545 MiB against limit 3106 MiB)
+  10:14:00 hall-a__kill-english-hindi: pauses of part 7 found (6 pauses, 5 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:16:00 hall-a__kill-english-hindi: pauses of part 8 found (6 pauses, 5 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:18:00 hall-a__kill-english-hindi: pauses of part 9 found (7 pauses, 4 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:18:00 hall-a__kill-english-hindi: 1 unit(s) planned after part 9
+  10:18:00 hall-a__kill-english-hindi: unit 2 of post-1 job 1 on gpu: Died { exit: Some(1), restart: 1, committed_until_ms: 0 }
+  10:20:00 hall-a__kill-english-hindi: pauses of part 10 found (7 pauses, 5 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:21:00 hall-a__kill-english-hindi: unit 1 of post-1 job 1 on cpu: Died { exit: Some(1), restart: 2, committed_until_ms: 0 }
+  10:22:00 hall-a__kill-english-hindi: pauses of part 11 found (10 pauses, 3 fallback cuts) in 1.6 s; engine peak 103 MiB against limit 1128 MiB (measured peak)
+  10:22:00 hall-a__kill-english-hindi: 1 unit(s) planned after part 11
+  10:22:00 hall-a__kill-english-hindi: unit 2 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 11 (663010 to 674705 ms) failed a guard (LowCoverage; compression ratio 0.78, 40 characters, 6.1 s of speech); retrying without previous-text context
+  10:22:00 hall-a__kill-english-hindi: unit 2 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 11: rescued by step a (decoded again without previous-text context at temperature 0.4)
+  10:23:00 hall-a__kill-english-hindi: unit 2 of post-1 job 1 on gpu: engine warning segment_dropped: chunk 24 (791755 to 796770 ms) is not speech and was dropped: LittleSpeech (compression ratio 1.02, average log-probability -0.24, no-speech 0.00, speech share 0.29)
+  10:24:00 hall-a__kill-english-hindi: pauses of part 12 found (10 pauses, 1 fallback cuts) in 1.2 s; engine peak 103 MiB against limit 1128 MiB (measured peak)
+  10:24:00 hall-a__kill-english-hindi: unit 2 of post-1 done in 397.8 s on gpu (1 restart(s), engine peak 1612 MiB against limit 3106 MiB)
+  10:25:00 hall-a__kill-english-hindi: unit 3 of post-1 job 1 on gpu: Died { exit: Some(1), restart: 1, committed_until_ms: 0 }
+  10:26:00 hall-a__kill-english-hindi: pauses of part 13 found (7 pauses, 4 fallback cuts) in 1.5 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:28:00 hall-a__kill-english-hindi: pauses of part 14 found (8 pauses, 2 fallback cuts) in 2.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:28:00 hall-a__kill-english-hindi: 1 unit(s) planned after part 14
+  10:29:00 hall-a__kill-english-hindi: unit 1 of post-1 job 1 on cpu: Died { exit: Some(1), restart: 3, committed_until_ms: 0 }
+  10:30:00 hall-a__kill-english-hindi: pauses of part 15 found (8 pauses, 2 fallback cuts) in 2.9 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:30:00 hall-a__kill-english-hindi: unit 3 of post-1 done in 355.8 s on gpu (1 restart(s), engine peak 1554 MiB against limit 3106 MiB)
+  10:30:00 DAY: stopped "Kill English Hindi"
+  10:30:00 hall-a__kill-english-hindi: stopped. All transcripts ready by 10:53 IST (sessions with several languages: measured, 1.83 times the profile's, from 1 finished unit(s); sessions with one language: the profile's speed until a unit finishes)
+  10:30:00 hall-a__kill-english-hindi: pauses of part 16 found (1 pauses, 0 fallback cuts) in 0.4 s; engine peak 90 MiB against limit 1128 MiB (measured peak)
+  10:30:00 hall-a__kill-english-hindi: session closed, 1 final unit(s) planned
+  10:32:00 START: queue registration of hall-b__kill-code-switched: open-sessions lock 0 ms, models 0 ms, session database 7 ms, rolling job 0 ms, manager 0 ms, open-sessions list 0 ms, engine slots 0 ms, total 8 ms
+  10:32:00 START: queue start hook of hall-b__kill-code-switched: profile read 0 ms, registration 8 ms, night plans 0 ms, total 9 ms; engine units running at the start: 2
+  10:32:00 START: start call of D:\STELMAR-Gate\day-sim\kill-emu-low-20261120-121320\rec\2026-11-20\hall-b__kill-code-switched: cancel check 0 ms, recorder start 168 ms, options file 1 ms, queue hook 9 ms, total 179 ms
+  10:32:00 DAY: started "Kill Code-switched" in D:\STELMAR-Gate\day-sim\kill-emu-low-20261120-121320\rec\2026-11-20\hall-b__kill-code-switched
+  10:32:00 hall-a__kill-english-hindi: unit 4 of post-1 job 1 on gpu: Died { exit: Some(1), restart: 1, committed_until_ms: 0 }
+  10:34:00 hall-b__kill-code-switched: pauses of part 1 found (3 pauses, 9 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:35:00 hall-a__kill-english-hindi: unit 1 of post-1 job 1 on cpu: Died { exit: Some(1), restart: 4, committed_until_ms: 0 }
+  10:36:00 hall-b__kill-code-switched: pauses of part 2 found (1 pauses, 9 fallback cuts) in 2.6 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:36:00 paused: running on battery
+  10:36:00 stopping 2 engine(s): running on battery
+  10:36:00 cpu: waiting, not processing: running on battery
+  10:36:00 gpu: waiting, not processing: running on battery
+  10:37:00 resumed (was: running on battery)
+  10:37:00 cpu: processing may continue
+  10:37:00 gpu: processing may continue
+  10:38:00 hall-b__kill-code-switched: pauses of part 3 found (2 pauses, 7 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:38:00 hall-a__kill-english-hindi: unit 4 of post-1 job 1 on gpu: Died { exit: Some(1), restart: 1, committed_until_ms: 1475350 }
+  10:40:00 hall-a__kill-english-hindi: unit 4 of post-1 done in 147.5 s on gpu (1 restart(s), engine peak 1559 MiB against limit 3106 MiB)
+  10:41:00 hall-a__kill-english-hindi: unit 5 of post-1 job 1 on gpu: Hung { silent_s: 60, restart: 1 }
+  10:41:00 hall-b__kill-code-switched: pauses of part 4 found (3 pauses, 9 fallback cuts) in 78.6 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:41:00 hall-b__kill-code-switched: 1 unit(s) planned after part 4
+  10:41:00 hall-a__kill-english-hindi: unit 1 of post-1 job 1 on cpu: Died { exit: Some(1), restart: 1, committed_until_ms: 0 }
+  10:42:00 hall-b__kill-code-switched: pauses of part 5 found (2 pauses, 8 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:44:00 hall-b__kill-code-switched: pauses of part 6 found (3 pauses, 8 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:44:00 hall-b__kill-code-switched: 1 unit(s) planned after part 6
+  10:44:00 hall-a__kill-english-hindi: unit 5 of post-1 done in 284.8 s on gpu (1 restart(s), engine peak 1540 MiB against limit 3106 MiB)
+  10:45:00 hall-b__kill-code-switched: unit 0 of post-1 job 1 on gpu: Died { exit: Some(1), restart: 1, committed_until_ms: 0 }
+  10:46:00 hall-b__kill-code-switched: pauses of part 7 found (2 pauses, 11 fallback cuts) in 2.0 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:47:00 hall-b__kill-code-switched: unit 0 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 2 (30200 to 42870 ms) failed a guard (LowCoverage; compression ratio 1.09, 61 characters, 12.5 s of speech); retrying without previous-text context
+  10:47:00 hall-b__kill-code-switched: unit 0 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 2: rescued by step a (decoded again without previous-text context at temperature 0.8)
+  10:48:00 hall-b__kill-code-switched: pauses of part 8 found (3 pauses, 6 fallback cuts) in 2.5 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:49:00 hall-b__kill-code-switched: unit 0 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 17 (184150 to 194995 ms) failed a guard (LowCoverage; compression ratio 1.00, 50 characters, 10.5 s of speech); retrying without previous-text context
+  10:49:00 hall-b__kill-code-switched: unit 0 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 17: rescued by step a (decoded again without previous-text context at temperature 0.6)
+  10:49:00 hall-b__kill-code-switched: unit 0 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 18 (194995 to 201960 ms) failed a guard (LowCoverage; compression ratio 1.20, 42 characters, 6.6 s of speech); retrying without previous-text context
+  10:49:00 hall-b__kill-code-switched: unit 0 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 18: rescued by step a (decoded again without previous-text context at temperature 0.4)
+  10:50:00 hall-b__kill-code-switched: unit 0 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 20 (215040 to 229180 ms) failed a guard (LowCoverage; compression ratio 1.10, 68 characters, 12.7 s of speech); retrying without previous-text context
+  10:50:00 hall-b__kill-code-switched: unit 0 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 20: rescued by step a (decoded again without previous-text context at temperature 0.4)
+  10:50:00 hall-b__kill-code-switched: pauses of part 9 found (3 pauses, 8 fallback cuts) in 2.8 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:50:00 hall-b__kill-code-switched: 1 unit(s) planned after part 9
+  10:50:00 hall-b__kill-code-switched: unit 0 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 22 (233075 to 247345 ms) failed a guard (TokenLimit; compression ratio 1.48, 214 characters, 14.1 s of speech); retrying without previous-text context
+  10:51:00 hall-b__kill-code-switched: unit 0 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 22: first half (233075 to 238899 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  10:51:00 hall-b__kill-code-switched: unit 0 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 22: rescued by step b (cut at 238899 ms, each half decoded without context)
+  10:52:00 hall-b__kill-code-switched: unit 0 of post-1 done in 429.0 s on gpu (1 restart(s), engine peak 1545 MiB against limit 3106 MiB)
+  10:52:00 hall-b__kill-code-switched: pauses of part 10 found (2 pauses, 8 fallback cuts) in 2.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:54:00 hall-b__kill-code-switched: pauses of part 11 found (3 pauses, 7 fallback cuts) in 1.9 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:54:00 hall-b__kill-code-switched: unit 1 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 3 (309210 to 322360 ms) failed a guard (LowCoverage; compression ratio 1.06, 66 characters, 13.0 s of speech); retrying without previous-text context
+  10:54:00 hall-b__kill-code-switched: unit 1 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 3: rescued by step a (decoded again without previous-text context at temperature 0.4)
+  10:54:00 hall-b__kill-code-switched: unit 1 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 4 (322360 to 333230 ms) failed a guard (LowCoverage; compression ratio 0.76, 26 characters, 10.7 s of speech); retrying without previous-text context
+  10:54:00 hall-b__kill-code-switched: unit 1 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 4: first half (322360 to 330044 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  10:54:00 hall-b__kill-code-switched: unit 1 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 4: rescued by step b (cut at 330044 ms, each half decoded without context)
+  10:55:00 hall-b__kill-code-switched: unit 1 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 6 (347840 to 362030 ms) failed a guard (LowCoverage; compression ratio 1.10, 75 characters, 13.4 s of speech); retrying without previous-text context
+  10:55:00 hall-b__kill-code-switched: unit 1 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 6: first half (347840 to 350895 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  10:55:00 hall-b__kill-code-switched: unit 1 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 6: rescued by step b (cut at 350895 ms, each half decoded without context)
+  10:55:00 hall-b__kill-code-switched: unit 1 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 8 (364230 to 378120 ms) failed a guard (LowCoverage; compression ratio 0.81, 46 characters, 13.7 s of speech); retrying without previous-text context
+  10:55:00 hall-b__kill-code-switched: unit 1 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 8: rescued by step a (decoded again without previous-text context at temperature 0.4)
+  10:56:00 hall-b__kill-code-switched: pauses of part 12 found (3 pauses, 10 fallback cuts) in 1.3 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:56:00 hall-b__kill-code-switched: 1 unit(s) planned after part 12
+  10:57:00 hall-b__kill-code-switched: unit 1 of post-1 done in 329.3 s on gpu (0 restart(s), engine peak 1550 MiB against limit 3106 MiB)
+  10:58:00 hall-b__kill-code-switched: pauses of part 13 found (3 pauses, 10 fallback cuts) in 2.0 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  11:00:00 hall-b__kill-code-switched: unit 2 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 1 (577435 to 587600 ms) failed a guard (LowCoverage; compression ratio 1.63, 31 characters, 9.8 s of speech); retrying without previous-text context
+  11:00:00 hall-b__kill-code-switched: pauses of part 14 found (3 pauses, 8 fallback cuts) in 1.3 s; engine peak 103 MiB against limit 1128 MiB (measured peak)
+  11:00:00 hall-b__kill-code-switched: 1 unit(s) planned after part 14
+  11:00:00 hall-b__kill-code-switched: unit 2 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 1: rescued by step a (decoded again without previous-text context at temperature 0.8)
+  11:00:00 hall-b__kill-code-switched: unit 2 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 4 (612980 to 623815 ms) failed a guard (LowCoverage; compression ratio 1.04, 52 characters, 10.6 s of speech); retrying without previous-text context
+  11:00:00 hall-b__kill-code-switched: unit 2 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 4: rescued by step a (decoded again without previous-text context at temperature 0.4)
+  11:00:00 hall-b__kill-code-switched: unit 2 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 5 (624545 to 637495 ms) failed a guard (LowCoverage; compression ratio 1.32, 70 characters, 12.7 s of speech); retrying without previous-text context
+  11:00:00 hall-b__kill-code-switched: unit 2 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 5: rescued by step a (decoded again without previous-text context at temperature 0.4)
+  11:01:00 hall-b__kill-code-switched: unit 2 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 11 (684955 to 697545 ms) failed a guard (LowCoverage; compression ratio 1.08, 55 characters, 12.0 s of speech); retrying without previous-text context
+  11:01:00 hall-b__kill-code-switched: unit 2 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 11: first half (684955 to 691283 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  11:01:00 hall-b__kill-code-switched: unit 2 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 11: rescued by step b (cut at 691283 ms, each half decoded without context)
+  11:01:00 hall-b__kill-code-switched: unit 2 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 13 (701045 to 715395 ms) failed a guard (LowCoverage; compression ratio 0.72, 21 characters, 14.2 s of speech); retrying without previous-text context
+  11:02:00 hall-b__kill-code-switched: unit 2 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 13: rescued by step a (decoded again without previous-text context at temperature 0.4)
+  11:02:00 hall-b__kill-code-switched: pauses of part 15 found (5 pauses, 7 fallback cuts) in 1.4 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  11:02:00 DAY: stopped "Kill Code-switched"
+  11:02:00 DAY: every session of the plan was recorded; waiting for the stop file
+  11:02:00 hall-b__kill-code-switched: stopped. All transcripts ready by 11:52 IST (sessions with several languages: measured, 2.23 times the profile's, from 2 finished unit(s); sessions with one language: the profile's speed until a unit finishes)
+  11:03:00 hall-b__kill-code-switched: pauses of part 16 found (2 pauses, 0 fallback cuts) in 2.2 s; engine peak 90 MiB against limit 1128 MiB (measured peak)
+  11:03:00 hall-b__kill-code-switched: session closed, 2 final unit(s) planned
+  11:03:00 hall-b__kill-code-switched: unit 2 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 26 (821045 to 835585 ms) failed a guard (LowCoverage; compression ratio 1.05, 63 characters, 13.9 s of speech); retrying without previous-text context
+  11:03:00 hall-b__kill-code-switched: unit 2 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 26: rescued by step a (decoded again without previous-text context at temperature 0.4)
+  11:03:00 hall-b__kill-code-switched: unit 2 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 28 (839445 to 851035 ms) failed a guard (LowCoverage; compression ratio 0.86, 32 characters, 11.5 s of speech); retrying without previous-text context
+  11:03:00 hall-b__kill-code-switched: unit 2 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 28: rescued by step a (decoded again without previous-text context at temperature 0.4)
+  11:03:00 hall-b__kill-code-switched: unit 2 of post-1 done in 382.3 s on gpu (0 restart(s), engine peak 1593 MiB against limit 3106 MiB)
+  11:05:00 hall-b__kill-code-switched: unit 3 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 1 (931990 to 944280 ms) failed a guard (LowCoverage; compression ratio 1.30, 70 characters, 11.4 s of speech); retrying without previous-text context
+  11:06:00 hall-b__kill-code-switched: unit 3 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 1: first half (931990 to 938725 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  11:06:00 hall-b__kill-code-switched: unit 3 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 1: rescued by step b (cut at 938725 ms, each half decoded without context)
+  11:06:00 hall-b__kill-code-switched: unit 3 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 2 (944430 to 958460 ms) failed a guard (LowCoverage; compression ratio 1.17, 54 characters, 13.3 s of speech); retrying without previous-text context
+  11:06:00 hall-b__kill-code-switched: unit 3 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 2: rescued by step a (decoded again without previous-text context at temperature 0.4)
+  11:08:00 hall-b__kill-code-switched: unit 3 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 24 (1156710 to 1171170 ms) failed a guard (LowCoverage; compression ratio 0.96, 50 characters, 14.2 s of speech); retrying without previous-text context
+  11:09:00 hall-b__kill-code-switched: unit 3 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 24: first half (1156710 to 1163172 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  11:09:00 hall-b__kill-code-switched: unit 3 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 24: rescued by step b (cut at 1163172 ms, each half decoded without context)
+  11:09:00 hall-b__kill-code-switched: unit 3 of post-1 done in 326.1 s on gpu (0 restart(s), engine peak 1544 MiB against limit 3106 MiB)
+  11:11:00 hall-b__kill-code-switched: unit 4 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 1 (1197690 to 1209040 ms) failed a guard (LowCoverage; compression ratio 1.05, 66 characters, 11.2 s of speech); retrying without previous-text context
+  11:11:00 hall-b__kill-code-switched: unit 4 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 1: first half (1197690 to 1205810 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  11:11:00 hall-b__kill-code-switched: unit 4 of post-1 job 1 on gpu: engine warning chunk_low_coverage: chunk 1: a half (cut at 1205810 ms) stays far shorter than its speech; the text is kept and flagged low_coverage
+  11:11:00 hall-b__kill-code-switched: unit 4 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 2 (1209290 to 1223680 ms) failed a guard (LowCoverage; compression ratio 0.78, 28 characters, 14.1 s of speech); retrying without previous-text context
+  11:12:00 hall-b__kill-code-switched: unit 4 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 2: first half (1209290 to 1219318 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  11:12:00 hall-b__kill-code-switched: unit 4 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 2: rescued by step b (cut at 1219318 ms, each half decoded without context)
+  11:12:00 hall-b__kill-code-switched: unit 4 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 3 (1223680 to 1237300 ms) failed a guard (LowCoverage; compression ratio 1.05, 59 characters, 13.1 s of speech); retrying without previous-text context
+  11:12:00 hall-b__kill-code-switched: unit 4 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 3: rescued by step a (decoded again without previous-text context at temperature 0.8)
+  11:12:00 hall-b__kill-code-switched: unit 4 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 6 (1259020 to 1271410 ms) failed a guard (TokenLimit; compression ratio 1.42, 206 characters, 12.1 s of speech); retrying without previous-text context
+  11:12:00 hall-b__kill-code-switched: unit 4 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 6: rescued by step a (decoded again without previous-text context at temperature 0.4)
+  11:13:00 hall-b__kill-code-switched: unit 4 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 14 (1343240 to 1351950 ms) failed a guard (LowCoverage; compression ratio 0.92, 46 characters, 8.4 s of speech); retrying without previous-text context
+  11:14:00 hall-b__kill-code-switched: unit 4 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 14: first half (1343240 to 1349112 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  11:14:00 hall-b__kill-code-switched: unit 4 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 14: rescued by step b (cut at 1349112 ms, each half decoded without context)
+  11:15:00 hall-b__kill-code-switched: unit 4 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 25 (1445930 to 1459710 ms) failed a guard (LowCoverage; compression ratio 1.32, 90 characters, 13.6 s of speech); retrying without previous-text context
+  11:15:00 hall-b__kill-code-switched: unit 4 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 25: rescued by step a (decoded again without previous-text context at temperature 0.4)
+  11:15:00 hall-b__kill-code-switched: unit 4 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 27 (1467885 to 1482320 ms) failed a guard (LowCoverage; compression ratio 1.09, 50 characters, 13.8 s of speech); retrying without previous-text context
+  11:15:00 hall-b__kill-code-switched: unit 4 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 27: rescued by step a (decoded again without previous-text context at temperature 0.4)
+  11:15:00 hall-b__kill-code-switched: unit 4 of post-1 done in 366.5 s on gpu (0 restart(s), engine peak 1560 MiB against limit 3106 MiB)
+  11:15:00 hall-a__kill-english-hindi: unit 1 of post-1 job 1 on cpu: engine warning segment_dropped: chunk 3 (309290 to 319930 ms) is not speech and was dropped: LittleSpeech (compression ratio 1.28, average log-probability -0.15, no-speech 0.00, speech share 0.28)
+  11:17:00 hall-b__kill-code-switched: unit 5 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 2 (1501480 to 1507730 ms) failed a guard (LowCoverage; compression ratio 0.84, 32 characters, 5.9 s of speech); retrying without previous-text context
+  11:17:00 hall-b__kill-code-switched: unit 5 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 2: rescued by step a (decoded again without previous-text context at temperature 0.4)
+  11:17:00 START: queue registration of hall-a__kill-english-hindi-copy: open-sessions lock 0 ms, models 0 ms, session database 8 ms, rolling job 0 ms, manager 0 ms, open-sessions list 0 ms, engine slots 0 ms, total 9 ms
+  11:17:00 hall-a__kill-english-hindi-copy: stopped. All transcripts ready by 12:06 IST (sessions with several languages: measured, 2.73 times the profile's, from 5 finished unit(s); sessions with one language: the profile's speed until a unit finishes)
+  11:17:00 ACTION import_session on "Kill Code-switched" -> ok (imported as hall-a__kill-english-hindi-copy)
+  11:18:00 hall-a__kill-english-hindi-copy: pauses of part 1 found (9 pauses, 3 fallback cuts) in 2.6 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  11:18:00 hall-a__kill-english-hindi-copy: pauses of part 2 found (8 pauses, 3 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  11:18:00 hall-a__kill-english-hindi-copy: pauses of part 3 found (7 pauses, 8 fallback cuts) in 2.0 s; engine peak 103 MiB against limit 1128 MiB (measured peak)
+  11:18:00 hall-a__kill-english-hindi-copy: pauses of part 4 found (12 pauses, 2 fallback cuts) in 2.7 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  11:18:00 hall-a__kill-english-hindi-copy: 1 unit(s) planned after part 4
+  11:18:00 hall-a__kill-english-hindi-copy: pauses of part 5 found (10 pauses, 5 fallback cuts) in 2.3 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  11:18:00 hall-a__kill-english-hindi-copy: pauses of part 6 found (8 pauses, 4 fallback cuts) in 2.0 s; engine peak 103 MiB against limit 1128 MiB (measured peak)
+  11:18:00 hall-a__kill-english-hindi-copy: 1 unit(s) planned after part 6
+  11:18:00 hall-a__kill-english-hindi-copy: pauses of part 7 found (6 pauses, 5 fallback cuts) in 1.4 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  11:18:00 START: queue registration of hall-b__kill-code-switched-copy: open-sessions lock 0 ms, models 0 ms, session database 8 ms, rolling job 0 ms, manager 0 ms, open-sessions list 0 ms, engine slots 0 ms, total 9 ms
+  11:18:00 hall-b__kill-code-switched-copy: stopped. All transcripts ready by 12:20 IST (sessions with several languages: measured, 2.73 times the profile's, from 5 finished unit(s); sessions with one language: the profile's speed until a unit finishes)
+  11:18:00 ACTION import_session on "Kill Code-switched" -> ok (imported as hall-b__kill-code-switched-copy)
+  11:18:00 hall-a__kill-english-hindi-copy: pauses of part 8 found (6 pauses, 5 fallback cuts) in 2.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  11:18:00 hall-a__kill-english-hindi-copy: pauses of part 9 found (7 pauses, 4 fallback cuts) in 2.6 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  11:18:00 hall-a__kill-english-hindi-copy: 1 unit(s) planned after part 9
+  11:18:00 hall-a__kill-english-hindi-copy: pauses of part 10 found (7 pauses, 5 fallback cuts) in 2.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  11:18:00 hall-a__kill-english-hindi-copy: pauses of part 11 found (10 pauses, 3 fallback cuts) in 1.9 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  11:18:00 hall-a__kill-english-hindi-copy: 1 unit(s) planned after part 11
+  11:18:00 hall-a__kill-english-hindi-copy: pauses of part 12 found (10 pauses, 1 fallback cuts) in 1.0 s; engine peak 103 MiB against limit 1128 MiB (measured peak)
+  11:18:00 hall-a__kill-english-hindi-copy: pauses of part 13 found (7 pauses, 4 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  11:18:00 hall-a__kill-english-hindi-copy: pauses of part 14 found (8 pauses, 2 fallback cuts) in 2.9 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  11:18:00 hall-a__kill-english-hindi-copy: 1 unit(s) planned after part 14
+  11:18:00 hall-a__kill-english-hindi-copy: pauses of part 15 found (8 pauses, 2 fallback cuts) in 1.3 s; engine peak 103 MiB against limit 1128 MiB (measured peak)
+  11:18:00 hall-a__kill-english-hindi-copy: pauses of part 16 found (1 pauses, 0 fallback cuts) in 0.6 s; engine peak 90 MiB against limit 1128 MiB (measured peak)
+  11:18:00 hall-a__kill-english-hindi-copy: session closed, 1 final unit(s) planned
+  11:18:00 hall-b__kill-code-switched-copy: pauses of part 1 found (3 pauses, 9 fallback cuts) in 1.2 s; engine peak 103 MiB against limit 1128 MiB (measured peak)
+  11:18:00 hall-b__kill-code-switched-copy: pauses of part 2 found (1 pauses, 9 fallback cuts) in 2.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  11:18:00 hall-b__kill-code-switched-copy: pauses of part 3 found (2 pauses, 7 fallback cuts) in 1.1 s; engine peak 103 MiB against limit 1128 MiB (measured peak)
+  11:18:00 hall-b__kill-code-switched-copy: pauses of part 4 found (3 pauses, 9 fallback cuts) in 1.6 s; engine peak 103 MiB against limit 1128 MiB (measured peak)
+  11:18:00 hall-b__kill-code-switched-copy: 1 unit(s) planned after part 4
+  11:18:00 hall-b__kill-code-switched-copy: pauses of part 5 found (2 pauses, 8 fallback cuts) in 2.5 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  11:18:00 hall-b__kill-code-switched-copy: pauses of part 6 found (3 pauses, 8 fallback cuts) in 1.1 s; engine peak 103 MiB against limit 1128 MiB (measured peak)
+  11:18:00 hall-b__kill-code-switched-copy: 1 unit(s) planned after part 6
+  11:18:00 hall-b__kill-code-switched-copy: pauses of part 7 found (2 pauses, 11 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  11:18:00 hall-b__kill-code-switched-copy: pauses of part 8 found (3 pauses, 6 fallback cuts) in 2.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  11:18:00 hall-b__kill-code-switched-copy: pauses of part 9 found (3 pauses, 8 fallback cuts) in 2.3 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  11:18:00 hall-b__kill-code-switched-copy: 1 unit(s) planned after part 9
+  11:18:00 hall-b__kill-code-switched-copy: pauses of part 10 found (2 pauses, 8 fallback cuts) in 2.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  11:18:00 hall-b__kill-code-switched-copy: pauses of part 11 found (3 pauses, 7 fallback cuts) in 1.8 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  11:18:00 hall-b__kill-code-switched-copy: pauses of part 12 found (3 pauses, 10 fallback cuts) in 1.0 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  11:18:00 hall-b__kill-code-switched-copy: 1 unit(s) planned after part 12
+  11:18:00 hall-b__kill-code-switched-copy: pauses of part 13 found (3 pauses, 10 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  11:18:00 hall-b__kill-code-switched-copy: pauses of part 14 found (3 pauses, 8 fallback cuts) in 2.5 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  11:18:00 hall-b__kill-code-switched-copy: 1 unit(s) planned after part 14
+  11:18:00 hall-b__kill-code-switched-copy: pauses of part 15 found (5 pauses, 7 fallback cuts) in 1.0 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  11:18:00 hall-b__kill-code-switched-copy: pauses of part 16 found (2 pauses, 0 fallback cuts) in 0.4 s; engine peak 90 MiB against limit 1128 MiB (measured peak)
+  11:18:00 hall-b__kill-code-switched-copy: session closed, 2 final unit(s) planned
+  11:19:00 hall-b__kill-code-switched: unit 5 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 15 (1620945 to 1625270 ms) failed a guard (LowCoverage; compression ratio 0.80, 24 characters, 3.9 s of speech); retrying without previous-text context
+  11:19:00 hall-b__kill-code-switched: unit 5 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 15: rescued by step a (decoded again without previous-text context at temperature 0.8)
+  11:20:00 hall-b__kill-code-switched: unit 5 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 19 (1653000 to 1667090 ms) failed a guard (LowCoverage; compression ratio 1.23, 81 characters, 13.7 s of speech); retrying without previous-text context
+  11:20:00 hall-b__kill-code-switched: unit 5 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 19: rescued by step a (decoded again without previous-text context at temperature 0.4)
+  11:21:00 hall-b__kill-code-switched: unit 5 of post-1 done in 333.4 s on gpu (0 restart(s), engine peak 1543 MiB against limit 3106 MiB)
+  11:21:00 hall-b__kill-code-switched: unit 6 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 2 (1773965 to 1785845 ms) failed a guard (LowCoverage; compression ratio 0.68, 17 characters, 10.8 s of speech); retrying without previous-text context
+  11:22:00 hall-b__kill-code-switched: unit 6 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 2: first half (1773965 to 1777180 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  11:22:00 hall-b__kill-code-switched: unit 6 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 2: rescued by step b (cut at 1777180 ms, each half decoded without context)
+  11:22:00 hall-b__kill-code-switched: unit 6 of post-1 done in 112.4 s on gpu (0 restart(s), engine peak 1529 MiB against limit 3106 MiB)
+  11:22:00 hall-b__kill-code-switched: post-1 transcript complete
+  11:27:00 hall-a__kill-english-hindi-copy: unit 0 of post-1 done in 295.0 s on gpu (0 restart(s), engine peak 1543 MiB against limit 3106 MiB)
+  11:30:00 hall-a__kill-english-hindi-copy: unit 1 of post-1 job 1 on gpu: engine warning segment_dropped: chunk 3 (309290 to 319930 ms) is not speech and was dropped: LittleSpeech (compression ratio 1.28, average log-probability -0.15, no-speech 0.00, speech share 0.28)
+  11:32:00 hall-a__kill-english-hindi-copy: unit 1 of post-1 done in 296.9 s on gpu (0 restart(s), engine peak 1540 MiB against limit 3106 MiB)
+  11:36:00 hall-a__kill-english-hindi-copy: unit 2 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 11 (663010 to 674705 ms) failed a guard (LowCoverage; compression ratio 0.78, 40 characters, 6.1 s of speech); retrying without previous-text context
+  11:36:00 hall-a__kill-english-hindi-copy: unit 2 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 11: rescued by step a (decoded again without previous-text context at temperature 0.4)
+  11:37:00 hall-a__kill-english-hindi-copy: unit 2 of post-1 job 1 on gpu: engine warning segment_dropped: chunk 24 (791755 to 796770 ms) is not speech and was dropped: LittleSpeech (compression ratio 1.02, average log-probability -0.24, no-speech 0.00, speech share 0.29)
+  11:38:00 hall-a__kill-english-hindi-copy: unit 2 of post-1 done in 363.8 s on gpu (0 restart(s), engine peak 1611 MiB against limit 3106 MiB)
+  11:43:00 hall-a__kill-english-hindi: unit 1 of post-1 done in 3974.6 s on cpu (1 restart(s), engine peak 1450 MiB against limit 2807 MiB)
+  11:43:00 hall-a__kill-english-hindi: post-1 transcript complete
+  11:43:00 hall-a__kill-english-hindi-copy: unit 3 of post-1 done in 308.4 s on gpu (0 restart(s), engine peak 1553 MiB against limit 3106 MiB)
+  11:47:00 hall-a__kill-english-hindi-copy: unit 5 of post-1 done in 201.3 s on gpu (0 restart(s), engine peak 1539 MiB against limit 3106 MiB)
+  11:49:00 hall-b__kill-code-switched-copy: unit 0 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 2 (30200 to 42870 ms) failed a guard (LowCoverage; compression ratio 1.09, 61 characters, 12.5 s of speech); retrying without previous-text context
+  11:49:00 hall-b__kill-code-switched-copy: unit 0 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 2: rescued by step a (decoded again without previous-text context at temperature 0.8)
+  11:51:00 hall-b__kill-code-switched-copy: unit 0 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 17 (184150 to 194995 ms) failed a guard (LowCoverage; compression ratio 1.00, 50 characters, 10.5 s of speech); retrying without previous-text context
+  11:51:00 hall-b__kill-code-switched-copy: unit 0 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 17: rescued by step a (decoded again without previous-text context at temperature 0.6)
+  11:51:00 hall-b__kill-code-switched-copy: unit 0 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 18 (194995 to 201960 ms) failed a guard (LowCoverage; compression ratio 1.20, 42 characters, 6.6 s of speech); retrying without previous-text context
+  11:51:00 hall-b__kill-code-switched-copy: unit 0 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 18: rescued by step a (decoded again without previous-text context at temperature 0.4)
+  11:51:00 hall-b__kill-code-switched-copy: unit 0 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 20 (215040 to 229180 ms) failed a guard (LowCoverage; compression ratio 1.10, 68 characters, 12.7 s of speech); retrying without previous-text context
+  11:51:00 hall-b__kill-code-switched-copy: unit 0 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 20: rescued by step a (decoded again without previous-text context at temperature 0.4)
+  11:52:00 hall-b__kill-code-switched-copy: unit 0 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 22 (233075 to 247345 ms) failed a guard (TokenLimit; compression ratio 1.48, 214 characters, 14.1 s of speech); retrying without previous-text context
+  11:53:00 hall-b__kill-code-switched-copy: unit 0 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 22: first half (233075 to 238899 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  11:53:00 hall-b__kill-code-switched-copy: unit 0 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 22: rescued by step b (cut at 238899 ms, each half decoded without context)
+  11:53:00 hall-b__kill-code-switched-copy: unit 0 of post-1 done in 389.0 s on gpu (0 restart(s), engine peak 1544 MiB against limit 3106 MiB)
+  11:56:00 hall-b__kill-code-switched-copy: unit 1 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 3 (309210 to 322360 ms) failed a guard (LowCoverage; compression ratio 1.06, 66 characters, 13.0 s of speech); retrying without previous-text context
+  11:56:00 hall-b__kill-code-switched-copy: unit 1 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 3: rescued by step a (decoded again without previous-text context at temperature 0.4)
+  11:56:00 hall-b__kill-code-switched-copy: unit 1 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 4 (322360 to 333230 ms) failed a guard (LowCoverage; compression ratio 0.76, 26 characters, 10.7 s of speech); retrying without previous-text context
+  11:56:00 hall-b__kill-code-switched-copy: unit 1 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 4: first half (322360 to 330044 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  11:56:00 hall-b__kill-code-switched-copy: unit 1 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 4: rescued by step b (cut at 330044 ms, each half decoded without context)
+  11:56:00 hall-b__kill-code-switched-copy: unit 1 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 6 (347840 to 362030 ms) failed a guard (LowCoverage; compression ratio 1.10, 75 characters, 13.4 s of speech); retrying without previous-text context
+  11:57:00 hall-b__kill-code-switched-copy: unit 1 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 6: first half (347840 to 350895 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  11:57:00 hall-b__kill-code-switched-copy: unit 1 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 6: rescued by step b (cut at 350895 ms, each half decoded without context)
+  11:57:00 hall-b__kill-code-switched-copy: unit 1 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 8 (364230 to 378120 ms) failed a guard (LowCoverage; compression ratio 0.81, 46 characters, 13.7 s of speech); retrying without previous-text context
+  11:57:00 hall-b__kill-code-switched-copy: unit 1 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 8: rescued by step a (decoded again without previous-text context at temperature 0.4)
+  11:59:00 hall-b__kill-code-switched-copy: unit 1 of post-1 done in 327.9 s on gpu (0 restart(s), engine peak 1550 MiB against limit 3106 MiB)
+  12:01:00 hall-b__kill-code-switched-copy: unit 2 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 1 (577435 to 587600 ms) failed a guard (LowCoverage; compression ratio 1.63, 31 characters, 9.8 s of speech); retrying without previous-text context
+  12:01:00 hall-b__kill-code-switched-copy: unit 2 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 1: rescued by step a (decoded again without previous-text context at temperature 0.8)
+  12:02:00 hall-b__kill-code-switched-copy: unit 2 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 4 (612980 to 623815 ms) failed a guard (LowCoverage; compression ratio 1.04, 52 characters, 10.6 s of speech); retrying without previous-text context
+  12:02:00 hall-b__kill-code-switched-copy: unit 2 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 4: rescued by step a (decoded again without previous-text context at temperature 0.4)
+  12:02:00 hall-b__kill-code-switched-copy: unit 2 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 5 (624545 to 637495 ms) failed a guard (LowCoverage; compression ratio 1.32, 70 characters, 12.7 s of speech); retrying without previous-text context
+  12:02:00 hall-b__kill-code-switched-copy: unit 2 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 5: rescued by step a (decoded again without previous-text context at temperature 0.4)
+  12:03:00 hall-b__kill-code-switched-copy: unit 2 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 11 (684955 to 697545 ms) failed a guard (LowCoverage; compression ratio 1.08, 55 characters, 12.0 s of speech); retrying without previous-text context
+  12:03:00 hall-b__kill-code-switched-copy: unit 2 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 11: first half (684955 to 691283 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  12:03:00 hall-b__kill-code-switched-copy: unit 2 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 11: rescued by step b (cut at 691283 ms, each half decoded without context)
+  12:03:00 hall-b__kill-code-switched-copy: unit 2 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 13 (701045 to 715395 ms) failed a guard (LowCoverage; compression ratio 0.72, 21 characters, 14.2 s of speech); retrying without previous-text context
+  12:03:00 hall-b__kill-code-switched-copy: unit 2 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 13: rescued by step a (decoded again without previous-text context at temperature 0.4)
+  12:04:00 hall-b__kill-code-switched-copy: unit 2 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 26 (821045 to 835585 ms) failed a guard (LowCoverage; compression ratio 1.05, 63 characters, 13.9 s of speech); retrying without previous-text context
+  12:04:00 hall-b__kill-code-switched-copy: unit 2 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 26: rescued by step a (decoded again without previous-text context at temperature 0.4)
+  12:05:00 hall-b__kill-code-switched-copy: unit 2 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 28 (839445 to 851035 ms) failed a guard (LowCoverage; compression ratio 0.86, 32 characters, 11.5 s of speech); retrying without previous-text context
+  12:05:00 hall-b__kill-code-switched-copy: unit 2 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 28: rescued by step a (decoded again without previous-text context at temperature 0.4)
+  12:05:00 hall-b__kill-code-switched-copy: unit 2 of post-1 done in 386.2 s on gpu (0 restart(s), engine peak 1593 MiB against limit 3106 MiB)
+  12:07:00 hall-b__kill-code-switched-copy: unit 3 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 1 (931990 to 944280 ms) failed a guard (LowCoverage; compression ratio 1.30, 70 characters, 11.4 s of speech); retrying without previous-text context
+  12:07:00 hall-b__kill-code-switched-copy: unit 3 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 1: first half (931990 to 938725 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  12:08:00 hall-b__kill-code-switched-copy: unit 3 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 1: rescued by step b (cut at 938725 ms, each half decoded without context)
+  12:08:00 hall-b__kill-code-switched-copy: unit 3 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 2 (944430 to 958460 ms) failed a guard (LowCoverage; compression ratio 1.17, 54 characters, 13.3 s of speech); retrying without previous-text context
+  12:08:00 hall-b__kill-code-switched-copy: unit 3 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 2: rescued by step a (decoded again without previous-text context at temperature 0.4)
+  12:10:00 hall-b__kill-code-switched-copy: unit 3 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 24 (1156710 to 1171170 ms) failed a guard (LowCoverage; compression ratio 0.96, 50 characters, 14.2 s of speech); retrying without previous-text context
+  12:10:00 hall-b__kill-code-switched-copy: unit 3 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 24: first half (1156710 to 1163172 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  12:10:00 hall-b__kill-code-switched-copy: unit 3 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 24: rescued by step b (cut at 1163172 ms, each half decoded without context)
+  12:11:00 hall-b__kill-code-switched-copy: unit 3 of post-1 done in 324.5 s on gpu (0 restart(s), engine peak 1544 MiB against limit 3106 MiB)
+  12:13:00 hall-b__kill-code-switched-copy: unit 4 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 1 (1197690 to 1209040 ms) failed a guard (LowCoverage; compression ratio 1.05, 66 characters, 11.2 s of speech); retrying without previous-text context
+  12:13:00 hall-b__kill-code-switched-copy: unit 4 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 1: first half (1197690 to 1205810 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  12:13:00 hall-b__kill-code-switched-copy: unit 4 of post-1 job 1 on gpu: engine warning chunk_low_coverage: chunk 1: a half (cut at 1205810 ms) stays far shorter than its speech; the text is kept and flagged low_coverage
+  12:13:00 hall-b__kill-code-switched-copy: unit 4 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 2 (1209290 to 1223680 ms) failed a guard (LowCoverage; compression ratio 0.78, 28 characters, 14.1 s of speech); retrying without previous-text context
+  12:13:00 hall-b__kill-code-switched-copy: unit 4 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 2: first half (1209290 to 1219318 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  12:13:00 hall-b__kill-code-switched-copy: unit 4 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 2: rescued by step b (cut at 1219318 ms, each half decoded without context)
+  12:14:00 hall-b__kill-code-switched-copy: unit 4 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 3 (1223680 to 1237300 ms) failed a guard (LowCoverage; compression ratio 1.05, 59 characters, 13.1 s of speech); retrying without previous-text context
+  12:14:00 hall-b__kill-code-switched-copy: unit 4 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 3: rescued by step a (decoded again without previous-text context at temperature 0.8)
+  12:14:00 hall-b__kill-code-switched-copy: unit 4 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 6 (1259020 to 1271410 ms) failed a guard (TokenLimit; compression ratio 1.42, 206 characters, 12.1 s of speech); retrying without previous-text context
+  12:14:00 hall-b__kill-code-switched-copy: unit 4 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 6: rescued by step a (decoded again without previous-text context at temperature 0.4)
+  12:15:00 hall-b__kill-code-switched-copy: unit 4 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 14 (1343240 to 1351950 ms) failed a guard (LowCoverage; compression ratio 0.92, 46 characters, 8.4 s of speech); retrying without previous-text context
+  12:15:00 hall-b__kill-code-switched-copy: unit 4 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 14: first half (1343240 to 1349112 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  12:15:00 hall-b__kill-code-switched-copy: unit 4 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 14: rescued by step b (cut at 1349112 ms, each half decoded without context)
+  12:16:00 hall-b__kill-code-switched-copy: unit 4 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 25 (1445930 to 1459710 ms) failed a guard (LowCoverage; compression ratio 1.32, 90 characters, 13.6 s of speech); retrying without previous-text context
+  12:16:00 hall-b__kill-code-switched-copy: unit 4 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 25: rescued by step a (decoded again without previous-text context at temperature 0.4)
+  12:17:00 hall-b__kill-code-switched-copy: unit 4 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 27 (1467885 to 1482320 ms) failed a guard (LowCoverage; compression ratio 1.09, 50 characters, 13.8 s of speech); retrying without previous-text context
+  12:17:00 hall-b__kill-code-switched-copy: unit 4 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 27: rescued by step a (decoded again without previous-text context at temperature 0.4)
+  12:17:00 hall-b__kill-code-switched-copy: unit 4 of post-1 done in 363.3 s on gpu (0 restart(s), engine peak 1559 MiB against limit 3106 MiB)
+  12:19:00 hall-b__kill-code-switched-copy: unit 5 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 2 (1501480 to 1507730 ms) failed a guard (LowCoverage; compression ratio 0.84, 32 characters, 5.9 s of speech); retrying without previous-text context
+  12:19:00 hall-b__kill-code-switched-copy: unit 5 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 2: rescued by step a (decoded again without previous-text context at temperature 0.4)
+  12:20:00 hall-b__kill-code-switched-copy: unit 5 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 15 (1620945 to 1625270 ms) failed a guard (LowCoverage; compression ratio 0.80, 24 characters, 3.9 s of speech); retrying without previous-text context
+  12:21:00 hall-b__kill-code-switched-copy: unit 5 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 15: rescued by step a (decoded again without previous-text context at temperature 0.8)
+  12:21:00 hall-b__kill-code-switched-copy: unit 5 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 19 (1653000 to 1667090 ms) failed a guard (LowCoverage; compression ratio 1.23, 81 characters, 13.7 s of speech); retrying without previous-text context
+  12:21:00 hall-b__kill-code-switched-copy: unit 5 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 19: rescued by step a (decoded again without previous-text context at temperature 0.4)
+  12:22:00 hall-b__kill-code-switched-copy: unit 5 of post-1 done in 325.8 s on gpu (0 restart(s), engine peak 1543 MiB against limit 3106 MiB)
+  12:23:00 hall-b__kill-code-switched-copy: unit 6 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 2 (1773965 to 1785845 ms) failed a guard (LowCoverage; compression ratio 0.68, 17 characters, 10.8 s of speech); retrying without previous-text context
+  12:23:00 hall-b__kill-code-switched-copy: unit 6 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 2: first half (1773965 to 1777180 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  12:23:00 hall-b__kill-code-switched-copy: unit 6 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 2: rescued by step b (cut at 1777180 ms, each half decoded without context)
+  12:24:00 hall-b__kill-code-switched-copy: unit 6 of post-1 done in 112.9 s on gpu (0 restart(s), engine peak 1529 MiB against limit 3106 MiB)
+  12:24:00 hall-b__kill-code-switched-copy: post-1 transcript complete
+  12:47:00 hall-a__kill-english-hindi-copy: unit 4 of post-1 done in 3828.4 s on cpu (0 restart(s), engine peak 1478 MiB against limit 2807 MiB)
+  12:47:00 hall-a__kill-english-hindi-copy: post-1 transcript complete
+  12:48:00 DAY: report written; exiting

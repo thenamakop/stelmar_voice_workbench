@@ -1,0 +1,82 @@
+﻿Engine spawn smoke (Phase 4), profile emu-low
+source: commit 8dd62f9 with uncommitted or untracked changes (the build hashes below identify the code)
+build: wb-engine-avx2-x86_64-pc-windows-msvc.exe sha256 fb190b5b786cc10420d5fcdec9651cd9036b2a8b00ca5c24ce2161e67b8a6d32 (built 2026-11-13 16:22)
+gate: spawn smoke emu-low
+started: 2026-11-14 20:57:53 +05:30
+machine: Legion
+emulation profile: emu-low
+overlay tools closed: yes (RTSS.exe, MSIAfterburner.exe and LatMon.exe not running when the gate started)
+overlay tools at the end: none running
+engine builds: none running when the gate started (D:\Projects\stelmar-build.lock absent; no cargo.exe, rustc.exe, cl.exe, link.exe, cmake.exe, ninja.exe, nvcc.exe, glslc.exe, MSBuild.exe, cicc.exe, ptxas.exe, fatbinary.exe, nvlink.exe process)
+engine builds at the end: none running
+Track B paused: D:\Projects\stelmar-gate.lock held for the whole run (removed in a finally block)
+Track B busy lock: D:\Projects\stelmar-eval-busy.lock absent at start
+free RAM: 16.1 GB at start (needs 14 GB), 17.1 GB at end
+
+Why: the spawn path (suspended start, a Job Object per engine, optional memory limit, device variables dropped in release config) changed after the Phase 3 evidence build 6253468.
+
+== 12 restart tests, mock engine, inside the emulation job (12 s, exit 0) ==
+test a_chunk_is_shown_only_after_all_of_it_is_committed ... ok
+test a_chunk_with_no_segment_still_moves_the_cursor_so_nothing_is_decoded_twice ... ok
+test a_clean_run_commits_every_segment_once_with_no_restart ... ok
+test a_hung_engine_is_killed_by_the_watchdog_and_the_job_finishes ... ok
+test a_long_decode_that_sends_heartbeats_is_not_a_hang ... ok
+test a_resumed_job_continues_after_what_an_earlier_run_committed ... ok
+test an_engine_killed_at_several_points_loses_nothing_and_repeats_nothing ... ok
+test an_engine_killed_between_the_two_halves_of_a_split_chunk_loses_and_repeats_no_half ... ok
+test an_engine_that_cannot_be_started_is_reported_and_retried_then_given_up_on ... ok
+test an_engine_that_never_gets_anywhere_is_given_up_on ... ok
+test an_error_a_restart_cannot_fix_stops_the_job_without_restarting ... ok
+test control_a_long_silent_decode_is_a_hang_and_is_restarted ... ok
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 11.47s
+
+== memory-limit tests (mock engine allocates over and under its limit, two engines at once) (3 s, exit 0) ==
+test an_engine_that_reaches_its_memory_limit_dies_and_is_reported_as_a_memory_limit_death ... ok
+test an_engine_under_its_limit_finishes_and_the_run_reports_its_peak ... ok
+test two_engines_at_once_each_have_their_own_limit ... ok
+test without_a_limit_nothing_changes ... ok
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.53s
+
+== real wb-engine bench, Hindi 60 s clip, avx2, small f16, 3 threads, started through the supervisor (250 s, exit 101) ==
+engine: wb-engine avx2 (copy wb-engine-smoke.exe, sha256 fb190b5b786cc10420d5fcdec9651cd9036b2a8b00ca5c24ce2161e67b8a6d32); clip: speed\clip-hi.wav (FLEURS Hindi, 60 s, not committed)
+
+wb-emulate: profile=emu-low
+wb-emulate: cores: class 0: 16 cores / 16 threads; class 1: 8 cores / 16 threads
+wb-emulate: affinity_mask=0xf0000 logical_processors=4 chosen=[16, 17, 18, 19] efficiency_classes=[0, 0, 0, 0]
+wb-emulate: job_memory_limit_bytes=11811160064
+wb-emulate: vulkan[0] Intel(R) RaptorLake-S Mobile Graphics Controller vendor=0x8086 integrated=true luid=0e3a010000000000 driver=Intel Corporation 101.7092
+wb-emulate: vulkan[1] NVIDIA GeForce RTX 4070 Laptop GPU vendor=0x10de integrated=false luid=7e5e010000000000 driver=NVIDIA 621.14
+wb-emulate: vulkan[2] Intel(R) RaptorLake-S Mobile Graphics Controller vendor=0x8086 integrated=true luid=034c020000000000 driver=Intel Corporation 101.7092
+wb-emulate: note: 2 Intel integrated Vulkan devices listed (different LUIDs or unknown: check the drivers); exposing only index 0
+wb-emulate: env WB_EMULATE=emu-low
+wb-emulate: env WB_EMULATE_REPORTED_RAM_BYTES=17179869184
+wb-emulate: env WB_EMULATE_JOB_MEMORY_BYTES=11811160064
+wb-emulate: env WB_EMULATE_LOGICAL_PROCESSORS=4
+wb-emulate: env CUDA_VISIBLE_DEVICES=-1
+wb-emulate: env GGML_VK_VISIBLE_DEVICES=0
+wb-emulate: command: D:\Projects\stelmar_voice_workbench\target\debug\deps\spawn_smoke-cdd6cd6706516cd2.exe --ignored --nocapture
+System.Management.Automation.RemoteException
+thread 'a_real_engine_bench_starts_suspended_in_its_own_job_and_reports_its_peak_against_its_limit' (15124) panicked at crates\wb-supervisor\tests\spawn_smoke.rs:94:9:
+no bench report (exit Some(-1073740791), engine error None); see smoke-engine-limited.log
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test a_real_engine_bench_starts_suspended_in_its_own_job_and_reports_its_peak_against_its_limit ... FAILED
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 249.95s
+thread 'a_real_engine_bench_starts_suspended_in_its_own_job_and_reports_its_peak_against_its_limit' (15124) panicked at crates\wb-supervisor\tests\spawn_smoke.rs:94:9:
+
+== real-engine split-chunk kill test (Phase 2 case 2, three kills inside the second half of a split chunk) (1162 s, exit 0) ==
+audio: concat-150s.wav: 163.3 s from 16 fleurs-en utterances, sha256 84cc11d1d601e0a425d69449e8d393868fdd0c68c5b7e52a452cddc35acc92e7
+split case: every chunk of 4 s or more is cut at its deepest pause and decoded as two halves (debug_force_split)
+chunks that reported a first half done in the uninterrupted run: 13; segments: 26
+kill points (number of the first-half-done report, committed audio ms at that time): [(2, 9030), (5, 38660), (8, 64810)]
+the cursor at each death equalled the end of the last committed segment ([9030, 38660, 64810]): nothing of the killed chunk was committed
+restarts: 3 (kills sent: 3)
+segments after the kills: 26; repeats refused by the committer: 0
+wall time: uninterrupted 523 s, with kills 639 s
+segment times equal to the uninterrupted run: true
+segments with different text: 0
+notices: [Died { exit: Some(1), restart: 1, committed_until_ms: 9030 }, Died { exit: Some(1), restart: 2, committed_until_ms: 38660 }, Died { exit: Some(1), restart: 3, committed_until_ms: 64810 }]
+result: PASS
+test kills_inside_the_second_half_of_a_split_chunk_lose_and_repeat_no_half ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 1161.79s
+
+verdict: FAIL

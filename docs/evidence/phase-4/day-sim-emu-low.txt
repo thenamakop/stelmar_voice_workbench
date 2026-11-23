@@ -1,0 +1,997 @@
+﻿date: 2026-11-21 15:30 (IST on the Legion)
+command: powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\gates\day-sim.ps1 -Day -Profile emu-low -Tag day -Audio D:\STELMAR-Gate\day-sim\day-audio -NightMinutes 120 -MaxMinutes 900 -DecisionMinutes 360
+machine: Legion, emulation profile emu-low; the gate build target\gate\stelmar-voice-workbench.exe, WB_GATE_DAY_PLAN; PROVISIONAL (emulation profile; the real laptops repeat it)
+source: e611650
+build: stelmar-voice-workbench.exe sha256 6564558bd59d83eeb93ab6995628be3b6be04627e1efec172f80303f2dc6a922
+run folder: D:\STELMAR-Gate\day-sim\day-emu-low-20261121-052323
+FULL DAY SIMULATION (PROVISIONAL: emulation profile, the real laptops repeat it)
+run folder: day-emu-low-20261121-052323
+profile in force: {'config': '{"index":0,"kind":"gpu"}', 'process_while_recording': True, 'tier': 'C', 'cpu_threads': 2}
+app exit code 0; scheduler clock offset 6842129 s (the first session of the plan maps to 10:00 IST); parts of 120 s; night time box 120 min
+quiet-machine rule: idle (idle-check.json: 1 attempt(s), waited 1 min; the last: host CPU 6.4% over 60 s, busy [], the owner's programs running None)
+display drivers: at the start Intel(R) UHD Graphics=32.0.101.6881; NVIDIA GeForce RTX 4070 Laptop GPU=32.0.16.2114; at the end Intel(R) UHD Graphics=32.0.101.6881; NVIDIA GeForce RTX 4070 Laptop GPU=32.0.16.2114
+configuration the queue worked in: Gpu { index: 0 }; forced hybrid: False
+
+Script notes (progress):
+  05:24:34 player 1 started for Inaugural (5411.211 s); this script wrote the go file 1.4 s after it read the app's start line
+  06:54:47 player 1 has finished playing
+  06:55:02 stop file of session 1 written (15 s after its player finished)
+  06:55:06 11:30	DAY: stopped "Inaugural"
+  07:10:04 11:45	main-hall__inaugural: post-1 transcript complete
+  07:24:34 player 2 started for Parallel I (5403.892 s); this script wrote the go file 1.1 s after it read the app's start line
+  08:54:39 player 2 has finished playing
+  08:54:55 stop file of session 2 written (15 s after its player finished)
+  08:54:58 13:30	DAY: stopped "Parallel I"
+  09:38:25 14:13	hall-a__parallel-i: post-1 transcript complete
+  09:54:34 player 3 started for Parallel II (5458.985 s); this script wrote the go file 1.1 s after it read the app's start line
+  11:25:34 player 3 has finished playing
+  11:25:50 stop file of session 3 written (15 s after its player finished)
+  11:25:53 16:01	DAY: stopped "Parallel II"
+  11:27:23 player 4 started for Panel (5403.628 s); this script wrote the go file 1.1 s after it read the app's start line
+  11:38:29 16:13	hall-b__parallel-ii: post-1 transcript complete
+  12:57:28 player 4 has finished playing
+  12:57:43 stop file of session 4 written (15 s after its player finished)
+  12:57:46 17:33	DAY: stopped "Panel"
+  12:57:46 all sessions recorded
+  13:21:28 17:56	main-hall__panel: post-1 transcript complete
+  13:28:04 18:03	night pass planned for 2 session(s): about 5.6 h, ready by 23:40 IST (measured speed: 2.44 times the profile's, from 5 finished unit(s))
+  15:06:34 19:42	main-hall__inaugural: post-2 transcript complete
+  15:28:05 night pass time box of 120 min reached: stopping
+
+Sessions under rec/:
+  hall-a__parallel-i: title 'Parallel I', recorded, 46 parts, 90.4 min of audio, post-1 complete True, post-2 complete False, default revision post-1
+  hall-b__parallel-ii: title 'Parallel II', recorded, 46 parts, 91.3 min of audio, post-1 complete True, post-2 complete False, default revision post-1
+  main-hall__inaugural: title 'Inaugural', recorded, 46 parts, 90.5 min of audio, post-1 complete True, post-2 complete True, default revision post-2
+  main-hall__panel: title 'Panel', recorded, 46 parts, 90.4 min of audio, post-1 complete True, post-2 complete False, default revision post-1
+
+RECORDING FIDELITY  each session against its own independent reference capture of the cable (the Phase 1 rule, docs/PLAN.md section 12)
+  Inaugural: PASS; 90.6 min; upstream breaks 1, counted 1 of at most 9; differing frames 0; runs of the app 1; dropped samples 0, ring overrun samples 0, xruns 0
+      recording rule (9 Nov 2026): fidelity decides PASS or FAIL; upstream breaks are reported; a run with limits exceeded is INVALID (docs/PLAN.md section 12)
+      fidelity: app compared with the reference capture over 260,548,800 frames (5,428.1 s) in 1 run(s) of the app; differing frames 0; reference audio the app has no recording of 0 frame(s); audio only the app has 0 frame(s); restart gaps 0 frame(s)
+        run 1: app frames 0 to 260638080, one fixed offset 89280 frames (found by a stretch of the reference); compared 260548800, differing 0, largest difference 0
+      upstream breaks (between the source and the reference capture; reported, not gated): 1 in 90.6 minutes of audio, 1 counted toward the limit of 9 (breaks in the first 3 s of playback are not counted)
+        at source 22.000 s, 05:24:56.899 IST: repeat 11.9 ms, skipped 0.0 ms, unmatched 0.0 ms; nearest reference xrun #1 at 05:24:34.902 (21,997 ms before); late player callbacks within 500 ms: 0
+      player callbacks: longest gap 21.5 ms against a 100 ms output buffer; late callbacks (a gap longer than the buffer) 0
+      validity: valid (limits: a late player callback within 500 ms of a break, more than 250 ms unmatched in a break, more than max(1, floor(minutes / 10)) counted breaks, a missing, misaligned or incomplete reference, or an upstream break without late-callback data)
+  Parallel I: PASS; 90.4 min; upstream breaks 0, counted 0 of at most 9; differing frames 0; runs of the app 1; dropped samples 0, ring overrun samples 0, xruns 0
+      recording rule (9 Nov 2026): fidelity decides PASS or FAIL; upstream breaks are reported; a run with limits exceeded is INVALID (docs/PLAN.md section 12)
+      fidelity: app compared with the reference capture over 260,201,280 frames (5,420.9 s) in 1 run(s) of the app; differing frames 0; reference audio the app has no recording of 0 frame(s); audio only the app has 0 frame(s); restart gaps 0 frame(s)
+        run 1: app frames 0 to 260288160, one fixed offset 86880 frames (found by a stretch of the reference); compared 260201280, differing 0, largest difference 0
+      upstream breaks (between the source and the reference capture; reported, not gated): 0 in 90.4 minutes of audio, 0 counted toward the limit of 9 (breaks in the first 3 s of playback are not counted)
+      player callbacks: longest gap 22.3 ms against a 100 ms output buffer; late callbacks (a gap longer than the buffer) 0
+      validity: valid (limits: a late player callback within 500 ms of a break, more than 250 ms unmatched in a break, more than max(1, floor(minutes / 10)) counted breaks, a missing, misaligned or incomplete reference, or an upstream break without late-callback data)
+  Parallel II: PASS; 91.4 min; upstream breaks 0, counted 0 of at most 9; differing frames 0; runs of the app 1; dropped samples 0, ring overrun samples 0, xruns 0
+      recording rule (9 Nov 2026): fidelity decides PASS or FAIL; upstream breaks are reported; a run with limits exceeded is INVALID (docs/PLAN.md section 12)
+      fidelity: app compared with the reference capture over 262,833,600 frames (5,475.7 s) in 1 run(s) of the app; differing frames 0; reference audio the app has no recording of 0 frame(s); audio only the app has 0 frame(s); restart gaps 0 frame(s)
+        run 1: app frames 0 to 262900320, one fixed offset 66720 frames (found by a stretch of the reference); compared 262833600, differing 0, largest difference 0
+      upstream breaks (between the source and the reference capture; reported, not gated): 0 in 91.4 minutes of audio, 0 counted toward the limit of 9 (breaks in the first 3 s of playback are not counted)
+      player callbacks: longest gap 21.9 ms against a 100 ms output buffer; late callbacks (a gap longer than the buffer) 0
+      validity: valid (limits: a late player callback within 500 ms of a break, more than 250 ms unmatched in a break, more than max(1, floor(minutes / 10)) counted breaks, a missing, misaligned or incomplete reference, or an upstream break without late-callback data)
+  Panel: PASS; 90.4 min; upstream breaks 0, counted 0 of at most 9; differing frames 0; runs of the app 1; dropped samples 0, ring overrun samples 0, xruns 0
+      recording rule (9 Nov 2026): fidelity decides PASS or FAIL; upstream breaks are reported; a run with limits exceeded is INVALID (docs/PLAN.md section 12)
+      fidelity: app compared with the reference capture over 260,178,720 frames (5,420.4 s) in 1 run(s) of the app; differing frames 0; reference audio the app has no recording of 0 frame(s); audio only the app has 0 frame(s); restart gaps 0 frame(s)
+        run 1: app frames 0 to 260246880, one fixed offset 68160 frames (found by a stretch of the reference); compared 260178720, differing 0, largest difference 0
+      upstream breaks (between the source and the reference capture; reported, not gated): 0 in 90.4 minutes of audio, 0 counted toward the limit of 9 (breaks in the first 3 s of playback are not counted)
+      player callbacks: longest gap 22.2 ms against a 100 ms output buffer; late callbacks (a gap longer than the buffer) 0
+      validity: valid (limits: a late player callback within 500 ms of a break, more than 250 ms unmatched in a break, more than max(1, floor(minutes / 10)) counted breaks, a missing, misaligned or incomplete reference, or an upstream break without late-callback data)
+
+ROLLING ESTIMATES  the 'ready by' recorded at each Stop against the moment everything that was outstanding at that Stop had finished
+  Inaugural: Stop 11:30:00, estimate 15.0 min (ready by 11:45:00), actual 15.0 min (finished 11:45:00), difference +0.0%, 1 transcript(s) outstanding; basis: sessions with several languages: measured, 2.67 times the profile's, f
+  Parallel I: Stop 13:30:00, estimate 47.0 min (ready by 14:17:00), actual 43.0 min (finished 14:13:00), difference -8.5%, 1 transcript(s) outstanding; basis: sessions with several languages: measured, 2.01 times the profile's, f
+  Parallel II: Stop 16:01:00, estimate 16.0 min (ready by 16:17:00), actual 12.0 min (finished 16:13:00), difference -25.0%, 1 transcript(s) outstanding; basis: sessions with several languages: measured, 2.76 times the profile's, f
+  Panel: Stop 17:33:00, estimate 25.0 min (ready by 17:58:00), actual 23.0 min (finished 17:56:00), difference -8.0%, 1 transcript(s) outstanding; basis: sessions with several languages: measured, 2.01 times the profile's, f
+
+START CALLS  how long the app's start call took for each session, step by step (the recorder had begun when it returned)
+    queue registration of main-hall__inaugural: open-sessions lock 0 ms, models 0 ms, session database 8 ms, rolling job 0 ms, manager 0 ms, open-sessions list 0 ms, engine slots 0 ms, total 9 ms
+    queue start hook of main-hall__inaugural: profile read 0 ms, registration 9 ms, night plans 0 ms, total 10 ms; engine units running at the start: 0
+  start call of D:\STELMAR-Gate\day-sim\day-emu-low-20261121-052323\rec\2026-11-21\main-hall__inaugural: cancel check 0 ms, recorder start 237 ms, options file 1 ms, queue hook 10 ms, total 249 ms
+    queue registration of hall-a__parallel-i: open-sessions lock 0 ms, models 0 ms, session database 8 ms, rolling job 0 ms, manager 0 ms, open-sessions list 0 ms, engine slots 0 ms, total 8 ms
+    queue start hook of hall-a__parallel-i: profile read 163 ms, registration 8 ms, night plans 0 ms, total 172 ms; engine units running at the start: 0
+  start call of D:\STELMAR-Gate\day-sim\day-emu-low-20261121-052323\rec\2026-11-21\hall-a__parallel-i: cancel check 0 ms, recorder start 254 ms, options file 1 ms, queue hook 172 ms, total 428 ms
+    queue registration of hall-b__parallel-ii: open-sessions lock 0 ms, models 0 ms, session database 10 ms, rolling job 0 ms, manager 0 ms, open-sessions list 0 ms, engine slots 0 ms, total 10 ms
+    queue start hook of hall-b__parallel-ii: profile read 1 ms, registration 11 ms, night plans 0 ms, total 12 ms; engine units running at the start: 0
+  start call of D:\STELMAR-Gate\day-sim\day-emu-low-20261121-052323\rec\2026-11-21\hall-b__parallel-ii: cancel check 0 ms, recorder start 250 ms, options file 2 ms, queue hook 13 ms, total 265 ms
+    queue registration of main-hall__panel: open-sessions lock 0 ms, models 0 ms, session database 8 ms, rolling job 0 ms, manager 0 ms, open-sessions list 0 ms, engine slots 0 ms, total 8 ms
+    queue start hook of main-hall__panel: profile read 0 ms, registration 9 ms, night plans 0 ms, total 10 ms; engine units running at the start: 1
+  start call of D:\STELMAR-Gate\day-sim\day-emu-low-20261121-052323\rec\2026-11-21\main-hall__panel: cancel check 0 ms, recorder start 176 ms, options file 1 ms, queue hook 10 ms, total 188 ms
+  lead-in of Inaugural: the player began 1.9 s after the recorder's first audio
+  lead-in of Parallel I: the player began 1.9 s after the recorder's first audio
+  lead-in of Parallel II: the player began 1.5 s after the recorder's first audio
+  lead-in of Panel: the player began 1.5 s after the recorder's first audio
+
+DEVICES  hybrid only where the profile chose it
+  profile config: {"index":0,"kind":"gpu"}; forced hybrid (labelled, kill test only): False
+  units done by revision and slot: post-1 on gpu: 73, post-2 on gpu: 19
+
+ENGINE MEMORY  peak against the limit the queue granted (bar: 70%)
+  worst: 51.8% (1609 of 3106 MiB; hall-b__parallel-ii unit 7 of post-1 on gpu)
+  memory-limit deaths (reported apart from other failures): 0
+
+TRANSCRIPT INTEGRITY  (single writer: no overlap, no repeated start, audio order, cursor)
+  hall-a__parallel-i post-1: 729 segments, overlaps 0, duplicate starts 0, appended in audio order True, job cursor 5422670 ms vs last segment end 5403115 ms, speech 3874 s of 5423 s, last end 5403 s -> ok
+  hall-a__parallel-i post-2: 44 segments, overlaps 0, duplicate starts 0, appended in audio order True, job cursor 334415 ms vs last segment end 332740 ms, speech 242 s of 5423 s, last end 333 s -> ok
+  hall-b__parallel-ii post-1: 620 segments, overlaps 0, duplicate starts 0, appended in audio order True, job cursor 5477090 ms vs last segment end 5456895 ms, speech 5211 s of 5477 s, last end 5457 s -> ok
+  main-hall__inaugural post-1: 633 segments, overlaps 0, duplicate starts 0, appended in audio order True, job cursor 5429960 ms vs last segment end 5397415 ms, speech 3888 s of 5430 s, last end 5397 s -> ok
+  main-hall__inaugural post-2: 633 segments, overlaps 0, duplicate starts 0, appended in audio order True, job cursor 5429960 ms vs last segment end 5397415 ms, speech 3888 s of 5430 s, last end 5397 s -> ok
+  main-hall__panel post-1: 628 segments, overlaps 0, duplicate starts 0, appended in audio order True, job cursor 5421810 ms vs last segment end 5403155 ms, speech 4285 s of 5422 s, last end 5403 s -> ok
+
+NIGHT PASS
+  planned at 18:03:00: night pass planned for 2 session(s): about 5.6 h, ready by 23:40 IST (measured speed: 2.44 times the profile's, from 5 finished unit(s))
+  night units finished: 19; audio 96.1 of 180.9 min; engine time 109.9 min; sessions with a complete post-2: 1 of 2
+  planned 'ready by' 23:40:00
+  ESTIMATE (extrapolated; the time box ended the run): 96.1 of 180.9 min of night audio done at 0.874 audio seconds per engine second; the remaining 84.8 min take about 97 min more, so the pass would finish at about 21:29:58 -> before 08:00
+  10:00:00 START: queue start hook of main-hall__inaugural: profile read 0 ms, registration 9 ms, night plans 0 ms, total 10 ms; engine units running at the start: 0
+  12:00:00 START: queue start hook of hall-a__parallel-i: profile read 163 ms, registration 8 ms, night plans 0 ms, total 172 ms; engine units running at the start: 0
+  14:30:00 START: queue start hook of hall-b__parallel-ii: profile read 1 ms, registration 11 ms, night plans 0 ms, total 12 ms; engine units running at the start: 0
+  16:02:00 START: queue start hook of main-hall__panel: profile read 0 ms, registration 9 ms, night plans 0 ms, total 10 ms; engine units running at the start: 1
+  18:08:00 main-hall__inaugural: unit 0 of post-2 done in 284.2 s on gpu (0 restart(s), engine peak 4173 MiB against limit 8675 MiB)
+  18:08:00 main-hall__inaugural: unit 1 of post-2 job 2 on gpu waits: starting needs 10.1 GB free after the engine's peak of 4.2 GB (3 GB stay free), 9.1 GB are free now
+  18:08:00 main-hall__inaugural: unit 1 of post-2 job 2 on gpu starts after waiting 2.0 s
+  18:11:00 main-hall__inaugural: unit 1 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 0 (275955 to 283245 ms) failed a guard (LowCoverage; compression ratio 0.78, 28 characters, 5.0 s of speech); retrying without previous-text context
+  18:11:00 main-hall__inaugural: unit 1 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 0: first half (275955 to 279295 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  18:11:00 main-hall__inaugural: unit 1 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 0: rescued by step b (cut at 279295 ms, each half decoded without context)
+  18:12:00 main-hall__inaugural: unit 1 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 10 (356540 to 361695 ms) failed a guard (LowCoverage; compression ratio 0.92, 24 characters, 4.5 s of speech); retrying without previous-text context
+  18:12:00 main-hall__inaugural: unit 1 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 10: first half (356540 to 359035 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  18:12:00 main-hall__inaugural: unit 1 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 10: rescued by step b (cut at 359035 ms, each half decoded without context)
+  18:13:00 main-hall__inaugural: unit 1 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 21 (481070 to 493955 ms) failed a guard (LowCoverage; compression ratio 0.74, 23 characters, 8.2 s of speech); retrying without previous-text context
+  18:13:00 main-hall__inaugural: unit 1 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 21: first half (481070 to 484815 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  18:13:00 main-hall__inaugural: unit 1 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 21: rescued by step b (cut at 484815 ms, each half decoded without context)
+  18:14:00 main-hall__inaugural: unit 1 of post-2 done in 393.0 s on gpu (0 restart(s), engine peak 3590 MiB against limit 8675 MiB)
+  18:17:00 main-hall__inaugural: unit 2 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 0 (625930 to 634130 ms) failed a guard (LowCoverage; compression ratio 0.62, 13 characters, 3.7 s of speech); retrying without previous-text context
+  18:18:00 main-hall__inaugural: unit 2 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 0: first half (625930 to 630540 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  18:18:00 main-hall__inaugural: unit 2 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 0: rescued by step b (cut at 630540 ms, each half decoded without context)
+  18:18:00 main-hall__inaugural: unit 2 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 6 (665710 to 676180 ms) failed a guard (LowCoverage; compression ratio 1.02, 48 characters, 7.2 s of speech); retrying without previous-text context
+  18:18:00 main-hall__inaugural: unit 2 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 6: first half (665710 to 670190 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  18:18:00 main-hall__inaugural: unit 2 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 6: rescued by step b (cut at 670190 ms, each half decoded without context)
+  18:19:00 main-hall__inaugural: unit 2 of post-2 job 2 on gpu: engine warning segment_dropped: chunk 15 (733970 to 742290 ms) is not speech and was dropped: LittleSpeech (compression ratio 0.65, average log-probability -0.07, no-speech 0.00, speech share 0.15)
+  18:21:00 main-hall__inaugural: unit 2 of post-2 done in 391.5 s on gpu (0 restart(s), engine peak 3585 MiB against limit 8675 MiB)
+  18:21:00 main-hall__inaugural: unit 3 of post-2 job 2 on gpu waits: starting needs 10.1 GB free after the engine's peak of 4.2 GB (3 GB stay free), 10.1 GB are free now
+  18:21:00 main-hall__inaugural: unit 3 of post-2 job 2 on gpu starts after waiting 2.0 s
+  18:24:00 main-hall__inaugural: unit 3 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 6 (990140 to 995400 ms) failed a guard (LowCoverage; compression ratio 0.76, 26 characters, 3.5 s of speech); retrying without previous-text context
+  18:24:00 main-hall__inaugural: unit 3 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 6: first half (990140 to 992795 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  18:24:00 main-hall__inaugural: unit 3 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 6: rescued by step b (cut at 992795 ms, each half decoded without context)
+  18:26:00 main-hall__inaugural: unit 3 of post-2 done in 281.2 s on gpu (0 restart(s), engine peak 3558 MiB against limit 8675 MiB)
+  18:26:00 main-hall__inaugural: unit 4 of post-2 job 2 on gpu waits: starting needs 10.1 GB free after the engine's peak of 4.2 GB (3 GB stay free), 4.8 GB are free now
+  18:26:00 main-hall__inaugural: unit 4 of post-2 job 2 on gpu starts after waiting 2.0 s
+  18:30:00 main-hall__inaugural: unit 4 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 11 (1292570 to 1300260 ms) failed a guard (LowCoverage; compression ratio 0.78, 29 characters, 4.3 s of speech); retrying without previous-text context
+  18:30:00 main-hall__inaugural: unit 4 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 11: first half (1292570 to 1296735 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  18:30:00 main-hall__inaugural: unit 4 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 11: rescued by step b (cut at 1296735 ms, each half decoded without context)
+  18:30:00 main-hall__inaugural: unit 4 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 18 (1335320 to 1340230 ms) failed a guard (LowCoverage; compression ratio 0.74, 17 characters, 3.3 s of speech); retrying without previous-text context
+  18:31:00 main-hall__inaugural: unit 4 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 18: first half (1335320 to 1336485 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  18:31:00 main-hall__inaugural: unit 4 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 18: rescued by step b (cut at 1336485 ms, each half decoded without context)
+  18:33:00 main-hall__inaugural: unit 4 of post-2 done in 415.7 s on gpu (0 restart(s), engine peak 3612 MiB against limit 8675 MiB)
+  18:33:00 main-hall__inaugural: unit 5 of post-2 job 2 on gpu waits: starting needs 10.1 GB free after the engine's peak of 4.2 GB (3 GB stay free), 4.8 GB are free now
+  18:33:00 main-hall__inaugural: unit 5 of post-2 job 2 on gpu starts after waiting 2.0 s
+  18:37:00 main-hall__inaugural: unit 5 of post-2 done in 235.7 s on gpu (0 restart(s), engine peak 3558 MiB against limit 8675 MiB)
+  18:37:00 main-hall__inaugural: unit 6 of post-2 job 2 on gpu waits: starting needs 10.1 GB free after the engine's peak of 4.2 GB (3 GB stay free), 4.8 GB are free now
+  18:37:00 main-hall__inaugural: unit 6 of post-2 job 2 on gpu starts after waiting 2.0 s
+  18:41:00 main-hall__inaugural: unit 6 of post-2 done in 291.7 s on gpu (0 restart(s), engine peak 3581 MiB against limit 8675 MiB)
+  18:45:00 main-hall__inaugural: unit 7 of post-2 done in 211.4 s on gpu (0 restart(s), engine peak 3558 MiB against limit 8675 MiB)
+  18:45:00 main-hall__inaugural: unit 8 of post-2 job 2 on gpu waits: starting needs 10.1 GB free after the engine's peak of 4.2 GB (3 GB stay free), 4.8 GB are free now
+  18:45:00 main-hall__inaugural: unit 8 of post-2 job 2 on gpu starts after waiting 2.0 s
+  18:49:00 main-hall__inaugural: unit 8 of post-2 job 2 on gpu: engine warning segment_dropped: chunk 22 (2526515 to 2541285 ms) is not speech and was dropped: LittleSpeech (compression ratio 0.91, average log-probability -0.19, no-speech 0.00, speech share 0.25)
+  18:50:00 main-hall__inaugural: unit 8 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 36 (2644635 to 2648975 ms) failed a guard (LowCoverage; compression ratio 0.72, 21 characters, 3.2 s of speech); retrying without previous-text context
+  18:51:00 main-hall__inaugural: unit 8 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 36: first half (2644635 to 2645775 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  18:51:00 main-hall__inaugural: unit 8 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 36: rescued by step b (cut at 2645775 ms, each half decoded without context)
+  18:51:00 main-hall__inaugural: unit 8 of post-2 done in 361.4 s on gpu (0 restart(s), engine peak 3571 MiB against limit 8675 MiB)
+  18:54:00 main-hall__inaugural: unit 9 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 0 (2678055 to 2684695 ms) failed a guard (LowCoverage; compression ratio 0.58, 11 characters, 3.6 s of speech); retrying without previous-text context
+  18:54:00 main-hall__inaugural: unit 9 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 0: first half (2678055 to 2681635 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  18:54:00 main-hall__inaugural: unit 9 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 0: rescued by step b (cut at 2681635 ms, each half decoded without context)
+  18:55:00 main-hall__inaugural: unit 9 of post-2 job 2 on gpu: engine warning segment_dropped: chunk 19 (2844075 to 2853365 ms) is not speech and was dropped: LittleSpeech (compression ratio 1.36, average log-probability -0.11, no-speech 0.00, speech share 0.28)
+  18:56:00 main-hall__inaugural: unit 9 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 31 (2954925 to 2962480 ms) failed a guard (LowCoverage; compression ratio 0.81, 47 characters, 7.2 s of speech); retrying without previous-text context
+  18:57:00 main-hall__inaugural: unit 9 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 31: first half (2954925 to 2957866 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  18:57:00 main-hall__inaugural: unit 9 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 31: rescued by step b (cut at 2957866 ms, each half decoded without context)
+  18:57:00 main-hall__inaugural: unit 9 of post-2 done in 365.2 s on gpu (0 restart(s), engine peak 4176 MiB against limit 8675 MiB)
+  19:00:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 0 (2996510 to 3003400 ms) failed a guard (LowCoverage; compression ratio 0.27, 3 characters, 3.2 s of speech); retrying without previous-text context
+  19:00:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 0: first half (2996510 to 3000640 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  19:00:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 0: rescued by step b (cut at 3000640 ms, each half decoded without context)
+  19:00:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 2 (3008280 to 3013380 ms) failed a guard (LowCoverage; compression ratio 0.53, 9 characters, 3.9 s of speech); retrying without previous-text context
+  19:01:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 2: first half (3008280 to 3010880 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  19:01:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 2: rescued by step b (cut at 3010880 ms, each half decoded without context)
+  19:01:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 11 (3087165 to 3092675 ms) failed a guard (LowCoverage; compression ratio 0.73, 22 characters, 4.6 s of speech); retrying without previous-text context
+  19:02:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 11: first half (3087165 to 3088465 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  19:02:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 11: rescued by step b (cut at 3088465 ms, each half decoded without context)
+  19:02:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 13 (3099290 to 3104610 ms) failed a guard (LowCoverage; compression ratio 0.78, 28 characters, 4.4 s of speech); retrying without previous-text context
+  19:02:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 13: first half (3099290 to 3100975 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  19:02:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 13: rescued by step b (cut at 3100975 ms, each half decoded without context)
+  19:02:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 16 (3112860 to 3117280 ms) failed a guard (LowCoverage; compression ratio 0.60, 12 characters, 3.5 s of speech); retrying without previous-text context
+  19:03:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 16: first half (3112860 to 3114350 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  19:03:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 16: rescued by step b (cut at 3114350 ms, each half decoded without context)
+  19:03:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 20 (3144790 to 3148840 ms) failed a guard (LowCoverage; compression ratio 0.68, 17 characters, 3.7 s of speech); retrying without previous-text context
+  19:03:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 20: first half (3144790 to 3146290 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  19:03:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 20: rescued by step b (cut at 3146290 ms, each half decoded without context)
+  19:04:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 26 (3208600 to 3214730 ms) failed a guard (LowCoverage; compression ratio 0.79, 30 characters, 4.9 s of speech); retrying without previous-text context
+  19:04:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 26: first half (3208600 to 3210895 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  19:04:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 26: rescued by step b (cut at 3210895 ms, each half decoded without context)
+  19:05:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning segment_dropped: chunk 36 (3306110 to 3316330 ms) is not speech and was dropped: LittleSpeech (compression ratio 1.27, average log-probability -0.15, no-speech 0.00, speech share 0.23)
+  19:05:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 38 (3329110 to 3334790 ms) failed a guard (LowCoverage; compression ratio 0.92, 33 characters, 4.1 s of speech); retrying without previous-text context
+  19:05:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 38: first half (3329110 to 3332130 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  19:05:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 38: rescued by step b (cut at 3332130 ms, each half decoded without context)
+  19:06:00 main-hall__inaugural: unit 10 of post-2 done in 504.3 s on gpu (0 restart(s), engine peak 4175 MiB against limit 8675 MiB)
+  19:09:00 main-hall__inaugural: unit 11 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 14 (3469000 to 3473690 ms) failed a guard (LowCoverage; compression ratio 0.83, 25 characters, 3.7 s of speech); retrying without previous-text context
+  19:09:00 main-hall__inaugural: unit 11 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 14: first half (3469000 to 3471410 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  19:09:00 main-hall__inaugural: unit 11 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 14: rescued by step b (cut at 3471410 ms, each half decoded without context)
+  19:10:00 main-hall__inaugural: unit 11 of post-2 job 2 on gpu: engine warning segment_dropped: chunk 26 (3592590 to 3605185 ms) is not speech and was dropped: LittleSpeech (compression ratio 0.81, average log-probability -0.26, no-speech 0.00, speech share 0.27)
+  19:10:00 main-hall__inaugural: unit 11 of post-2 done in 273.9 s on gpu (0 restart(s), engine peak 3578 MiB against limit 8675 MiB)
+  19:15:00 main-hall__inaugural: unit 12 of post-2 job 2 on gpu: engine warning segment_dropped: chunk 26 (3838985 to 3849525 ms) is not speech and was dropped: LittleSpeech (compression ratio 0.68, average log-probability -0.22, no-speech 0.00, speech share 0.14)
+  19:15:00 main-hall__inaugural: unit 12 of post-2 job 2 on gpu: engine warning segment_dropped: chunk 27 (3849545 to 3858035 ms) is not speech and was dropped: LittleSpeech (compression ratio 0.72, average log-probability -0.36, no-speech 0.00, speech share 0.21)
+  19:16:00 main-hall__inaugural: unit 12 of post-2 done in 351.7 s on gpu (0 restart(s), engine peak 3595 MiB against limit 8675 MiB)
+  19:20:00 main-hall__inaugural: unit 13 of post-2 job 2 on gpu: engine warning segment_dropped: chunk 19 (4120960 to 4134505 ms) is not speech and was dropped: LittleSpeech (compression ratio 1.30, average log-probability -0.20, no-speech 0.00, speech share 0.12)
+  19:20:00 main-hall__inaugural: unit 13 of post-2 done in 260.8 s on gpu (0 restart(s), engine peak 3558 MiB against limit 8675 MiB)
+  19:20:00 main-hall__inaugural: unit 14 of post-2 job 2 on gpu waits: starting needs 10.1 GB free after the engine's peak of 4.2 GB (3 GB stay free), 7.4 GB are free now
+  19:20:00 main-hall__inaugural: unit 14 of post-2 job 2 on gpu starts after waiting 2.0 s
+  19:26:00 main-hall__inaugural: unit 14 of post-2 done in 319.4 s on gpu (0 restart(s), engine peak 3583 MiB against limit 8675 MiB)
+  19:30:00 main-hall__inaugural: unit 15 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 24 (4779115 to 4784345 ms) failed a guard (LowCoverage; compression ratio 0.56, 10 characters, 3.4 s of speech); retrying without previous-text context
+  19:30:00 main-hall__inaugural: unit 15 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 24: first half (4779115 to 4780480 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  19:30:00 main-hall__inaugural: unit 15 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 24: rescued by step b (cut at 4780480 ms, each half decoded without context)
+  19:30:00 main-hall__inaugural: unit 15 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 25 (4784395 to 4790075 ms) failed a guard (LowCoverage; compression ratio 0.53, 9 characters, 4.5 s of speech); retrying without previous-text context
+  19:31:00 main-hall__inaugural: unit 15 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 25: first half (4784395 to 4786990 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  19:31:00 main-hall__inaugural: unit 15 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 25: rescued by step b (cut at 4786990 ms, each half decoded without context)
+  19:31:00 main-hall__inaugural: unit 15 of post-2 done in 341.8 s on gpu (0 restart(s), engine peak 4173 MiB against limit 8675 MiB)
+  19:31:00 main-hall__inaugural: unit 16 of post-2 job 2 on gpu waits: starting needs 10.1 GB free after the engine's peak of 4.2 GB (3 GB stay free), 7.4 GB are free now
+  19:31:00 main-hall__inaugural: unit 16 of post-2 job 2 on gpu starts after waiting 2.0 s
+  19:35:00 main-hall__inaugural: unit 16 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 15 (4973445 to 4978510 ms) failed a guard (LowCoverage; compression ratio 0.80, 32 characters, 4.7 s of speech); retrying without previous-text context
+  19:35:00 main-hall__inaugural: unit 16 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 15: first half (4973445 to 4974848 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  19:35:00 main-hall__inaugural: unit 16 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 15: rescued by step b (cut at 4974848 ms, each half decoded without context)
+  19:36:00 main-hall__inaugural: unit 16 of post-2 job 2 on gpu: engine warning segment_dropped: chunk 23 (5048105 to 5053655 ms) is not speech and was dropped: LittleSpeech (compression ratio 0.43, average log-probability -0.61, no-speech 0.00, speech share 0.17)
+  19:36:00 main-hall__inaugural: unit 16 of post-2 done in 272.1 s on gpu (0 restart(s), engine peak 3558 MiB against limit 8675 MiB)
+  19:42:00 main-hall__inaugural: unit 17 of post-2 job 2 on gpu: engine warning segment_dropped: chunk 37 (5400445 to 5406055 ms) is not speech and was dropped: LittleSpeech (compression ratio 1.15, average log-probability -0.03, no-speech 0.00, speech share 0.23)
+  19:42:00 main-hall__inaugural: unit 17 of post-2 done in 338.4 s on gpu (0 restart(s), engine peak 4173 MiB against limit 8675 MiB)
+  19:42:00 main-hall__inaugural: post-2 transcript complete
+  19:53:00 hall-a__parallel-i: unit 0 of post-2 done in 698.3 s on gpu (0 restart(s), engine peak 4095 MiB against limit 8675 MiB)
+
+ERROR RATES  information only (not a gate); reference text of every utterance is from the local evaluation sets
+  per session, whole text: reference words, WER, CER (the final revision: post-2 where complete, else post-1)
+  Parallel I (post-1): reference words 8828, hypothesis words 8991, WER 24.2%, CER 7.3%
+  Parallel II (post-1): reference words 17663, hypothesis words 16688, WER 8.9%, CER 6.1%
+  Inaugural (post-2): reference words 9055, hypothesis words 7646, WER 22.1%, CER 19.4%
+  Panel (post-1): reference words 9663, hypothesis words 9975, WER 67.3%, CER 50.3%
+  per dataset, utterance by utterance, each utterance's window from where the source starts in the app's recording (reference capture start plus the fixed offset), information:
+    coshe-eval (CC BY-NC 4.0, local evaluation data: numbers only): 100 utterances, WER 9.7%, CER 6.9%
+    fleurs-en: 149 utterances, WER 52.8%, CER 50.6%
+    fleurs-hi: 224 utterances, WER 108.0%, CER 87.3%
+    kathbath-hi: 746 utterances, WER 28.3%, CER 11.6%
+    kathbath-ur: 81 utterances, WER 43.3%, CER 23.3%
+    svarah: 674 utterances, WER 25.5%, CER 21.8%
+
+UNIT SPEED  engine seconds per audio second for every unit (1.0 = real time), by revision
+  Inaugural unit 0 of post-1: 276 s of audio in 277 s on gpu -> 1.00, 0 restart(s), peak 1539 of 3106 MiB, done at 10:12:00
+  Inaugural unit 1 of post-1: 350 s of audio in 391 s on gpu -> 1.12, 0 restart(s), peak 1566 of 3106 MiB, done at 10:19:00
+  Inaugural unit 2 of post-1: 316 s of audio in 390 s on gpu -> 1.23, 0 restart(s), peak 1561 of 3106 MiB, done at 10:25:00
+  Inaugural unit 3 of post-1: 250 s of audio in 280 s on gpu -> 1.12, 0 restart(s), peak 1535 of 3106 MiB, done at 10:30:00
+  Inaugural unit 4 of post-1: 357 s of audio in 414 s on gpu -> 1.16, 0 restart(s), peak 1588 of 3106 MiB, done at 10:37:00
+  Inaugural unit 5 of post-1: 246 s of audio in 233 s on gpu -> 0.95, 0 restart(s), peak 1535 of 3106 MiB, done at 10:41:00
+  Inaugural unit 6 of post-1: 299 s of audio in 291 s on gpu -> 0.97, 0 restart(s), peak 1557 of 3106 MiB, done at 10:46:00
+  Inaugural unit 7 of post-1: 255 s of audio in 210 s on gpu -> 0.83, 0 restart(s), peak 1535 of 3106 MiB, done at 10:49:00
+  Inaugural unit 8 of post-1: 329 s of audio in 361 s on gpu -> 1.10, 0 restart(s), peak 1547 of 3106 MiB, done at 10:55:00
+  Inaugural unit 9 of post-1: 318 s of audio in 362 s on gpu -> 1.14, 0 restart(s), peak 1562 of 3106 MiB, done at 11:01:00
+  Inaugural unit 10 of post-1: 345 s of audio in 503 s on gpu -> 1.46, 0 restart(s), peak 1581 of 3106 MiB, done at 11:09:00
+  Inaugural unit 11 of post-1: 284 s of audio in 273 s on gpu -> 0.96, 0 restart(s), peak 1554 of 3106 MiB, done at 11:14:00
+  Inaugural unit 12 of post-1: 346 s of audio in 351 s on gpu -> 1.01, 0 restart(s), peak 1571 of 3106 MiB, done at 11:20:00
+  Inaugural unit 13 of post-1: 254 s of audio in 259 s on gpu -> 1.02, 0 restart(s), peak 1535 of 3106 MiB, done at 11:24:00
+  Inaugural unit 14 of post-1: 313 s of audio in 318 s on gpu -> 1.02, 0 restart(s), peak 1559 of 3106 MiB, done at 11:29:00
+  Inaugural unit 15 of post-1: 311 s of audio in 336 s on gpu -> 1.08, 0 restart(s), peak 1570 of 3106 MiB, done at 11:35:00
+  Inaugural unit 16 of post-1: 242 s of audio in 269 s on gpu -> 1.11, 0 restart(s), peak 1534 of 3106 MiB, done at 11:40:00
+  Inaugural unit 17 of post-1: 339 s of audio in 327 s on gpu -> 0.97, 0 restart(s), peak 1558 of 3106 MiB, done at 11:45:00
+  Parallel I unit 0 of post-1: 334 s of audio in 464 s on gpu -> 1.39, 0 restart(s), peak 1571 of 3106 MiB, done at 12:15:00
+  Parallel I unit 1 of post-1: 289 s of audio in 400 s on gpu -> 1.38, 0 restart(s), peak 1540 of 3106 MiB, done at 12:22:00
+  Parallel I unit 2 of post-1: 251 s of audio in 334 s on gpu -> 1.33, 0 restart(s), peak 1538 of 3106 MiB, done at 12:28:00
+  Parallel I unit 3 of post-1: 305 s of audio in 406 s on gpu -> 1.33, 0 restart(s), peak 1555 of 3106 MiB, done at 12:34:00
+  Parallel I unit 4 of post-1: 312 s of audio in 427 s on gpu -> 1.37, 0 restart(s), peak 1570 of 3106 MiB, done at 12:41:00
+  Parallel I unit 5 of post-1: 264 s of audio in 344 s on gpu -> 1.30, 0 restart(s), peak 1538 of 3106 MiB, done at 12:47:00
+  Parallel I unit 6 of post-1: 247 s of audio in 336 s on gpu -> 1.36, 0 restart(s), peak 1538 of 3106 MiB, done at 12:53:00
+  Parallel I unit 7 of post-1: 276 s of audio in 395 s on gpu -> 1.43, 0 restart(s), peak 1539 of 3106 MiB, done at 12:59:00
+  Parallel I unit 8 of post-1: 278 s of audio in 407 s on gpu -> 1.47, 0 restart(s), peak 1543 of 3106 MiB, done at 13:06:00
+  Parallel I unit 9 of post-1: 327 s of audio in 466 s on gpu -> 1.42, 0 restart(s), peak 1566 of 3106 MiB, done at 13:14:00
+  Parallel I unit 10 of post-1: 318 s of audio in 503 s on gpu -> 1.58, 0 restart(s), peak 1562 of 3106 MiB, done at 13:22:00
+  Parallel I unit 11 of post-1: 261 s of audio in 376 s on gpu -> 1.44, 0 restart(s), peak 1539 of 3106 MiB, done at 13:29:00
+  Parallel I unit 12 of post-1: 323 s of audio in 398 s on gpu -> 1.23, 0 restart(s), peak 1575 of 3106 MiB, done at 13:35:00
+  Parallel I unit 13 of post-1: 295 s of audio in 410 s on gpu -> 1.39, 0 restart(s), peak 1550 of 3106 MiB, done at 13:42:00
+  Parallel I unit 14 of post-1: 274 s of audio in 394 s on gpu -> 1.44, 0 restart(s), peak 1540 of 3106 MiB, done at 13:49:00
+  Parallel I unit 15 of post-1: 339 s of audio in 494 s on gpu -> 1.46, 0 restart(s), peak 1567 of 3106 MiB, done at 13:57:00
+  Parallel I unit 16 of post-1: 265 s of audio in 357 s on gpu -> 1.34, 0 restart(s), peak 1540 of 3106 MiB, done at 14:03:00
+  Parallel I unit 17 of post-1: 300 s of audio in 436 s on gpu -> 1.45, 0 restart(s), peak 1552 of 3106 MiB, done at 14:10:00
+  Parallel I unit 18 of post-1: 166 s of audio in 199 s on gpu -> 1.20, 0 restart(s), peak 1533 of 3106 MiB, done at 14:13:00
+  Parallel II unit 0 of post-1: 288 s of audio in 351 s on gpu -> 1.22, 0 restart(s), peak 1546 of 3106 MiB, done at 14:43:00
+  Parallel II unit 1 of post-1: 274 s of audio in 309 s on gpu -> 1.13, 0 restart(s), peak 1538 of 3106 MiB, done at 14:49:00
+  Parallel II unit 2 of post-1: 313 s of audio in 284 s on gpu -> 0.91, 0 restart(s), peak 1540 of 3106 MiB, done at 14:53:00
+  Parallel II unit 3 of post-1: 261 s of audio in 291 s on gpu -> 1.12, 0 restart(s), peak 1536 of 3106 MiB, done at 14:58:00
+  Parallel II unit 4 of post-1: 311 s of audio in 308 s on gpu -> 0.99, 0 restart(s), peak 1554 of 3106 MiB, done at 15:03:00
+  Parallel II unit 5 of post-1: 345 s of audio in 393 s on gpu -> 1.14, 0 restart(s), peak 1577 of 3106 MiB, done at 15:10:00
+  Parallel II unit 6 of post-1: 323 s of audio in 324 s on gpu -> 1.00, 0 restart(s), peak 1570 of 3106 MiB, done at 15:15:00
+  Parallel II unit 7 of post-1: 357 s of audio in 344 s on gpu -> 0.96, 0 restart(s), peak 1609 of 3106 MiB, done at 15:21:00
+  Parallel II unit 8 of post-1: 347 s of audio in 321 s on gpu -> 0.93, 0 restart(s), peak 1605 of 3106 MiB, done at 15:26:00
+  Parallel II unit 9 of post-1: 283 s of audio in 305 s on gpu -> 1.07, 0 restart(s), peak 1543 of 3106 MiB, done at 15:31:00
+  Parallel II unit 10 of post-1: 266 s of audio in 279 s on gpu -> 1.05, 0 restart(s), peak 1537 of 3106 MiB, done at 15:36:00
+  Parallel II unit 11 of post-1: 273 s of audio in 284 s on gpu -> 1.04, 0 restart(s), peak 1538 of 3106 MiB, done at 15:41:00
+  Parallel II unit 12 of post-1: 300 s of audio in 265 s on gpu -> 0.88, 0 restart(s), peak 1552 of 3106 MiB, done at 15:45:00
+  Parallel II unit 13 of post-1: 249 s of audio in 264 s on gpu -> 1.06, 0 restart(s), peak 1536 of 3106 MiB, done at 15:50:00
+  Parallel II unit 14 of post-1: 356 s of audio in 396 s on gpu -> 1.11, 0 restart(s), peak 1589 of 3106 MiB, done at 15:56:00
+  Parallel II unit 15 of post-1: 352 s of audio in 448 s on gpu -> 1.27, 0 restart(s), peak 1588 of 3106 MiB, done at 16:04:00
+  Parallel II unit 16 of post-1: 305 s of audio in 333 s on gpu -> 1.09, 0 restart(s), peak 1568 of 3106 MiB, done at 16:09:00
+  Parallel II unit 17 of post-1: 275 s of audio in 253 s on gpu -> 0.92, 0 restart(s), peak 1538 of 3106 MiB, done at 16:13:00
+  Panel unit 0 of post-1: 343 s of audio in 380 s on gpu -> 1.11, 0 restart(s), peak 1576 of 3106 MiB, done at 16:20:00
+  Panel unit 1 of post-1: 270 s of audio in 338 s on gpu -> 1.25, 0 restart(s), peak 1540 of 3106 MiB, done at 16:25:00
+  Panel unit 2 of post-1: 349 s of audio in 393 s on gpu -> 1.13, 0 restart(s), peak 1578 of 3106 MiB, done at 16:32:00
+  Panel unit 3 of post-1: 257 s of audio in 272 s on gpu -> 1.06, 0 restart(s), peak 1538 of 3106 MiB, done at 16:37:00
+  Panel unit 4 of post-1: 328 s of audio in 374 s on gpu -> 1.14, 0 restart(s), peak 1568 of 3106 MiB, done at 16:43:00
+  Panel unit 5 of post-1: 346 s of audio in 378 s on gpu -> 1.09, 0 restart(s), peak 1585 of 3106 MiB, done at 16:49:00
+  Panel unit 6 of post-1: 282 s of audio in 294 s on gpu -> 1.04, 0 restart(s), peak 1540 of 3106 MiB, done at 16:54:00
+  Panel unit 7 of post-1: 337 s of audio in 362 s on gpu -> 1.07, 0 restart(s), peak 1573 of 3106 MiB, done at 17:00:00
+  Panel unit 8 of post-1: 348 s of audio in 366 s on gpu -> 1.05, 0 restart(s), peak 1583 of 3106 MiB, done at 17:06:00
+  Panel unit 9 of post-1: 355 s of audio in 423 s on gpu -> 1.19, 0 restart(s), peak 1593 of 3106 MiB, done at 17:13:00
+  Panel unit 10 of post-1: 314 s of audio in 355 s on gpu -> 1.13, 0 restart(s), peak 1574 of 3106 MiB, done at 17:19:00
+  Panel unit 11 of post-1: 271 s of audio in 319 s on gpu -> 1.18, 0 restart(s), peak 1537 of 3106 MiB, done at 17:24:00
+  Panel unit 12 of post-1: 281 s of audio in 310 s on gpu -> 1.10, 0 restart(s), peak 1541 of 3106 MiB, done at 17:30:00
+  Panel unit 13 of post-1: 312 s of audio in 344 s on gpu -> 1.10, 0 restart(s), peak 1559 of 3106 MiB, done at 17:35:00
+  Panel unit 14 of post-1: 343 s of audio in 368 s on gpu -> 1.07, 0 restart(s), peak 1602 of 3106 MiB, done at 17:41:00
+  Panel unit 15 of post-1: 294 s of audio in 368 s on gpu -> 1.25, 0 restart(s), peak 1549 of 3106 MiB, done at 17:48:00
+  Panel unit 16 of post-1: 260 s of audio in 327 s on gpu -> 1.26, 0 restart(s), peak 1539 of 3106 MiB, done at 17:53:00
+  Panel unit 17 of post-1: 133 s of audio in 206 s on gpu -> 1.55, 0 restart(s), peak 1530 of 3106 MiB, done at 17:56:00
+  Inaugural unit 0 of post-2: 276 s of audio in 284 s on gpu -> 1.03, 0 restart(s), peak 4173 of 8675 MiB, done at 18:08:00
+  Inaugural unit 1 of post-2: 350 s of audio in 393 s on gpu -> 1.12, 0 restart(s), peak 3590 of 8675 MiB, done at 18:14:00
+  Inaugural unit 2 of post-2: 316 s of audio in 392 s on gpu -> 1.24, 0 restart(s), peak 3585 of 8675 MiB, done at 18:21:00
+  Inaugural unit 3 of post-2: 250 s of audio in 281 s on gpu -> 1.12, 0 restart(s), peak 3558 of 8675 MiB, done at 18:26:00
+  Inaugural unit 4 of post-2: 357 s of audio in 416 s on gpu -> 1.16, 0 restart(s), peak 3612 of 8675 MiB, done at 18:33:00
+  Inaugural unit 5 of post-2: 246 s of audio in 236 s on gpu -> 0.96, 0 restart(s), peak 3558 of 8675 MiB, done at 18:37:00
+  Inaugural unit 6 of post-2: 299 s of audio in 292 s on gpu -> 0.97, 0 restart(s), peak 3581 of 8675 MiB, done at 18:41:00
+  Inaugural unit 7 of post-2: 255 s of audio in 211 s on gpu -> 0.83, 0 restart(s), peak 3558 of 8675 MiB, done at 18:45:00
+  Inaugural unit 8 of post-2: 329 s of audio in 361 s on gpu -> 1.10, 0 restart(s), peak 3571 of 8675 MiB, done at 18:51:00
+  Inaugural unit 9 of post-2: 318 s of audio in 365 s on gpu -> 1.15, 0 restart(s), peak 4176 of 8675 MiB, done at 18:57:00
+  Inaugural unit 10 of post-2: 345 s of audio in 504 s on gpu -> 1.46, 0 restart(s), peak 4175 of 8675 MiB, done at 19:06:00
+  Inaugural unit 11 of post-2: 284 s of audio in 274 s on gpu -> 0.96, 0 restart(s), peak 3578 of 8675 MiB, done at 19:10:00
+  Inaugural unit 12 of post-2: 346 s of audio in 352 s on gpu -> 1.02, 0 restart(s), peak 3595 of 8675 MiB, done at 19:16:00
+  Inaugural unit 13 of post-2: 254 s of audio in 261 s on gpu -> 1.03, 0 restart(s), peak 3558 of 8675 MiB, done at 19:20:00
+  Inaugural unit 14 of post-2: 313 s of audio in 319 s on gpu -> 1.02, 0 restart(s), peak 3583 of 8675 MiB, done at 19:26:00
+  Inaugural unit 15 of post-2: 311 s of audio in 342 s on gpu -> 1.10, 0 restart(s), peak 4173 of 8675 MiB, done at 19:31:00
+  Inaugural unit 16 of post-2: 242 s of audio in 272 s on gpu -> 1.12, 0 restart(s), peak 3558 of 8675 MiB, done at 19:36:00
+  Inaugural unit 17 of post-2: 339 s of audio in 338 s on gpu -> 1.00, 0 restart(s), peak 4173 of 8675 MiB, done at 19:42:00
+  Parallel I unit 0 of post-2: 334 s of audio in 698 s on gpu -> 2.09, 0 restart(s), peak 4095 of 8675 MiB, done at 19:53:00
+
+MACHINE LOAD  the per-process sampler (rows every 10 s)
+  2083 samples over 10.0 h; mean CPU % of the host: host 10.9, engine 0.7, app 0.1, webview 0.1, player 0.1, script 2.9, other 6.9
+  other (outside our processes) above 15% in 2 of 2083 samples; highest 27%
+
+timeline: D:\STELMAR-Gate\day-sim\day-emu-low-20261121-052323\timeline.svg (copied next to this file)
+
+CHECKS
+  [PASS] fidelity of 'Inaugural' (one offset per run, 0 dropped, upstream breaks within max(1, floor(minutes/10))): PASS
+  [PASS] recorder counters of 'Inaugural': 0 ring overruns, 0 xruns, 0 dropped samples: dropped 0, overrun 0, xruns 0
+  [PASS] fidelity of 'Parallel I' (one offset per run, 0 dropped, upstream breaks within max(1, floor(minutes/10))): PASS
+  [PASS] recorder counters of 'Parallel I': 0 ring overruns, 0 xruns, 0 dropped samples: dropped 0, overrun 0, xruns 0
+  [PASS] fidelity of 'Parallel II' (one offset per run, 0 dropped, upstream breaks within max(1, floor(minutes/10))): PASS
+  [PASS] recorder counters of 'Parallel II': 0 ring overruns, 0 xruns, 0 dropped samples: dropped 0, overrun 0, xruns 0
+  [PASS] fidelity of 'Panel' (one offset per run, 0 dropped, upstream breaks within max(1, floor(minutes/10))): PASS
+  [PASS] recorder counters of 'Panel': 0 ring overruns, 0 xruns, 0 dropped samples: dropped 0, overrun 0, xruns 0
+  [PASS] rolling transcripts outstanding at the Stop of 'Inaugural' finished within 10% of the estimate recorded then: estimate 15.0 min, actual 15.0 min (+0.0%)
+  [PASS] rolling transcripts outstanding at the Stop of 'Parallel I' finished within 10% of the estimate recorded then: estimate 47.0 min, actual 43.0 min (-8.5%)
+  [FAIL] rolling transcripts outstanding at the Stop of 'Parallel II' finished within 10% of the estimate recorded then: estimate 16.0 min, actual 12.0 min (-25.0%)
+  [PASS] rolling transcripts outstanding at the Stop of 'Panel' finished within 10% of the estimate recorded then: estimate 25.0 min, actual 23.0 min (-8.0%)
+  [PASS] the start call of every session returned within 1000 ms of the recorder starting (worst 428 ms)
+  [PASS] the player began within 10 s of the recorder's first audio in every session (worst 1.9 s)
+  [PASS] every session was stopped by its stop file, 15 s after its player finished (no safety timer)
+  [PASS] hybrid only where the profile chose it: slots used ['gpu'], profile hybrid False
+  [PASS] engine peak memory under 70% of its limit in every unit: worst 51.8%
+  [PASS] no engine died at its memory limit: 0
+  [PASS] no segment repeated or overlapping, appended in audio order, cursor at the end, in every revision
+  [PASS] rolling transcript of 'Parallel I' complete and its revision the default (until the night pass): post-1 complete True, default post-1
+  [PASS] rolling transcript of 'Parallel II' complete and its revision the default (until the night pass): post-1 complete True, default post-1
+  [PASS] rolling transcript of 'Inaugural' complete and its revision the default (until the night pass): post-1 complete True, default post-2
+  [PASS] rolling transcript of 'Panel' complete and its revision the default (until the night pass): post-1 complete True, default post-1
+  [PASS] night pass: extrapolated finish before 08:00 IST (ESTIMATE; the time box ended the run): estimated 21:29:58
+
+VERDICT: FAIL (23 passed, 1 failed, 0 information or invalid)
+Speed, 'ready by' and 10% differences on the emulation profile are low-tier findings with numbers, not code failures (owner, 17 and 18 Nov 2026); the real laptops repeat the run.
+
+Scheduler log (every line, IST time first):
+  10:00:00 gpu engine slot started (configuration Gpu { index: 0 }, 2 thread(s))
+  10:00:00 START: queue registration of main-hall__inaugural: open-sessions lock 0 ms, models 0 ms, session database 8 ms, rolling job 0 ms, manager 0 ms, open-sessions list 0 ms, engine slots 0 ms, total 9 ms
+  10:00:00 START: queue start hook of main-hall__inaugural: profile read 0 ms, registration 9 ms, night plans 0 ms, total 10 ms; engine units running at the start: 0
+  10:00:00 START: start call of D:\STELMAR-Gate\day-sim\day-emu-low-20261121-052323\rec\2026-11-21\main-hall__inaugural: cancel check 0 ms, recorder start 237 ms, options file 1 ms, queue hook 10 ms, total 249 ms
+  10:00:00 paused: processing while recording is not cleared on this computer
+  10:00:00 DAY: started "Inaugural" in D:\STELMAR-Gate\day-sim\day-emu-low-20261121-052323\rec\2026-11-21\main-hall__inaugural
+  10:00:00 gpu: waiting, not processing: processing while recording is not cleared on this computer
+  10:00:00 resumed (was: processing while recording is not cleared on this computer)
+  10:00:00 gpu: processing may continue
+  10:02:00 main-hall__inaugural: pauses of part 1 found (12 pauses, 2 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 2048 MiB (assumed peak)
+  10:04:00 main-hall__inaugural: pauses of part 2 found (9 pauses, 6 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:06:00 main-hall__inaugural: pauses of part 3 found (8 pauses, 5 fallback cuts) in 1.1 s; engine peak 103 MiB against limit 1128 MiB (measured peak)
+  10:08:00 main-hall__inaugural: pauses of part 4 found (9 pauses, 1 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:08:00 main-hall__inaugural: 1 unit(s) planned after part 4
+  10:10:00 main-hall__inaugural: pauses of part 5 found (14 pauses, 1 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:12:00 main-hall__inaugural: pauses of part 6 found (13 pauses, 2 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:12:00 main-hall__inaugural: 1 unit(s) planned after part 6
+  10:12:00 main-hall__inaugural: unit 0 of post-1 done in 276.9 s on gpu (0 restart(s), engine peak 1539 MiB against limit 3106 MiB)
+  10:14:00 main-hall__inaugural: pauses of part 7 found (10 pauses, 5 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:15:00 main-hall__inaugural: unit 1 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 0 (275955 to 283245 ms) failed a guard (LowCoverage; compression ratio 0.78, 28 characters, 5.0 s of speech); retrying without previous-text context
+  10:15:00 main-hall__inaugural: unit 1 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 0: first half (275955 to 279295 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  10:15:00 main-hall__inaugural: unit 1 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 0: rescued by step b (cut at 279295 ms, each half decoded without context)
+  10:16:00 main-hall__inaugural: pauses of part 8 found (10 pauses, 4 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:16:00 main-hall__inaugural: unit 1 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 10 (356540 to 361695 ms) failed a guard (LowCoverage; compression ratio 0.92, 24 characters, 4.5 s of speech); retrying without previous-text context
+  10:16:00 main-hall__inaugural: unit 1 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 10: first half (356540 to 359035 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  10:16:00 main-hall__inaugural: unit 1 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 10: rescued by step b (cut at 359035 ms, each half decoded without context)
+  10:17:00 main-hall__inaugural: unit 1 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 21 (481070 to 493955 ms) failed a guard (LowCoverage; compression ratio 0.74, 23 characters, 8.2 s of speech); retrying without previous-text context
+  10:17:00 main-hall__inaugural: unit 1 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 21: first half (481070 to 484815 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  10:18:00 main-hall__inaugural: unit 1 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 21: rescued by step b (cut at 484815 ms, each half decoded without context)
+  10:18:00 main-hall__inaugural: pauses of part 9 found (13 pauses, 3 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:18:00 main-hall__inaugural: 1 unit(s) planned after part 9
+  10:19:00 main-hall__inaugural: unit 1 of post-1 done in 391.3 s on gpu (0 restart(s), engine peak 1566 MiB against limit 3106 MiB)
+  10:20:00 main-hall__inaugural: pauses of part 10 found (10 pauses, 4 fallback cuts) in 1.1 s; engine peak 103 MiB against limit 1128 MiB (measured peak)
+  10:22:00 main-hall__inaugural: pauses of part 11 found (12 pauses, 3 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:22:00 main-hall__inaugural: unit 2 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 0 (625930 to 634130 ms) failed a guard (LowCoverage; compression ratio 0.62, 13 characters, 3.7 s of speech); retrying without previous-text context
+  10:22:00 main-hall__inaugural: unit 2 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 0: first half (625930 to 630540 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  10:22:00 main-hall__inaugural: unit 2 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 0: rescued by step b (cut at 630540 ms, each half decoded without context)
+  10:22:00 main-hall__inaugural: unit 2 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 6 (665710 to 676180 ms) failed a guard (LowCoverage; compression ratio 1.02, 48 characters, 7.2 s of speech); retrying without previous-text context
+  10:23:00 main-hall__inaugural: unit 2 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 6: first half (665710 to 670190 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  10:23:00 main-hall__inaugural: unit 2 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 6: rescued by step b (cut at 670190 ms, each half decoded without context)
+  10:23:00 main-hall__inaugural: unit 2 of post-1 job 1 on gpu: engine warning segment_dropped: chunk 15 (733970 to 742290 ms) is not speech and was dropped: LittleSpeech (compression ratio 0.65, average log-probability -0.07, no-speech 0.00, speech share 0.15)
+  10:24:00 main-hall__inaugural: pauses of part 12 found (12 pauses, 2 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:24:00 main-hall__inaugural: 1 unit(s) planned after part 12
+  10:25:00 main-hall__inaugural: unit 2 of post-1 done in 390.2 s on gpu (0 restart(s), engine peak 1561 MiB against limit 3106 MiB)
+  10:26:00 main-hall__inaugural: pauses of part 13 found (11 pauses, 2 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:28:00 main-hall__inaugural: pauses of part 14 found (13 pauses, 2 fallback cuts) in 1.1 s; engine peak 103 MiB against limit 1128 MiB (measured peak)
+  10:28:00 main-hall__inaugural: 1 unit(s) planned after part 14
+  10:28:00 main-hall__inaugural: unit 3 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 6 (990140 to 995400 ms) failed a guard (LowCoverage; compression ratio 0.76, 26 characters, 3.5 s of speech); retrying without previous-text context
+  10:28:00 main-hall__inaugural: unit 3 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 6: first half (990140 to 992795 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  10:28:00 main-hall__inaugural: unit 3 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 6: rescued by step b (cut at 992795 ms, each half decoded without context)
+  10:30:00 main-hall__inaugural: pauses of part 15 found (11 pauses, 2 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:30:00 main-hall__inaugural: unit 3 of post-1 done in 280.3 s on gpu (0 restart(s), engine peak 1535 MiB against limit 3106 MiB)
+  10:32:00 main-hall__inaugural: pauses of part 16 found (9 pauses, 4 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:34:00 main-hall__inaugural: pauses of part 17 found (10 pauses, 3 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:34:00 main-hall__inaugural: 1 unit(s) planned after part 17
+  10:34:00 main-hall__inaugural: unit 4 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 11 (1292570 to 1300260 ms) failed a guard (LowCoverage; compression ratio 0.78, 29 characters, 4.3 s of speech); retrying without previous-text context
+  10:34:00 main-hall__inaugural: unit 4 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 11: first half (1292570 to 1296735 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  10:34:00 main-hall__inaugural: unit 4 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 11: rescued by step b (cut at 1296735 ms, each half decoded without context)
+  10:35:00 main-hall__inaugural: unit 4 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 18 (1335320 to 1340230 ms) failed a guard (LowCoverage; compression ratio 0.74, 17 characters, 3.3 s of speech); retrying without previous-text context
+  10:35:00 main-hall__inaugural: unit 4 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 18: first half (1335320 to 1336485 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  10:35:00 main-hall__inaugural: unit 4 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 18: rescued by step b (cut at 1336485 ms, each half decoded without context)
+  10:36:00 main-hall__inaugural: pauses of part 18 found (10 pauses, 5 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:37:00 main-hall__inaugural: unit 4 of post-1 done in 414.1 s on gpu (0 restart(s), engine peak 1588 MiB against limit 3106 MiB)
+  10:38:00 main-hall__inaugural: pauses of part 19 found (10 pauses, 0 fallback cuts) in 1.3 s; engine peak 103 MiB against limit 1128 MiB (measured peak)
+  10:38:00 main-hall__inaugural: 1 unit(s) planned after part 19
+  10:40:00 main-hall__inaugural: pauses of part 20 found (9 pauses, 2 fallback cuts) in 1.1 s; engine peak 103 MiB against limit 1128 MiB (measured peak)
+  10:41:00 main-hall__inaugural: unit 5 of post-1 done in 233.2 s on gpu (0 restart(s), engine peak 1535 MiB against limit 3106 MiB)
+  10:42:00 main-hall__inaugural: pauses of part 21 found (7 pauses, 8 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:42:00 main-hall__inaugural: 1 unit(s) planned after part 21
+  10:44:00 main-hall__inaugural: pauses of part 22 found (7 pauses, 7 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:46:00 main-hall__inaugural: unit 6 of post-1 done in 291.3 s on gpu (0 restart(s), engine peak 1557 MiB against limit 3106 MiB)
+  10:46:00 main-hall__inaugural: pauses of part 23 found (9 pauses, 4 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:48:00 main-hall__inaugural: pauses of part 24 found (7 pauses, 8 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:48:00 main-hall__inaugural: 1 unit(s) planned after part 24
+  10:49:00 main-hall__inaugural: unit 7 of post-1 done in 210.5 s on gpu (0 restart(s), engine peak 1535 MiB against limit 3106 MiB)
+  10:50:00 main-hall__inaugural: pauses of part 25 found (9 pauses, 1 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:52:00 main-hall__inaugural: pauses of part 26 found (7 pauses, 10 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:52:00 main-hall__inaugural: 1 unit(s) planned after part 26
+  10:53:00 main-hall__inaugural: unit 8 of post-1 job 1 on gpu: engine warning segment_dropped: chunk 22 (2526515 to 2541285 ms) is not speech and was dropped: LittleSpeech (compression ratio 0.91, average log-probability -0.19, no-speech 0.00, speech share 0.25)
+  10:54:00 main-hall__inaugural: pauses of part 27 found (11 pauses, 1 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:55:00 main-hall__inaugural: unit 8 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 36 (2644635 to 2648975 ms) failed a guard (LowCoverage; compression ratio 0.72, 21 characters, 3.2 s of speech); retrying without previous-text context
+  10:55:00 main-hall__inaugural: unit 8 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 36: first half (2644635 to 2645775 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  10:55:00 main-hall__inaugural: unit 8 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 36: rescued by step b (cut at 2645775 ms, each half decoded without context)
+  10:55:00 main-hall__inaugural: unit 8 of post-1 done in 361.4 s on gpu (0 restart(s), engine peak 1547 MiB against limit 3106 MiB)
+  10:56:00 main-hall__inaugural: pauses of part 28 found (11 pauses, 1 fallback cuts) in 1.0 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  10:58:00 main-hall__inaugural: pauses of part 29 found (12 pauses, 2 fallback cuts) in 1.2 s; engine peak 103 MiB against limit 1128 MiB (measured peak)
+  10:58:00 main-hall__inaugural: 1 unit(s) planned after part 29
+  10:58:00 main-hall__inaugural: unit 9 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 0 (2678055 to 2684695 ms) failed a guard (LowCoverage; compression ratio 0.58, 11 characters, 3.6 s of speech); retrying without previous-text context
+  10:58:00 main-hall__inaugural: unit 9 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 0: first half (2678055 to 2681635 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  10:58:00 main-hall__inaugural: unit 9 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 0: rescued by step b (cut at 2681635 ms, each half decoded without context)
+  10:59:00 main-hall__inaugural: unit 9 of post-1 job 1 on gpu: engine warning segment_dropped: chunk 19 (2844075 to 2853365 ms) is not speech and was dropped: LittleSpeech (compression ratio 1.36, average log-probability -0.11, no-speech 0.00, speech share 0.28)
+  11:00:00 main-hall__inaugural: pauses of part 30 found (9 pauses, 1 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  11:00:00 main-hall__inaugural: unit 9 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 31 (2954925 to 2962480 ms) failed a guard (LowCoverage; compression ratio 0.81, 47 characters, 7.2 s of speech); retrying without previous-text context
+  11:01:00 main-hall__inaugural: unit 9 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 31: first half (2954925 to 2957866 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  11:01:00 main-hall__inaugural: unit 9 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 31: rescued by step b (cut at 2957866 ms, each half decoded without context)
+  11:01:00 main-hall__inaugural: unit 9 of post-1 done in 362.2 s on gpu (0 restart(s), engine peak 1562 MiB against limit 3106 MiB)
+  11:02:00 main-hall__inaugural: pauses of part 31 found (13 pauses, 2 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  11:04:00 main-hall__inaugural: pauses of part 32 found (11 pauses, 2 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  11:04:00 main-hall__inaugural: 1 unit(s) planned after part 32
+  11:04:00 main-hall__inaugural: unit 10 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 0 (2996510 to 3003400 ms) failed a guard (LowCoverage; compression ratio 0.27, 3 characters, 3.2 s of speech); retrying without previous-text context
+  11:04:00 main-hall__inaugural: unit 10 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 0: first half (2996510 to 3000640 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  11:04:00 main-hall__inaugural: unit 10 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 0: rescued by step b (cut at 3000640 ms, each half decoded without context)
+  11:04:00 main-hall__inaugural: unit 10 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 2 (3008280 to 3013380 ms) failed a guard (LowCoverage; compression ratio 0.53, 9 characters, 3.9 s of speech); retrying without previous-text context
+  11:05:00 main-hall__inaugural: unit 10 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 2: first half (3008280 to 3010880 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  11:05:00 main-hall__inaugural: unit 10 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 2: rescued by step b (cut at 3010880 ms, each half decoded without context)
+  11:05:00 main-hall__inaugural: unit 10 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 11 (3087165 to 3092675 ms) failed a guard (LowCoverage; compression ratio 0.73, 22 characters, 4.6 s of speech); retrying without previous-text context
+  11:06:00 main-hall__inaugural: pauses of part 33 found (10 pauses, 5 fallback cuts) in 1.2 s; engine peak 103 MiB against limit 1128 MiB (measured peak)
+  11:06:00 main-hall__inaugural: unit 10 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 11: first half (3087165 to 3088465 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  11:06:00 main-hall__inaugural: unit 10 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 11: rescued by step b (cut at 3088465 ms, each half decoded without context)
+  11:06:00 main-hall__inaugural: unit 10 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 13 (3099290 to 3104610 ms) failed a guard (LowCoverage; compression ratio 0.78, 28 characters, 4.4 s of speech); retrying without previous-text context
+  11:06:00 main-hall__inaugural: unit 10 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 13: first half (3099290 to 3100975 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  11:06:00 main-hall__inaugural: unit 10 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 13: rescued by step b (cut at 3100975 ms, each half decoded without context)
+  11:06:00 main-hall__inaugural: unit 10 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 16 (3112860 to 3117280 ms) failed a guard (LowCoverage; compression ratio 0.60, 12 characters, 3.5 s of speech); retrying without previous-text context
+  11:07:00 main-hall__inaugural: unit 10 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 16: first half (3112860 to 3114350 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  11:07:00 main-hall__inaugural: unit 10 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 16: rescued by step b (cut at 3114350 ms, each half decoded without context)
+  11:07:00 main-hall__inaugural: unit 10 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 20 (3144790 to 3148840 ms) failed a guard (LowCoverage; compression ratio 0.68, 17 characters, 3.7 s of speech); retrying without previous-text context
+  11:07:00 main-hall__inaugural: unit 10 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 20: first half (3144790 to 3146290 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  11:07:00 main-hall__inaugural: unit 10 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 20: rescued by step b (cut at 3146290 ms, each half decoded without context)
+  11:08:00 main-hall__inaugural: pauses of part 34 found (10 pauses, 5 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  11:08:00 main-hall__inaugural: 1 unit(s) planned after part 34
+  11:08:00 main-hall__inaugural: unit 10 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 26 (3208600 to 3214730 ms) failed a guard (LowCoverage; compression ratio 0.79, 30 characters, 4.9 s of speech); retrying without previous-text context
+  11:08:00 main-hall__inaugural: unit 10 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 26: first half (3208600 to 3210895 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  11:08:00 main-hall__inaugural: unit 10 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 26: rescued by step b (cut at 3210895 ms, each half decoded without context)
+  11:09:00 main-hall__inaugural: unit 10 of post-1 job 1 on gpu: engine warning segment_dropped: chunk 36 (3306110 to 3316330 ms) is not speech and was dropped: LittleSpeech (compression ratio 1.27, average log-probability -0.15, no-speech 0.00, speech share 0.23)
+  11:09:00 main-hall__inaugural: unit 10 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 38 (3329110 to 3334790 ms) failed a guard (LowCoverage; compression ratio 0.92, 33 characters, 4.1 s of speech); retrying without previous-text context
+  11:09:00 main-hall__inaugural: unit 10 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 38: first half (3329110 to 3332130 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  11:09:00 main-hall__inaugural: unit 10 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 38: rescued by step b (cut at 3332130 ms, each half decoded without context)
+  11:09:00 main-hall__inaugural: unit 10 of post-1 done in 502.9 s on gpu (0 restart(s), engine peak 1581 MiB against limit 3106 MiB)
+  11:10:00 main-hall__inaugural: pauses of part 35 found (10 pauses, 3 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  11:12:00 main-hall__inaugural: pauses of part 36 found (13 pauses, 4 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  11:13:00 main-hall__inaugural: unit 11 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 14 (3469000 to 3473690 ms) failed a guard (LowCoverage; compression ratio 0.83, 25 characters, 3.7 s of speech); retrying without previous-text context
+  11:13:00 main-hall__inaugural: unit 11 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 14: first half (3469000 to 3471410 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  11:13:00 main-hall__inaugural: unit 11 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 14: rescued by step b (cut at 3471410 ms, each half decoded without context)
+  11:14:00 main-hall__inaugural: pauses of part 37 found (11 pauses, 3 fallback cuts) in 1.1 s; engine peak 103 MiB against limit 1128 MiB (measured peak)
+  11:14:00 main-hall__inaugural: 1 unit(s) planned after part 37
+  11:14:00 main-hall__inaugural: unit 11 of post-1 job 1 on gpu: engine warning segment_dropped: chunk 26 (3592590 to 3605185 ms) is not speech and was dropped: LittleSpeech (compression ratio 0.81, average log-probability -0.26, no-speech 0.00, speech share 0.27)
+  11:14:00 main-hall__inaugural: unit 11 of post-1 done in 273.1 s on gpu (0 restart(s), engine peak 1554 MiB against limit 3106 MiB)
+  11:16:00 main-hall__inaugural: pauses of part 38 found (11 pauses, 2 fallback cuts) in 1.1 s; engine peak 103 MiB against limit 1128 MiB (measured peak)
+  11:18:00 main-hall__inaugural: pauses of part 39 found (10 pauses, 3 fallback cuts) in 1.1 s; engine peak 103 MiB against limit 1128 MiB (measured peak)
+  11:18:00 main-hall__inaugural: 1 unit(s) planned after part 39
+  11:19:00 main-hall__inaugural: unit 12 of post-1 job 1 on gpu: engine warning segment_dropped: chunk 26 (3838985 to 3849525 ms) is not speech and was dropped: LittleSpeech (compression ratio 0.68, average log-probability -0.22, no-speech 0.00, speech share 0.14)
+  11:19:00 main-hall__inaugural: unit 12 of post-1 job 1 on gpu: engine warning segment_dropped: chunk 27 (3849545 to 3858035 ms) is not speech and was dropped: LittleSpeech (compression ratio 0.72, average log-probability -0.36, no-speech 0.00, speech share 0.21)
+  11:20:00 main-hall__inaugural: pauses of part 40 found (11 pauses, 1 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  11:20:00 main-hall__inaugural: unit 12 of post-1 done in 350.7 s on gpu (0 restart(s), engine peak 1571 MiB against limit 3106 MiB)
+  11:22:00 main-hall__inaugural: pauses of part 41 found (12 pauses, 3 fallback cuts) in 1.1 s; engine peak 103 MiB against limit 1128 MiB (measured peak)
+  11:23:00 main-hall__inaugural: unit 13 of post-1 job 1 on gpu: engine warning segment_dropped: chunk 19 (4120960 to 4134505 ms) is not speech and was dropped: LittleSpeech (compression ratio 1.30, average log-probability -0.20, no-speech 0.00, speech share 0.12)
+  11:24:00 main-hall__inaugural: pauses of part 42 found (8 pauses, 6 fallback cuts) in 1.1 s; engine peak 103 MiB against limit 1128 MiB (measured peak)
+  11:24:00 main-hall__inaugural: 1 unit(s) planned after part 42
+  11:24:00 main-hall__inaugural: unit 13 of post-1 done in 258.6 s on gpu (0 restart(s), engine peak 1535 MiB against limit 3106 MiB)
+  11:26:00 main-hall__inaugural: pauses of part 43 found (9 pauses, 7 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  11:28:00 main-hall__inaugural: pauses of part 44 found (9 pauses, 5 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  11:28:00 main-hall__inaugural: 1 unit(s) planned after part 44
+  11:29:00 main-hall__inaugural: unit 14 of post-1 done in 317.8 s on gpu (0 restart(s), engine peak 1559 MiB against limit 3106 MiB)
+  11:30:00 main-hall__inaugural: pauses of part 45 found (11 pauses, 5 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  11:30:00 main-hall__inaugural: pauses of part 46 found (2 pauses, 1 fallback cuts) in 0.4 s; engine peak 90 MiB against limit 1128 MiB (measured peak)
+  11:30:00 DAY: stopped "Inaugural"
+  11:30:00 main-hall__inaugural: session closed, 1 final unit(s) planned
+  11:30:00 main-hall__inaugural: stopped. All transcripts ready by 11:45 IST (sessions with several languages: measured, 2.67 times the profile's, from 5 finished unit(s); sessions with one language: the profile's speed until a unit finishes)
+  11:34:00 main-hall__inaugural: unit 15 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 24 (4779115 to 4784345 ms) failed a guard (LowCoverage; compression ratio 0.56, 10 characters, 3.4 s of speech); retrying without previous-text context
+  11:34:00 main-hall__inaugural: unit 15 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 24: first half (4779115 to 4780480 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  11:34:00 main-hall__inaugural: unit 15 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 24: rescued by step b (cut at 4780480 ms, each half decoded without context)
+  11:34:00 main-hall__inaugural: unit 15 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 25 (4784395 to 4790075 ms) failed a guard (LowCoverage; compression ratio 0.53, 9 characters, 4.5 s of speech); retrying without previous-text context
+  11:34:00 main-hall__inaugural: unit 15 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 25: first half (4784395 to 4786990 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  11:34:00 main-hall__inaugural: unit 15 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 25: rescued by step b (cut at 4786990 ms, each half decoded without context)
+  11:35:00 main-hall__inaugural: unit 15 of post-1 done in 335.6 s on gpu (0 restart(s), engine peak 1570 MiB against limit 3106 MiB)
+  11:38:00 main-hall__inaugural: unit 16 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 15 (4973445 to 4978510 ms) failed a guard (LowCoverage; compression ratio 0.80, 32 characters, 4.7 s of speech); retrying without previous-text context
+  11:39:00 main-hall__inaugural: unit 16 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 15: first half (4973445 to 4974848 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  11:39:00 main-hall__inaugural: unit 16 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 15: rescued by step b (cut at 4974848 ms, each half decoded without context)
+  11:39:00 main-hall__inaugural: unit 16 of post-1 job 1 on gpu: engine warning segment_dropped: chunk 23 (5048105 to 5053655 ms) is not speech and was dropped: LittleSpeech (compression ratio 0.43, average log-probability -0.61, no-speech 0.00, speech share 0.17)
+  11:40:00 main-hall__inaugural: unit 16 of post-1 done in 269.2 s on gpu (0 restart(s), engine peak 1534 MiB against limit 3106 MiB)
+  11:45:00 main-hall__inaugural: unit 17 of post-1 job 1 on gpu: engine warning segment_dropped: chunk 37 (5400445 to 5406055 ms) is not speech and was dropped: LittleSpeech (compression ratio 1.15, average log-probability -0.03, no-speech 0.00, speech share 0.23)
+  11:45:00 main-hall__inaugural: unit 17 of post-1 done in 327.4 s on gpu (0 restart(s), engine peak 1558 MiB against limit 3106 MiB)
+  11:45:00 main-hall__inaugural: post-1 transcript complete
+  12:00:00 START: queue registration of hall-a__parallel-i: open-sessions lock 0 ms, models 0 ms, session database 8 ms, rolling job 0 ms, manager 0 ms, open-sessions list 0 ms, engine slots 0 ms, total 8 ms
+  12:00:00 START: queue start hook of hall-a__parallel-i: profile read 163 ms, registration 8 ms, night plans 0 ms, total 172 ms; engine units running at the start: 0
+  12:00:00 START: start call of D:\STELMAR-Gate\day-sim\day-emu-low-20261121-052323\rec\2026-11-21\hall-a__parallel-i: cancel check 0 ms, recorder start 254 ms, options file 1 ms, queue hook 172 ms, total 428 ms
+  12:00:00 DAY: started "Parallel I" in D:\STELMAR-Gate\day-sim\day-emu-low-20261121-052323\rec\2026-11-21\hall-a__parallel-i
+  12:02:00 hall-a__parallel-i: pauses of part 1 found (16 pauses, 0 fallback cuts) in 1.0 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  12:04:00 hall-a__parallel-i: pauses of part 2 found (15 pauses, 0 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  12:06:00 hall-a__parallel-i: pauses of part 3 found (15 pauses, 0 fallback cuts) in 1.1 s; engine peak 103 MiB against limit 1128 MiB (measured peak)
+  12:08:00 hall-a__parallel-i: pauses of part 4 found (17 pauses, 0 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  12:08:00 hall-a__parallel-i: 1 unit(s) planned after part 4
+  12:10:00 hall-a__parallel-i: pauses of part 5 found (16 pauses, 0 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  12:12:00 hall-a__parallel-i: pauses of part 6 found (14 pauses, 0 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  12:14:00 hall-a__parallel-i: pauses of part 7 found (16 pauses, 0 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  12:14:00 hall-a__parallel-i: 1 unit(s) planned after part 7
+  12:15:00 hall-a__parallel-i: unit 0 of post-1 done in 463.6 s on gpu (0 restart(s), engine peak 1571 MiB against limit 3106 MiB)
+  12:16:00 hall-a__parallel-i: pauses of part 8 found (14 pauses, 0 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  12:18:00 hall-a__parallel-i: pauses of part 9 found (15 pauses, 0 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  12:18:00 hall-a__parallel-i: 1 unit(s) planned after part 9
+  12:20:00 hall-a__parallel-i: pauses of part 10 found (14 pauses, 1 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  12:22:00 hall-a__parallel-i: pauses of part 11 found (17 pauses, 0 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  12:22:00 hall-a__parallel-i: 1 unit(s) planned after part 11
+  12:22:00 hall-a__parallel-i: unit 1 of post-1 done in 399.8 s on gpu (0 restart(s), engine peak 1540 MiB against limit 3106 MiB)
+  12:24:00 hall-a__parallel-i: pauses of part 12 found (15 pauses, 0 fallback cuts) in 1.0 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  12:26:00 hall-a__parallel-i: pauses of part 13 found (15 pauses, 0 fallback cuts) in 1.0 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  12:28:00 hall-a__parallel-i: unit 2 of post-1 done in 333.8 s on gpu (0 restart(s), engine peak 1538 MiB against limit 3106 MiB)
+  12:28:00 hall-a__parallel-i: pauses of part 14 found (14 pauses, 0 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  12:28:00 hall-a__parallel-i: 1 unit(s) planned after part 14
+  12:30:00 hall-a__parallel-i: pauses of part 15 found (16 pauses, 0 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  12:32:00 hall-a__parallel-i: pauses of part 16 found (16 pauses, 0 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  12:32:00 hall-a__parallel-i: 1 unit(s) planned after part 16
+  12:34:00 hall-a__parallel-i: pauses of part 17 found (15 pauses, 0 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  12:34:00 hall-a__parallel-i: unit 3 of post-1 done in 406.5 s on gpu (0 restart(s), engine peak 1555 MiB against limit 3106 MiB)
+  12:36:00 hall-a__parallel-i: pauses of part 18 found (18 pauses, 0 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  12:38:00 hall-a__parallel-i: pauses of part 19 found (16 pauses, 0 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  12:38:00 hall-a__parallel-i: 1 unit(s) planned after part 19
+  12:40:00 hall-a__parallel-i: pauses of part 20 found (14 pauses, 3 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  12:41:00 hall-a__parallel-i: unit 4 of post-1 done in 426.9 s on gpu (0 restart(s), engine peak 1570 MiB against limit 3106 MiB)
+  12:42:00 hall-a__parallel-i: pauses of part 21 found (15 pauses, 2 fallback cuts) in 1.1 s; engine peak 103 MiB against limit 1128 MiB (measured peak)
+  12:42:00 hall-a__parallel-i: 1 unit(s) planned after part 21
+  12:44:00 hall-a__parallel-i: pauses of part 22 found (18 pauses, 0 fallback cuts) in 1.2 s; engine peak 103 MiB against limit 1128 MiB (measured peak)
+  12:46:00 hall-a__parallel-i: pauses of part 23 found (16 pauses, 1 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  12:46:00 hall-a__parallel-i: 1 unit(s) planned after part 23
+  12:47:00 hall-a__parallel-i: unit 5 of post-1 done in 343.5 s on gpu (0 restart(s), engine peak 1538 MiB against limit 3106 MiB)
+  12:48:00 hall-a__parallel-i: pauses of part 24 found (15 pauses, 0 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  12:50:00 hall-a__parallel-i: pauses of part 25 found (18 pauses, 0 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  12:50:00 hall-a__parallel-i: 1 unit(s) planned after part 25
+  12:52:00 hall-a__parallel-i: pauses of part 26 found (18 pauses, 0 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  12:53:00 hall-a__parallel-i: unit 6 of post-1 done in 336.5 s on gpu (0 restart(s), engine peak 1538 MiB against limit 3106 MiB)
+  12:54:00 hall-a__parallel-i: pauses of part 27 found (18 pauses, 0 fallback cuts) in 1.0 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  12:56:00 hall-a__parallel-i: pauses of part 28 found (17 pauses, 1 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  12:56:00 hall-a__parallel-i: 1 unit(s) planned after part 28
+  12:58:00 hall-a__parallel-i: pauses of part 29 found (15 pauses, 0 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  12:59:00 hall-a__parallel-i: unit 7 of post-1 done in 394.9 s on gpu (0 restart(s), engine peak 1539 MiB against limit 3106 MiB)
+  13:00:00 hall-a__parallel-i: pauses of part 30 found (14 pauses, 0 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  13:02:00 hall-a__parallel-i: pauses of part 31 found (13 pauses, 0 fallback cuts) in 1.0 s; engine peak 103 MiB against limit 1128 MiB (measured peak)
+  13:02:00 hall-a__parallel-i: 1 unit(s) planned after part 31
+  13:04:00 hall-a__parallel-i: pauses of part 32 found (15 pauses, 0 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  13:06:00 hall-a__parallel-i: pauses of part 33 found (17 pauses, 0 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  13:06:00 hall-a__parallel-i: 1 unit(s) planned after part 33
+  13:06:00 hall-a__parallel-i: unit 8 of post-1 done in 407.1 s on gpu (0 restart(s), engine peak 1543 MiB against limit 3106 MiB)
+  13:08:00 hall-a__parallel-i: pauses of part 34 found (17 pauses, 0 fallback cuts) in 1.2 s; engine peak 103 MiB against limit 1128 MiB (measured peak)
+  13:10:00 hall-a__parallel-i: pauses of part 35 found (18 pauses, 0 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  13:12:00 hall-a__parallel-i: pauses of part 36 found (17 pauses, 0 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  13:12:00 hall-a__parallel-i: 1 unit(s) planned after part 36
+  13:14:00 hall-a__parallel-i: pauses of part 37 found (15 pauses, 0 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  13:14:00 hall-a__parallel-i: unit 9 of post-1 done in 466.0 s on gpu (0 restart(s), engine peak 1566 MiB against limit 3106 MiB)
+  13:16:00 hall-a__parallel-i: pauses of part 38 found (17 pauses, 0 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  13:16:00 hall-a__parallel-i: 1 unit(s) planned after part 38
+  13:18:00 hall-a__parallel-i: pauses of part 39 found (17 pauses, 0 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  13:20:00 hall-a__parallel-i: pauses of part 40 found (14 pauses, 0 fallback cuts) in 1.2 s; engine peak 103 MiB against limit 1128 MiB (measured peak)
+  13:20:00 hall-a__parallel-i: 1 unit(s) planned after part 40
+  13:22:00 hall-a__parallel-i: pauses of part 41 found (17 pauses, 0 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  13:22:00 hall-a__parallel-i: unit 10 of post-1 done in 503.0 s on gpu (0 restart(s), engine peak 1562 MiB against limit 3106 MiB)
+  13:24:00 hall-a__parallel-i: pauses of part 42 found (18 pauses, 0 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  13:26:00 hall-a__parallel-i: pauses of part 43 found (16 pauses, 0 fallback cuts) in 1.2 s; engine peak 103 MiB against limit 1128 MiB (measured peak)
+  13:26:00 hall-a__parallel-i: 1 unit(s) planned after part 43
+  13:28:00 hall-a__parallel-i: pauses of part 44 found (17 pauses, 0 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  13:29:00 hall-a__parallel-i: unit 11 of post-1 done in 376.4 s on gpu (0 restart(s), engine peak 1539 MiB against limit 3106 MiB)
+  13:30:00 hall-a__parallel-i: pauses of part 45 found (15 pauses, 0 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  13:30:00 hall-a__parallel-i: 1 unit(s) planned after part 45
+  13:30:00 hall-a__parallel-i: pauses of part 46 found (1 pauses, 0 fallback cuts) in 0.3 s; engine peak 89 MiB against limit 1128 MiB (measured peak)
+  13:30:00 DAY: stopped "Parallel I"
+  13:30:00 hall-a__parallel-i: session closed, 1 final unit(s) planned
+  13:30:00 hall-a__parallel-i: stopped. All transcripts ready by 14:17 IST (sessions with several languages: measured, 2.01 times the profile's, from 5 finished unit(s); sessions with one language: the profile's speed until a unit finishes)
+  13:35:00 hall-a__parallel-i: unit 12 of post-1 done in 398.4 s on gpu (0 restart(s), engine peak 1575 MiB against limit 3106 MiB)
+  13:42:00 hall-a__parallel-i: unit 13 of post-1 done in 410.5 s on gpu (0 restart(s), engine peak 1550 MiB against limit 3106 MiB)
+  13:49:00 hall-a__parallel-i: unit 14 of post-1 done in 394.4 s on gpu (0 restart(s), engine peak 1540 MiB against limit 3106 MiB)
+  13:57:00 hall-a__parallel-i: unit 15 of post-1 done in 494.3 s on gpu (0 restart(s), engine peak 1567 MiB against limit 3106 MiB)
+  14:03:00 hall-a__parallel-i: unit 16 of post-1 done in 356.6 s on gpu (0 restart(s), engine peak 1540 MiB against limit 3106 MiB)
+  14:10:00 hall-a__parallel-i: unit 17 of post-1 done in 435.8 s on gpu (0 restart(s), engine peak 1552 MiB against limit 3106 MiB)
+  14:13:00 hall-a__parallel-i: unit 18 of post-1 done in 199.3 s on gpu (0 restart(s), engine peak 1533 MiB against limit 3106 MiB)
+  14:13:00 hall-a__parallel-i: post-1 transcript complete
+  14:30:00 START: queue registration of hall-b__parallel-ii: open-sessions lock 0 ms, models 0 ms, session database 10 ms, rolling job 0 ms, manager 0 ms, open-sessions list 0 ms, engine slots 0 ms, total 10 ms
+  14:30:00 START: queue start hook of hall-b__parallel-ii: profile read 1 ms, registration 11 ms, night plans 0 ms, total 12 ms; engine units running at the start: 0
+  14:30:00 START: start call of D:\STELMAR-Gate\day-sim\day-emu-low-20261121-052323\rec\2026-11-21\hall-b__parallel-ii: cancel check 0 ms, recorder start 250 ms, options file 2 ms, queue hook 13 ms, total 265 ms
+  14:30:00 DAY: started "Parallel II" in D:\STELMAR-Gate\day-sim\day-emu-low-20261121-052323\rec\2026-11-21\hall-b__parallel-ii
+  14:32:00 hall-b__parallel-ii: pauses of part 1 found (6 pauses, 13 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  14:34:00 hall-b__parallel-ii: pauses of part 2 found (4 pauses, 11 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  14:36:00 hall-b__parallel-ii: pauses of part 3 found (7 pauses, 8 fallback cuts) in 1.0 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  14:38:00 hall-b__parallel-ii: pauses of part 4 found (2 pauses, 10 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  14:38:00 hall-b__parallel-ii: 1 unit(s) planned after part 4
+  14:40:00 hall-b__parallel-ii: pauses of part 5 found (3 pauses, 11 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  14:42:00 hall-b__parallel-ii: pauses of part 6 found (3 pauses, 7 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  14:42:00 hall-b__parallel-ii: 1 unit(s) planned after part 6
+  14:43:00 hall-b__parallel-ii: unit 0 of post-1 done in 350.9 s on gpu (0 restart(s), engine peak 1546 MiB against limit 3106 MiB)
+  14:44:00 hall-b__parallel-ii: pauses of part 7 found (3 pauses, 11 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  14:46:00 hall-b__parallel-ii: pauses of part 8 found (4 pauses, 12 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  14:48:00 hall-b__parallel-ii: pauses of part 9 found (8 pauses, 7 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  14:48:00 hall-b__parallel-ii: 1 unit(s) planned after part 9
+  14:49:00 hall-b__parallel-ii: unit 1 of post-1 done in 309.2 s on gpu (0 restart(s), engine peak 1538 MiB against limit 3106 MiB)
+  14:50:00 hall-b__parallel-ii: pauses of part 10 found (1 pauses, 8 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  14:52:00 hall-b__parallel-ii: pauses of part 11 found (2 pauses, 9 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  14:52:00 hall-b__parallel-ii: 1 unit(s) planned after part 11
+  14:53:00 hall-b__parallel-ii: unit 2 of post-1 done in 284.3 s on gpu (0 restart(s), engine peak 1540 MiB against limit 3106 MiB)
+  14:54:00 hall-b__parallel-ii: pauses of part 12 found (3 pauses, 8 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  14:56:00 hall-b__parallel-ii: pauses of part 13 found (3 pauses, 12 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  14:56:00 hall-b__parallel-ii: 1 unit(s) planned after part 13
+  14:58:00 hall-b__parallel-ii: pauses of part 14 found (5 pauses, 9 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  14:58:00 hall-b__parallel-ii: unit 3 of post-1 done in 291.1 s on gpu (0 restart(s), engine peak 1536 MiB against limit 3106 MiB)
+  15:00:00 hall-b__parallel-ii: pauses of part 15 found (2 pauses, 12 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  15:02:00 hall-b__parallel-ii: pauses of part 16 found (2 pauses, 12 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  15:02:00 hall-b__parallel-ii: 1 unit(s) planned after part 16
+  15:03:00 hall-b__parallel-ii: unit 4 of post-1 done in 308.5 s on gpu (0 restart(s), engine peak 1554 MiB against limit 3106 MiB)
+  15:04:00 hall-b__parallel-ii: pauses of part 17 found (3 pauses, 9 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  15:06:00 hall-b__parallel-ii: pauses of part 18 found (3 pauses, 7 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  15:08:00 hall-b__parallel-ii: pauses of part 19 found (1 pauses, 9 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  15:08:00 hall-b__parallel-ii: 1 unit(s) planned after part 19
+  15:10:00 hall-b__parallel-ii: pauses of part 20 found (1 pauses, 12 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  15:10:00 hall-b__parallel-ii: unit 5 of post-1 done in 392.9 s on gpu (0 restart(s), engine peak 1577 MiB against limit 3106 MiB)
+  15:12:00 hall-b__parallel-ii: pauses of part 21 found (2 pauses, 8 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  15:14:00 hall-b__parallel-ii: pauses of part 22 found (3 pauses, 10 fallback cuts) in 1.3 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  15:14:00 hall-b__parallel-ii: 1 unit(s) planned after part 22
+  15:15:00 hall-b__parallel-ii: unit 6 of post-1 done in 323.8 s on gpu (0 restart(s), engine peak 1570 MiB against limit 3106 MiB)
+  15:16:00 hall-b__parallel-ii: pauses of part 23 found (1 pauses, 10 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  15:18:00 hall-b__parallel-ii: pauses of part 24 found (4 pauses, 12 fallback cuts) in 1.2 s; engine peak 103 MiB against limit 1128 MiB (measured peak)
+  15:20:00 hall-b__parallel-ii: pauses of part 25 found (1 pauses, 9 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  15:20:00 hall-b__parallel-ii: 1 unit(s) planned after part 25
+  15:21:00 hall-b__parallel-ii: unit 7 of post-1 done in 343.9 s on gpu (0 restart(s), engine peak 1609 MiB against limit 3106 MiB)
+  15:22:00 hall-b__parallel-ii: pauses of part 26 found (4 pauses, 11 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  15:24:00 hall-b__parallel-ii: pauses of part 27 found (2 pauses, 11 fallback cuts) in 1.2 s; engine peak 103 MiB against limit 1128 MiB (measured peak)
+  15:26:00 hall-b__parallel-ii: pauses of part 28 found (3 pauses, 10 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  15:26:00 hall-b__parallel-ii: 1 unit(s) planned after part 28
+  15:26:00 hall-b__parallel-ii: unit 8 of post-1 done in 321.3 s on gpu (0 restart(s), engine peak 1605 MiB against limit 3106 MiB)
+  15:28:00 hall-b__parallel-ii: pauses of part 29 found (2 pauses, 11 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  15:30:00 hall-b__parallel-ii: pauses of part 30 found (2 pauses, 9 fallback cuts) in 1.3 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  15:30:00 hall-b__parallel-ii: 1 unit(s) planned after part 30
+  15:31:00 hall-b__parallel-ii: unit 9 of post-1 done in 304.7 s on gpu (0 restart(s), engine peak 1543 MiB against limit 3106 MiB)
+  15:32:00 hall-b__parallel-ii: pauses of part 31 found (3 pauses, 11 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  15:34:00 hall-b__parallel-ii: pauses of part 32 found (2 pauses, 9 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  15:34:00 hall-b__parallel-ii: 1 unit(s) planned after part 32
+  15:34:00 hall-b__parallel-ii: unit 10 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 4 (3138880 to 3147030 ms) failed a guard (LowCoverage; compression ratio 0.82, 32 characters, 7.6 s of speech); retrying without previous-text context
+  15:34:00 hall-b__parallel-ii: unit 10 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 4: rescued by step a (decoded again without previous-text context at temperature 0.4)
+  15:36:00 hall-b__parallel-ii: pauses of part 33 found (2 pauses, 10 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  15:36:00 hall-b__parallel-ii: unit 10 of post-1 done in 279.4 s on gpu (0 restart(s), engine peak 1537 MiB against limit 3106 MiB)
+  15:38:00 hall-b__parallel-ii: pauses of part 34 found (5 pauses, 8 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  15:38:00 hall-b__parallel-ii: 1 unit(s) planned after part 34
+  15:40:00 hall-b__parallel-ii: pauses of part 35 found (3 pauses, 11 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  15:41:00 hall-b__parallel-ii: unit 11 of post-1 done in 284.0 s on gpu (0 restart(s), engine peak 1538 MiB against limit 3106 MiB)
+  15:42:00 hall-b__parallel-ii: pauses of part 36 found (2 pauses, 12 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  15:44:00 hall-b__parallel-ii: pauses of part 37 found (3 pauses, 9 fallback cuts) in 1.1 s; engine peak 103 MiB against limit 1128 MiB (measured peak)
+  15:44:00 hall-b__parallel-ii: 1 unit(s) planned after part 37
+  15:45:00 hall-b__parallel-ii: unit 12 of post-1 done in 265.2 s on gpu (0 restart(s), engine peak 1552 MiB against limit 3106 MiB)
+  15:46:00 hall-b__parallel-ii: pauses of part 38 found (3 pauses, 11 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  15:48:00 hall-b__parallel-ii: pauses of part 39 found (3 pauses, 11 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  15:48:00 hall-b__parallel-ii: 1 unit(s) planned after part 39
+  15:50:00 hall-b__parallel-ii: pauses of part 40 found (4 pauses, 12 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  15:50:00 hall-b__parallel-ii: unit 13 of post-1 done in 263.5 s on gpu (0 restart(s), engine peak 1536 MiB against limit 3106 MiB)
+  15:52:00 hall-b__parallel-ii: pauses of part 41 found (3 pauses, 10 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  15:54:00 hall-b__parallel-ii: pauses of part 42 found (3 pauses, 11 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  15:54:00 hall-b__parallel-ii: 1 unit(s) planned after part 42
+  15:56:00 hall-b__parallel-ii: pauses of part 43 found (3 pauses, 11 fallback cuts) in 1.2 s; engine peak 103 MiB against limit 1128 MiB (measured peak)
+  15:56:00 hall-b__parallel-ii: unit 14 of post-1 done in 396.4 s on gpu (0 restart(s), engine peak 1589 MiB against limit 3106 MiB)
+  15:58:00 hall-b__parallel-ii: pauses of part 44 found (4 pauses, 10 fallback cuts) in 1.2 s; engine peak 103 MiB against limit 1128 MiB (measured peak)
+  16:00:00 hall-b__parallel-ii: pauses of part 45 found (3 pauses, 9 fallback cuts) in 1.3 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  16:00:00 hall-b__parallel-ii: 1 unit(s) planned after part 45
+  16:01:00 hall-b__parallel-ii: pauses of part 46 found (1 pauses, 5 fallback cuts) in 0.8 s; engine peak 92 MiB against limit 1128 MiB (measured peak)
+  16:01:00 DAY: stopped "Parallel II"
+  16:01:00 hall-b__parallel-ii: session closed, 1 final unit(s) planned
+  16:01:00 hall-b__parallel-ii: stopped. All transcripts ready by 16:17 IST (sessions with several languages: measured, 2.76 times the profile's, from 5 finished unit(s); sessions with one language: the profile's speed until a unit finishes)
+  16:02:00 START: queue registration of main-hall__panel: open-sessions lock 0 ms, models 0 ms, session database 8 ms, rolling job 0 ms, manager 0 ms, open-sessions list 0 ms, engine slots 0 ms, total 8 ms
+  16:02:00 START: queue start hook of main-hall__panel: profile read 0 ms, registration 9 ms, night plans 0 ms, total 10 ms; engine units running at the start: 1
+  16:02:00 START: start call of D:\STELMAR-Gate\day-sim\day-emu-low-20261121-052323\rec\2026-11-21\main-hall__panel: cancel check 0 ms, recorder start 176 ms, options file 1 ms, queue hook 10 ms, total 188 ms
+  16:02:00 DAY: started "Panel" in D:\STELMAR-Gate\day-sim\day-emu-low-20261121-052323\rec\2026-11-21\main-hall__panel
+  16:02:00 hall-b__parallel-ii: unit 15 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 37 (4831880 to 4836400 ms) failed a guard (LowCoverage; compression ratio 0.79, 30 characters, 4.1 s of speech); retrying without previous-text context
+  16:03:00 hall-b__parallel-ii: unit 15 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 37: first half (4831880 to 4833794 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  16:03:00 hall-b__parallel-ii: unit 15 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 37: rescued by step b (cut at 4833794 ms, each half decoded without context)
+  16:03:00 hall-b__parallel-ii: unit 15 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 39 (4846440 to 4850860 ms) failed a guard (LowCoverage; compression ratio 0.68, 17 characters, 4.1 s of speech); retrying without previous-text context
+  16:03:00 hall-b__parallel-ii: unit 15 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 39: first half (4846440 to 4848674 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  16:03:00 hall-b__parallel-ii: unit 15 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 39: rescued by step b (cut at 4848674 ms, each half decoded without context)
+  16:04:00 hall-b__parallel-ii: unit 15 of post-1 done in 447.6 s on gpu (0 restart(s), engine peak 1588 MiB against limit 3106 MiB)
+  16:04:00 main-hall__panel: pauses of part 1 found (11 pauses, 3 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  16:06:00 main-hall__panel: pauses of part 2 found (8 pauses, 6 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  16:08:00 main-hall__panel: pauses of part 3 found (13 pauses, 2 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  16:09:00 hall-b__parallel-ii: unit 16 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 29 (5143050 to 5156400 ms) failed a guard (LowCoverage; compression ratio 0.56, 10 characters, 8.2 s of speech); retrying without previous-text context
+  16:09:00 hall-b__parallel-ii: unit 16 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 29: first half (5143050 to 5146665 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  16:09:00 hall-b__parallel-ii: unit 16 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 29: rescued by step b (cut at 5146665 ms, each half decoded without context)
+  16:09:00 hall-b__parallel-ii: unit 16 of post-1 job 1 on gpu: engine warning half_silent: chunk 29: the half 5143050 to 5146665 ms holds no speech worth decoding (too little speech or judged not speech) and gives no segment
+  16:09:00 hall-b__parallel-ii: unit 16 of post-1 done in 333.4 s on gpu (0 restart(s), engine peak 1568 MiB against limit 3106 MiB)
+  16:10:00 main-hall__panel: pauses of part 4 found (10 pauses, 3 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  16:10:00 main-hall__panel: 1 unit(s) planned after part 4
+  16:12:00 main-hall__panel: pauses of part 5 found (9 pauses, 5 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  16:13:00 hall-b__parallel-ii: unit 17 of post-1 done in 253.3 s on gpu (0 restart(s), engine peak 1538 MiB against limit 3106 MiB)
+  16:13:00 hall-b__parallel-ii: post-1 transcript complete
+  16:14:00 main-hall__panel: pauses of part 6 found (9 pauses, 6 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  16:16:00 main-hall__panel: pauses of part 7 found (9 pauses, 4 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  16:16:00 main-hall__panel: 1 unit(s) planned after part 7
+  16:18:00 main-hall__panel: pauses of part 8 found (9 pauses, 3 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  16:20:00 main-hall__panel: unit 0 of post-1 done in 380.1 s on gpu (0 restart(s), engine peak 1576 MiB against limit 3106 MiB)
+  16:20:00 main-hall__panel: pauses of part 9 found (10 pauses, 2 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  16:20:00 main-hall__panel: 1 unit(s) planned after part 9
+  16:22:00 main-hall__panel: pauses of part 10 found (8 pauses, 5 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  16:24:00 main-hall__panel: pauses of part 11 found (11 pauses, 2 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  16:25:00 main-hall__panel: unit 1 of post-1 done in 338.0 s on gpu (0 restart(s), engine peak 1540 MiB against limit 3106 MiB)
+  16:26:00 main-hall__panel: pauses of part 12 found (12 pauses, 3 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  16:26:00 main-hall__panel: 1 unit(s) planned after part 12
+  16:28:00 main-hall__panel: pauses of part 13 found (9 pauses, 2 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  16:30:00 main-hall__panel: unit 2 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 21 (782475 to 790540 ms) failed a guard (LowCoverage; compression ratio 0.43, 6 characters, 7.0 s of speech); retrying without previous-text context
+  16:30:00 main-hall__panel: unit 2 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 21: rescued by step a (decoded again without previous-text context at temperature 0.4)
+  16:30:00 main-hall__panel: pauses of part 14 found (11 pauses, 3 fallback cuts) in 1.1 s; engine peak 103 MiB against limit 1128 MiB (measured peak)
+  16:30:00 main-hall__panel: 1 unit(s) planned after part 14
+  16:32:00 main-hall__panel: unit 2 of post-1 done in 393.4 s on gpu (0 restart(s), engine peak 1578 MiB against limit 3106 MiB)
+  16:32:00 main-hall__panel: pauses of part 15 found (7 pauses, 5 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  16:34:00 main-hall__panel: unit 3 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 3 (999965 to 1009085 ms) failed a guard (LowCoverage; compression ratio 0.75, 33 characters, 6.0 s of speech); retrying without previous-text context
+  16:34:00 main-hall__panel: pauses of part 16 found (10 pauses, 4 fallback cuts) in 1.2 s; engine peak 103 MiB against limit 1128 MiB (measured peak)
+  16:34:00 main-hall__panel: unit 3 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 3: first half (999965 to 1003625 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  16:35:00 main-hall__panel: unit 3 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 3: rescued by step b (cut at 1003625 ms, each half decoded without context)
+  16:36:00 main-hall__panel: pauses of part 17 found (14 pauses, 1 fallback cuts) in 1.2 s; engine peak 103 MiB against limit 1128 MiB (measured peak)
+  16:36:00 main-hall__panel: 1 unit(s) planned after part 17
+  16:37:00 main-hall__panel: unit 3 of post-1 done in 271.5 s on gpu (0 restart(s), engine peak 1538 MiB against limit 3106 MiB)
+  16:38:00 main-hall__panel: pauses of part 18 found (11 pauses, 1 fallback cuts) in 1.3 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  16:39:00 main-hall__panel: unit 4 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 4 (1250795 to 1263285 ms) failed a guard (LowCoverage; compression ratio 0.75, 33 characters, 10.4 s of speech); retrying without previous-text context
+  16:40:00 main-hall__panel: unit 4 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 4: first half (1250795 to 1253700 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  16:40:00 main-hall__panel: unit 4 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 4: rescued by step b (cut at 1253700 ms, each half decoded without context)
+  16:40:00 main-hall__panel: pauses of part 19 found (10 pauses, 6 fallback cuts) in 1.2 s; engine peak 103 MiB against limit 1128 MiB (measured peak)
+  16:42:00 main-hall__panel: pauses of part 20 found (10 pauses, 4 fallback cuts) in 1.3 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  16:42:00 main-hall__panel: 1 unit(s) planned after part 20
+  16:43:00 main-hall__panel: unit 4 of post-1 done in 374.0 s on gpu (0 restart(s), engine peak 1568 MiB against limit 3106 MiB)
+  16:44:00 main-hall__panel: pauses of part 21 found (9 pauses, 3 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  16:46:00 main-hall__panel: pauses of part 22 found (9 pauses, 7 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  16:46:00 main-hall__panel: 1 unit(s) planned after part 22
+  16:48:00 main-hall__panel: unit 5 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 29 (1822155 to 1829465 ms) failed a guard (LowCoverage; compression ratio 0.76, 35 characters, 6.6 s of speech); retrying without previous-text context
+  16:48:00 main-hall__panel: unit 5 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 29: rescued by step a (decoded again without previous-text context at temperature 0.4)
+  16:48:00 main-hall__panel: pauses of part 23 found (14 pauses, 1 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  16:49:00 main-hall__panel: unit 5 of post-1 done in 378.1 s on gpu (0 restart(s), engine peak 1585 MiB against limit 3106 MiB)
+  16:50:00 main-hall__panel: pauses of part 24 found (9 pauses, 3 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  16:52:00 main-hall__panel: pauses of part 25 found (11 pauses, 4 fallback cuts) in 1.0 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  16:52:00 main-hall__panel: 1 unit(s) planned after part 25
+  16:54:00 main-hall__panel: unit 6 of post-1 done in 294.0 s on gpu (0 restart(s), engine peak 1540 MiB against limit 3106 MiB)
+  16:54:00 main-hall__panel: pauses of part 26 found (12 pauses, 3 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  16:56:00 main-hall__panel: pauses of part 27 found (11 pauses, 5 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  16:58:00 main-hall__panel: pauses of part 28 found (12 pauses, 2 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  16:58:00 main-hall__panel: 1 unit(s) planned after part 28
+  17:00:00 main-hall__panel: unit 7 of post-1 done in 362.0 s on gpu (0 restart(s), engine peak 1573 MiB against limit 3106 MiB)
+  17:00:00 main-hall__panel: pauses of part 29 found (15 pauses, 0 fallback cuts) in 1.2 s; engine peak 103 MiB against limit 1128 MiB (measured peak)
+  17:02:00 main-hall__panel: pauses of part 30 found (13 pauses, 0 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  17:04:00 main-hall__panel: pauses of part 31 found (16 pauses, 0 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  17:04:00 main-hall__panel: 1 unit(s) planned after part 31
+  17:06:00 main-hall__panel: unit 8 of post-1 done in 365.9 s on gpu (0 restart(s), engine peak 1583 MiB against limit 3106 MiB)
+  17:06:00 main-hall__panel: pauses of part 32 found (15 pauses, 0 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  17:08:00 main-hall__panel: pauses of part 33 found (14 pauses, 1 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  17:08:00 main-hall__panel: 1 unit(s) planned after part 33
+  17:10:00 main-hall__panel: pauses of part 34 found (12 pauses, 2 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  17:12:00 main-hall__panel: unit 9 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 35 (3143390 to 3154730 ms) failed a guard (LowCoverage; compression ratio 0.76, 34 characters, 8.0 s of speech); retrying without previous-text context
+  17:12:00 main-hall__panel: pauses of part 35 found (10 pauses, 5 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  17:12:00 main-hall__panel: unit 9 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 35: rescued by step a (decoded again without previous-text context at temperature 0.4)
+  17:13:00 main-hall__panel: unit 9 of post-1 done in 423.2 s on gpu (0 restart(s), engine peak 1593 MiB against limit 3106 MiB)
+  17:14:00 main-hall__panel: pauses of part 36 found (9 pauses, 4 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  17:14:00 main-hall__panel: 1 unit(s) planned after part 36
+  17:16:00 main-hall__panel: unit 10 of post-1 job 1 on gpu: engine warning segment_dropped: chunk 2 (3233320 to 3239760 ms) is not speech and was dropped: LittleSpeech (compression ratio 0.58, average log-probability -0.02, no-speech 0.00, speech share 0.25)
+  17:16:00 main-hall__panel: pauses of part 37 found (9 pauses, 4 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  17:18:00 main-hall__panel: pauses of part 38 found (9 pauses, 3 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  17:18:00 main-hall__panel: 1 unit(s) planned after part 38
+  17:19:00 main-hall__panel: unit 10 of post-1 done in 355.4 s on gpu (0 restart(s), engine peak 1574 MiB against limit 3106 MiB)
+  17:20:00 main-hall__panel: pauses of part 39 found (12 pauses, 2 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  17:22:00 main-hall__panel: pauses of part 40 found (7 pauses, 5 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  17:24:00 main-hall__panel: pauses of part 41 found (9 pauses, 8 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  17:24:00 main-hall__panel: 1 unit(s) planned after part 41
+  17:24:00 main-hall__panel: unit 11 of post-1 done in 319.1 s on gpu (0 restart(s), engine peak 1537 MiB against limit 3106 MiB)
+  17:26:00 main-hall__panel: pauses of part 42 found (8 pauses, 7 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  17:28:00 main-hall__panel: unit 12 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 16 (3926375 to 3939385 ms) failed a guard (LowCoverage; compression ratio 0.79, 42 characters, 9.7 s of speech); retrying without previous-text context
+  17:28:00 main-hall__panel: unit 12 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 16: rescued by step a (decoded again without previous-text context at temperature 0.4)
+  17:28:00 main-hall__panel: pauses of part 43 found (6 pauses, 11 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  17:28:00 main-hall__panel: 1 unit(s) planned after part 43
+  17:30:00 main-hall__panel: unit 12 of post-1 done in 310.1 s on gpu (0 restart(s), engine peak 1541 MiB against limit 3106 MiB)
+  17:30:00 main-hall__panel: pauses of part 44 found (11 pauses, 3 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  17:32:00 main-hall__panel: pauses of part 45 found (11 pauses, 3 fallback cuts) in 1.2 s; engine peak 104 MiB against limit 1128 MiB (measured peak)
+  17:33:00 main-hall__panel: pauses of part 46 found (1 pauses, 0 fallback cuts) in 0.4 s; engine peak 89 MiB against limit 1128 MiB (measured peak)
+  17:33:00 DAY: stopped "Panel"
+  17:33:00 DAY: every session of the plan was recorded; waiting for the stop file
+  17:33:00 main-hall__panel: session closed, 2 final unit(s) planned
+  17:33:00 main-hall__panel: stopped. All transcripts ready by 17:58 IST (sessions with several languages: measured, 2.01 times the profile's, from 5 finished unit(s); sessions with one language: the profile's speed until a unit finishes)
+  17:33:00 main-hall__panel: unit 13 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 9 (4152310 to 4158400 ms) failed a guard (LowCoverage; compression ratio 0.65, 15 characters, 4.3 s of speech); retrying without previous-text context
+  17:33:00 main-hall__panel: unit 13 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 9: rescued by step a (decoded again without previous-text context at temperature 0.4)
+  17:35:00 main-hall__panel: unit 13 of post-1 done in 344.0 s on gpu (0 restart(s), engine peak 1559 MiB against limit 3106 MiB)
+  17:39:00 main-hall__panel: unit 14 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 15 (4546550 to 4554020 ms) failed a guard (LowCoverage; compression ratio 0.78, 39 characters, 7.1 s of speech); retrying without previous-text context
+  17:39:00 main-hall__panel: unit 14 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 15: rescued by step a (decoded again without previous-text context at temperature 0.4)
+  17:40:00 main-hall__panel: unit 14 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 26 (4641790 to 4653290 ms) failed a guard (LowCoverage; compression ratio 0.98, 56 characters, 8.3 s of speech); retrying without previous-text context
+  17:41:00 main-hall__panel: unit 14 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 26: first half (4641790 to 4646030 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  17:41:00 main-hall__panel: unit 14 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 26: rescued by step b (cut at 4646030 ms, each half decoded without context)
+  17:41:00 main-hall__panel: unit 14 of post-1 done in 368.3 s on gpu (0 restart(s), engine peak 1602 MiB against limit 3106 MiB)
+  17:45:00 main-hall__panel: unit 15 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 7 (4801855 to 4805800 ms) failed a guard (LowCoverage; compression ratio 0.64, 14 characters, 3.6 s of speech); retrying without previous-text context
+  17:45:00 main-hall__panel: unit 15 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 7: first half (4801855 to 4804874 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  17:45:00 main-hall__panel: unit 15 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 7: rescued by step b (cut at 4804874 ms, each half decoded without context)
+  17:48:00 main-hall__panel: unit 15 of post-1 done in 368.4 s on gpu (0 restart(s), engine peak 1549 MiB against limit 3106 MiB)
+  17:50:00 main-hall__panel: unit 16 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 1 (5034315 to 5040955 ms) failed a guard (LowCoverage; compression ratio 0.89, 31 characters, 5.5 s of speech); retrying without previous-text context
+  17:50:00 main-hall__panel: unit 16 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 1: first half (5034315 to 5035860 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  17:50:00 main-hall__panel: unit 16 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 1: rescued by step b (cut at 5035860 ms, each half decoded without context)
+  17:52:00 main-hall__panel: unit 16 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 22 (5224715 to 5229595 ms) failed a guard (LowCoverage; compression ratio 0.78, 29 characters, 4.2 s of speech); retrying without previous-text context
+  17:52:00 main-hall__panel: unit 16 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 22: first half (5224715 to 5226785 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  17:52:00 main-hall__panel: unit 16 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 22: rescued by step b (cut at 5226785 ms, each half decoded without context)
+  17:53:00 main-hall__panel: unit 16 of post-1 done in 326.6 s on gpu (0 restart(s), engine peak 1539 MiB against limit 3106 MiB)
+  17:54:00 main-hall__panel: unit 17 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 3 (5312425 to 5318135 ms) failed a guard (LowCoverage; compression ratio 0.77, 27 characters, 5.3 s of speech); retrying without previous-text context
+  17:55:00 main-hall__panel: unit 17 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 3: first half (5312425 to 5315877 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  17:55:00 main-hall__panel: unit 17 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 3: rescued by step b (cut at 5315877 ms, each half decoded without context)
+  17:55:00 main-hall__panel: unit 17 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 4 (5320935 to 5326715 ms) failed a guard (LowCoverage; compression ratio 0.76, 25 characters, 5.0 s of speech); retrying without previous-text context
+  17:55:00 main-hall__panel: unit 17 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 4: first half (5320935 to 5324385 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  17:55:00 main-hall__panel: unit 17 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 4: rescued by step b (cut at 5324385 ms, each half decoded without context)
+  17:56:00 main-hall__panel: unit 17 of post-1 job 1 on gpu: engine warning chunk_retry: chunk 13 (5398445 to 5403155 ms) failed a guard (LowCoverage; compression ratio 0.81, 26 characters, 4.3 s of speech); retrying without previous-text context
+  17:56:00 main-hall__panel: unit 17 of post-1 job 1 on gpu: engine warning chunk_half_done: chunk 13: first half (5398445 to 5402197 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  17:56:00 main-hall__panel: unit 17 of post-1 job 1 on gpu: engine warning chunk_rescued: chunk 13: rescued by step b (cut at 5402197 ms, each half decoded without context)
+  17:56:00 main-hall__panel: unit 17 of post-1 done in 205.9 s on gpu (0 restart(s), engine peak 1530 MiB against limit 3106 MiB)
+  17:56:00 main-hall__panel: post-1 transcript complete
+  18:03:00 night pass planned for 2 session(s): about 5.6 h, ready by 23:40 IST (measured speed: 2.44 times the profile's, from 5 finished unit(s))
+  18:08:00 main-hall__inaugural: unit 0 of post-2 done in 284.2 s on gpu (0 restart(s), engine peak 4173 MiB against limit 8675 MiB)
+  18:08:00 main-hall__inaugural: unit 1 of post-2 job 2 on gpu waits: starting needs 10.1 GB free after the engine's peak of 4.2 GB (3 GB stay free), 9.1 GB are free now
+  18:08:00 main-hall__inaugural: unit 1 of post-2 job 2 on gpu starts after waiting 2.0 s
+  18:11:00 main-hall__inaugural: unit 1 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 0 (275955 to 283245 ms) failed a guard (LowCoverage; compression ratio 0.78, 28 characters, 5.0 s of speech); retrying without previous-text context
+  18:11:00 main-hall__inaugural: unit 1 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 0: first half (275955 to 279295 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  18:11:00 main-hall__inaugural: unit 1 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 0: rescued by step b (cut at 279295 ms, each half decoded without context)
+  18:12:00 main-hall__inaugural: unit 1 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 10 (356540 to 361695 ms) failed a guard (LowCoverage; compression ratio 0.92, 24 characters, 4.5 s of speech); retrying without previous-text context
+  18:12:00 main-hall__inaugural: unit 1 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 10: first half (356540 to 359035 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  18:12:00 main-hall__inaugural: unit 1 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 10: rescued by step b (cut at 359035 ms, each half decoded without context)
+  18:13:00 main-hall__inaugural: unit 1 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 21 (481070 to 493955 ms) failed a guard (LowCoverage; compression ratio 0.74, 23 characters, 8.2 s of speech); retrying without previous-text context
+  18:13:00 main-hall__inaugural: unit 1 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 21: first half (481070 to 484815 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  18:13:00 main-hall__inaugural: unit 1 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 21: rescued by step b (cut at 484815 ms, each half decoded without context)
+  18:14:00 main-hall__inaugural: unit 1 of post-2 done in 393.0 s on gpu (0 restart(s), engine peak 3590 MiB against limit 8675 MiB)
+  18:17:00 main-hall__inaugural: unit 2 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 0 (625930 to 634130 ms) failed a guard (LowCoverage; compression ratio 0.62, 13 characters, 3.7 s of speech); retrying without previous-text context
+  18:18:00 main-hall__inaugural: unit 2 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 0: first half (625930 to 630540 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  18:18:00 main-hall__inaugural: unit 2 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 0: rescued by step b (cut at 630540 ms, each half decoded without context)
+  18:18:00 main-hall__inaugural: unit 2 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 6 (665710 to 676180 ms) failed a guard (LowCoverage; compression ratio 1.02, 48 characters, 7.2 s of speech); retrying without previous-text context
+  18:18:00 main-hall__inaugural: unit 2 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 6: first half (665710 to 670190 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  18:18:00 main-hall__inaugural: unit 2 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 6: rescued by step b (cut at 670190 ms, each half decoded without context)
+  18:19:00 main-hall__inaugural: unit 2 of post-2 job 2 on gpu: engine warning segment_dropped: chunk 15 (733970 to 742290 ms) is not speech and was dropped: LittleSpeech (compression ratio 0.65, average log-probability -0.07, no-speech 0.00, speech share 0.15)
+  18:21:00 main-hall__inaugural: unit 2 of post-2 done in 391.5 s on gpu (0 restart(s), engine peak 3585 MiB against limit 8675 MiB)
+  18:21:00 main-hall__inaugural: unit 3 of post-2 job 2 on gpu waits: starting needs 10.1 GB free after the engine's peak of 4.2 GB (3 GB stay free), 10.1 GB are free now
+  18:21:00 main-hall__inaugural: unit 3 of post-2 job 2 on gpu starts after waiting 2.0 s
+  18:24:00 main-hall__inaugural: unit 3 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 6 (990140 to 995400 ms) failed a guard (LowCoverage; compression ratio 0.76, 26 characters, 3.5 s of speech); retrying without previous-text context
+  18:24:00 main-hall__inaugural: unit 3 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 6: first half (990140 to 992795 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  18:24:00 main-hall__inaugural: unit 3 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 6: rescued by step b (cut at 992795 ms, each half decoded without context)
+  18:26:00 main-hall__inaugural: unit 3 of post-2 done in 281.2 s on gpu (0 restart(s), engine peak 3558 MiB against limit 8675 MiB)
+  18:26:00 main-hall__inaugural: unit 4 of post-2 job 2 on gpu waits: starting needs 10.1 GB free after the engine's peak of 4.2 GB (3 GB stay free), 4.8 GB are free now
+  18:26:00 main-hall__inaugural: unit 4 of post-2 job 2 on gpu starts after waiting 2.0 s
+  18:30:00 main-hall__inaugural: unit 4 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 11 (1292570 to 1300260 ms) failed a guard (LowCoverage; compression ratio 0.78, 29 characters, 4.3 s of speech); retrying without previous-text context
+  18:30:00 main-hall__inaugural: unit 4 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 11: first half (1292570 to 1296735 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  18:30:00 main-hall__inaugural: unit 4 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 11: rescued by step b (cut at 1296735 ms, each half decoded without context)
+  18:30:00 main-hall__inaugural: unit 4 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 18 (1335320 to 1340230 ms) failed a guard (LowCoverage; compression ratio 0.74, 17 characters, 3.3 s of speech); retrying without previous-text context
+  18:31:00 main-hall__inaugural: unit 4 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 18: first half (1335320 to 1336485 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  18:31:00 main-hall__inaugural: unit 4 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 18: rescued by step b (cut at 1336485 ms, each half decoded without context)
+  18:33:00 main-hall__inaugural: unit 4 of post-2 done in 415.7 s on gpu (0 restart(s), engine peak 3612 MiB against limit 8675 MiB)
+  18:33:00 main-hall__inaugural: unit 5 of post-2 job 2 on gpu waits: starting needs 10.1 GB free after the engine's peak of 4.2 GB (3 GB stay free), 4.8 GB are free now
+  18:33:00 main-hall__inaugural: unit 5 of post-2 job 2 on gpu starts after waiting 2.0 s
+  18:37:00 main-hall__inaugural: unit 5 of post-2 done in 235.7 s on gpu (0 restart(s), engine peak 3558 MiB against limit 8675 MiB)
+  18:37:00 main-hall__inaugural: unit 6 of post-2 job 2 on gpu waits: starting needs 10.1 GB free after the engine's peak of 4.2 GB (3 GB stay free), 4.8 GB are free now
+  18:37:00 main-hall__inaugural: unit 6 of post-2 job 2 on gpu starts after waiting 2.0 s
+  18:41:00 main-hall__inaugural: unit 6 of post-2 done in 291.7 s on gpu (0 restart(s), engine peak 3581 MiB against limit 8675 MiB)
+  18:45:00 main-hall__inaugural: unit 7 of post-2 done in 211.4 s on gpu (0 restart(s), engine peak 3558 MiB against limit 8675 MiB)
+  18:45:00 main-hall__inaugural: unit 8 of post-2 job 2 on gpu waits: starting needs 10.1 GB free after the engine's peak of 4.2 GB (3 GB stay free), 4.8 GB are free now
+  18:45:00 main-hall__inaugural: unit 8 of post-2 job 2 on gpu starts after waiting 2.0 s
+  18:49:00 main-hall__inaugural: unit 8 of post-2 job 2 on gpu: engine warning segment_dropped: chunk 22 (2526515 to 2541285 ms) is not speech and was dropped: LittleSpeech (compression ratio 0.91, average log-probability -0.19, no-speech 0.00, speech share 0.25)
+  18:50:00 main-hall__inaugural: unit 8 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 36 (2644635 to 2648975 ms) failed a guard (LowCoverage; compression ratio 0.72, 21 characters, 3.2 s of speech); retrying without previous-text context
+  18:51:00 main-hall__inaugural: unit 8 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 36: first half (2644635 to 2645775 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  18:51:00 main-hall__inaugural: unit 8 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 36: rescued by step b (cut at 2645775 ms, each half decoded without context)
+  18:51:00 main-hall__inaugural: unit 8 of post-2 done in 361.4 s on gpu (0 restart(s), engine peak 3571 MiB against limit 8675 MiB)
+  18:54:00 main-hall__inaugural: unit 9 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 0 (2678055 to 2684695 ms) failed a guard (LowCoverage; compression ratio 0.58, 11 characters, 3.6 s of speech); retrying without previous-text context
+  18:54:00 main-hall__inaugural: unit 9 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 0: first half (2678055 to 2681635 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  18:54:00 main-hall__inaugural: unit 9 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 0: rescued by step b (cut at 2681635 ms, each half decoded without context)
+  18:55:00 main-hall__inaugural: unit 9 of post-2 job 2 on gpu: engine warning segment_dropped: chunk 19 (2844075 to 2853365 ms) is not speech and was dropped: LittleSpeech (compression ratio 1.36, average log-probability -0.11, no-speech 0.00, speech share 0.28)
+  18:56:00 main-hall__inaugural: unit 9 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 31 (2954925 to 2962480 ms) failed a guard (LowCoverage; compression ratio 0.81, 47 characters, 7.2 s of speech); retrying without previous-text context
+  18:57:00 main-hall__inaugural: unit 9 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 31: first half (2954925 to 2957866 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  18:57:00 main-hall__inaugural: unit 9 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 31: rescued by step b (cut at 2957866 ms, each half decoded without context)
+  18:57:00 main-hall__inaugural: unit 9 of post-2 done in 365.2 s on gpu (0 restart(s), engine peak 4176 MiB against limit 8675 MiB)
+  19:00:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 0 (2996510 to 3003400 ms) failed a guard (LowCoverage; compression ratio 0.27, 3 characters, 3.2 s of speech); retrying without previous-text context
+  19:00:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 0: first half (2996510 to 3000640 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  19:00:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 0: rescued by step b (cut at 3000640 ms, each half decoded without context)
+  19:00:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 2 (3008280 to 3013380 ms) failed a guard (LowCoverage; compression ratio 0.53, 9 characters, 3.9 s of speech); retrying without previous-text context
+  19:01:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 2: first half (3008280 to 3010880 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  19:01:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 2: rescued by step b (cut at 3010880 ms, each half decoded without context)
+  19:01:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 11 (3087165 to 3092675 ms) failed a guard (LowCoverage; compression ratio 0.73, 22 characters, 4.6 s of speech); retrying without previous-text context
+  19:02:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 11: first half (3087165 to 3088465 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  19:02:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 11: rescued by step b (cut at 3088465 ms, each half decoded without context)
+  19:02:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 13 (3099290 to 3104610 ms) failed a guard (LowCoverage; compression ratio 0.78, 28 characters, 4.4 s of speech); retrying without previous-text context
+  19:02:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 13: first half (3099290 to 3100975 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  19:02:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 13: rescued by step b (cut at 3100975 ms, each half decoded without context)
+  19:02:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 16 (3112860 to 3117280 ms) failed a guard (LowCoverage; compression ratio 0.60, 12 characters, 3.5 s of speech); retrying without previous-text context
+  19:03:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 16: first half (3112860 to 3114350 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  19:03:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 16: rescued by step b (cut at 3114350 ms, each half decoded without context)
+  19:03:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 20 (3144790 to 3148840 ms) failed a guard (LowCoverage; compression ratio 0.68, 17 characters, 3.7 s of speech); retrying without previous-text context
+  19:03:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 20: first half (3144790 to 3146290 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  19:03:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 20: rescued by step b (cut at 3146290 ms, each half decoded without context)
+  19:04:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 26 (3208600 to 3214730 ms) failed a guard (LowCoverage; compression ratio 0.79, 30 characters, 4.9 s of speech); retrying without previous-text context
+  19:04:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 26: first half (3208600 to 3210895 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  19:04:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 26: rescued by step b (cut at 3210895 ms, each half decoded without context)
+  19:05:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning segment_dropped: chunk 36 (3306110 to 3316330 ms) is not speech and was dropped: LittleSpeech (compression ratio 1.27, average log-probability -0.15, no-speech 0.00, speech share 0.23)
+  19:05:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 38 (3329110 to 3334790 ms) failed a guard (LowCoverage; compression ratio 0.92, 33 characters, 4.1 s of speech); retrying without previous-text context
+  19:05:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 38: first half (3329110 to 3332130 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  19:05:00 main-hall__inaugural: unit 10 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 38: rescued by step b (cut at 3332130 ms, each half decoded without context)
+  19:06:00 main-hall__inaugural: unit 10 of post-2 done in 504.3 s on gpu (0 restart(s), engine peak 4175 MiB against limit 8675 MiB)
+  19:09:00 main-hall__inaugural: unit 11 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 14 (3469000 to 3473690 ms) failed a guard (LowCoverage; compression ratio 0.83, 25 characters, 3.7 s of speech); retrying without previous-text context
+  19:09:00 main-hall__inaugural: unit 11 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 14: first half (3469000 to 3471410 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  19:09:00 main-hall__inaugural: unit 11 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 14: rescued by step b (cut at 3471410 ms, each half decoded without context)
+  19:10:00 main-hall__inaugural: unit 11 of post-2 job 2 on gpu: engine warning segment_dropped: chunk 26 (3592590 to 3605185 ms) is not speech and was dropped: LittleSpeech (compression ratio 0.81, average log-probability -0.26, no-speech 0.00, speech share 0.27)
+  19:10:00 main-hall__inaugural: unit 11 of post-2 done in 273.9 s on gpu (0 restart(s), engine peak 3578 MiB against limit 8675 MiB)
+  19:15:00 main-hall__inaugural: unit 12 of post-2 job 2 on gpu: engine warning segment_dropped: chunk 26 (3838985 to 3849525 ms) is not speech and was dropped: LittleSpeech (compression ratio 0.68, average log-probability -0.22, no-speech 0.00, speech share 0.14)
+  19:15:00 main-hall__inaugural: unit 12 of post-2 job 2 on gpu: engine warning segment_dropped: chunk 27 (3849545 to 3858035 ms) is not speech and was dropped: LittleSpeech (compression ratio 0.72, average log-probability -0.36, no-speech 0.00, speech share 0.21)
+  19:16:00 main-hall__inaugural: unit 12 of post-2 done in 351.7 s on gpu (0 restart(s), engine peak 3595 MiB against limit 8675 MiB)
+  19:20:00 main-hall__inaugural: unit 13 of post-2 job 2 on gpu: engine warning segment_dropped: chunk 19 (4120960 to 4134505 ms) is not speech and was dropped: LittleSpeech (compression ratio 1.30, average log-probability -0.20, no-speech 0.00, speech share 0.12)
+  19:20:00 main-hall__inaugural: unit 13 of post-2 done in 260.8 s on gpu (0 restart(s), engine peak 3558 MiB against limit 8675 MiB)
+  19:20:00 main-hall__inaugural: unit 14 of post-2 job 2 on gpu waits: starting needs 10.1 GB free after the engine's peak of 4.2 GB (3 GB stay free), 7.4 GB are free now
+  19:20:00 main-hall__inaugural: unit 14 of post-2 job 2 on gpu starts after waiting 2.0 s
+  19:26:00 main-hall__inaugural: unit 14 of post-2 done in 319.4 s on gpu (0 restart(s), engine peak 3583 MiB against limit 8675 MiB)
+  19:30:00 main-hall__inaugural: unit 15 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 24 (4779115 to 4784345 ms) failed a guard (LowCoverage; compression ratio 0.56, 10 characters, 3.4 s of speech); retrying without previous-text context
+  19:30:00 main-hall__inaugural: unit 15 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 24: first half (4779115 to 4780480 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  19:30:00 main-hall__inaugural: unit 15 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 24: rescued by step b (cut at 4780480 ms, each half decoded without context)
+  19:30:00 main-hall__inaugural: unit 15 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 25 (4784395 to 4790075 ms) failed a guard (LowCoverage; compression ratio 0.53, 9 characters, 4.5 s of speech); retrying without previous-text context
+  19:31:00 main-hall__inaugural: unit 15 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 25: first half (4784395 to 4786990 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  19:31:00 main-hall__inaugural: unit 15 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 25: rescued by step b (cut at 4786990 ms, each half decoded without context)
+  19:31:00 main-hall__inaugural: unit 15 of post-2 done in 341.8 s on gpu (0 restart(s), engine peak 4173 MiB against limit 8675 MiB)
+  19:31:00 main-hall__inaugural: unit 16 of post-2 job 2 on gpu waits: starting needs 10.1 GB free after the engine's peak of 4.2 GB (3 GB stay free), 7.4 GB are free now
+  19:31:00 main-hall__inaugural: unit 16 of post-2 job 2 on gpu starts after waiting 2.0 s
+  19:35:00 main-hall__inaugural: unit 16 of post-2 job 2 on gpu: engine warning chunk_retry: chunk 15 (4973445 to 4978510 ms) failed a guard (LowCoverage; compression ratio 0.80, 32 characters, 4.7 s of speech); retrying without previous-text context
+  19:35:00 main-hall__inaugural: unit 16 of post-2 job 2 on gpu: engine warning chunk_half_done: chunk 15: first half (4973445 to 4974848 ms) decoded; decoding the second half (nothing of this chunk is committed until both are done)
+  19:35:00 main-hall__inaugural: unit 16 of post-2 job 2 on gpu: engine warning chunk_rescued: chunk 15: rescued by step b (cut at 4974848 ms, each half decoded without context)
+  19:36:00 main-hall__inaugural: unit 16 of post-2 job 2 on gpu: engine warning segment_dropped: chunk 23 (5048105 to 5053655 ms) is not speech and was dropped: LittleSpeech (compression ratio 0.43, average log-probability -0.61, no-speech 0.00, speech share 0.17)
+  19:36:00 main-hall__inaugural: unit 16 of post-2 done in 272.1 s on gpu (0 restart(s), engine peak 3558 MiB against limit 8675 MiB)
+  19:42:00 main-hall__inaugural: unit 17 of post-2 job 2 on gpu: engine warning segment_dropped: chunk 37 (5400445 to 5406055 ms) is not speech and was dropped: LittleSpeech (compression ratio 1.15, average log-probability -0.03, no-speech 0.00, speech share 0.23)
+  19:42:00 main-hall__inaugural: unit 17 of post-2 done in 338.4 s on gpu (0 restart(s), engine peak 4173 MiB against limit 8675 MiB)
+  19:42:00 main-hall__inaugural: post-2 transcript complete
+  19:53:00 hall-a__parallel-i: unit 0 of post-2 done in 698.3 s on gpu (0 restart(s), engine peak 4095 MiB against limit 8675 MiB)
+  20:03:00 DAY: report written; exiting

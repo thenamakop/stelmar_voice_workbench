@@ -12,6 +12,8 @@
 //!   MOCK_SPLIT    1: every chunk is two segments (a split chunk: two halves), then one Progress
 //!   MOCK_COUNTER  a file that counts launches
 //!   MOCK_DELAY_MS pause between chunks (default 2)
+//!   MOCK_ALLOC_MB commit this many MiB at start-up, 1 MiB at a time, before the first event; when an
+//!                 allocation fails (a job memory limit) the engine aborts, as a real engine would
 
 use std::io::Write;
 
@@ -64,6 +66,24 @@ fn main() {
     let steps: Vec<&str> = plan.split(',').collect();
     let step = steps.get(launch).or(steps.last()).copied().unwrap_or("ok");
 
+    let mut held: Vec<Vec<u8>> = Vec::new();
+    if let Some(mb) = std::env::var("MOCK_ALLOC_MB")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+    {
+        let mut left = mb;
+        while left > 0 {
+            let step = left.min(1);
+            let mut block: Vec<u8> = Vec::new();
+            if block.try_reserve_exact(step << 20).is_err() {
+                eprintln!("mock engine: out of memory after {} MiB", mb - left);
+                std::process::abort();
+            }
+            block.resize(step << 20, 1);
+            held.push(block);
+            left -= step;
+        }
+    }
     emit(&Event::Hello(Hello::new("mock")));
     if let Some(code) = step.strip_prefix("fatal:") {
         emit(&Event::Error {
@@ -164,6 +184,7 @@ fn main() {
         });
         emitted += 1;
     }
+    std::hint::black_box(&held);
     emit(&Event::Done(wb_protocol::DoneSummary {
         segments: emitted as u32,
         chunks: emitted as u32,
