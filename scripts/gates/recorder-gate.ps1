@@ -94,6 +94,7 @@ Set-WbInvariantCulture
 Import-Module (Join-Path $repo 'scripts\lib\GateRun.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\GateData.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Redact.psm1') -Force
+Import-Module (Join-Path $repo 'scripts\lib\GpuOverlap.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\AppProcess.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Rig.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\CableRig.psm1') -Force
@@ -111,6 +112,20 @@ function Q([string]$v) { ConvertTo-WbArg $v }
 
 function Get-Descendants([int]$RootId) {
   @(Get-WbProcessTree $RootId | ForEach-Object { [int]$_.ProcessId })
+}
+
+# Every process nvidia-smi lists (pid, type C / G / C+G, name), parsed by lib\GpuOverlap.psm1.
+function Get-NvidiaProcesses {
+  @(ConvertFrom-WbNvidiaSmi -Lines (Invoke-WbNative -FilePath 'nvidia-smi').Output)
+}
+
+# Command lines of the given process ids (pid -> text); a process that has gone or cannot be read is left out.
+function Get-WbCommandLines([int[]]$Pids) {
+  $map = @{}
+  foreach ($p in @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $Pids -contains [int]$_.ProcessId })) {
+    if ($p.CommandLine) { $map[[int]$p.ProcessId] = [string]$p.CommandLine }
+  }
+  $map
 }
 
 function Get-NvidiaPids {
@@ -151,7 +166,7 @@ function Get-ResultFromRun([string]$run) {
   [pscustomobject]@{
     Run = $run; Compare = (Read-Json (Join-Path $run 'compare.json')); CompareError = $(if ($cmp.ExitCode -ne 0) { (@($cmp.Error) + @($cmp.Output)) -join ' ' } else { $null }); SessionDir = $sessionDir; Source = $source; Report = (Read-Json (Join-Path $run 'stop-report.json')); Inner = (Read-Json (Join-Path $run 'inner.json'))
     Play = $play; Stress = (Read-Json (Join-Path $run 'stress.json')); Analysis = (Read-Json (Join-Path $run 'analysis.json')); Decode = (Read-Json (Join-Path $run 'decode.json'))
-    Progress = @("re-evaluated from the saved run $run"); CableDefaultRoles = $null; AppLog = @(); NvOverlap = $null; JobPids = $null; NvPids = $null; WebviewKill = $null; Interference = $null
+    Progress = @("re-evaluated from the saved run $run"); CableDefaultRoles = $null; AppLog = @(); NvOverlap = $null; NvRows = $null; JobPids = $null; NvPids = $null; WebviewKill = $null; Interference = $null
     LastStatus = (Read-Json (Join-Path $run 'status.json')); HostStress = (Read-Json (Join-Path $run 'host-stress.json'))
     Reference = (Read-Json (Join-Path $run 'reference.json')); RefAnalysis = (Read-Json (Join-Path $run 'reference-analysis.json'))
     AnalysisError = $analysisErr; RefAnalysisError = $refAnalysisErr; Rig = $null
@@ -335,11 +350,17 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
   Start-Sleep -Seconds 15
   if ($isLaptop) {
     # No emulation job on a laptop, so there is nothing to keep off the NVIDIA GPU.
-    $jobPids = @(); $nvPids = @(); $nvOverlap = $null
+    $jobPids = @(); $nvPids = @(); $nvOverlap = $null; $nvRows = $null
   } else {
     $jobPids = @(Get-Descendants $emu.Id)
-    $nvPids = @(Get-NvidiaPids)
+    $nvProcs = @(Get-NvidiaProcesses)
+    $nvPids = @($nvProcs | ForEach-Object { [int]$_.Pid })
     $nvOverlap = @($nvPids | Where-Object { $jobPids -contains $_ })
+    # Name every nvidia-smi process (pid, type, name, command line, in the job or not): on 23 Nov 2026 one soak
+    # failed this check with "overlap 1" and the evidence could not say which process it was.
+    $gpuReport = Get-WbGpuOverlap -NvProcesses $nvProcs -JobPids $jobPids -CommandLines (Get-WbCommandLines -Pids $nvPids)
+    $nvRows = $gpuReport.Rows
+    foreach ($gl in $gpuReport.Lines) { $progress.Add("$(Get-Date -Format 'HH:mm:ss') $gl") }
     $progress.Add("$(Get-Date -Format 'HH:mm:ss') job processes: $($jobPids.Count); nvidia-smi processes: $($nvPids.Count); job processes on the NVIDIA GPU: $($nvOverlap.Count)")
   }
   # Load gate: read the stress processes' priority class and threads from the running processes.
@@ -446,7 +467,7 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
     Run = $run; SessionDir = $sessionDir; Source = $source; Report = $report; Inner = $innerRes; Play = $playRes; EmuExit = $emu.ExitCode
     Compare = (Read-Json (Join-Path $run 'compare.json')); CompareError = $(if ($cmp.ExitCode -ne 0) { (@($cmp.Error) + @($cmp.Output)) -join ' ' } else { $null })
     Stress = $stressRes; Analysis = $analysis; Decode = $decode; Progress = $progress; AppLog = $appLog
-    NvOverlap = $nvOverlap; JobPids = $jobPids; NvPids = $nvPids; WebviewKill = $webviewKill; Interference = @(ConvertTo-WbArray $interference)
+    NvOverlap = $nvOverlap; NvRows = $nvRows; JobPids = $jobPids; NvPids = $nvPids; WebviewKill = $webviewKill; Interference = @(ConvertTo-WbArray $interference)
     LastStatus = $lastStatus; HostStress = (Read-Json (Join-Path $run 'host-stress.json'))
     Reference = (Read-Json (Join-Path $run 'reference.json')); RefAnalysis = (Read-Json (Join-Path $run 'reference-analysis.json'))
     AnalysisError = $analysisErr; RefAnalysisError = $refAnalysisErr; CableDefaultRoles = $cableRoles; Rig = $rig
@@ -607,9 +628,15 @@ if ($SecondReference) {
 $lines_cable = $(if ($null -eq $r.Interference) { 'cable interference polling: not re-evaluated (measured live, not saved); the analysis above is the evidence' } elseif (@($r.Interference).Count -gt 0) { 'cable interference seen (run invalid for the "equals the source" check): ' + (@($r.Interference) -join '; ') } else { 'cable interference: none seen by the 1-second session poll (sounds shorter than a second can be missed; the analysis above is the check)' })
 
 $lines = @()
+# On a FAIL because a job process is on the NVIDIA GPU, the verdict line names the process (pid, name, command line).
+$nvFailText = ''
+if ($verdict -eq 'FAIL' -and $null -ne $r.NvRows) {
+  $nvHit = @($r.NvRows | Where-Object { $_.InJob })
+  if ($nvHit.Count -gt 0) { $nvFailText = ' (job process on the NVIDIA GPU: ' + (Get-WbGpuOverlapText -Rows $nvHit) + ')' }
+}
 $lines += Get-WbGateHeader -Machine $Machine -Profile $Profile -Builds $builds
 $lines += "app build: target\gate\stelmar-voice-workbench.exe (cargo profile gate, features gate-hooks + custom-protocol)"
-$verdictText = "verdict: $(if ($verdict -eq 'INVALID') { 'INVALID (no verdict; the run must be repeated)' } elseif ($verdict -eq 'PASS' -and $Profile -notin @('native', 'laptop')) { "PASS (PROVISIONAL: emulated$hashNote$coverageNote)" } elseif ($verdict -eq 'PASS') { "PASS$hashNote$coverageNote" } else { $verdict })"
+$verdictText = "verdict: $(if ($verdict -eq 'INVALID') { 'INVALID (no verdict; the run must be repeated)' } elseif ($verdict -eq 'PASS' -and $Profile -notin @('native', 'laptop')) { "PASS (PROVISIONAL: emulated$hashNote$coverageNote)" } elseif ($verdict -eq 'PASS') { "PASS$hashNote$coverageNote" } else { "$verdict$nvFailText" })"
 if ($DiagnosticNote) {
   $lines += "verdict: DIAGNOSTIC, NOT A VERDICT. $DiagnosticNote"
   $lines += "  what the checks below say about this run (not the gate result): $($verdictText -replace '^verdict: ', '')"
