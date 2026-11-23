@@ -119,10 +119,67 @@ pub fn load(data_dir: &Path, documents: Option<PathBuf>) -> Settings {
     s
 }
 
+/// Settings fields that something other than the operator set for this run (the gate hooks' recordings and
+/// backup folders and input device, `gate.rs`) and that must never be written to `settings.json`: a gate run
+/// that shares the real app data folder would otherwise leave its test folders behind as the operator's
+/// own. Always empty outside a gate build.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Transient {
+    pub recordings_root: bool,
+    pub backup_root: bool,
+    pub last_device_id: bool,
+}
+
+impl Transient {
+    pub fn any(self) -> bool {
+        self.recordings_root || self.backup_root || self.last_device_id
+    }
+}
+
+/// What may be written for `current`: the transient fields keep the value already saved on disk. `None` means
+/// nothing may be written (a transient field and no saved file: a gate run never creates `settings.json`).
+pub fn persistable(
+    saved: Option<&Settings>,
+    current: &Settings,
+    transient: Transient,
+) -> Option<Settings> {
+    if !transient.any() {
+        return Some(current.clone());
+    }
+    let saved = saved?;
+    let mut out = current.clone();
+    if transient.recordings_root {
+        out.recordings_root = saved.recordings_root.clone();
+    }
+    if transient.backup_root {
+        out.backup_root = saved.backup_root.clone();
+    }
+    if transient.last_device_id {
+        out.last_device_id = saved.last_device_id.clone();
+    }
+    Some(out)
+}
+
 pub fn save(data_dir: &Path, settings: &Settings) -> Result<(), String> {
+    #[cfg(feature = "gate-hooks")]
+    let transient = crate::gate::transient();
+    #[cfg(not(feature = "gate-hooks"))]
+    let transient = Transient::default();
+    save_with(data_dir, settings, transient)
+}
+
+fn save_with(data_dir: &Path, settings: &Settings, transient: Transient) -> Result<(), String> {
+    let saved = if transient.any() {
+        read_json::<Settings>(&data_dir.join(SETTINGS_FILE)).ok()
+    } else {
+        None
+    };
+    let Some(to_write) = persistable(saved.as_ref(), settings, transient) else {
+        return Ok(());
+    };
     std::fs::create_dir_all(data_dir)
         .map_err(|e| format!("Could not create {}: {e}", data_dir.display()))?;
-    write_json_atomic(&data_dir.join(SETTINGS_FILE), settings)
+    write_json_atomic(&data_dir.join(SETTINGS_FILE), &to_write)
         .map_err(|e| format!("Could not save settings: {e}"))
 }
 
@@ -187,6 +244,79 @@ mod tests {
         assert!(wb_recorder::sys::is_local_path(&s.recordings_root()));
         assert!(s.recordings_root.ends_with("STELMAR-Transcripts"));
         assert_eq!(s.backup_root, None);
+        Ok(())
+    }
+
+    const REAL_ROOT: &str = "D:\\STELMAR-Transcripts";
+    const GATE_ROOT: &str = "D:\\STELMAR-Gate\\dryrun-hash\\hashing-emu-low-x\\rec";
+    const ALL: Transient = Transient {
+        recordings_root: true,
+        backup_root: true,
+        last_device_id: true,
+    };
+
+    fn read(dir: &Path) -> Result<Settings, Box<dyn std::error::Error>> {
+        Ok(read_json::<Settings>(&dir.join(SETTINGS_FILE))?)
+    }
+
+    fn write(dir: &Path, s: &Settings) -> Result<(), Box<dyn std::error::Error>> {
+        std::fs::write(dir.join(SETTINGS_FILE), serde_json::to_string(s)?)?;
+        Ok(())
+    }
+
+    /// The leak of 23 Nov 2026: a gate run on the real data folder saved its folders over the operator's.
+    #[test]
+    fn gate_folders_are_never_persisted() -> Result<(), Box<dyn std::error::Error>> {
+        let dir = wb_recorder::testutil::TempDir::new("settings-gate-keep")?;
+        let mut real = s(REAL_ROOT, None);
+        real.last_device_id = Some("wasapi:real".into());
+        write(dir.path(), &real)?;
+        let mut gate = s(GATE_ROOT, Some("C:\\STELMAR-Gate-Backup\\x"));
+        gate.last_device_id = Some("wasapi:cable".into());
+        save_with(dir.path(), &gate, ALL)?;
+        assert_eq!(read(dir.path())?, real);
+        Ok(())
+    }
+
+    #[test]
+    fn a_gate_run_never_creates_settings_json() -> Result<(), Box<dyn std::error::Error>> {
+        let dir = wb_recorder::testutil::TempDir::new("settings-gate-none")?;
+        save_with(dir.path(), &s(GATE_ROOT, None), ALL)?;
+        assert!(!dir.path().join(SETTINGS_FILE).exists());
+        Ok(())
+    }
+
+    #[test]
+    fn only_the_fields_the_gate_set_are_held_back() -> Result<(), Box<dyn std::error::Error>> {
+        let dir = wb_recorder::testutil::TempDir::new("settings-gate-mixed")?;
+        let mut real = s(REAL_ROOT, None);
+        real.last_device_id = Some("wasapi:real".into());
+        write(dir.path(), &real)?;
+        // The operator changes the backup folder while only the device is a gate setting.
+        let mut now = s(REAL_ROOT, Some("E:\\STELMAR-Backup"));
+        now.last_device_id = Some("wasapi:cable".into());
+        let only_device = Transient {
+            last_device_id: true,
+            ..Transient::default()
+        };
+        save_with(dir.path(), &now, only_device)?;
+        let back = read(dir.path())?;
+        assert_eq!(back.backup_root.as_deref(), Some("E:\\STELMAR-Backup"));
+        assert_eq!(back.last_device_id.as_deref(), Some("wasapi:real"));
+        Ok(())
+    }
+
+    #[test]
+    fn a_normal_run_saves_what_it_is_given() -> Result<(), Box<dyn std::error::Error>> {
+        let dir = wb_recorder::testutil::TempDir::new("settings-normal")?;
+        let mut now = s(REAL_ROOT, Some("E:\\STELMAR-Backup"));
+        now.last_device_id = Some("wasapi:x".into());
+        save_with(dir.path(), &now, Transient::default())?;
+        assert_eq!(read(dir.path())?, now);
+        assert_eq!(
+            persistable(None, &now, Transient::default()),
+            Some(now.clone())
+        );
         Ok(())
     }
 

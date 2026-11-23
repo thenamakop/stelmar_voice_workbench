@@ -24,7 +24,7 @@ $ast = [System.Management.Automation.Language.Parser]::ParseFile($runner, [ref]$
 Check 'run-gates.ps1 parses' (@($errs).Count -eq 0)
 $defined = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true) | ForEach-Object { $_.Name })
 # The modules the runner imports (the same ones it loads before it prints anything).
-foreach ($m in 'PsEnv.psm1', 'PackCore.psm1', 'PackGate.psm1', 'CableRig.psm1', 'LoopbackRig.psm1') {
+foreach ($m in 'PsEnv.psm1', 'PackCore.psm1', 'PackGate.psm1', 'CableRig.psm1', 'LoopbackRig.psm1', 'GateData.psm1') {
   $f = Join-Path $repo ('scripts\lib\' + $m)
   if (Test-Path -LiteralPath $f) { Import-Module $f -Force -ErrorAction SilentlyContinue }
 }

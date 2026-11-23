@@ -200,6 +200,17 @@ function Show-Status {
 }
 if ($Status) { Show-Status; exit 0 }
 
+# ---- The app data folder: no gate may run on the real one ------------------------------------------
+# Every gate inherits this environment. A WB_GATE_DATA_DIR that points at the real app data folder
+# (%APPDATA%\in.edu.bmu.stelmar.voiceworkbench) would make the gate build change the person's real
+# settings.json and delete their verified-models.json, so the runner stops before anything starts.
+Import-Module (Join-Path $libDir 'GateData.psm1') -Force
+try { Assert-WbGateDataEnvNotReal -Gate 'The gate pack' }
+catch {
+  Banner @('THE GATE PACK DID NOT START', $_.Exception.Message) 'Red'
+  exit 2
+}
+
 # ---- Start: unblock, launch check, blockers -------------------------------------------------------
 Banner @('STELMAR gate pack', "  laptop: $Role   profile: $Profile   $(if ($quickRun) { 'QUICK (dry run, not full length)' } else { 'full length' })", "  pack: $PackRoot", "  results: $WorkDir")
 $ub = Invoke-PackUnblock -Root $PackRoot

@@ -95,12 +95,27 @@ $log = [System.Collections.Generic.List[string]]::new()
 # The console gets the same redacted text as the log (user name, profile path, computer name).
 function Say([string]$line) { Write-Host ($line | ConvertTo-WbRedacted -MachineLabel $Machine); $log.Add($line) }
 
+# This script runs the RELEASE build, which has no gate hooks and so cannot be given a data folder of its own: it
+# uses the real app data folder. The three files in it (settings.json, capability.json, verified-models.json) are
+# copied aside now and put back byte for byte at the end, whatever the app did to them (GateData.psm1).
+Import-Module (Join-Path $here 'lib\GateData.psm1') -Force
+$guard = Save-WbRealAppData
+foreach ($l in @($guard.Pending)) { Write-Host "real app data, $l" }
+function Exit-AppDataGuard {
+  if ($script:guard) {
+    foreach ($l in (Restore-WbRealAppData -Saved $script:guard)) { Say "real app data, $l" }
+    Remove-Item -LiteralPath $script:guard.SaveDir -Recurse -Force -ErrorAction SilentlyContinue
+    $script:guard = $null
+  }
+}
+
 # Clean stop between runs (AppProcess.psm1): close the window, force-kill what is left including every
 # msedgewebview2.exe for the app's user data folder, and wait until none remain. A relaunch while the
 # previous WebView2 is still exiting would measure that race instead of the app.
 function Stop-App {
   if (-not (Stop-WbApp)) {
     Say "STOP: WebView2 from the previous run is still running (user data folder $(Get-WbUserDataDir))."
+    Exit-AppDataGuard
     Write-WbEvidence -Path (Join-Path $OutDir "offline-check-$Label.txt") -Lines $log -MachineLabel $Machine
     exit 3
   }
@@ -230,6 +245,7 @@ if ($verdict -eq 'BASELINE') {
 } else {
   Say "Result: $verdict"
 }
+Exit-AppDataGuard
 Write-WbEvidence -Path $logFile -Lines $log -MachineLabel $Machine
 Write-Host "Log: $logFile"
 if ($verdict -eq 'FAIL') { exit 1 }

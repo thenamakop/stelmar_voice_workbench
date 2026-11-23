@@ -104,6 +104,7 @@ Import-Module (Join-Path $repo 'scripts\lib\PsEnv.psm1') -Force
 Set-WbCleanPSModulePath
 Set-WbInvariantCulture
 Import-Module (Join-Path $repo 'scripts\lib\GateRun.psm1') -Force
+Import-Module (Join-Path $repo 'scripts\lib\GateData.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Redact.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\AppProcess.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Rig.psm1') -Force
@@ -339,7 +340,7 @@ try {
     }
 
     # 1. The app's own view of the saved profile: a fingerprint change would decide with safe defaults.
-    $env:WB_GATE_DATA_DIR = $data
+    $null = Set-WbGateDataDir -Dir $data
     $env:WB_GATE_ROOT = $rec
     $env:WB_GATE_CHECK = 'view'
     $env:WB_GATE_REPORT = Join-Path $run 'view.json'

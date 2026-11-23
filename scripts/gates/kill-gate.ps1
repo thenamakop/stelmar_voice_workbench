@@ -67,6 +67,7 @@ Import-Module (Join-Path $repo 'scripts\lib\PsEnv.psm1') -Force
 Set-WbCleanPSModulePath
 Set-WbInvariantCulture
 Import-Module (Join-Path $repo 'scripts\lib\GateRun.psm1') -Force
+Import-Module (Join-Path $repo 'scripts\lib\GateData.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Redact.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\AppProcess.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Rig.psm1') -Force
@@ -121,6 +122,8 @@ $result = Invoke-WbGate -Name "phase1-kill-$Profile" -Body {
     & $Testbench gen --out $source --seconds $seconds --rate 48000 --channels 2 | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'wb-testbench gen failed' }
   }
+  # The app's own data folder for this run: never the operator's real one.
+  $null = Set-WbGateDataDir -Dir (Join-Path $run 'appdata')
   $env:WB_GATE_ROOT = $rec
   $env:WB_GATE_BACKUP = Join-Path $BackupRoot "kill-$Profile-$stamp"
   $env:WB_GATE_DEVICE = $capName

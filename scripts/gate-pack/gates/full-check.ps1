@@ -12,6 +12,7 @@ Import-Module (Join-Path $lib 'PackGate.psm1') -Force
 $ctx = Read-PackCtx -CtxFile $CtxFile
 Initialize-PackGate -Ctx $ctx
 Import-Module (Join-Path $lib 'GateRun.psm1') -Force
+Import-Module (Join-Path $lib 'GateData.psm1') -Force
 Import-Module (Join-Path $lib 'Redact.psm1') -Force
 Import-Module (Join-Path $lib 'AppProcess.psm1') -Force
 Import-Module (Join-Path $lib 'ProcWatch.psm1') -Force
@@ -30,7 +31,7 @@ Invoke-PackGateBody -Ctx $ctx -Id 'full-check' -ResultFile $ResultFile -Body {
   if ($ctx.profile -ne 'laptop' -and (-not $paths.Emulate -or -not (Test-Path -LiteralPath $paths.Emulate))) { throw "the emulation profile $($ctx.profile) needs wb-emulate; it is not available (dry run on the Legion only)" }
 
   $env:WB_GATE_CHECK = 'full'
-  $env:WB_GATE_DATA_DIR = $data
+  $null = Set-WbGateDataDir -Dir $data
   $env:WB_GATE_REPORT = $report
   $env:WB_GATE_ROOT = Join-Path $run 'rec'
   $env:WB_BENCH_DIR = $paths.BenchClips

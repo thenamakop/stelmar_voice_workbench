@@ -27,6 +27,7 @@ use wb_recorder::util::write_json_atomic;
 
 use crate::engines::Registry;
 use crate::recording::{self, RecoverAction, StartRequest};
+use crate::settings::Transient;
 use crate::state::{AppState, lock};
 use crate::syscheck;
 use wb_capability::CheckKind;
@@ -48,6 +49,10 @@ pub fn data_dir_override() -> Option<PathBuf> {
 }
 
 fn active() -> bool {
+    active_with(&var)
+}
+
+fn active_with(get: &dyn Fn(&str) -> Option<String>) -> bool {
     [
         "WB_GATE_START",
         "WB_GATE_RECOVERY",
@@ -56,7 +61,26 @@ fn active() -> bool {
         "WB_GATE_DAY_PLAN",
     ]
     .iter()
-    .any(|k| var(k).is_some())
+    .any(|k| get(k).is_some())
+}
+
+/// The settings fields this run's gate variables set (`apply_overrides`, and the input device the hook picks):
+/// `settings::save` keeps them out of `settings.json`, so a gate run never leaves its test folders or device
+/// behind as the operator's own, whichever app data folder it uses.
+pub fn transient() -> Transient {
+    transient_with(&var)
+}
+
+fn transient_with(get: &dyn Fn(&str) -> Option<String>) -> Transient {
+    // `apply_overrides` does nothing unless a hook is active, so nothing is overridden either.
+    if !active_with(get) {
+        return Transient::default();
+    }
+    Transient {
+        recordings_root: get("WB_GATE_ROOT").is_some(),
+        backup_root: get("WB_GATE_BACKUP").is_some(),
+        last_device_id: get("WB_GATE_DEVICE").is_some(),
+    }
 }
 
 /// Applies the run's folders before the start-up recovery scan reads them.
@@ -360,4 +384,55 @@ fn inject_panics() -> serde_json::Value {
         "boundary_result": format!("{boundary:?}"),
         "thread_panicked": thread.unwrap_or(false),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    fn env(pairs: &[(&str, &str)]) -> impl Fn(&str) -> Option<String> {
+        let map: HashMap<String, String> = pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+        move |k| map.get(k).cloned().filter(|v| !v.trim().is_empty())
+    }
+
+    #[test]
+    fn the_folders_and_device_a_gate_sets_are_transient() {
+        let get = env(&[
+            ("WB_GATE_START", "Gate soak"),
+            ("WB_GATE_ROOT", r"D:\STELMAR-Gate\x\rec"),
+            ("WB_GATE_BACKUP", r"C:\STELMAR-Gate-Backup\x"),
+            ("WB_GATE_DEVICE", "CABLE Output"),
+        ]);
+        assert_eq!(
+            transient_with(&get),
+            Transient {
+                recordings_root: true,
+                backup_root: true,
+                last_device_id: true
+            }
+        );
+    }
+
+    #[test]
+    fn only_what_is_set_is_transient_and_an_empty_value_is_not_set() {
+        let get = env(&[
+            ("WB_GATE_CHECK", "quick"),
+            ("WB_GATE_ROOT", r"D:\STELMAR-Gate\x\rec"),
+            ("WB_GATE_BACKUP", ""),
+        ]);
+        let t = transient_with(&get);
+        assert!(t.recordings_root && !t.backup_root && !t.last_device_id);
+    }
+
+    #[test]
+    fn without_an_active_hook_nothing_is_overridden_so_nothing_is_transient() {
+        // `apply_overrides` returns at once unless a start, recovery, stop, check or day-plan hook is set.
+        let get = env(&[("WB_GATE_ROOT", r"D:\STELMAR-Gate\x\rec")]);
+        assert_eq!(transient_with(&get), Transient::default());
+        assert_eq!(transient_with(&env(&[])), Transient::default());
+    }
 }

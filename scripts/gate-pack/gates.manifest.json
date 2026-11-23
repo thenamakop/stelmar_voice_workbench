@@ -274,7 +274,7 @@
     },
     {
       "id": "supervisor-kill",
-      "title": "Batch engine killed at 5 random points (low value: Phase 4's supervisor replaces it)",
+      "title": "Supervisor kill tests with the real engine: 5 kills between chunks, 3 kills in a forced split, a decode over 2 minutes, a detection pass over the watchdog (recovery only; Phase 4 day-sim -Kill stays Legion-only)",
       "priority": "P3", "order": 10, "script": "gates/supervisor-kill.ps1", "group": "long",
       "needs": { "ac": true }, "interactive": false,
       "est_minutes": { "low": 80, "mid": 70 },

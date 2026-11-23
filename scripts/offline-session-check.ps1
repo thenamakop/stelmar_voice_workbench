@@ -85,6 +85,12 @@ if ($expectOffline -and $state.State -eq 'Online') {
 }
 
 if (-not (Stop-WbApp)) { Say 'STOP: a previous WebView2 is still running.'; exit 3 }
+# The release build cannot be given a data folder of its own, so it runs on the real app data folder. The three
+# files in it (settings.json, capability.json, verified-models.json) are copied aside now and put back byte for
+# byte after the checks below have read them (GateData.psm1).
+Import-Module (Join-Path $here 'lib\GateData.psm1') -Force
+$guard = Save-WbRealAppData
+foreach ($l in @($guard.Pending)) { Write-Host "real app data, $l" }
 $run = Start-WbApp -Exe $exePath -TimeoutSeconds 30
 $app = $run.Process
 Say "window shown after $($run.WindowMs) ms; rendered after $($run.RenderMs) ms"
@@ -161,6 +167,8 @@ if ($expectOffline) {
 } else {
   Say "verdict: BASELINE (online: $($seen.Count) non-loopback endpoints from WebView2 are expected; compare with the offline run)"
 }
+foreach ($l in (Restore-WbRealAppData -Saved $guard)) { Say "real app data, $l" }
+Remove-Item -LiteralPath $guard.SaveDir -Recurse -Force -ErrorAction SilentlyContinue
 Write-WbEvidence -Path (Join-Path $OutDir "offline-session-$Label.txt") -Lines $log -MachineLabel $Machine
 Write-Host "log: $(Join-Path $OutDir "offline-session-$Label.txt")"
 exit $exitCode

@@ -85,6 +85,17 @@ What it does, in order
      cable and gives numbers only, no pass or fail.
    - More recorder checks (cold-cache hashing, background decoding), the speed tables on the
      processor, a full system check, and, if this pack has it, the 2.5-hour microphone test in a quiet room.
+   - The engine kill tests (about 80 minutes in a full run, no cable needed): the speech engine is stopped
+     by force at random points while it works, and the pack checks that the app restarts it and the
+     finished text is the same as an uninterrupted run. This checks recovery only.
+
+Your own settings are safe
+--------------------------
+ The checks that start the app give it a settings folder of its own inside the pack's "work" folder. They
+ never read or change the real STELMAR Voice Workbench settings on this laptop (the recordings folder, the
+ saved system check, the model list). If you set the environment variable WB_GATE_DATA_DIR to the real
+ settings folder, the pack refuses to start and says so. The two checks that must run the installed
+ (release) app, the network test, copy the three settings files aside first and put them back afterwards.
 
  You can stop at any time. Anything not finished is marked "waiting" in the results.
 
@@ -139,3 +150,12 @@ What stays on the laptop
 
 This pack never connects to the network, sends nothing anywhere, and installs nothing. It needs no
 development tools: everything it runs is in this folder.
+
+Test audio and licences
+-----------------------
+ The speech clips in the data folder are taken from FLEURS (Conneau et al., "FLEURS: Few-shot Learning
+ Evaluation of Universal Representations of Speech", 2022; published by Google), which is licensed under
+ Creative Commons Attribution 4.0 International (CC BY 4.0): https://creativecommons.org/licenses/by/4.0/
+ The clips are cut to short excerpts and some are joined or resampled for the checks. No change makes them
+ endorsed by the authors or by Google. The speech models in the models folder keep their own licences,
+ listed in models\manifest.json.
