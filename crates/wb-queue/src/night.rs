@@ -182,9 +182,10 @@ struct ProgrammeSession {
     transcribe: bool,
 }
 
-/// The end of the programme's last session of the IST day that contains `reference_ms`, counting only the
-/// sessions the programme marks for transcription (docs/programme.json). `reference_ms` is the end of a
-/// session that was recorded, so a night pass after midnight still belongs to the day that just ended.
+/// The end of the programme's last session of the event day that contains `reference_ms` (an event day runs from
+/// 08:00 to 08:00 IST, like [`evening_ms`]), counting only the sessions the programme marks for transcription
+/// (docs/programme.json). `reference_ms` is the end of a session that was recorded, so a night pass after midnight
+/// still belongs to the day that just ended: a last session ending at 00:30 must not pick up the next day's entry.
 /// None when the programme does not parse or has no such session that day (a rehearsal, another date):
 /// the caller then goes by the recorded sessions alone.
 pub fn programme_day_end_ms(programme_json: &str, reference_ms: u64) -> Option<u64> {
@@ -200,13 +201,17 @@ pub struct ProgrammeDay {
     pub last_end_ms: u64,
 }
 
-/// The programme's entry for the IST day that contains `reference_ms` (the sessions marked for transcription), or
+/// The programme's entry for the event day (08:00 to 08:00 IST) that contains `reference_ms` (the sessions marked for transcription), or
 /// None when the programme does not parse or lists none that day. Gate script: the pre-flight check of the day
 /// simulation reads this through the app (`WB_GATE_CHECK=programme`), so the script cannot disagree with the app.
 pub fn programme_day(programme_json: &str, reference_ms: u64) -> Option<ProgrammeDay> {
     let programme: Programme = serde_json::from_str(programme_json).ok()?;
-    let local = reference_ms.checked_add(IST_OFFSET_MS)?;
-    let day_start = local - local % DAY_MS - IST_OFFSET_MS;
+    // Shift the reference back by the day's 08:00 start so that the event day, not the calendar day, is found.
+    let day_hour_ms = DEADLINE_HOUR_IST * 3_600_000;
+    let shifted = reference_ms
+        .checked_add(IST_OFFSET_MS)?
+        .checked_sub(day_hour_ms)?;
+    let day_start = shifted - shifted % DAY_MS + day_hour_ms - IST_OFFSET_MS;
     let mut titles = Vec::new();
     let mut last_end_ms = 0u64;
     for s in programme.sessions.iter().filter(|s| s.transcribe) {
@@ -326,9 +331,24 @@ mod tests {
 
     #[test]
     fn the_reference_is_the_end_of_the_last_recorded_session_so_its_own_day_counts() {
-        // A reference at 09:00 the next day is that next IST day: its own programme is used.
+        // A reference at 09:00 the next day is that next event day: its own programme is used.
         assert_eq!(
             programme_day_end_ms(PROGRAMME, at(24 + 9, 0)),
+            Some(at(24 + 13, 0))
+        );
+        // The event day runs 08:00 to 08:00 (auditor item 10): a last recorded session that ends at 00:20, or at
+        // 07:59, still belongs to the day before, so the night pass waits for that day's last session (18:15), not
+        // for the next day's (13:00 on the 10th). The day changes at 08:00.
+        assert_eq!(
+            programme_day_end_ms(PROGRAMME, at(24, 20)),
+            Some(at(18, 15))
+        );
+        assert_eq!(
+            programme_day_end_ms(PROGRAMME, at(24 + 7, 59)),
+            Some(at(18, 15))
+        );
+        assert_eq!(
+            programme_day_end_ms(PROGRAMME, at(24 + 8, 0)),
             Some(at(24 + 13, 0))
         );
         // The reference is the end of the last recorded session, so a night pass at 01:00 still uses its day.
