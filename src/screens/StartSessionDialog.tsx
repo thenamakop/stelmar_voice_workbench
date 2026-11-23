@@ -195,9 +195,16 @@ export function StartSessionDialog({
     >
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 12 }}>
-          <Input label="Session title" value={title} onChange={(e) => setTitle(e.target.value)} required />
+          <Input
+            label="Session title"
+            dir="auto"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            required
+          />
           <Input
             label="Hall"
+            dir="auto"
             placeholder="Seminar Hall B"
             value={hall}
             onChange={(e) => setHall(e.target.value)}

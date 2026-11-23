@@ -253,6 +253,7 @@ export const SEGMENTS: QueueSegment[] = [
   ["en", false, 131_000, "The second slide shows the monthly output against the campus average."],
   ["ur", false, 190_000, "اس مطالعے میں ہم نے تین عمارتوں کی چھتوں پر لگے سولر پینلوں کا ڈیٹا دیکھا۔"],
   ["hi", true, 262_000, "Next, यह graph बताता है कि सर्दियों में output कितना गिरता है।"],
+  ["ur", true, 310_000, "ہمارا main finding یہ ہے کہ battery storage سے peak load کافی کم ہوا۔"],
 ].map(([lang, mixed, start, text]) => ({
   revision: "post-1",
   start_ms: start as number,

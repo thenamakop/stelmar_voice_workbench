@@ -37,3 +37,13 @@ button {
   font-family: var(--font-urdu);
   line-height: var(--lh-urdu);
 }
+
+/* One transcript segment (src/screens/SegmentText.tsx): runs of another script keep their own font, and
+   the line box comes from the block, not from the language rule above. */
+.seg-text {
+  overflow-wrap: anywhere;
+}
+
+.seg-text [lang] {
+  line-height: inherit;
+}

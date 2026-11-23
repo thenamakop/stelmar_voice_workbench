@@ -27,11 +27,12 @@ const APP_FONTS = "(?:Inter|IBM Plex Mono|Noto Sans Devanagari|Noto Nastaliq Urd
 // them: <Button onClick>, <Input placeholder>). Under --max-warnings 0 that would forbid any
 // interaction, so these pass-through attributes are allowed as well. The lists below, not TypeScript,
 // limit the extra attributes (several ports extend the HTML attribute types); TypeScript rejects
-// unknown design props and invalid values.
+// unknown design props and invalid values. `dir` and `lang` are allowed because Hindi and Urdu text in an
+// editable field needs `dir="auto"` (Phase 5: mixed English and Urdu typing, selection and caret movement).
 const PROP_RULE = "> JSXIdentifier[name!=/^(?:";
 const PASS_THROUGH =
   "on[A-Z][A-Za-z]*|aria-[a-z-]+|data-[a-z-]+|id|name|title|type|value|defaultValue|" +
-  "placeholder|disabled|readOnly|autoFocus|autoComplete|tabIndex|role|";
+  "placeholder|disabled|readOnly|autoFocus|autoComplete|tabIndex|role|dir|lang|";
 
 // App additions to the same rule (one rule key, so they must share its array). They close gaps the
 // reference leaves in React style objects: font families and functional colours.
