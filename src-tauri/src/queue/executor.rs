@@ -100,16 +100,18 @@ impl AppExecutor {
         };
         // The build the profile measured for this kind of device comes first.
         let measured = profile.engine_build(device == Device::Gpu);
-        measured
-            .into_iter()
-            .chain(want.iter().copied())
-            .find_map(|v| {
-                self.env
-                    .engines
-                    .iter()
-                    .find(|(name, _)| name == v)
-                    .map(|(n, p)| (n.clone(), p.clone()))
-            })
+        let (name, path, fallback) = pick_engine(measured, want, &self.env.engines)?;
+        if fallback {
+            // Auditor item 17 of 20 Nov 2026: the engine's own CPU check keeps another build safe, but the speed
+            // the profile measured belongs to the build it measured, so say which one runs instead.
+            tracing::warn!(
+                device = ?device,
+                measured = measured.unwrap_or("none"),
+                running = name,
+                "the engine build the profile measured is not installed; another build runs the unit"
+            );
+        }
+        Some((name.to_owned(), path.clone()))
     }
 
     fn model_ref(&self, id: &str) -> Result<ModelRef, String> {
@@ -261,10 +263,56 @@ impl UnitExecutor for AppExecutor {
     }
 }
 
+/// The engine to start: the build the profile measured first, then the usual order for the device. The flag is true
+/// when the build chosen is not the measured one (the measured build is not installed, or the profile has none).
+fn pick_engine<'a>(
+    measured: Option<&str>,
+    want: &[&str],
+    installed: &'a [(String, PathBuf)],
+) -> Option<(&'a str, &'a PathBuf, bool)> {
+    let (name, path) = measured
+        .into_iter()
+        .chain(want.iter().copied())
+        .find_map(|v| installed.iter().find(|(name, _)| name == v))
+        .map(|(n, p)| (n.as_str(), p))?;
+    Some((name, path, measured.is_some_and(|m| m != name)))
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
+
+    fn installed(names: &[&str]) -> Vec<(String, PathBuf)> {
+        names
+            .iter()
+            .map(|n| ((*n).to_owned(), PathBuf::from(format!("wb-engine-{n}.exe"))))
+            .collect()
+    }
+
+    /// Auditor item 17: the measured build wins when it is installed; otherwise the usual order runs and the
+    /// choice is flagged so the executor logs it.
+    #[test]
+    fn the_measured_engine_build_is_used_and_a_different_one_is_flagged() {
+        let all = installed(&["avx2", "avx512", "vulkan"]);
+        let cpu = ["avx512", "avx2"];
+        let (name, _, fallback) = pick_engine(Some("avx2"), &cpu, &all).unwrap();
+        assert_eq!((name, fallback), ("avx2", false));
+        let only_avx2 = installed(&["avx2"]);
+        let (name, _, fallback) = pick_engine(Some("avx512"), &cpu, &only_avx2).unwrap();
+        assert_eq!(
+            (name, fallback),
+            ("avx2", true),
+            "measured avx512 is not installed"
+        );
+        let (name, _, fallback) = pick_engine(None, &cpu, &all).unwrap();
+        assert_eq!(
+            (name, fallback),
+            ("avx512", false),
+            "no measured build: the usual order, nothing to flag"
+        );
+        assert!(pick_engine(Some("avx2"), &cpu, &installed(&["vulkan"])).is_none());
+    }
 
     /// Row 102: the app's engines get a scrubbed environment in an installed (release) build, and keep `WB_EMULATE`
     /// and the device variables in gate and debug builds, which pass them on purpose.
