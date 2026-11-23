@@ -150,3 +150,12 @@ What stays on the laptop
 
 This pack never connects to the network, sends nothing anywhere, and installs nothing. It needs no
 development tools: everything it runs is in this folder.
+
+Test audio and licences
+-----------------------
+ The speech clips in the data folder are taken from FLEURS (Conneau et al., "FLEURS: Few-shot Learning
+ Evaluation of Universal Representations of Speech", 2022; published by Google), which is licensed under
+ Creative Commons Attribution 4.0 International (CC BY 4.0): https://creativecommons.org/licenses/by/4.0/
+ The clips are cut to short excerpts and some are joined or resampled for the checks. No change makes them
+ endorsed by the authors or by Google. The speech models in the models folder keep their own licences,
+ listed in models\manifest.json.
