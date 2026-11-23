@@ -29,7 +29,7 @@ Invoke-PackGateBody -Ctx $ctx -Id 'queue-soak' -ResultFile $ResultFile -Body {
   }
   foreach ($f in @($paths.GateExe, $paths.Testbench, $paths.BenchClips)) { if (-not (Test-Path -LiteralPath $f)) { throw "the pack is missing $f (run run-gates.ps1 -Verify)" } }
   $settings = Get-WbQueueSoakSettings -Quick:$quick
-  $minutes = [math]::Ceiling(($settings.Session1Seconds + $settings.Session2Seconds) / 60.0 + $settings.DecodeWaitMinutes + 15)
+  $minutes = [math]::Ceiling(($settings.Session1Seconds + $settings.Session2Seconds) / 60.0 + $settings.HardLimitMinutes + 15)
   Assert-PackFreeDisk -Path ([string]$ctx.work_dir) -NeedGB (Get-PackDiskNeedGB -Minutes $minutes) -What 'the queue-soak recordings'
   Assert-PackBackupDrive -BackupRoot ([string]$ctx.backup_root)
   $args1 = @(Get-PackLegacyCommon -Ctx $ctx) + @('-RigPrefer', [string]$ctx.rig_prefer, '-CapabilityFile', (ConvertTo-PackArg $capPath), '-BenchClips', (ConvertTo-PackArg $paths.BenchClips))

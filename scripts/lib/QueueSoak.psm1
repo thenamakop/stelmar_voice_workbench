@@ -34,19 +34,23 @@ $script:MinOverlapSeconds = 60
 # observed: 20 looks is 40 s.
 $script:MinBatchSamples = 20
 $script:BatchLookSeconds = 2
+# A batch engine that was running when a recording began may take this long to be stopped (the queue's monitor looks every
+# 2 s and the supervisor polls every 500 ms); owner, 23 Nov 2026.
+$script:StopGraceSeconds = 10
 
 function Get-WbQueueSoakGapLimitMs { $script:GapLimitMs }
 function Get-WbQueueSoakMinOverlapSeconds { $script:MinOverlapSeconds }
 
-# Lengths of the two sessions and the time the queue gets to finish session 1 after the last recording. Quick mode is
-# for a short test run (about 25 minutes on a laptop); full mode for the laptop run (about an hour).
+# Lengths of the two sessions and the hard limit for session 1's transcript (counted from the moment session 1 stops: 30
+# minutes in quick mode, 90 in full mode; the app's own estimate usually ends the wait earlier). Quick mode is for a short
+# test run (about 25 minutes on a laptop); full mode for the laptop run (about an hour).
 function Get-WbQueueSoakSettings {
   param([switch]$Quick)
   if ($Quick) {
-    return [pscustomobject]@{ Mode = 'quick'; Session1Seconds = 300; Session2Seconds = 300; PartSeconds = 120; DecodeWaitMinutes = 12; MaxMinutes = 45 }
+    return [pscustomobject]@{ Mode = 'quick'; Session1Seconds = 300; Session2Seconds = 300; PartSeconds = 120; HardLimitMinutes = 30; MaxMinutes = 60 }
   }
   # PartSeconds 0: the app's own part length (10 minutes).
-  [pscustomobject]@{ Mode = 'full'; Session1Seconds = 1500; Session2Seconds = 1200; PartSeconds = 0; DecodeWaitMinutes = 30; MaxMinutes = 120 }
+  [pscustomobject]@{ Mode = 'full'; Session1Seconds = 1500; Session2Seconds = 1200; PartSeconds = 0; HardLimitMinutes = 90; MaxMinutes = 150 }
 }
 
 # The capability.json this pack run's own quick check kept, or why there is none. A missing, empty or unreadable file
@@ -288,12 +292,12 @@ function Get-WbQueueSoakModeText {
   else { 'waiting (this machine''s system check did not clear processing while recording): the queue must not run a batch engine while a session records, and must finish session 1 after the recordings' }
 }
 
-# How long the app is left running after both sessions are recorded. In waiting mode nothing of session 1 was decoded
+# Waiting mode only: how long the app is left running after both sessions are recorded. Nothing of session 1 was decoded
 # during the recordings except between them, so the whole transcript still has to be made: twice the audio plus 5 minutes.
+# (Processing mode uses Get-WbQueueSoakWaitLimit.)
 function Get-WbQueueSoakDecodeWaitMinutes {
-  param([Parameter(Mandatory = $true)] $Settings, [ValidateSet('processing', 'waiting')] [string]$Mode = 'processing')
-  if ($Mode -eq 'processing') { return [int]$Settings.DecodeWaitMinutes }
-  [int][math]::Max([int]$Settings.DecodeWaitMinutes, [math]::Ceiling([double]$Settings.Session1Seconds / 60.0 * 2 + 5))
+  param([Parameter(Mandatory = $true)] $Settings)
+  [int][math]::Ceiling([double]$Settings.Session1Seconds / 60.0 * 2 + 5)
 }
 
 # Is this process a batch engine (or the chunks call, which is processing too)? From its command line: "wb-engine-<build>...
@@ -307,30 +311,98 @@ function Get-WbEngineSubcommand {
   $null
 }
 
-# The waiting rule from the looks at the engine processes. Samples: At, Batch (count of batch engines), Chunks (count of
-# chunk calls). Windows: Start, End of each recording (wall time, from the app's own start and stop lines). A look is "inside"
-# when it fell within a window; the rule is judged on batch engines only (chunk calls are reported, not judged).
+# The waiting rule from the looks at the engine processes. What the queue code does (read 23 Nov 2026):
+#   when a recording starts while a batch unit runs and the machine's profile refuses processing while recording, the
+#   queue's monitor (src-tauri/src/queue/mod.rs, step() at line 543, MONITOR_STEP = 2 s at line 90) sees the refusal
+#   (wb-queue/src/sched.rs:143 PauseReason::RecordingRefused) and calls cancel_running (mod.rs:550, wb-runner/src/manager.rs:216);
+#   the supervisor's read loop sees the cancel within its 500 ms poll and kills the engine (wb-supervisor/src/run.rs:268-269).
+#   The unit is NOT let finish; it is pending again and resumes from its staged file. No new unit starts while the refusal
+#   holds: wb-runner/src/gate.rs wait_for_gate keeps asking the gate (every 2 s).
+# So the rule (owner, 23 Nov 2026): a batch engine that was already running when a recording started may stay alive for at
+# most StopGraceSeconds (10 s) after the start; a batch engine created after the recording started is a violation at once.
+#   Samples: At, Engines (the batch engines alive at that look: Pid, Created), Chunks (count of chunk calls, information only)
+#   Windows: Start, End of each recording (wall time, from the app's own start and stop lines)
+# Returns the counts, the first violation in words, and for each recording how long an engine that was running at its start
+# took to go (lower bound: the last look that saw it; upper bound: the first look that did not).
 function Get-WbBatchDuringRecording {
   param(
     [AllowEmptyCollection()] [AllowNull()] [object[]]$Samples,
     [AllowEmptyCollection()] [AllowNull()] [object[]]$Windows,
-    [int]$LookSeconds = $script:BatchLookSeconds
+    [int]$LookSeconds = $script:BatchLookSeconds,
+    [double]$GraceSeconds = $script:StopGraceSeconds
   )
-  $inside = 0; $batch = 0; $chunks = 0; $first = $null
-  foreach ($s in @($Samples)) {
-    if ($null -eq $s) { continue }
-    $at = [datetime]$s.At
-    $in = $false
-    foreach ($w in @($Windows)) { if ($null -ne $w -and $at -ge [datetime]$w.Start -and $at -le [datetime]$w.End) { $in = $true; break } }
-    if (-not $in) { continue }
-    $inside++
-    if ([int]$s.Batch -gt 0) { $batch++; if ($null -eq $first) { $first = $at } }
-    if ([int]$s.Chunks -gt 0) { $chunks++ }
+  $inside = 0; $chunks = 0; $late = 0; $lateSeconds = 0; $newEngines = @{}
+  $firstViolation = $null
+  $stops = New-Object System.Collections.Generic.List[object]
+  $wi = 0
+  foreach ($w in @($Windows)) {
+    if ($null -eq $w) { continue }
+    $wi++
+    $ws = [datetime]$w.Start; $we = [datetime]$w.End
+    $carried = @{}
+    $lastAlive = $null; $firstGone = $null
+    $looks = @(@($Samples) | Where-Object { $null -ne $_ -and [datetime]$_.At -ge $ws -and [datetime]$_.At -le $we } | Sort-Object { [datetime]$_.At })
+    foreach ($s in $looks) {
+      $at = [datetime]$s.At
+      $inside++
+      if ([int]$s.Chunks -gt 0) { $chunks++ }
+      $aliveCarried = 0
+      foreach ($e in @($s.Engines)) {
+        if ($null -eq $e) { continue }
+        $key = "$($e.Pid)/" + ([datetime]$e.Created).Ticks
+        if ([datetime]$e.Created -ge $ws) {
+          if (-not $newEngines.ContainsKey($key)) {
+            $newEngines[$key] = $at
+            if ($null -eq $firstViolation) { $firstViolation = ("a batch engine (pid {0}) started at {1}, inside the recording that began at {2}" -f $e.Pid, ([datetime]$e.Created).ToString('HH:mm:ss'), $ws.ToString('HH:mm:ss')) }
+          }
+        } else {
+          $carried[$key] = $true; $aliveCarried++
+          $age = ($at - $ws).TotalSeconds
+          if ($age -gt $GraceSeconds) {
+            $late++; $lateSeconds += $LookSeconds
+            if ($null -eq $firstViolation) { $firstViolation = ("a batch engine (pid {0}) that was running when the recording began at {1} was still alive {2:n0} s later (the limit is {3:n0} s)" -f $e.Pid, $ws.ToString('HH:mm:ss'), $age, $GraceSeconds) }
+          }
+        }
+      }
+      if ($aliveCarried -gt 0) { $lastAlive = $at }
+      elseif ($null -ne $lastAlive -and $null -eq $firstGone) { $firstGone = $at }
+    }
+    $had = ($carried.Count -gt 0)
+    $stops.Add([pscustomobject]@{
+      Window = $wi; Start = $ws; HadRunningEngine = $had
+      StopLowerSeconds = $(if ($had) { [math]::Round(($lastAlive - $ws).TotalSeconds, 1) } else { $null })
+      StopUpperSeconds = $(if ($had -and $null -ne $firstGone) { [math]::Round(($firstGone - $ws).TotalSeconds, 1) } else { $null })
+      StillAliveAtEnd = ($had -and $null -eq $firstGone)
+    })
   }
   [pscustomobject]@{
-    InWindowSamples = $inside; BatchSamples = $batch; ChunkSamples = $chunks; BatchSeconds = ($batch * $LookSeconds)
-    FirstBatchAt = $(if ($null -ne $first) { $first.ToString('HH:mm:ss') } else { $null })
+    InWindowSamples = $inside; ChunkSamples = $chunks; LateSamples = $late; LateSeconds = $lateSeconds
+    NewEngines = $newEngines.Count; Violations = ($late + $newEngines.Count); FirstViolation = $firstViolation; Stops = @($stops.ToArray())
   }
+}
+
+# The stop line of a session in the queue log: "<clock>\t<slug>: stopped. All transcripts ready by HH:MM IST (...)". The
+# clock is the app's (the gate's offset puts it at 10:00 for the first session). $null when the line is not that.
+function ConvertFrom-WbQueueStopLine {
+  param([string]$Line, [Parameter(Mandatory = $true)] [string]$Slug)
+  $m = [regex]::Match($Line, ('^(\d{1,2}:\d{2})\s+' + [regex]::Escape($Slug) + ': stopped\. All transcripts ready by (\d{1,2}:\d{2}) IST'))
+  if (-not $m.Success) { return $null }
+  [pscustomobject]@{ StopClock = $m.Groups[1].Value; ReadyByClock = $m.Groups[2].Value }
+}
+
+# How long the app is left running for session 1's transcript in processing mode (owner, 23 Nov 2026): until it is done, or
+# until the app's own "ready by" time read when session 1 stopped plus 10% plus 5 minutes, and never past the hard limit
+# (30 minutes in quick mode, 90 in full), all counted from the stop of session 1. Without an estimate only the hard limit
+# applies. The clock has minute resolution, so the estimate is taken one minute longer than the two clock readings show.
+function Get-WbQueueSoakWaitLimit {
+  param([Parameter(Mandatory = $true)] [datetime]$StoppedAt, $StopLine = $null, [Parameter(Mandatory = $true)] [int]$HardLimitMinutes)
+  $hard = $StoppedAt.AddMinutes($HardLimitMinutes)
+  if ($null -eq $StopLine) { return [pscustomobject]@{ Deadline = $hard; EstimateMinutes = $null; ReadyByClock = $null; Basis = ("the app gave no estimate; the hard limit of {0} minutes" -f $HardLimitMinutes) } }
+  $est = (ConvertTo-WbClockMinutes $StopLine.ReadyByClock) - (ConvertTo-WbClockMinutes $StopLine.StopClock)
+  if ($est -lt 0) { $est += 1440 }
+  $dl = $StoppedAt.AddMinutes(($est + 1) * 1.1 + 5)
+  if ($dl -gt $hard) { return [pscustomobject]@{ Deadline = $hard; EstimateMinutes = $est; ReadyByClock = $StopLine.ReadyByClock; Basis = ("the app's estimate ({0} min, ready by {1}) plus 10% plus 5 min is past the hard limit of {2} minutes" -f $est, $StopLine.ReadyByClock, $HardLimitMinutes) } }
+  [pscustomobject]@{ Deadline = $dl; EstimateMinutes = $est; ReadyByClock = $StopLine.ReadyByClock; Basis = ("the app's estimate ({0} min, ready by {1}) plus 10% plus 5 min" -f $est, $StopLine.ReadyByClock) }
 }
 
 # The verdict of the gate. A failure of a check always counts; an INVALID (a disturbed rig, a run in which the queue did
@@ -351,7 +423,11 @@ function Get-WbQueueSoakVerdict {
     # records (BatchObservation, from Get-WbBatchDuringRecording) and must still finish session 1 after the recordings.
     [ValidateSet('processing', 'waiting')] [string]$Mode = 'processing',
     $BatchObservation = $null,
-    [int]$MinSamples = $script:MinBatchSamples
+    [int]$MinSamples = $script:MinBatchSamples,
+    # True when the wait for session 1's transcript ended at its limit without the job being done; EstimatedReadyBy is the
+    # app's own "ready by" clock time read when session 1 stopped (or empty when it gave none).
+    [bool]$WaitedOut = $false,
+    [string]$EstimatedReadyBy = ''
   )
   $fail = New-Object System.Collections.Generic.List[string]
   $invalid = New-Object System.Collections.Generic.List[string]
@@ -365,7 +441,10 @@ function Get-WbQueueSoakVerdict {
   if ($null -eq $JobCheck) { $fail.Add('session 1: the queue report is missing, so the job cannot be judged'); $checks['session 1 transcript: job done, cursor at the end of the audio'] = $false }
   else {
     $checks['session 1 transcript: job done, cursor at the end of the audio'] = [bool]$JobCheck.Ok
-    if (-not $JobCheck.Ok) { $fail.Add("session 1: $($JobCheck.Reason)") }
+    if (-not $JobCheck.Ok) {
+      if ($WaitedOut) { $fail.Add(("session 1: not finished; the app estimated {0} ({1})" -f $(if ($EstimatedReadyBy) { $EstimatedReadyBy } else { 'nothing: it gave no estimate' }), $JobCheck.Reason)) }
+      else { $fail.Add("session 1: $($JobCheck.Reason)") }
+    }
   }
   if ($null -eq $Segments) { $fail.Add('session 1: its committed segments were not read'); $checks['session 1 segments: no overlap, no duplicate, no gap, both ends covered'] = $false }
   else {
@@ -382,9 +461,9 @@ function Get-WbQueueSoakVerdict {
       $checks['no batch engine process existed while either session was recording'] = $false
       $invalid.Add('no observation of the engine processes during the recordings: the waiting rule cannot be judged')
     } else {
-      $hit = [int]$BatchObservation.BatchSamples
-      $checks[("no batch engine process existed while either session was recording ({0} of {1} looks inside the recordings saw one)" -f $hit, $BatchObservation.InWindowSamples)] = ($hit -eq 0)
-      if ($hit -gt 0) { $fail.Add(("a batch engine process existed while a session was recording ({0} of {1} looks, about {2:n0} s, first at {3}): the machine's check did not clear processing while recording, so the queue had to wait" -f $hit, $BatchObservation.InWindowSamples, $BatchObservation.BatchSeconds, $BatchObservation.FirstBatchAt)) }
+      $hit = [int]$BatchObservation.Violations
+      $checks[("no batch engine ran during a recording: one running at its start gone within 10 s, none started inside it ({0} violating look(s) in {1} looks)" -f $hit, $BatchObservation.InWindowSamples)] = ($hit -eq 0)
+      if ($hit -gt 0) { $fail.Add(("a batch engine broke the waiting rule: {0}. The machine's check did not clear processing while recording, so the queue had to stop it within 10 s and start no new one ({1} look(s) over the limit, {2} engine(s) started inside a recording)" -f $BatchObservation.FirstViolation, $BatchObservation.LateSamples, $BatchObservation.NewEngines)) }
       if ([int]$BatchObservation.InWindowSamples -lt $MinSamples) { $invalid.Add(("only {0} look(s) at the engine processes fell inside the recordings (needs {1}): the waiting rule was not observed long enough" -f $BatchObservation.InWindowSamples, $MinSamples)) }
     }
   }
@@ -398,7 +477,12 @@ function Get-WbQueueSoakInfoLines {
   $l = New-Object System.Collections.Generic.List[string]
   $l.Add('machine mode: ' + (Get-WbQueueSoakModeText -Mode $Mode))
   if ($BatchObservation) {
-    $l.Add(('  looks at the engine processes inside the recordings: {0}; with a batch engine: {1} (about {2:n0} s); with a chunks call (information only): {3}' -f $BatchObservation.InWindowSamples, $BatchObservation.BatchSamples, $BatchObservation.BatchSeconds, $BatchObservation.ChunkSamples))
+    $l.Add(('  looks at the engine processes inside the recordings: {0}; looks over the 10 s limit: {1}; engines started inside a recording: {2}; looks with a chunks call (information only): {3}' -f $BatchObservation.InWindowSamples, $BatchObservation.LateSamples, $BatchObservation.NewEngines, $BatchObservation.ChunkSamples))
+    foreach ($s in @($BatchObservation.Stops)) {
+      if ($s.HadRunningEngine) {
+        $l.Add(('  recording {0} began at {1}; the batch engine that was running was {2}' -f $s.Window, $s.Start.ToString('HH:mm:ss'), $(if ($s.StillAliveAtEnd) { ('still alive at the end of the recording (seen alive {0:n1} s after the start)' -f $s.StopLowerSeconds) } else { ('stopped between {0:n1} and {1:n1} s after the start' -f $s.StopLowerSeconds, $s.StopUpperSeconds) })))
+      } else { $l.Add(('  recording {0} began at {1}; no batch engine was running then' -f $s.Window, $s.Start.ToString('HH:mm:ss'))) }
+    }
   }
   $l.Add('information only (no bar):')
   if ($LogInfo -and $null -ne $LogInfo.EstimateErrorMinutes) {
@@ -413,4 +497,4 @@ function Get-WbQueueSoakInfoLines {
 }
 
 Import-Module (Join-Path $PSScriptRoot 'DaySim.psm1')
-Export-ModuleMember -Function Get-WbQueueSoakGapLimitMs, Get-WbQueueSoakMinOverlapSeconds, Get-WbQueueSoakSettings, Get-WbQueueSoakCapability, Get-WbQueueSoakTitles, New-WbQueueSoakPlan, Test-WbQueueSoakSegments, Get-WbQueueSoakJob, Test-WbQueueSoakJobComplete, Get-WbDecodeOverlapSeconds, ConvertFrom-WbQueueUnitLine, ConvertTo-WbClockMinutes, Get-WbQueueSoakLogInfo, Get-WbQueueSoakRecordingVerdict, Get-WbQueueSoakVerdict, Get-WbQueueSoakInfoLines, Get-WbQueueSoakMode, Get-WbQueueSoakModeText, Get-WbQueueSoakDecodeWaitMinutes, Get-WbEngineSubcommand, Get-WbBatchDuringRecording
+Export-ModuleMember -Function Get-WbQueueSoakGapLimitMs, Get-WbQueueSoakMinOverlapSeconds, Get-WbQueueSoakSettings, Get-WbQueueSoakCapability, Get-WbQueueSoakTitles, New-WbQueueSoakPlan, Test-WbQueueSoakSegments, Get-WbQueueSoakJob, Test-WbQueueSoakJobComplete, Get-WbDecodeOverlapSeconds, ConvertFrom-WbQueueUnitLine, ConvertTo-WbClockMinutes, Get-WbQueueSoakLogInfo, Get-WbQueueSoakRecordingVerdict, Get-WbQueueSoakVerdict, Get-WbQueueSoakInfoLines, Get-WbQueueSoakMode, Get-WbQueueSoakModeText, Get-WbQueueSoakDecodeWaitMinutes, Get-WbEngineSubcommand, Get-WbBatchDuringRecording, ConvertFrom-WbQueueStopLine, Get-WbQueueSoakWaitLimit

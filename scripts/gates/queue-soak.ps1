@@ -264,7 +264,10 @@ try {
     Write-Host ("{0} profile: tier {1}, process while recording {2}, fingerprint changes {3}" -f (Get-Date -Format 'HH:mm:ss'), $decision.tier, $decision.process_while_recording, $changes.Count)
     if ($changes.Count -gt 0) { throw "the saved system check no longer matches this build or machine (fingerprint changes: $($changes -join '; ')); run the quick check again" }
     $mode = Get-WbQueueSoakMode -ProcessWhileRecording ([bool]$decision.process_while_recording)
-    $waitMinutes = Get-WbQueueSoakDecodeWaitMinutes -Settings $settings -Mode $mode
+    # Processing mode: until session 1 is done, or the app's own "ready by" plus 10% plus 5 min, at most the hard limit (30 min
+    # quick, 90 full) from the stop of session 1. Waiting mode: twice the audio of session 1 plus 5 min after both recordings.
+    $waitMinutes = $(if ($mode -eq 'waiting') { Get-WbQueueSoakDecodeWaitMinutes -Settings $settings } else { [int]$settings.HardLimitMinutes })
+    $stopLine = $null; $waitBasis = ''; $waitDeadline = $null
     Write-Host ('{0} machine mode: {1}' -f (Get-Date -Format 'HH:mm:ss'), (Get-WbQueueSoakModeText -Mode $mode))
     $engineLooks = New-Object System.Collections.Generic.List[object]
     $lastLook = [datetime]::MinValue
@@ -318,6 +321,8 @@ try {
           $u = ConvertFrom-WbQueueUnitLine -Line $l -Slug $slug1
           if ($u) { $units1.Add([pscustomobject]@{ At = (Get-Date); Seconds = $u.Seconds; Unit = $u.Unit; Device = $u.Device }); $progress.Add("$(Get-Date -Format 'HH:mm:ss') $l") }
           if ($l -match ([regex]::Escape($slug1) + ': post-1 transcript complete')) { $s1Complete = Get-Date; $progress.Add("$(Get-Date -Format 'HH:mm:ss') $l") }
+          $sl = ConvertFrom-WbQueueStopLine -Line $l -Slug $slug1
+          if ($sl -and -not $stopLine) { $stopLine = $sl; $progress.Add("$(Get-Date -Format 'HH:mm:ss') $l") }
         }
         $lines = $ref.Value
         # Each session is stopped 15 s after its player has finished; each reference capture 3 s after the app's stop line.
@@ -345,23 +350,30 @@ try {
         }
         # Once both sessions are recorded the queue gets time to finish session 1; then the app is told to stop.
         if ($allRecorded -and -not $dayStopAt) {
-          $waited = ((Get-Date) - $allRecorded).TotalMinutes
-          if ($s1Complete -or $waited -ge $waitMinutes) {
+          if ($mode -eq 'waiting') {
+            $waitDeadline = $allRecorded.AddMinutes($waitMinutes)
+            $waitBasis = "twice the audio of session 1 plus 5 minutes ($waitMinutes minutes after both sessions were recorded)"
+          } else {
+            $s1StoppedAt = $(if ($stoppedTitles.ContainsKey($titles.Speech)) { $stoppedTitles[$titles.Speech] } else { $allRecorded })
+            $wl = Get-WbQueueSoakWaitLimit -StoppedAt $s1StoppedAt -StopLine $stopLine -HardLimitMinutes ([int]$settings.HardLimitMinutes)
+            $waitDeadline = $wl.Deadline; $waitBasis = $wl.Basis
+          }
+          if ($s1Complete -or (Get-Date) -ge $waitDeadline) {
             Start-Sleep -Seconds 5
             Set-Content -LiteralPath $dayStop -Value 'stop' -Encoding ascii
             $dayStopAt = Get-Date
-            $progress.Add("$(Get-Date -Format 'HH:mm:ss') stop file of the day written ($(if ($s1Complete) { 'session 1 is transcribed' } else { "session 1 was not transcribed after $waitMinutes minutes" }))")
+            $progress.Add("$(Get-Date -Format 'HH:mm:ss') stop file of the day written ($(if ($s1Complete) { 'session 1 is transcribed' } else { "session 1 was not finished by $($waitDeadline.ToString('HH:mm:ss')): $waitBasis" }))")
           }
         }
         # Waiting mode: a look at the engine processes every 2 s (a batch engine, or a chunks call, with its command line).
         if ($mode -eq 'waiting' -and ((Get-Date) - $lastLook).TotalSeconds -ge 2) {
           $lastLook = Get-Date
-          $b = 0; $c = 0
+          $found = New-Object System.Collections.Generic.List[object]; $c = 0
           foreach ($pr in @(Get-CimInstance Win32_Process -Filter "Name like 'wb-engine%'" -ErrorAction SilentlyContinue)) {
             $k = Get-WbEngineSubcommand -Name $pr.Name -CommandLine $pr.CommandLine
-            if ($k -eq 'batch') { $b++ } elseif ($k -eq 'chunks') { $c++ }
+            if ($k -eq 'batch') { $found.Add([pscustomobject]@{ Pid = [int]$pr.ProcessId; Created = [datetime]$pr.CreationDate }) } elseif ($k -eq 'chunks') { $c++ }
           }
-          $engineLooks.Add([pscustomobject]@{ At = $lastLook; Batch = $b; Chunks = $c })
+          $engineLooks.Add([pscustomobject]@{ At = $lastLook; Engines = @($found.ToArray()); Chunks = $c })
         }
         Start-Sleep -Seconds 1
       }
@@ -407,10 +419,10 @@ try {
       $windows = @(foreach ($tt in @($titles.Speech, $titles.Noise)) { if ($startedTitles.ContainsKey($tt) -and $stoppedTitles.ContainsKey($tt)) { [pscustomobject]@{ Start = $startedTitles[$tt]; End = $stoppedTitles[$tt] } } })
       $batchObs = Get-WbBatchDuringRecording -Samples @($engineLooks.ToArray()) -Windows $windows
     }
-    $verdict = Get-WbQueueSoakVerdict -Recording1 $j1.Verdict -Recording2 $j2.Verdict -Segments $segCheck -JobCheck $jobCheck -OverlapSeconds $overlapS -Mode $mode -BatchObservation $batchObs
+    $verdict = Get-WbQueueSoakVerdict -Recording1 $j1.Verdict -Recording2 $j2.Verdict -Segments $segCheck -JobCheck $jobCheck -OverlapSeconds $overlapS -Mode $mode -BatchObservation $batchObs -WaitedOut ([bool](-not $s1Complete)) -EstimatedReadyBy $(if ($stopLine) { [string]$stopLine.ReadyByClock } else { '' })
     $appLogLines = @($progress.ToArray())
     [pscustomobject]@{
-      Mode = $mode; BatchObs = $batchObs; WaitMinutes = $waitMinutes; Run = $run; Verdict = $verdict; J1 = $j1; J2 = $j2; SegCheck = $segCheck; Job = $job; JobCheck = $jobCheck; OverlapS = $overlapS
+      Mode = $mode; BatchObs = $batchObs; WaitMinutes = $waitMinutes; WaitBasis = $waitBasis; WaitDeadline = $waitDeadline; Run = $run; Verdict = $verdict; J1 = $j1; J2 = $j2; SegCheck = $segCheck; Job = $job; JobCheck = $jobCheck; OverlapS = $overlapS
       LogInfo = $logInfo; Progress = $appLogLines; Settings = $settings; CableRig = $cableRig; CableTest = $cableTest
       StartedAt = $startedAt; EndedAt = $endedAt; AllRecorded = $allRecorded; S1Complete = $s1Complete; S2Started = $s2Started; S2Stopped = $s2Stopped
       Report = $report; Decision = $decision; Units1 = @($units1.ToArray()); DecodeWaitedOut = [bool](-not $s1Complete)
@@ -454,6 +466,7 @@ $lines += ''
 $lines += 'run:'
 $lines += ('  mode: {0}; session 1 {1} s of public speech (FLEURS English and Hindi, CC BY 4.0), session 2 {2} s of seeded noise; part length {3}' -f $r.Settings.Mode, $Session1Seconds, $Session2Seconds, $(if ($PartSeconds -gt 0) { "$PartSeconds s" } else { 'the app default (10 min)' }))
 $lines += ('  real duration of the gate: {0:n1} min (from the first check to the app''s exit); session 1 was {1} when the app was told to stop' -f $durMin, $(if ($r.DecodeWaitedOut) { 'NOT yet transcribed' } else { 'transcribed' }))
+if ($r.WaitBasis) { $lines += ('  wait for session 1''s transcript: {0}; it {1}' -f $r.WaitBasis, $(if ($r.DecodeWaitedOut) { 'was not finished when that time came' } else { 'was finished in time' })) }
 if ($r.AllRecorded -and $r.S1Complete) { $lines += ('  session 1 finished transcribing {0:n1} min after both sessions were recorded' -f (($r.S1Complete - $r.AllRecorded).TotalMinutes)) }
 if ($RigPrefer) { $lines += Get-PackRigLines -Rig $r.CableRig } else { $lines += Get-WbCableRigLines -Rig $r.CableRig -SelfTest $r.CableTest }
 $lines += ''
