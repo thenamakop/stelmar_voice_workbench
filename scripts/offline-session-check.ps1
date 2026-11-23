@@ -15,7 +15,16 @@
   and once with Wi-Fi off and Ethernet unplugged (every non-loopback socket is a FAIL). The
   network state comes from scripts/lib/NetworkState.psm1, like scripts/offline-check.ps1.
 
-  The log goes through scripts/lib/Redact.psm1 (the repository is public).
+  The log goes through scripts/lib/Redact.psm1 (the repository is public), and every private network
+  address (10/8, 172.16/12, 192.168/16, 169.254/16, fc00::/7, fe80::/10) in the console and in the log is
+  replaced by <private-ip> (scripts/lib/OfflineSession.psm1). Masking changes only the text: a socket is
+  classified on its real address first, and a non-loopback socket seen offline is a FAIL.
+
+  An offline PASS needs proof that the app post-processed a recording, not only the absence of sockets:
+  capability.json in the app data folder, a transcript.db in the session folder (written during the run), and
+  an engine process doing post-processing (`batch`) beyond the start-up `info` probes in the watched tree.
+  If any is missing the verdict is INCONCLUSIVE (no post-processing: <which>) and the exit code is 4.
+  Exit codes: 0 PASS or online baseline, 1 FAIL, 3 STOP (did not start), 4 INCONCLUSIVE.
 
 .EXAMPLE
   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\offline-session-check.ps1 -Label offline -Machine Legion -OutDir .\docs\evidence\phase-1
@@ -26,7 +35,9 @@ param(
   [string]$Exe,
   [string]$OutDir,
   [int]$WatchSeconds = 240,
-  [string]$Machine = '%COMPUTERNAME%'
+  [string]$Machine = '%COMPUTERNAME%',
+  # The app data folder (capability.json, settings.json): the release build's own.
+  [string]$AppDataDir = (Join-Path $env:APPDATA 'in.edu.bmu.stelmar.voiceworkbench')
 )
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -38,9 +49,15 @@ if (-not $OutDir) { $OutDir = Join-Path $here '..\docs\evidence\phase-1' }
 Import-Module (Join-Path $here 'lib\NetworkState.psm1') -Force
 Import-Module (Join-Path $here 'lib\Redact.psm1') -Force
 Import-Module (Join-Path $here 'lib\AppProcess.psm1') -Force
+Import-Module (Join-Path $here 'lib\OfflineSession.psm1') -Force
 
 $log = New-Object System.Collections.Generic.List[string]
-function Say([string]$line) { Write-Host ($line | ConvertTo-WbRedacted -MachineLabel $Machine); $log.Add($line) }
+# Private addresses are masked in every line that is printed or kept; sockets were classified before this.
+function Say([string]$line) {
+  $masked = $line | ConvertTo-WbPrivateMasked
+  Write-Host ($masked | ConvertTo-WbRedacted -MachineLabel $Machine)
+  $log.Add($masked)
+}
 
 $exePath = (Resolve-Path -LiteralPath $Exe).Path
 $hash = (Get-FileHash -LiteralPath $exePath -Algorithm SHA256).Hash.ToLower()
@@ -78,6 +95,8 @@ Write-Host ''
 $loop = @('127.0.0.1', '::1')
 $seen = @{}
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
+$startedAt = Get-Date
+$engineCmds = @{}   # subcommand of every wb-engine process seen in the watched tree -> processes seen
 $polls = 0
 $maxProcs = 0
 while ($sw.Elapsed.TotalSeconds -lt $WatchSeconds -and -not $app.HasExited) {
@@ -85,14 +104,22 @@ while ($sw.Elapsed.TotalSeconds -lt $WatchSeconds -and -not $app.HasExited) {
   $maxProcs = [math]::Max($maxProcs, $ids.Count)
   foreach ($c in @(Get-NetTCPConnection -ErrorAction SilentlyContinue | Where-Object { $ids -contains $_.OwningProcess })) {
     if ($c.State -eq 'Listen') {
-      if ($c.LocalAddress -notin $loop) { $seen["TCP listen $($c.LocalAddress):$($c.LocalPort)"] = [int]$sw.Elapsed.TotalSeconds }
+      if ($c.LocalAddress -notin $loop) { $seen["TCP listen $(Format-WbEndpoint $c.LocalAddress $c.LocalPort)"] = [int]$sw.Elapsed.TotalSeconds }
     } elseif ($c.RemoteAddress -notin ($loop + @('0.0.0.0', '::'))) {
-      $seen["$($c.RemoteAddress):$($c.RemotePort) $($c.State)"] = [int]$sw.Elapsed.TotalSeconds
+      $seen["$(Format-WbEndpoint $c.RemoteAddress $c.RemotePort) $($c.State)"] = [int]$sw.Elapsed.TotalSeconds
     }
   }
   Get-NetUDPEndpoint -ErrorAction SilentlyContinue |
     Where-Object { $ids -contains $_.OwningProcess -and $_.LocalAddress -notin $loop } |
-    ForEach-Object { $seen["UDP $($_.LocalAddress):$($_.LocalPort)"] = [int]$sw.Elapsed.TotalSeconds }
+    ForEach-Object { $seen["UDP $(Format-WbEndpoint $_.LocalAddress $_.LocalPort)"] = [int]$sw.Elapsed.TotalSeconds }
+  # Engines of the app (children of the app tree): which subcommand each runs. `info` is the start-up probe,
+  # `batch` is post-processing.
+  foreach ($e in @(Get-CimInstance Win32_Process -Filter "Name LIKE 'wb-engine%'" -ErrorAction SilentlyContinue | Where-Object { $ids -contains [int]$_.ParentProcessId })) {
+    $sub = Get-WbEngineSubcommand -CommandLine $e.CommandLine
+    if (-not $sub) { $sub = 'unknown' }
+    if (-not $engineCmds.ContainsKey($sub)) { $engineCmds[$sub] = New-Object 'System.Collections.Generic.HashSet[int]' }
+    [void]$engineCmds[$sub].Add([int]$e.ProcessId)
+  }
   $polls++
   Start-Sleep -Milliseconds 500
 }
@@ -106,11 +133,34 @@ if ($seen.Count -eq 0) {
 }
 [void](Stop-WbApp)
 
+# Proof that the app post-processed a recording while it was watched.
+$capFile = Join-Path $AppDataDir 'capability.json'
+$capOk = Test-Path -LiteralPath $capFile -PathType Leaf
+$sessionRoot = $null
+try {
+  $settingsFile = Join-Path $AppDataDir 'settings.json'
+  if (Test-Path -LiteralPath $settingsFile) { $sessionRoot = (Get-Content -Raw -LiteralPath $settingsFile | ConvertFrom-Json).recordings_root }
+} catch { $sessionRoot = $null }
+$dbs = @()
+if ($sessionRoot -and (Test-Path -LiteralPath $sessionRoot)) {
+  $dbs = @(Get-ChildItem -LiteralPath $sessionRoot -Recurse -Filter 'transcript.db' -File -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -ge $startedAt.AddSeconds(-5) })
+}
+$dbOk = ($dbs.Count -gt 0)
+$batchOk = ($engineCmds.ContainsKey('batch'))
+Say ("capability.json in the app data folder: " + $(if ($capOk) { "present, written $((Get-Item -LiteralPath $capFile).LastWriteTime.ToString('yyyy-MM-dd HH:mm'))" } else { 'MISSING' }))
+Say ("transcript.db in the session folder written during the run: " + $(if ($dbOk) { "$($dbs.Count) (first: $($dbs[0].FullName))" } else { 'NONE' }))
+$subs = @($engineCmds.Keys | Sort-Object | ForEach-Object { "$_ x$($engineCmds[$_].Count)" })
+Say ("engine processes seen in the watched tree: " + $(if ($subs.Count) { $subs -join ', ' } else { 'none' }) + "  (info = start-up probe, batch = post-processing)")
+
+$exitCode = 0
 if ($expectOffline) {
-  if ($seen.Count -eq 0 -and $gateStrings -eq 0 -and $alive) { Say 'verdict: PASS (offline: no non-loopback socket during a recording session)' }
-  else { Say 'verdict: FAIL' }
+  $v = Get-WbOfflineVerdict -NonLoopbackSeen $seen.Count -GateStrings $gateStrings -AppAlive $alive `
+    -CapabilityJson $capOk -TranscriptDb $dbOk -EngineBeyondProbes $batchOk
+  Say $v.Verdict
+  $exitCode = $v.ExitCode
 } else {
   Say "verdict: BASELINE (online: $($seen.Count) non-loopback endpoints from WebView2 are expected; compare with the offline run)"
 }
 Write-WbEvidence -Path (Join-Path $OutDir "offline-session-$Label.txt") -Lines $log -MachineLabel $Machine
 Write-Host "log: $(Join-Path $OutDir "offline-session-$Label.txt")"
+exit $exitCode
