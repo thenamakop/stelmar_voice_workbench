@@ -1,0 +1,24 @@
+﻿Phase 1 offline check with a recording (online)
+date: 2026-11-23 14:13:14 +05:30
+machine: Legion
+exe: D:\Projects\stelmar_voice_workbench\target\release\stelmar-voice-workbench.exe
+exe sha256: 20efc63525555ac694b2286b9a3e6ba640d0afa6baddc33ccb24749398ed167d (15676928 bytes, built 2026-11-23 05:56)
+WB_GATE_ strings in the exe: 0 (must be 0: no gate hooks in a release build)
+watch window: 600 s
+Network state: Online
+  reason: physical adapter Up: Wi-Fi (Intel(R) Wi-Fi 6E AX211 160MHz)
+  reason: connection profile on Wi-Fi reports IPv4 Internet
+  default route: 0.0.0.0/0 via <private-ip> on Wi-Fi (ifIndex 6, metric 0)
+  interface Wi-Fi (ifIndex 6): status Up, virtual False, IPv6:Connected IPv4:Connected, non-link-local address True
+  connection profile: Wi-Fi IPv4 Internet, IPv6 NoTraffic
+  physical adapter Up: Wi-Fi (Intel(R) Wi-Fi 6E AX211 160MHz)
+  probe: not run (facts already show the machine online)
+window shown after 166 ms; rendered after 716 ms
+watched 600 s, 386 polls, up to 15 processes (app tree plus WebView2); app still running at the end: True
+non-loopback sockets seen: 2
+  150.171.27.11:443 Established (last seen at +187 s)
+  40.104.66.34:443 Established (last seen at +221 s)
+capability.json in the app data folder: present, written 2026-11-23 14:11
+transcript.db in the session folder written during the run: 1 (first: D:\STELMAR-Gate\dryrun-hash\audio\hashing-emu-low-20261117-173025\rec\2026-11-23\unscheduled-session\transcript.db)
+engine processes seen in the watched tree: batch x1, unknown x1  (info = start-up probe, batch = post-processing)
+verdict: BASELINE (online: 2 non-loopback endpoints from WebView2 are expected; compare with the offline run)
