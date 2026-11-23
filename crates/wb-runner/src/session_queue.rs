@@ -488,9 +488,7 @@ impl SessionQueue {
         }
         let units = self.transcript.store().units(job)?;
         for u in units.iter().filter(|u| u.state == UnitState::Failed) {
-            self.transcript
-                .store_mut()
-                .set_unit_state(job, u.idx, UnitState::Pending, None)?;
+            self.transcript.store_mut().retry_unit(job, u.idx)?;
         }
         Ok(())
     }
@@ -1013,6 +1011,31 @@ mod tests {
         assert_eq!(q.jobs().unwrap()[0].cursor_ms, 30_000);
         assert_eq!(q.transcript().store().segment_count("post-1").unwrap(), 3);
         assert_eq!(done.refused, 0);
+    }
+
+    #[test]
+    fn a_resumed_job_gets_its_given_up_unit_back_with_fresh_attempts_and_finishes_it() {
+        let (mut q, job, _dir) = queue_with_units("resume-retry", 1);
+        // Three failures on the processor and no other device: the unit is given up and the job parked.
+        let mut last = None;
+        for t in 0..3u64 {
+            let c = q.claim(Device::Cpu, 10 + t).unwrap().unwrap();
+            last = Some(q.fail(&c, "engine died", false, 20 + t).unwrap());
+        }
+        assert_eq!(last, Some(Retry::GiveUp));
+        assert_eq!(q.jobs().unwrap()[0].state, JobState::Parked);
+        // The operator resumes. Before the fix the unit was Pending but its counts stayed at 3, nothing could claim
+        // it, and the job stayed Queued for ever (which also kept the night pass waiting).
+        q.set_paused(job, false, 30).unwrap();
+        let c = q
+            .claim(Device::Cpu, 31)
+            .unwrap()
+            .expect("the unit can be claimed again");
+        assert_eq!(c.unit.idx, 0);
+        stage(&c, &[ev(0, 0, 500, 4_000, "a")]);
+        let done = q.complete(&c, "t", 32).unwrap();
+        assert_eq!(done.committed_units, vec![0]);
+        assert_eq!(q.jobs().unwrap()[0].cursor_ms, 10_000);
     }
 
     #[test]

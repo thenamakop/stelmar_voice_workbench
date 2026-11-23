@@ -578,6 +578,17 @@ impl Store {
         Ok(())
     }
 
+    /// The operator resumed a job that gave this unit up: it is Pending again and its failed attempts are forgotten,
+    /// on both devices. With the counts kept (3 and 3) the claim rule never offered it again, the job stayed Queued
+    /// with a unit that could not run, the night pass waited for it for ever and its time stayed in 'ready by'.
+    pub fn retry_unit(&mut self, job: i64, idx: u32) -> Result<()> {
+        self.conn.execute(
+            "UPDATE units SET state = 'pending', cpu_attempts = 0, gpu_attempts = 0 WHERE job = ?1 AND idx = ?2",
+            params![job, idx],
+        )?;
+        Ok(())
+    }
+
     /// Counts a failed attempt on `device` and returns what to do next: retry on the same device, move to the
     /// other device after [`ATTEMPTS_PER_DEVICE`] failures, or give up when both devices have failed that
     /// many times (the job is then parked). A single-device machine passes `other_device_available = false`.
