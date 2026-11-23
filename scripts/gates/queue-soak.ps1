@@ -13,8 +13,13 @@
   check is copied into it (-CapabilityFile): without a system check the queue creates no job. The gate pack's wrapper
   (scripts\gate-pack\gates\queue-soak.ps1) answers PENDING when there is no such file and never starts this script.
 
-  Exit code: 0 PASS, 1 FAIL, 3 INVALID, 4 NOT APPLICABLE (this machine's system check did not clear processing while
-  recording, so the queue correctly waits and there is nothing to measure).
+  Exit code: 0 PASS, 1 FAIL, 3 INVALID.
+
+  Two modes, from the app's own view of this machine's system check (decision.process_while_recording), recorded in the evidence:
+    processing  the queue decodes session 1 while session 2 records (the overlap must be at least 60 s, else INVALID);
+    waiting     the check did not clear processing while recording: no batch engine process may exist while either session
+                records (looked at every 2 s), and session 1 must still be committed in full after session 2 stops.
+  Session 2 gets the full Phase 1 recording rule in both modes.
 
   Needs: a rig (a hardware loopback with -RigPrefer loopback, or VB-CABLE), the gate build, wb-testbench, the engines and
   models next to the build, and wb-emulate for an emulation profile (not for -Profile laptop).
@@ -258,9 +263,12 @@ try {
     $decision = $view.view.capability.decision
     Write-Host ("{0} profile: tier {1}, process while recording {2}, fingerprint changes {3}" -f (Get-Date -Format 'HH:mm:ss'), $decision.tier, $decision.process_while_recording, $changes.Count)
     if ($changes.Count -gt 0) { throw "the saved system check no longer matches this build or machine (fingerprint changes: $($changes -join '; ')); run the quick check again" }
-    if (-not [bool]$decision.process_while_recording) {
-      return [pscustomobject]@{ NotApplicable = $true; Run = $run; Decision = $decision; Settings = $settings; CableRig = $cableRig; CableTest = $cableTest }
-    }
+    $mode = Get-WbQueueSoakMode -ProcessWhileRecording ([bool]$decision.process_while_recording)
+    $waitMinutes = Get-WbQueueSoakDecodeWaitMinutes -Settings $settings -Mode $mode
+    Write-Host ('{0} machine mode: {1}' -f (Get-Date -Format 'HH:mm:ss'), (Get-WbQueueSoakModeText -Mode $mode))
+    $engineLooks = New-Object System.Collections.Generic.List[object]
+    $lastLook = [datetime]::MinValue
+    $stoppedTitles = @{}
 
     # The run.
     $emu = $null; $players = @(); $refs = @(); $refs2 = @()
@@ -303,6 +311,7 @@ try {
             $stoppedTitle = $Matches[1]
             foreach ($r in @($refs | Where-Object { $_.Title -eq $stoppedTitle })) { $refStopSeen[$r.Index] = Get-Date }
             if ($stoppedTitle -eq $titles.Noise) { $s2Stopped = Get-Date }
+            $stoppedTitles[$stoppedTitle] = Get-Date
             $progress.Add("$(Get-Date -Format 'HH:mm:ss') $l")
           }
           if ($l -match 'every session of the plan was recorded') { $allRecorded = Get-Date; $progress.Add("$(Get-Date -Format 'HH:mm:ss') all sessions recorded") }
@@ -337,12 +346,22 @@ try {
         # Once both sessions are recorded the queue gets time to finish session 1; then the app is told to stop.
         if ($allRecorded -and -not $dayStopAt) {
           $waited = ((Get-Date) - $allRecorded).TotalMinutes
-          if ($s1Complete -or $waited -ge $settings.DecodeWaitMinutes) {
+          if ($s1Complete -or $waited -ge $waitMinutes) {
             Start-Sleep -Seconds 5
             Set-Content -LiteralPath $dayStop -Value 'stop' -Encoding ascii
             $dayStopAt = Get-Date
-            $progress.Add("$(Get-Date -Format 'HH:mm:ss') stop file of the day written ($(if ($s1Complete) { 'session 1 is transcribed' } else { "session 1 was not transcribed after $($settings.DecodeWaitMinutes) minutes" }))")
+            $progress.Add("$(Get-Date -Format 'HH:mm:ss') stop file of the day written ($(if ($s1Complete) { 'session 1 is transcribed' } else { "session 1 was not transcribed after $waitMinutes minutes" }))")
           }
+        }
+        # Waiting mode: a look at the engine processes every 2 s (a batch engine, or a chunks call, with its command line).
+        if ($mode -eq 'waiting' -and ((Get-Date) - $lastLook).TotalSeconds -ge 2) {
+          $lastLook = Get-Date
+          $b = 0; $c = 0
+          foreach ($pr in @(Get-CimInstance Win32_Process -Filter "Name like 'wb-engine%'" -ErrorAction SilentlyContinue)) {
+            $k = Get-WbEngineSubcommand -Name $pr.Name -CommandLine $pr.CommandLine
+            if ($k -eq 'batch') { $b++ } elseif ($k -eq 'chunks') { $c++ }
+          }
+          $engineLooks.Add([pscustomobject]@{ At = $lastLook; Batch = $b; Chunks = $c })
         }
         Start-Sleep -Seconds 1
       }
@@ -383,10 +402,15 @@ try {
     $logLines = @()
     if (Test-Path -LiteralPath $queueLog) { $logLines = @(Get-Content -LiteralPath $queueLog -Encoding UTF8) }
     $logInfo = Get-WbQueueSoakLogInfo -Lines $logLines -Slug $slugDir
-    $verdict = Get-WbQueueSoakVerdict -Recording1 $j1.Verdict -Recording2 $j2.Verdict -Segments $segCheck -JobCheck $jobCheck -OverlapSeconds $overlapS
+    $batchObs = $null
+    if ($mode -eq 'waiting') {
+      $windows = @(foreach ($tt in @($titles.Speech, $titles.Noise)) { if ($startedTitles.ContainsKey($tt) -and $stoppedTitles.ContainsKey($tt)) { [pscustomobject]@{ Start = $startedTitles[$tt]; End = $stoppedTitles[$tt] } } })
+      $batchObs = Get-WbBatchDuringRecording -Samples @($engineLooks.ToArray()) -Windows $windows
+    }
+    $verdict = Get-WbQueueSoakVerdict -Recording1 $j1.Verdict -Recording2 $j2.Verdict -Segments $segCheck -JobCheck $jobCheck -OverlapSeconds $overlapS -Mode $mode -BatchObservation $batchObs
     $appLogLines = @($progress.ToArray())
     [pscustomobject]@{
-      NotApplicable = $false; Run = $run; Verdict = $verdict; J1 = $j1; J2 = $j2; SegCheck = $segCheck; Job = $job; JobCheck = $jobCheck; OverlapS = $overlapS
+      Mode = $mode; BatchObs = $batchObs; WaitMinutes = $waitMinutes; Run = $run; Verdict = $verdict; J1 = $j1; J2 = $j2; SegCheck = $segCheck; Job = $job; JobCheck = $jobCheck; OverlapS = $overlapS
       LogInfo = $logInfo; Progress = $appLogLines; Settings = $settings; CableRig = $cableRig; CableTest = $cableTest
       StartedAt = $startedAt; EndedAt = $endedAt; AllRecorded = $allRecorded; S1Complete = $s1Complete; S2Started = $s2Started; S2Stopped = $s2Stopped
       Report = $report; Decision = $decision; Units1 = @($units1.ToArray()); DecodeWaitedOut = [bool](-not $s1Complete)
@@ -407,21 +431,12 @@ $evidence = Join-Path $OutDir "$gateName-$Profile.txt"
 $lines = @()
 $lines += Get-WbGateHeader -Machine $Machine -Profile $Profile -Builds $builds
 $lines += "app build: target\gate\stelmar-voice-workbench.exe (cargo profile gate, features gate-hooks + custom-protocol)"
-if ($r.NotApplicable) {
-  $lines += 'verdict: NOT APPLICABLE (this machine''s system check did not clear processing while recording, so the app''s queue correctly does not transcribe during a recording)'
-  $lines += ''
-  $lines += "system check of this pack run: tier $($r.Decision.tier); process_while_recording false. Nothing was recorded."
-  $lines += ''
-  $lines += "audio and reports: $($r.Run) (not in the repository)"
-  Write-WbEvidence -Path $evidence -Lines $lines -MachineLabel $Machine
-  Write-Host "NOT APPLICABLE: $evidence"
-  exit 4
-}
 $v = $r.Verdict
 $status = $v.Status
 $durMin = ($r.EndedAt - $r.StartedAt).TotalMinutes
 $verdictText = "verdict: $(if ($status -eq 'INVALID') { 'INVALID (no verdict; the run must be repeated): ' + ($v.Invalid -join '; ') } elseif ($status -eq 'PASS' -and $Profile -notin @('native', 'laptop')) { 'PASS (PROVISIONAL: emulated)' } elseif ($status -eq 'FAIL') { 'FAIL: ' + ($v.Fail -join '; ') } else { $status })"
 $lines += $verdictText
+$lines += ('machine mode: ' + (Get-WbQueueSoakModeText -Mode $r.Mode))
 $lines += ''
 $lines += 'checks:'
 foreach ($k in $v.Checks.Keys) { $lines += "  [$(if ($v.Checks[$k]) { 'x' } else { ' ' })] $k" }
@@ -434,7 +449,7 @@ $lines += ('session 1 transcript: {0}' -f $(if ($r.SegCheck.Ok -and $r.JobCheck.
 foreach ($p in @($r.SegCheck.Problems)) { $lines += "  $p" }
 if (-not $r.JobCheck.Ok) { $lines += "  $($r.JobCheck.Reason)" }
 $lines += ''
-$lines += Get-WbQueueSoakInfoLines -LogInfo $r.LogInfo -OverlapSeconds $r.OverlapS -Segments $r.SegCheck -Job $r.Job
+$lines += Get-WbQueueSoakInfoLines -LogInfo $r.LogInfo -OverlapSeconds $r.OverlapS -Segments $r.SegCheck -Job $r.Job -Mode $r.Mode -BatchObservation $r.BatchObs
 $lines += ''
 $lines += 'run:'
 $lines += ('  mode: {0}; session 1 {1} s of public speech (FLEURS English and Hindi, CC BY 4.0), session 2 {2} s of seeded noise; part length {3}' -f $r.Settings.Mode, $Session1Seconds, $Session2Seconds, $(if ($PartSeconds -gt 0) { "$PartSeconds s" } else { 'the app default (10 min)' }))

@@ -30,6 +30,10 @@ $script:GapLimitMs = 20000
 # Decoding of session 1 that must overlap the recording of session 2 for the run to have measured the queue under a
 # recording at all.
 $script:MinOverlapSeconds = 60
+# Looks at the engine processes (one every 2 s) that must fall inside the recordings for the waiting rule to count as
+# observed: 20 looks is 40 s.
+$script:MinBatchSamples = 20
+$script:BatchLookSeconds = 2
 
 function Get-WbQueueSoakGapLimitMs { $script:GapLimitMs }
 function Get-WbQueueSoakMinOverlapSeconds { $script:MinOverlapSeconds }
@@ -270,6 +274,65 @@ function Get-WbQueueSoakRecordingVerdict {
   [pscustomobject]@{ Label = $Label; Status = $status; Fail = @($fail.ToArray()); Invalid = @($invalid.ToArray()) }
 }
 
+# ---- the two modes of a machine ----------------------------------------------------------------------------------------
+
+# The mode the machine is in, from the app's own view of its system check (decision.process_while_recording).
+function Get-WbQueueSoakMode {
+  param($ProcessWhileRecording)
+  if ($true -eq $ProcessWhileRecording) { 'processing' } else { 'waiting' }
+}
+
+function Get-WbQueueSoakModeText {
+  param([ValidateSet('processing', 'waiting')] [string]$Mode)
+  if ($Mode -eq 'processing') { 'processing during recording (this machine''s system check cleared it): the queue decodes session 1 while session 2 records' }
+  else { 'waiting (this machine''s system check did not clear processing while recording): the queue must not run a batch engine while a session records, and must finish session 1 after the recordings' }
+}
+
+# How long the app is left running after both sessions are recorded. In waiting mode nothing of session 1 was decoded
+# during the recordings except between them, so the whole transcript still has to be made: twice the audio plus 5 minutes.
+function Get-WbQueueSoakDecodeWaitMinutes {
+  param([Parameter(Mandatory = $true)] $Settings, [ValidateSet('processing', 'waiting')] [string]$Mode = 'processing')
+  if ($Mode -eq 'processing') { return [int]$Settings.DecodeWaitMinutes }
+  [int][math]::Max([int]$Settings.DecodeWaitMinutes, [math]::Ceiling([double]$Settings.Session1Seconds / 60.0 * 2 + 5))
+}
+
+# Is this process a batch engine (or the chunks call, which is processing too)? From its command line: "wb-engine-<build>...
+# batch ..." or "... chunks ...". Returns 'batch', 'chunks' or $null.
+function Get-WbEngineSubcommand {
+  param([AllowNull()] [string]$Name, [AllowNull()] [string]$CommandLine)
+  if ([string]::IsNullOrEmpty($Name) -or $Name -notmatch '^wb-engine') { return $null }
+  if ([string]::IsNullOrEmpty($CommandLine)) { return $null }
+  if ($CommandLine -match '\sbatch(\s|$)') { return 'batch' }
+  if ($CommandLine -match '\schunks(\s|$)') { return 'chunks' }
+  $null
+}
+
+# The waiting rule from the looks at the engine processes. Samples: At, Batch (count of batch engines), Chunks (count of
+# chunk calls). Windows: Start, End of each recording (wall time, from the app's own start and stop lines). A look is "inside"
+# when it fell within a window; the rule is judged on batch engines only (chunk calls are reported, not judged).
+function Get-WbBatchDuringRecording {
+  param(
+    [AllowEmptyCollection()] [AllowNull()] [object[]]$Samples,
+    [AllowEmptyCollection()] [AllowNull()] [object[]]$Windows,
+    [int]$LookSeconds = $script:BatchLookSeconds
+  )
+  $inside = 0; $batch = 0; $chunks = 0; $first = $null
+  foreach ($s in @($Samples)) {
+    if ($null -eq $s) { continue }
+    $at = [datetime]$s.At
+    $in = $false
+    foreach ($w in @($Windows)) { if ($null -ne $w -and $at -ge [datetime]$w.Start -and $at -le [datetime]$w.End) { $in = $true; break } }
+    if (-not $in) { continue }
+    $inside++
+    if ([int]$s.Batch -gt 0) { $batch++; if ($null -eq $first) { $first = $at } }
+    if ([int]$s.Chunks -gt 0) { $chunks++ }
+  }
+  [pscustomobject]@{
+    InWindowSamples = $inside; BatchSamples = $batch; ChunkSamples = $chunks; BatchSeconds = ($batch * $LookSeconds)
+    FirstBatchAt = $(if ($null -ne $first) { $first.ToString('HH:mm:ss') } else { $null })
+  }
+}
+
 # The verdict of the gate. A failure of a check always counts; an INVALID (a disturbed rig, a run in which the queue did
 # no work during the second recording) only decides when nothing failed.
 #   Recording1, Recording2: Get-WbQueueSoakRecordingVerdict results
@@ -282,7 +345,13 @@ function Get-WbQueueSoakVerdict {
     $Segments = $null,
     $JobCheck = $null,
     [double]$OverlapSeconds = 0,
-    [double]$MinOverlapSeconds = $script:MinOverlapSeconds
+    [double]$MinOverlapSeconds = $script:MinOverlapSeconds,
+    # 'processing': the machine's system check cleared processing while recording, so the queue must decode session 1
+    # while session 2 records. 'waiting': it did not, so the queue must NOT run a batch engine while either session
+    # records (BatchObservation, from Get-WbBatchDuringRecording) and must still finish session 1 after the recordings.
+    [ValidateSet('processing', 'waiting')] [string]$Mode = 'processing',
+    $BatchObservation = $null,
+    [int]$MinSamples = $script:MinBatchSamples
   )
   $fail = New-Object System.Collections.Generic.List[string]
   $invalid = New-Object System.Collections.Generic.List[string]
@@ -303,17 +372,34 @@ function Get-WbQueueSoakVerdict {
     $checks['session 1 segments: no overlap, no duplicate, no gap, both ends covered'] = [bool]$Segments.Ok
     foreach ($p in @($Segments.Problems)) { $fail.Add("session 1 segments: $p") }
   }
-  $overlapOk = ($OverlapSeconds -ge $MinOverlapSeconds)
-  $checks[("the queue decoded session 1 while session 2 recorded (at least {0:n0} s)" -f $MinOverlapSeconds)] = $overlapOk
-  if (-not $overlapOk) { $invalid.Add(("the queue decoded session 1 for {0:n0} s while session 2 recorded (needs {1:n0} s): the run did not measure the recorder beside the queue" -f $OverlapSeconds, $MinOverlapSeconds)) }
+  if ($Mode -eq 'processing') {
+    $overlapOk = ($OverlapSeconds -ge $MinOverlapSeconds)
+    $checks[("the queue decoded session 1 while session 2 recorded (at least {0:n0} s)" -f $MinOverlapSeconds)] = $overlapOk
+    if (-not $overlapOk) { $invalid.Add(("the queue decoded session 1 for {0:n0} s while session 2 recorded (needs {1:n0} s): the run did not measure the recorder beside the queue" -f $OverlapSeconds, $MinOverlapSeconds)) }
+  } else {
+    # Waiting mode: the queue must stay out of the way of both recordings. A look that saw too little proves nothing.
+    if ($null -eq $BatchObservation) {
+      $checks['no batch engine process existed while either session was recording'] = $false
+      $invalid.Add('no observation of the engine processes during the recordings: the waiting rule cannot be judged')
+    } else {
+      $hit = [int]$BatchObservation.BatchSamples
+      $checks[("no batch engine process existed while either session was recording ({0} of {1} looks inside the recordings saw one)" -f $hit, $BatchObservation.InWindowSamples)] = ($hit -eq 0)
+      if ($hit -gt 0) { $fail.Add(("a batch engine process existed while a session was recording ({0} of {1} looks, about {2:n0} s, first at {3}): the machine's check did not clear processing while recording, so the queue had to wait" -f $hit, $BatchObservation.InWindowSamples, $BatchObservation.BatchSeconds, $BatchObservation.FirstBatchAt)) }
+      if ([int]$BatchObservation.InWindowSamples -lt $MinSamples) { $invalid.Add(("only {0} look(s) at the engine processes fell inside the recordings (needs {1}): the waiting rule was not observed long enough" -f $BatchObservation.InWindowSamples, $MinSamples)) }
+    }
+  }
   $status = $(if ($fail.Count -gt 0) { 'FAIL' } elseif ($invalid.Count -gt 0) { 'INVALID' } else { 'PASS' })
   [pscustomobject]@{ Status = $status; Fail = @($fail.ToArray()); Invalid = @($invalid.ToArray()); Checks = $checks }
 }
 
 # Lines for the evidence: the information items (no bar) and what the run cost.
 function Get-WbQueueSoakInfoLines {
-  param($LogInfo, [double]$OverlapSeconds = 0, $Segments = $null, $Job = $null)
+  param($LogInfo, [double]$OverlapSeconds = 0, $Segments = $null, $Job = $null, [ValidateSet('processing', 'waiting')] [string]$Mode = 'processing', $BatchObservation = $null)
   $l = New-Object System.Collections.Generic.List[string]
+  $l.Add('machine mode: ' + (Get-WbQueueSoakModeText -Mode $Mode))
+  if ($BatchObservation) {
+    $l.Add(('  looks at the engine processes inside the recordings: {0}; with a batch engine: {1} (about {2:n0} s); with a chunks call (information only): {3}' -f $BatchObservation.InWindowSamples, $BatchObservation.BatchSamples, $BatchObservation.BatchSeconds, $BatchObservation.ChunkSamples))
+  }
   $l.Add('information only (no bar):')
   if ($LogInfo -and $null -ne $LogInfo.EstimateErrorMinutes) {
     $l.Add(('  "ready by" estimate for session 1, given when it stopped ({0} on the app clock): {1}; the transcript was complete at {2}; error {3:+0;-0;0} min (clock minutes)' -f $LogInfo.EstimateGivenAt, $LogInfo.EstimatedReadyBy, $LogInfo.CompletedAt, $LogInfo.EstimateErrorMinutes))
@@ -327,4 +413,4 @@ function Get-WbQueueSoakInfoLines {
 }
 
 Import-Module (Join-Path $PSScriptRoot 'DaySim.psm1')
-Export-ModuleMember -Function Get-WbQueueSoakGapLimitMs, Get-WbQueueSoakMinOverlapSeconds, Get-WbQueueSoakSettings, Get-WbQueueSoakCapability, Get-WbQueueSoakTitles, New-WbQueueSoakPlan, Test-WbQueueSoakSegments, Get-WbQueueSoakJob, Test-WbQueueSoakJobComplete, Get-WbDecodeOverlapSeconds, ConvertFrom-WbQueueUnitLine, ConvertTo-WbClockMinutes, Get-WbQueueSoakLogInfo, Get-WbQueueSoakRecordingVerdict, Get-WbQueueSoakVerdict, Get-WbQueueSoakInfoLines
+Export-ModuleMember -Function Get-WbQueueSoakGapLimitMs, Get-WbQueueSoakMinOverlapSeconds, Get-WbQueueSoakSettings, Get-WbQueueSoakCapability, Get-WbQueueSoakTitles, New-WbQueueSoakPlan, Test-WbQueueSoakSegments, Get-WbQueueSoakJob, Test-WbQueueSoakJobComplete, Get-WbDecodeOverlapSeconds, ConvertFrom-WbQueueUnitLine, ConvertTo-WbClockMinutes, Get-WbQueueSoakLogInfo, Get-WbQueueSoakRecordingVerdict, Get-WbQueueSoakVerdict, Get-WbQueueSoakInfoLines, Get-WbQueueSoakMode, Get-WbQueueSoakModeText, Get-WbQueueSoakDecodeWaitMinutes, Get-WbEngineSubcommand, Get-WbBatchDuringRecording

@@ -20,7 +20,7 @@ Import-Module (Join-Path $lib 'QueueSoak.psm1') -Force
 Invoke-PackGateBody -Ctx $ctx -Id 'queue-soak' -ResultFile $ResultFile -Body {
   $quick = [bool]$ctx.quick
   $paths = Get-PackPaths -Ctx $ctx
-  $threshold = 'recording rule for both sessions (one offset per run, 0 dropped, at most 9 counted breaks per 90 min, equals both references); 0 overruns, 0 xruns; session 1 transcribed in full (job done, no gap, no overlap, no duplicate); decoding of session 1 overlapped session 2'
+  $threshold = 'recording rule for both sessions (one offset per run, 0 dropped, at most 9 counted breaks per 90 min, equals both references); 0 overruns, 0 xruns; session 1 transcribed in full (job done, no gap, no overlap, no duplicate); decoding of session 1 overlapped session 2 (processing mode) or no batch engine ran while a session recorded (waiting mode)'
   # The quick check of this pack run keeps its capability.json in its own gate folder (quick-check.ps1).
   $capPath = Join-Path (Join-Path (Join-Path ([string]$ctx.work_dir) 'gates') 'quick-check') 'capability.json'
   $cap = Get-WbQueueSoakCapability -Path $capPath
@@ -50,10 +50,6 @@ Invoke-PackGateBody -Ctx $ctx -Id 'queue-soak' -ResultFile $ResultFile -Body {
   }
   $rigKind = Get-PackRigKindFromEvidence -EvidenceLines $evLines
   $rigLabel = Get-PackRigLabel -Rig ([pscustomobject]@{ Kind = $(if ($rigKind -eq 'loopback') { 'loopback' } else { 'vb-cable' }); Fallback = ($rigKind -eq 'vb-cable-fallback'); Instance = '' })
-  if ($e.ExitCode -eq 4) {
-    $head = 'not applicable on this laptop: its system check did not clear processing while recording, so the queue correctly waits for the recording to end (nothing to measure)'
-    return (New-PackResult -Id 'queue-soak' -Status 'INFO' -Headline $head -Evidence @($e.Evidence) -Threshold $threshold -Quick $quick -Rig $rigLabel)
-  }
   $out = Get-PackRecorderOutcome -ExitCode $e.ExitCode -EvidenceLines $evLines
   $head = $(if ($out.VerdictLine) { $out.VerdictLine -replace '^verdict:\s*', '' } else { $out.Status })
   if ($out.Status -eq 'FAIL') {
@@ -64,12 +60,13 @@ Invoke-PackGateBody -Ctx $ctx -Id 'queue-soak' -ResultFile $ResultFile -Body {
   # The numbers the owner asked for, taken from the evidence the gate wrote.
   $num = { param($pattern) $m = @($evLines | ForEach-Object { [regex]::Match([string]$_, $pattern) } | Where-Object { $_.Success } | Select-Object -First 1); if ($m.Count) { $m[0].Groups[1].Value } else { $null } }
   $measured = [ordered]@{
-    mode = $settings.Mode; rig = $rigKind; exit_code = $e.ExitCode; wall_minutes = [math]::Round($wall, 1)
+    mode = $settings.Mode; machine_mode = (& $num 'machine mode: (processing|waiting)'); rig = $rigKind; exit_code = $e.ExitCode; wall_minutes = [math]::Round($wall, 1)
     gate_minutes = (& $num 'real duration of the gate: ([0-9.,]+) min')
     decoding_inside_session_2_s = (& $num 'decoding of session 1 inside the recording of session 2: ([0-9,.]+) s')
     ready_by_error_min = (& $num 'error ([+-]?\d+) min \(clock minutes\)')
     engine_peak_mib = (& $num 'engine memory peak while session 1 was decoded: (\d+) MiB')
     run_dir = (Get-PackRunDirFromEvidence -EvidenceLines $evLines)
   }
+  if ($measured.machine_mode) { $head = "$head [machine mode: $($measured.machine_mode)]" }
   New-PackResult -Id 'queue-soak' -Status $out.Status -Headline $head -Measured $measured -Threshold $threshold -Rig $rigLabel -Evidence @($e.Evidence) -Quick $quick
 }
