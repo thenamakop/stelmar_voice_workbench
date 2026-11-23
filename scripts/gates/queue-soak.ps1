@@ -419,7 +419,7 @@ try {
       $windows = @(foreach ($tt in @($titles.Speech, $titles.Noise)) { if ($startedTitles.ContainsKey($tt) -and $stoppedTitles.ContainsKey($tt)) { [pscustomobject]@{ Start = $startedTitles[$tt]; End = $stoppedTitles[$tt] } } })
       $batchObs = Get-WbBatchDuringRecording -Samples @($engineLooks.ToArray()) -Windows $windows
     }
-    $verdict = Get-WbQueueSoakVerdict -Recording1 $j1.Verdict -Recording2 $j2.Verdict -Segments $segCheck -JobCheck $jobCheck -OverlapSeconds $overlapS -Mode $mode -BatchObservation $batchObs -WaitedOut ([bool](-not $s1Complete)) -EstimatedReadyBy $(if ($stopLine) { [string]$stopLine.ReadyByClock } else { '' })
+    $verdict = Get-WbQueueSoakVerdict -Recording1 $j1.Verdict -Recording2 $j2.Verdict -Segments $segCheck -JobCheck $jobCheck -OverlapSeconds $overlapS -Mode $mode -BatchObservation $batchObs -WaitedOut ([bool](-not $s1Complete)) -AppReadyClock $(if ($stopLine) { [string]$stopLine.ReadyByClock } else { '' })
     $appLogLines = @($progress.ToArray())
     [pscustomobject]@{
       Mode = $mode; BatchObs = $batchObs; WaitMinutes = $waitMinutes; WaitBasis = $waitBasis; WaitDeadline = $waitDeadline; Run = $run; Verdict = $verdict; J1 = $j1; J2 = $j2; SegCheck = $segCheck; Job = $job; JobCheck = $jobCheck; OverlapS = $overlapS

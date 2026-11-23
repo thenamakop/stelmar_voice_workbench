@@ -424,10 +424,10 @@ function Get-WbQueueSoakVerdict {
     [ValidateSet('processing', 'waiting')] [string]$Mode = 'processing',
     $BatchObservation = $null,
     [int]$MinSamples = $script:MinBatchSamples,
-    # True when the wait for session 1's transcript ended at its limit without the job being done; EstimatedReadyBy is the
+    # True when the wait for session 1's transcript ended at its limit without the job being done; AppReadyClock is the
     # app's own "ready by" clock time read when session 1 stopped (or empty when it gave none).
     [bool]$WaitedOut = $false,
-    [string]$EstimatedReadyBy = ''
+    [string]$AppReadyClock = ''
   )
   $fail = New-Object System.Collections.Generic.List[string]
   $invalid = New-Object System.Collections.Generic.List[string]
@@ -442,7 +442,7 @@ function Get-WbQueueSoakVerdict {
   else {
     $checks['session 1 transcript: job done, cursor at the end of the audio'] = [bool]$JobCheck.Ok
     if (-not $JobCheck.Ok) {
-      if ($WaitedOut) { $fail.Add(("session 1: not finished; the app estimated {0} ({1})" -f $(if ($EstimatedReadyBy) { $EstimatedReadyBy } else { 'nothing: it gave no estimate' }), $JobCheck.Reason)) }
+      if ($WaitedOut) { $fail.Add(("session 1: not finished; the app estimated {0} ({1})" -f $(if ($AppReadyClock) { $AppReadyClock } else { 'nothing: it gave no estimate' }), $JobCheck.Reason)) }
       else { $fail.Add("session 1: $($JobCheck.Reason)") }
     }
   }
