@@ -89,7 +89,8 @@ if (-not (Stop-WbApp)) { Say 'STOP: a previous WebView2 is still running.'; exit
 # files in it (settings.json, capability.json, verified-models.json) are copied aside now and put back byte for
 # byte after the checks below have read them (GateData.psm1).
 Import-Module (Join-Path $here 'lib\GateData.psm1') -Force
-$guard = Save-WbRealAppData -SaveDir (Join-Path ([IO.Path]::GetTempPath()) ('wb-appdata-guard-' + [guid]::NewGuid().ToString('N')))
+$guard = Save-WbRealAppData
+foreach ($l in @($guard.Pending)) { Write-Host "real app data, $l" }
 $run = Start-WbApp -Exe $exePath -TimeoutSeconds 30
 $app = $run.Process
 Say "window shown after $($run.WindowMs) ms; rendered after $($run.RenderMs) ms"

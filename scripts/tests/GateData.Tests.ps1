@@ -85,6 +85,43 @@ try {
   $lines2 = @(Restore-WbRealAppData -Saved $saved2)
   Check 'a file the run created is removed again' (-not (Test-Path -LiteralPath (Join-Path $real 'capability.json')) -and (($lines2 -join "`n") -match 'capability.json : the run had created it'))
 
+  # ---- A release-app script that was killed mid-way: the next start puts the files back -----------------------------
+  $env:WB_GUARD_ROOT = Join-Path $tmp 'guard'
+  $orig = Get-WbAppDataHashes -Dir $real
+  Set-Content -LiteralPath (Join-Path $real 'verified-models.json') -Value '{"models":[]}' -Encoding ASCII
+  $orig = Get-WbAppDataHashes -Dir $real
+  $dead = Start-Process -FilePath "$env:SystemRoot\System32\cmd.exe" -ArgumentList '/c', 'exit' -PassThru -WindowStyle Hidden
+  $dead.WaitForExit()
+  $g = Save-WbRealAppData                       # the default aside folder is under the guard root
+  Check 'the aside copy is under the guard root, with a journal' ((Test-Path -LiteralPath (Join-Path $g.SaveDir 'journal.json')) -and $g.SaveDir.StartsWith($env:WB_GUARD_ROOT))
+  # The run changes the files, then is killed: no Restore-WbRealAppData, no cleanup.
+  Set-Content -LiteralPath (Join-Path $real 'settings.json') -Value '{"recordings_root":"D:\\STELMAR-Gate\\killed-run"}' -Encoding ASCII
+  Remove-Item -LiteralPath (Join-Path $real 'verified-models.json')
+  $j = Get-Content -LiteralPath (Join-Path $g.SaveDir 'journal.json') -Raw | ConvertFrom-Json
+  $j.Owner.Pid = $dead.Id
+  $j | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $g.SaveDir 'journal.json') -Encoding UTF8
+  $lines3 = @(Restore-WbPendingAppData)
+  $now = Get-WbAppDataHashes -Dir $real
+  Check 'a killed run: settings.json is put back byte for byte' ($now['settings.json'] -eq $orig['settings.json'])
+  Check 'a killed run: the deleted verified-models.json is put back' ($now['verified-models.json'] -eq $orig['verified-models.json'])
+  Check 'a killed run: what was in the real folder is kept, not thrown away' (@(Get-ChildItem -LiteralPath $env:WB_GUARD_ROOT -Directory -Filter 'replaced-*').Count -eq 1 -and ((Get-ChildItem -LiteralPath $env:WB_GUARD_ROOT -Recurse -Filter settings.json | Where-Object { (Get-Content $_.FullName -Raw) -match 'killed-run' }).Count -eq 1))
+  Check 'a killed run: the report says what happened' (($lines3 -join "`n") -match 'stopped before it put the real app data files back' -and ($lines3 -join "`n") -match 'settings.json : put back')
+  Check 'the journal of a restored run is gone, so the next start finds nothing to do' (@(Restore-WbPendingAppData).Count -eq 0 -and -not (Test-Path -LiteralPath $g.SaveDir))
+  # A run that is still alive is left alone.
+  $g2 = Save-WbRealAppData
+  Set-Content -LiteralPath (Join-Path $real 'settings.json') -Value '{"recordings_root":"D:\\other"}' -Encoding ASCII
+  Check 'a run that is still alive is not touched' (@(Restore-WbPendingAppData).Count -eq 0 -and ((Get-Content -LiteralPath (Join-Path $real 'settings.json') -Raw) -match 'other'))
+  # Save-WbRealAppData itself restores a dead run first, and reports it, so a script never copies a half-finished state.
+  $j2 = Get-Content -LiteralPath (Join-Path $g2.SaveDir 'journal.json') -Raw | ConvertFrom-Json
+  $j2.Owner.Pid = $dead.Id
+  $j2 | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $g2.SaveDir 'journal.json') -Encoding UTF8
+  $g3 = Save-WbRealAppData
+  $now3 = Get-WbAppDataHashes -Dir $real
+  Check 'Save-WbRealAppData restores a dead run first and returns its report' ($now3['settings.json'] -eq $orig['settings.json'] -and @($g3.Pending).Count -gt 0)
+  Check 'the copy taken after that is of the restored files' ((Get-WbFileSha256 (Join-Path $g3.SaveDir 'settings.json')) -eq $orig['settings.json'])
+  Remove-Item -LiteralPath $g3.SaveDir -Recurse -Force
+  Remove-Item Env:\WB_GUARD_ROOT
+
   # ---- Every entry point that starts the gate build sets WB_GATE_DATA_DIR ---------------------------------------
   # Each of these scripts starts the gate build of the app (or the emulator around it). A new script that sets a
   # WB_GATE_ hook variable or starts the gate build must be listed here, and must carry the guard.
@@ -122,6 +159,7 @@ try {
 finally {
   $env:APPDATA = $saveAppData; $env:LOCALAPPDATA = $saveLocal
   if ($saveGate) { $env:WB_GATE_DATA_DIR = $saveGate } else { Remove-Item Env:\WB_GATE_DATA_DIR -ErrorAction SilentlyContinue }
+  Remove-Item Env:\WB_GUARD_ROOT -ErrorAction SilentlyContinue
   Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
 }
 if ($fails) { Write-Host "$fails check(s) failed"; exit 1 }

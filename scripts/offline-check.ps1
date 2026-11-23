@@ -99,8 +99,8 @@ function Say([string]$line) { Write-Host ($line | ConvertTo-WbRedacted -MachineL
 # uses the real app data folder. The three files in it (settings.json, capability.json, verified-models.json) are
 # copied aside now and put back byte for byte at the end, whatever the app did to them (GateData.psm1).
 Import-Module (Join-Path $here 'lib\GateData.psm1') -Force
-$guardDir = Join-Path ([IO.Path]::GetTempPath()) ('wb-appdata-guard-' + [guid]::NewGuid().ToString('N'))
-$guard = Save-WbRealAppData -SaveDir $guardDir
+$guard = Save-WbRealAppData
+foreach ($l in @($guard.Pending)) { Write-Host "real app data, $l" }
 function Exit-AppDataGuard {
   if ($script:guard) {
     foreach ($l in (Restore-WbRealAppData -Saved $script:guard)) { Say "real app data, $l" }

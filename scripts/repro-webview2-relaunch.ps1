@@ -49,7 +49,8 @@ function Say([string]$line) { Write-Host $line; $log.Add($line) }
 # The release build cannot be given a data folder of its own: copy the real settings.json, capability.json and
 # verified-models.json aside now and put them back byte for byte before the log is written (GateData.psm1).
 Import-Module (Join-Path $here 'lib\GateData.psm1') -Force
-$guard = Save-WbRealAppData -SaveDir (Join-Path ([IO.Path]::GetTempPath()) ('wb-appdata-guard-' + [guid]::NewGuid().ToString('N')))
+$guard = Save-WbRealAppData
+foreach ($l in @($guard.Pending)) { Write-Host "real app data, $l" }
 function Get-Dumps {
   $dir = Join-Path (Get-WbUserDataDir) 'Crashpad\reports'
   if (-not (Test-Path $dir)) { return @() }

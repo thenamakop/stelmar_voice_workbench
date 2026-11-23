@@ -117,10 +117,14 @@ function Get-WbAppDataHashes {
 # For a script that has to run the RELEASE build of the app (it cannot be redirected): copies the three files to
 # $SaveDir first. Refuses while the app is running (its own writes would be lost or kept by mistake).
 function Save-WbRealAppData {
-  param([Parameter(Mandatory)] [string]$SaveDir, [string]$Dir = (Get-WbRealAppDataDir))
+  param([string]$SaveDir, [string]$Dir = (Get-WbRealAppDataDir))
   if (Get-Process -Name 'stelmar-voice-workbench' -ErrorAction SilentlyContinue) {
     throw 'The app is already running. Close it first: this script protects the real app data files while it starts the release app, and a running app would change them.'
   }
+  # A run that was killed mid-way (window closed, Ctrl+C, power loss) left its aside copy behind: put those files
+  # back first, so the copy taken now is of the operator's own files and not of a half-finished run's.
+  $pending = @(Restore-WbPendingAppData -Dir $Dir)
+  if (-not $SaveDir) { $SaveDir = Join-Path (Get-WbGuardRoot) ('run-' + [guid]::NewGuid().ToString('N')) }
   New-Item -ItemType Directory -Force -Path $SaveDir | Out-Null
   $files = [ordered]@{}
   foreach ($n in $script:ProtectedFiles) {
@@ -132,7 +136,54 @@ function Save-WbRealAppData {
       $files[$n] = [pscustomobject]@{ Existed = $false; Sha256 = $null }
     }
   }
-  [pscustomobject]@{ Dir = $Dir; SaveDir = $SaveDir; Files = $files }
+  # The journal is what a later start reads to put the files back. Restore-WbRealAppData's caller removes SaveDir
+  # (journal included) when the run ends normally, so a journal that is still there means the run did not finish.
+  $me = Get-Process -Id $PID
+  [pscustomobject]@{
+    Owner = [pscustomobject]@{ Pid = $PID; Start = $me.StartTime.ToFileTimeUtc() }
+    Dir = $Dir; Created = (Get-Date).ToString('s')
+    Files = @($script:ProtectedFiles | ForEach-Object { [pscustomobject]@{ Name = $_; Existed = $files[$_].Existed; Sha256 = $files[$_].Sha256 } })
+  } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $SaveDir 'journal.json') -Encoding UTF8
+  [pscustomobject]@{ Dir = $Dir; SaveDir = $SaveDir; Files = $files; Pending = $pending }
+}
+
+# Where the aside copies of the release-app scripts live. A fixed place (not a random temp folder) so that the next
+# start can find what a killed run left. WB_GUARD_ROOT replaces it in tests.
+function Get-WbGuardRoot {
+  if ($env:WB_GUARD_ROOT) { return $env:WB_GUARD_ROOT }
+  Join-Path $env:LOCALAPPDATA 'wb-gate-guard'
+}
+
+# Puts back the files of every run that left a journal and is no longer alive. What the run left in the real folder
+# is first copied into the same guard folder (replaced-<time>), so nothing is thrown away: if the operator used the
+# real app after the killed run and changed a setting, that copy is how to get it back. Returns report lines.
+function Restore-WbPendingAppData {
+  param([string]$Dir = (Get-WbRealAppDataDir))
+  $lines = New-Object System.Collections.Generic.List[string]
+  $root = Get-WbGuardRoot
+  if (-not (Test-Path -LiteralPath $root)) { return @() }
+  foreach ($d in @(Get-ChildItem -LiteralPath $root -Directory -Filter 'run-*' -ErrorAction SilentlyContinue)) {
+    $jp = Join-Path $d.FullName 'journal.json'
+    if (-not (Test-Path -LiteralPath $jp)) { continue }
+    try { $j = Get-Content -LiteralPath $jp -Raw | ConvertFrom-Json } catch { $lines.Add("$($d.Name): journal unreadable, left alone ($($_.Exception.Message))"); continue }
+    $alive = $false
+    try { $o = Get-Process -Id ([int]$j.Owner.Pid) -ErrorAction Stop; $alive = ($o.StartTime.ToFileTimeUtc() -eq [int64]$j.Owner.Start) } catch { }
+    if ($alive) { continue }
+    if ($j.Dir -ne $Dir) { continue }
+    $replaced = Join-Path $root ('replaced-' + (Get-Date).ToString('yyyyMMdd-HHmmss') + '-' + $d.Name)
+    $lines.Add("an earlier run ($($j.Created)) was stopped before it put the real app data files back; restoring them from its copy")
+    foreach ($f in @($j.Files)) {
+      $p = Join-Path $Dir $f.Name
+      $now = $(if (Test-Path -LiteralPath $p) { Get-WbFileSha256 $p } else { $null })
+      if ($now -ne $f.Sha256) {
+        if ($null -ne $now) { New-Item -ItemType Directory -Force -Path $replaced | Out-Null; Copy-Item -LiteralPath $p -Destination (Join-Path $replaced $f.Name) -Force }
+        if ($f.Existed) { Copy-Item -LiteralPath (Join-Path $d.FullName $f.Name) -Destination $p -Force; $lines.Add("  $($f.Name) : put back (what was there is kept in $replaced)") }
+        else { Remove-Item -LiteralPath $p -Force; $lines.Add("  $($f.Name) : the stopped run had created it; removed (a copy is kept in $replaced)") }
+      } else { $lines.Add("  $($f.Name) : unchanged") }
+    }
+    Remove-Item -LiteralPath $d.FullName -Recurse -Force -ErrorAction SilentlyContinue
+  }
+  $lines.ToArray()
 }
 
 # Puts the three files back as Save-WbRealAppData found them (a file the run created is removed). Returns lines
@@ -157,4 +208,4 @@ function Restore-WbRealAppData {
   $lines.ToArray()
 }
 
-Export-ModuleMember -Function Get-WbRealAppDataDirs, Get-WbRealAppDataDir, Resolve-WbRealPath, Test-WbRealAppDataDir, Set-WbGateDataDir, Assert-WbGateDataDir, Assert-WbGateDataEnvNotReal, Get-WbFileSha256, Get-WbAppDataHashes, Save-WbRealAppData, Restore-WbRealAppData
+Export-ModuleMember -Function Get-WbRealAppDataDirs, Get-WbRealAppDataDir, Resolve-WbRealPath, Test-WbRealAppDataDir, Set-WbGateDataDir, Assert-WbGateDataDir, Assert-WbGateDataEnvNotReal, Get-WbFileSha256, Get-WbAppDataHashes, Save-WbRealAppData, Restore-WbRealAppData, Get-WbGuardRoot, Restore-WbPendingAppData
