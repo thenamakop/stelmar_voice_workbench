@@ -197,6 +197,10 @@ eval\.venv\Scripts\python eval\run.py rescore   # recompute scores from finished
   `ctl-wb-medium-fleurs-{en,hi,ur}-chunk30` (against the `verify-wb-medium-*` runs) answer the two open controls in
   `docs/GATES.md`; `ctl-wb-medium-coshe-heldout` is the baseline every engine change is compared with. All go
   through `wb-engine batch --file` (set `WB_ENGINE`).
+- **Error causes of a day-simulation session:** `eval/panel_causes.py <run folder> <day-audio.json>` splits a session's
+  word errors by block and cause (script mismatch, detection, normalisation, spelling variants) from the transcript the run
+  already wrote; no decoding. `scripts/gates/night_speed.py <run folder>...` compares a run's night plan with its night units.
+  Both write numbers only (see `docs/evidence/phase-5/`).
 - **Report:** `eval/.venv/Scripts/python eval/run.py report` writes `eval/REPORT.md` (numbers only) from the
   summaries on disk. CoSHE-Eval is CC BY-NC: the report is not committed until the phase ends.
 - **Independence:** `scripts/models/candidates.toml` lists, per candidate, the sets whose corpus it was

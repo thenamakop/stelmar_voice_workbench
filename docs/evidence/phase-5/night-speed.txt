@@ -1,0 +1,16 @@
+Night plan against the night units (Phase 5, item 7). Numbers only; written by scripts/gates/night_speed.py.
+
+== day-emu-low-20261121-052323
+  night plan: 2 session(s), about 5.6 h, ready by 23:40 IST; it multiplied the profile's night speed by 2.44, learned from 5 finished unit(s) of the rolling pass
+  rolling units (post-1): 73 units, 21755 s of audio, 1.16 engine seconds per audio second
+  night units (post-2): 19 units, 5764 s of audio, 1.14 engine seconds per audio second
+  night audio 180.9 min; the plan assumed 1.86 engine seconds per audio second, the units needed 1.14: actual over planned 0.62
+  extrapolated finish of the whole night pass at the speed the units showed: 21:29:58 (planned: 23:40)
+  room before 08:00 (13.5 h): the plan accepts up to 436 min of night audio, the units' speed would have fitted 708 min: between those two the plan says it will not finish and the night would have finished
+  rolling against night speed: 1.16 against 1.14 engine seconds per audio second (the rolling units ran beside the recorder; in this run the night units ran alone)
+
+== smoke5-emu-low-20261123-055853
+  night plan: 2 session(s), about 0.6 h, ready by 11:07 IST; it multiplied the profile's night speed by 1.74, learned from 5 finished unit(s) of the rolling pass
+  rolling units (post-1): 0 units, 0 s of audio, n/a engine seconds per audio second
+  night units (post-2): 0 units, 0 s of audio, n/a engine seconds per audio second
+  no night unit finished: the plan could not be compared with anything (the night pass ended before its first unit)
