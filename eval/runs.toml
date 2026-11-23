@@ -422,3 +422,98 @@ dataset = "kathbath-ur"
 role = "rolling"
 engine = "wb-engine"
 limit = "eval/clips/phase3-kathbath-ur.txt"
+
+# ------------------------------------------------------- Phase 5 controls and the code-switching baseline
+# Everything below goes through `wb-engine batch --file` (set WB_ENGINE), the engine the app ships. They exist before
+# any engine change: item 4 and item 5 of the Phase 5 plan record their "before" scores from these runs.
+
+# Baseline of the code-switching gate: stock medium, en+hi, language detected per chunk, the three clips that hold
+# the ten held-out labelled chunks. The summary's chunk_labels block is the gate's score (6 of 10 in Phase 2).
+[[run]]
+name = "ctl-wb-medium-coshe-heldout"
+setup = "medium"
+dataset = "coshe-eval"
+role = "rolling"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["en", "hi"]
+limit = "eval/clips/phase5-coshe-heldout.txt"
+needs = "phase-2"
+
+# Control 1 (GATES.md, Open items of 9 Nov): previous-text context on against off, through the engine. The engine
+# resets its context after a flagged chunk (PLAN section 6), so this is the app's own behaviour, not a harness
+# approximation. Same 20 CoSHE-Eval clips, detection en+hi, stock medium. Report the gap both ways.
+[[run]]
+name = "ctl-wb-medium-coshe-ctx-on"
+setup = "medium"
+dataset = "coshe-eval"
+role = "rolling"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["en", "hi"]
+limit = 20
+needs = "phase-2"
+
+[[run]]
+name = "ctl-wb-medium-coshe-ctx-off"
+setup = "medium"
+dataset = "coshe-eval"
+role = "parity"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["en", "hi"]
+limit = 20
+needs = "phase-2"
+
+[[compare]]
+a = "ctl-wb-medium-coshe-ctx-on"
+b = "ctl-wb-medium-coshe-ctx-off"
+max_wer_points = 3.0
+informational = true   # control 1: context on against off; a gap is a finding, not a gate
+
+# Control 2: the 15 s chunk cap against 30 s for single-language sets. The 15 s side is the existing verify-wb-medium-*
+# run (role rolling); these are the 30 s side (role rolling-30). Label both when quoting either.
+[[run]]
+name = "ctl-wb-medium-fleurs-en-chunk30"
+setup = "medium"
+dataset = "fleurs-en"
+role = "rolling-30"
+engine = "wb-engine"
+limit = "eval/clips/phase2-verify-fleurs.txt"
+needs = "phase-2"
+
+[[run]]
+name = "ctl-wb-medium-fleurs-hi-chunk30"
+setup = "medium"
+dataset = "fleurs-hi"
+role = "rolling-30"
+engine = "wb-engine"
+limit = "eval/clips/phase2-verify-fleurs.txt"
+needs = "phase-2"
+
+[[run]]
+name = "ctl-wb-medium-fleurs-ur-chunk30"
+setup = "medium"
+dataset = "fleurs-ur"
+role = "rolling-30"
+engine = "wb-engine"
+limit = "eval/clips/phase2-verify-fleurs.txt"
+needs = "phase-2"
+
+[[compare]]
+a = "verify-wb-medium-fleurs-en"
+b = "ctl-wb-medium-fleurs-en-chunk30"
+max_wer_points = 3.0
+informational = true   # control 2: 15 s cap (a) against 30 s (b)
+
+[[compare]]
+a = "verify-wb-medium-fleurs-hi"
+b = "ctl-wb-medium-fleurs-hi-chunk30"
+max_wer_points = 3.0
+informational = true   # control 2
+
+[[compare]]
+a = "verify-wb-medium-fleurs-ur"
+b = "ctl-wb-medium-fleurs-ur-chunk30"
+max_wer_points = 3.0
+informational = true   # control 2

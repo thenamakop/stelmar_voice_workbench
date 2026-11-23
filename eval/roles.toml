@@ -64,3 +64,28 @@ previous_text_context = false
 vad = true
 max_chunk_s = 15.0
 threads = 8
+
+# The 30 s variants of rolling and night for SINGLE-language sessions (PLAN section 6 allows 30 s there; the 15 s
+# role limits are for sessions with several languages, where sentence-sized chunks keep detection per sentence).
+# A 15 s cap splits a long single-language sentence where there may be no pause (the FLEURS Hindi clips of 22 s:
+# stock medium 47.5 -> 51.7 WER, hindi-medium 18.5 -> 23.9 against whole-clip decoding, Phase 5a). Used by the
+# chunk-cap control in runs.toml; label every result with its role.
+[rolling-30]
+timestamps = false
+beam_size = 5
+best_of = 5
+temperature_fallback = true
+previous_text_context = true
+vad = true
+max_chunk_s = 30.0
+threads = 8
+
+[night-30]
+timestamps = false
+beam_size = 5
+best_of = 5
+temperature_fallback = true
+previous_text_context = true
+vad = true
+max_chunk_s = 30.0
+threads = 8

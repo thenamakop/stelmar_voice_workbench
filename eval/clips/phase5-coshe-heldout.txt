@@ -1,0 +1,5 @@
+# Phase 5 baseline and held-out clips: the three CoSHE-Eval clips that hold the ten hand-labelled chunks of the Phase 2 code-switching gate
+# (eval/labels/coshe-eval.json). dataset<TAB>utterance id. Ids only: no audio, no text.
+coshe-eval	audio_1343
+coshe-eval	audio_350
+coshe-eval	audio_147

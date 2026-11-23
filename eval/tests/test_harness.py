@@ -406,3 +406,62 @@ def test_unknown_independence_is_reported_and_not_ranked(tmp_path, monkeypatch):
     rows = [{"run": "a", "dataset": "d", "wer": 0.20, "wer_nukta_ignored": 0.19, "independent": None},
             {"run": "b", "dataset": "d", "wer": 0.21, "wer_nukta_ignored": 0.17}]
     assert harness.rank_flips(rows) == []
+
+
+def test_a_run_over_a_labelled_set_scores_the_chunks_and_the_report_lists_them(tmp_path):
+    data_dir = make_set(tmp_path, "mini", [("a", "मैं office जा रहा हूँ।", "hi", True)])
+    (data_dir / "mini" / "labels.json").write_text(json.dumps({
+        "dataset": "mini", "heldout": False,
+        "chunks": [{"id": "a", "start_ms": 0, "end_ms": 450, "kind": "mixed", "main": "hi"},
+                   {"id": "a", "start_ms": 500, "end_ms": 1000, "kind": "pure", "main": "en"}]}), encoding="utf-8")
+    fx = tmp_path / "fixture"
+    write_fixture(fx, "a", [Segment(0, 450, "मैं ऑफिस", "hi", 0.97), Segment(500, 1000, "जा रहा हूँ", "hi", 0.8)])
+    results = tmp_path / "results"
+    s = harness.run("wb-engine", Setup("medium", {"*": "medium"}), "mini", "rolling", fixture=str(fx),
+                    data_dir=data_dir, results_dir=results, machine="test", lang_mode="detect", langs=["en", "hi"])
+    c = s["chunk_labels"]
+    assert (c["chunks"], c["matches"]) == (2, 1)
+    assert c["pure"] == {"chunks": 1, "matches": 0} and c["mixed"] == {"chunks": 1, "matches": 1}
+    assert c["confusion"] == {"en->hi": 1, "hi->hi": 1}
+    assert "ऑफिस" not in json.dumps(c, ensure_ascii=False)  # no text in the label score
+
+    report = harness.write_report(results, tmp_path / "none.toml", out=tmp_path / "REPORT.md", data_dir=data_dir)
+    text = report.read_text(encoding="utf-8")
+    assert "## Chunk-language detection against hand labels" in text
+    assert f"| {s['run']} | mini | medium | rolling | 2 | 1 | 50.0 | 0/1 | 1/1 | 0 | 0 | en->hi: 1, hi->hi: 1 |" in text
+    assert "## All runs" in text and "## Data sources and licences" in text
+    assert "ऑफिस" not in text and "office" not in text  # numbers only
+
+
+def test_fixed_language_runs_have_no_chunk_label_score(tmp_path):
+    data_dir = make_set(tmp_path, "mini", [("a", "आज मौसम अच्छा है।", "hi", False)])
+    (data_dir / "mini" / "labels.json").write_text(json.dumps({
+        "dataset": "mini", "chunks": [{"id": "a", "start_ms": 0, "end_ms": 900, "kind": "pure", "main": "hi"}]}),
+        encoding="utf-8")
+    fx = tmp_path / "fixture"
+    write_fixture(fx, "a", [Segment(0, 900, "आज मौसम अच्छा है", "hi", 0.9)])
+    s = harness.run("wb-engine", Setup("medium", {"*": "medium"}), "mini", "rolling", fixture=str(fx),
+                    data_dir=data_dir, results_dir=tmp_path / "results", machine="test", lang_mode="fixed")
+    assert s["chunk_labels"] is None  # the language was given to the engine: detection is not measured
+
+
+def test_the_new_roles_and_control_runs_are_defined():
+    roles = harness.load_toml(harness.ROLES_FILE)
+    assert roles["rolling"]["max_chunk_s"] == 15.0 and roles["rolling-30"]["max_chunk_s"] == 30.0
+    assert roles["night"]["max_chunk_s"] == 15.0 and roles["night-30"]["max_chunk_s"] == 30.0
+    only_chunk = {k: v for k, v in roles["rolling-30"].items() if k != "max_chunk_s"}
+    assert only_chunk == {k: v for k, v in roles["rolling"].items() if k != "max_chunk_s"}
+    assert roles["parity"]["previous_text_context"] is False and roles["rolling"]["previous_text_context"] is True
+    cfg = harness.load_toml(harness.RUNS_FILE)
+    runs = {r["name"]: r for r in cfg["run"] if "name" in r}
+    for lang in ("en", "hi", "ur"):
+        assert runs[f"ctl-wb-medium-fleurs-{lang}-chunk30"]["role"] == "rolling-30"
+        assert runs[f"ctl-wb-medium-fleurs-{lang}-chunk30"]["limit"] == runs[f"verify-wb-medium-fleurs-{lang}"]["limit"]
+    assert runs["ctl-wb-medium-coshe-ctx-on"]["role"] == "rolling" and runs["ctl-wb-medium-coshe-ctx-off"]["role"] == "parity"
+    held = runs["ctl-wb-medium-coshe-heldout"]
+    assert held["lang_mode"] == "detect" and held["langs"] == ["en", "hi"] and held["engine"] == "wb-engine"
+    ids = harness.clip_list_ids(held["limit"], "coshe-eval")
+    assert sorted(ids) == ["audio_1343", "audio_147", "audio_350"]
+    for r in runs.values():
+        if r["name"].startswith("ctl-"):
+            assert r["engine"] == "wb-engine"  # the controls never go through whisper-cli
