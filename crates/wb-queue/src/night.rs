@@ -77,24 +77,51 @@ pub fn deadline_ms(now_ms: u64) -> u64 {
 }
 
 /// Plans the night pass. `night_rtf` holds, per language that has a night model, its RTF in the chosen
-/// configuration. Only the audio of those languages counts toward the time; a session's other languages
-/// keep their rolling text in `post-2`.
-pub fn plan(start_ms: u64, sessions: &[SessionAudio], night_rtf: &BTreeMap<String, f64>) -> Plan {
+/// configuration: a session gets a night job when it has audio in one of those languages. `decode_rtf` holds, per
+/// language, the RTF of the model the night job uses for it (the night model, or the rolling model for a language
+/// without one). The job decodes the WHOLE audio of the session, so the time counts all of it at those speeds,
+/// not only the languages with a night model (decision of 23 Nov 2026: the plan counts what the job decodes; the
+/// 21 Nov plan counted only the Hindi minutes of Inaugural, about 0.5 of its 90.5, while its job decoded all of them).
+/// Whether a language without a night model should be decoded again at night is a Phase 5 question.
+pub fn plan(
+    start_ms: u64,
+    sessions: &[SessionAudio],
+    night_rtf: &BTreeMap<String, f64>,
+    decode_rtf: &BTreeMap<String, f64>,
+) -> Plan {
     if night_rtf.is_empty() {
         return Plan::Skip(SkipReason::NoNightModel);
     }
+    // A language the job decodes but neither map knows counts at the slowest speed known, not for free.
+    let slowest = decode_rtf
+        .values()
+        .chain(night_rtf.values())
+        .copied()
+        .fold(1.0, f64::max);
     let mut planned = Vec::new();
     let mut needed_s = 0.0;
     for s in sessions {
+        let has_night_audio = s
+            .audio_ms_by_lang
+            .iter()
+            .any(|(lang, ms)| *ms > 0 && night_rtf.contains_key(lang));
+        if !has_night_audio {
+            continue;
+        }
         let secs: f64 = s
             .audio_ms_by_lang
             .iter()
-            .filter_map(|(lang, ms)| night_rtf.get(lang).map(|rtf| *ms as f64 / 1000.0 * rtf))
+            .map(|(lang, ms)| {
+                let rtf = decode_rtf
+                    .get(lang)
+                    .or_else(|| night_rtf.get(lang))
+                    .copied()
+                    .unwrap_or(slowest);
+                *ms as f64 / 1000.0 * rtf
+            })
             .sum();
-        if secs > 0.0 {
-            planned.push(s.id.clone());
-            needed_s += secs;
-        }
+        planned.push(s.id.clone());
+        needed_s += secs;
     }
     if planned.is_empty() {
         return Plan::Skip(SkipReason::NothingToDo);
@@ -412,27 +439,78 @@ mod tests {
         );
     }
 
+    /// English at the rolling model's speed 1.0 and Hindi at the night model's 2.0, as the night job decodes them.
+    fn decode() -> BTreeMap<String, f64> {
+        BTreeMap::from([("en".to_owned(), 1.0), ("hi".to_owned(), 2.0)])
+    }
+
     #[test]
-    fn a_night_model_for_hindi_only_plans_only_the_hindi_audio() {
+    fn a_night_model_for_hindi_only_gives_post_2_to_sessions_with_hindi_and_counts_all_their_audio()
+    {
         let sessions = vec![
             session("a", 90, 0),
             session("b", 45, 45),
             session("c", 0, 90),
         ];
         let rtf = BTreeMap::from([("hi".to_owned(), 2.0)]);
-        match plan(at(18, 0), &sessions, &rtf) {
+        match plan(at(18, 0), &sessions, &rtf, &decode()) {
             Plan::Run {
                 sessions,
                 estimate_s,
                 finish_ms,
             } => {
-                // Session a has no Hindi audio and gets no post-2.
+                // Session a has no Hindi audio and gets no post-2. Sessions b and c are decoded whole: b is 45 min
+                // of English at 1.0 and 45 min of Hindi at 2.0, c is 90 min of Hindi at 2.0.
                 assert_eq!(sessions, vec!["b", "c"]);
-                assert!((estimate_s - 135.0 * 60.0 * 2.0).abs() < 1e-6);
+                assert!((estimate_s - (45.0 * 1.0 + 45.0 * 2.0 + 90.0 * 2.0) * 60.0).abs() < 1e-6);
                 assert_eq!(finish_ms, at(18, 0) + (estimate_s * 1000.0) as u64);
             }
             other => panic!("expected a run, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn the_plan_counts_the_whole_session_the_job_decodes_not_only_the_languages_with_a_night_model()
+    {
+        // The 21 Nov 2026 shape: a session that is almost all English (no night model) with a little Hindi (one).
+        // The job decodes all of it; the old plan counted only the Hindi minutes (10 min at 3.0 = 30 min) and the
+        // new one counts the 100 min of English at the rolling model's 1.0 as well (130 min).
+        let sessions = vec![session("a", 100, 10)];
+        let night = BTreeMap::from([("hi".to_owned(), 3.0)]);
+        let decode = BTreeMap::from([("en".to_owned(), 1.0), ("hi".to_owned(), 3.0)]);
+        let Plan::Run { estimate_s, .. } = plan(at(18, 0), &sessions, &night, &decode) else {
+            panic!("expected a run");
+        };
+        assert!(
+            (estimate_s - 130.0 * 60.0).abs() < 1e-6,
+            "plan minutes {} against the job's 130",
+            estimate_s / 60.0
+        );
+        // And it decides on that size: 14 hours are left at 18:00, 820 min of English at 1.0 and 10 of Hindi
+        // at 3.0 need 14 h 10 min; the old plan counted 30 min and would have run it.
+        let sessions = vec![session("a", 820, 10)];
+        let Plan::Skip(SkipReason::DoesNotFit { needed_s, .. }) =
+            plan(at(18, 0), &sessions, &night, &decode)
+        else {
+            panic!("expected DoesNotFit");
+        };
+        assert!((needed_s - (820.0 + 30.0) * 60.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn a_language_the_job_decodes_that_no_map_knows_counts_at_the_slowest_speed() {
+        let sessions = vec![SessionAudio {
+            id: "a".into(),
+            audio_ms_by_lang: BTreeMap::from([
+                ("hi".to_owned(), 60_000),
+                ("ur".to_owned(), 60_000),
+            ]),
+        }];
+        let night = BTreeMap::from([("hi".to_owned(), 2.0)]);
+        let Plan::Run { estimate_s, .. } = plan(at(18, 0), &sessions, &night, &night) else {
+            panic!("expected a run");
+        };
+        assert!((estimate_s - (60.0 * 2.0 + 60.0 * 2.0)).abs() < 1e-6);
     }
 
     #[test]
@@ -443,7 +521,7 @@ mod tests {
         let Plan::Skip(SkipReason::DoesNotFit {
             needed_s,
             available_s,
-        }) = plan(at(18, 0), &sessions, &rtf)
+        }) = plan(at(18, 0), &sessions, &rtf, &rtf)
         else {
             panic!("expected DoesNotFit");
         };
@@ -455,12 +533,12 @@ mod tests {
     fn no_night_model_and_no_matching_audio_are_skipped_with_a_reason() {
         let sessions = vec![session("a", 60, 0)];
         assert_eq!(
-            plan(at(18, 0), &sessions, &BTreeMap::new()),
+            plan(at(18, 0), &sessions, &BTreeMap::new(), &decode()),
             Plan::Skip(SkipReason::NoNightModel)
         );
         let rtf = BTreeMap::from([("hi".to_owned(), 2.0)]);
         assert_eq!(
-            plan(at(18, 0), &sessions, &rtf),
+            plan(at(18, 0), &sessions, &rtf, &decode()),
             Plan::Skip(SkipReason::NothingToDo)
         );
         assert!(SkipReason::NoNightModel.text().contains("rolling"));

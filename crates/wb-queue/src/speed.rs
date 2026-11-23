@@ -351,7 +351,10 @@ mod tests {
             audio_ms_by_lang: BTreeMap::from([("hi".to_string(), 5 * H + 18 * 60_000)]),
         }];
         let profile = BTreeMap::from([("hi".to_string(), 1.479)]);
-        assert!(matches!(plan(start, &audio, &profile), Plan::Run { .. }));
+        assert!(matches!(
+            plan(start, &audio, &profile, &profile),
+            Plan::Run { .. }
+        ));
         let with_allowance: BTreeMap<String, f64> = profile
             .iter()
             .map(|(l, r)| {
@@ -362,7 +365,7 @@ mod tests {
             })
             .collect();
         assert!(matches!(
-            plan(start, &audio, &with_allowance),
+            plan(start, &audio, &with_allowance, &with_allowance),
             Plan::Skip(SkipReason::DoesNotFit { .. })
         ));
     }
@@ -400,7 +403,10 @@ mod tests {
         }];
         let profile = BTreeMap::from([("hi".to_string(), 1.479)]);
         // 6 h of Hindi at 1.479 is 8.9 h: it fits in 9.5 h on the profile's word.
-        assert!(matches!(plan(start, &audio, &profile), Plan::Run { .. }));
+        assert!(matches!(
+            plan(start, &audio, &profile, &profile),
+            Plan::Run { .. }
+        ));
         let mut log = SpeedLog::default();
         log.record(unit(300, 300.0 * 0.696 * 2.0, 0.696)); // twice as slow as promised
         let f = log.factor();
@@ -409,7 +415,7 @@ mod tests {
             .map(|(l, r)| (l.clone(), scaled(*r, f)))
             .collect();
         assert!(matches!(
-            plan(start, &audio, &measured),
+            plan(start, &audio, &measured, &measured),
             Plan::Skip(SkipReason::DoesNotFit { .. })
         ));
     }

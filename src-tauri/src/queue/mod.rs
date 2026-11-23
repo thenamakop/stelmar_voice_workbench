@@ -911,7 +911,12 @@ impl Queue {
             .into_iter()
             .map(|(l, r)| (l, wb_queue::speed::scaled(r, Some(factor))))
             .collect();
-        match night::plan(now, &audio, &rtf) {
+        let decode_rtf: std::collections::BTreeMap<String, f64> = profile
+            .night_decode_rtf(&langs)
+            .into_iter()
+            .map(|(l, r)| (l, wb_queue::speed::scaled(r, Some(factor))))
+            .collect();
+        match night::plan(now, &audio, &rtf, &decode_rtf) {
             Plan::Run {
                 sessions,
                 estimate_s,

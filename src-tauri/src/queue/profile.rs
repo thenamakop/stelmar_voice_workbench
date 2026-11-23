@@ -146,6 +146,23 @@ impl ProfileView {
             .collect()
     }
 
+    /// The real-time factor of every language the night job decodes, each at the model the job uses for it: the
+    /// night model, the rolling model for a language without one, or the job's catch-all model. The job decodes the
+    /// whole session, so the night plan counts all of it at these speeds (23 Nov 2026).
+    pub fn night_decode_rtf(&self, languages: &[String]) -> BTreeMap<String, f64> {
+        let gpu = self.uses_gpu();
+        let models = self.night_models(languages);
+        languages
+            .iter()
+            .filter_map(|l| {
+                let model = models.get(l).or_else(|| models.get("*"))?;
+                let rtf = self.rtf_for(model, gpu);
+                // A model that was never timed counts as slow (1.0), not free.
+                Some((l.clone(), if rtf > 0.0 { rtf } else { 1.0 }))
+            })
+            .collect()
+    }
+
     fn pick(from: &BTreeMap<String, String>, languages: &[String]) -> BTreeMap<String, String> {
         let mut m = BTreeMap::new();
         for l in languages {
@@ -494,6 +511,28 @@ mod tests {
         assert!((v.rtf_for_lang("large-v3-turbo-q5_0", "en", true) - 0.389).abs() < 1e-9);
         assert!((v.rtf_for_lang("large-v3-turbo-q5_0", "hi", true) - 0.696).abs() < 1e-9);
         assert!((v.rtf_for_lang("large-v3-turbo-q5_0", "ur", true) - 0.696).abs() < 1e-9);
+    }
+
+    #[test]
+    fn the_night_plan_counts_english_at_the_rolling_model_and_hindi_at_the_night_model() {
+        let mut v = smoke_cells();
+        // English has no night model of its own here (the shape of the 21 Nov run), Hindi has one.
+        v.night.remove("en");
+        v.night
+            .insert("hi".to_string(), "large-v3-q5_0".to_string());
+        let langs = vec!["en".to_string(), "hi".to_string()];
+        let night = v.night_rtf(&langs);
+        let decode = v.night_decode_rtf(&langs);
+        // Only Hindi has a night model, so only Hindi decides that a session gets a night job...
+        assert_eq!(
+            night.keys().cloned().collect::<Vec<_>>(),
+            vec!["hi".to_string()]
+        );
+        // ...but the job decodes the whole session, so the plan counts English too, at the rolling model's speed.
+        assert_eq!(decode.keys().cloned().collect::<Vec<_>>(), langs);
+        assert!((decode["hi"] - night["hi"]).abs() < 1e-9);
+        let en_model = v.night_models(&langs)["en"].clone();
+        assert!((decode["en"] - v.rtf_for(&en_model, true)).abs() < 1e-9);
     }
 
     #[test]
