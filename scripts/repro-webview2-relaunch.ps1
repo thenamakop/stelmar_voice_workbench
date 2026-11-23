@@ -46,6 +46,10 @@ if ($BrowserArgs) { $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = $BrowserArgs }
 
 $log = New-Object System.Collections.Generic.List[string]
 function Say([string]$line) { Write-Host $line; $log.Add($line) }
+# The release build cannot be given a data folder of its own: copy the real settings.json, capability.json and
+# verified-models.json aside now and put them back byte for byte before the log is written (GateData.psm1).
+Import-Module (Join-Path $here 'lib\GateData.psm1') -Force
+$guard = Save-WbRealAppData -SaveDir (Join-Path ([IO.Path]::GetTempPath()) ('wb-appdata-guard-' + [guid]::NewGuid().ToString('N')))
 function Get-Dumps {
   $dir = Join-Path (Get-WbUserDataDir) 'Crashpad\reports'
   if (-not (Test-Path $dir)) { return @() }
@@ -114,6 +118,8 @@ foreach ($m in $modes) {
 Say ""
 Say "== Summary"
 foreach ($s in $summary) { Say "  $s" }
+foreach ($l in (Restore-WbRealAppData -Saved $guard)) { Say "real app data, $l" }
+Remove-Item -LiteralPath $guard.SaveDir -Recurse -Force -ErrorAction SilentlyContinue
 $out = Join-Path $OutDir "$Tag.txt"
 Write-WbEvidence -Path $out -Lines $log -MachineLabel $Machine
 Write-Host "Log: $out"

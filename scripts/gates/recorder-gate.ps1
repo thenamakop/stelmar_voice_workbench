@@ -92,6 +92,7 @@ Import-Module (Join-Path $repo 'scripts\lib\PsEnv.psm1') -Force
 Set-WbCleanPSModulePath
 Set-WbInvariantCulture
 Import-Module (Join-Path $repo 'scripts\lib\GateRun.psm1') -Force
+Import-Module (Join-Path $repo 'scripts\lib\GateData.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Redact.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\AppProcess.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Rig.psm1') -Force
@@ -210,6 +211,8 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
   }
   $stopFile = Join-Path $run 'STOP'
   $stressStop = Join-Path $run 'STOP-STRESS'
+  # The app's own data folder for this run (settings, capability, verified-models): never the operator's real one.
+  $dataDir = Set-WbGateDataDir -Dir (Join-Path $run 'appdata')
   $env:WB_GATE_ROOT = $rec
   $env:WB_GATE_BACKUP = $backup
   $env:WB_GATE_START = "Gate $Gate $stamp"
@@ -231,7 +234,9 @@ $result = Invoke-WbGate -Name "phase1-$Gate-$Profile" -Body {
   $modelsDisk = $null
   $recDisk = $null
   if ($Gate -eq 'hashing') {
-    $cacheFile = Join-Path (Join-Path $env:APPDATA 'in.edu.bmu.stelmar.voiceworkbench') 'verified-models.json'
+    # The cache lives in this run's own app data folder (a new folder: cold by construction); the operator's real
+    # verified-models.json is never read or deleted.
+    $cacheFile = Join-Path $dataDir 'verified-models.json'
     $existed = Test-Path -LiteralPath $cacheFile
     if ($existed) { Remove-Item -LiteralPath $cacheFile -Force }
     if (Test-Path -LiteralPath $cacheFile) { throw 'verified-models.json could not be removed: the hash cache is not cold' }

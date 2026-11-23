@@ -57,6 +57,7 @@ Import-Module (Join-Path $repo 'scripts\lib\PsEnv.psm1') -Force
 Set-WbCleanPSModulePath
 Set-WbInvariantCulture
 Import-Module (Join-Path $repo 'scripts\lib\GateRun.psm1') -Force
+Import-Module (Join-Path $repo 'scripts\lib\GateData.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Redact.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\AppProcess.psm1') -Force
 Import-Module (Join-Path $repo 'scripts\lib\Quiet.psm1') -Force
@@ -89,7 +90,7 @@ function Invoke-OneRun([string]$Name) {
   $limit = if ($mode -eq 'full') { $FullLimitMinutes } elseif ($mode -eq 'quick') { $QuickLimitMinutes } else { 5 }
   $report = Join-Path $run 'report.json'
   $env:WB_GATE_CHECK = $mode
-  $env:WB_GATE_DATA_DIR = $data
+  $null = Set-WbGateDataDir -Dir $data
   $env:WB_GATE_REPORT = $report
   $env:WB_GATE_ROOT = Join-Path $run 'rec'
   $env:WB_BENCH_DIR = Join-Path $repo 'resources\bench'

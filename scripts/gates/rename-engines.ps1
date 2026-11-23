@@ -94,6 +94,7 @@ $run2 = Invoke-Run 'intact' $intact
 # the desktop) at about 1, 3 and 5 s after the screen opened. The banner is "No speech engine found. Recording is
 # not affected." and must show with the engines renamed away and not with them present.
 Import-Module (Join-Path $repo 'scripts\lib\AppProcess.psm1') -Force
+Import-Module (Join-Path $repo 'scripts\lib\GateData.psm1') -Force
 $shotDir = Join-Path $OutDir 'ui'
 New-Item -ItemType Directory -Force -Path $shotDir | Out-Null
 $bannerText = 'No speech engine found.'
@@ -102,6 +103,9 @@ function Invoke-UiRun([string]$Tag, [string]$EnginesDir, [int[]]$Waits) {
   $env:WB_ENGINES_DIR = $EnginesDir
   try {
     if (Get-Process stelmar-voice-workbench -ErrorAction SilentlyContinue) { throw 'the app is already running' }
+    # The gate build of the app, on a data folder of its own for this run (never the operator's real one).
+    $null = Set-WbGateDataDir -Dir (Join-Path $OutDir "appdata-$Tag")
+    Assert-WbGateDataDir -Gate 'rename-engines'
     $app = Start-WbApp -Exe $(if ($Exe) { $Exe } else { Join-Path $repo 'target\gate\stelmar-voice-workbench.exe' }) -TimeoutSeconds 30
     $r.Opened = Invoke-WbAppButton -Handle $app.Handle -Name 'Record'
     if (-not $r.Opened) { throw 'the Record button was not found in the window' }

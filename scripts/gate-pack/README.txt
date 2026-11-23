@@ -85,6 +85,17 @@ What it does, in order
      cable and gives numbers only, no pass or fail.
    - More recorder checks (cold-cache hashing, background decoding), the speed tables on the
      processor, a full system check, and, if this pack has it, the 2.5-hour microphone test in a quiet room.
+   - The engine kill tests (about 80 minutes in a full run, no cable needed): the speech engine is stopped
+     by force at random points while it works, and the pack checks that the app restarts it and the
+     finished text is the same as an uninterrupted run. This checks recovery only.
+
+Your own settings are safe
+--------------------------
+ The checks that start the app give it a settings folder of its own inside the pack's "work" folder. They
+ never read or change the real STELMAR Voice Workbench settings on this laptop (the recordings folder, the
+ saved system check, the model list). If you set the environment variable WB_GATE_DATA_DIR to the real
+ settings folder, the pack refuses to start and says so. The two checks that must run the installed
+ (release) app, the network test, copy the three settings files aside first and put them back afterwards.
 
  You can stop at any time. Anything not finished is marked "waiting" in the results.
 

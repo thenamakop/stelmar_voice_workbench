@@ -15,6 +15,11 @@ param(
   [string]$StressReport
 )
 $ErrorActionPreference = 'Stop'
+# The gate build of the app must not run on the operator's real app data (settings.json, capability.json,
+# verified-models.json): the gate that started this script sets WB_GATE_DATA_DIR to a folder of its own. Nothing
+# is started (not even the stress load) without it.
+Import-Module (Join-Path $PSScriptRoot '..\lib\GateData.psm1') -Force
+Assert-WbGateDataDir -Gate 'The recorder gate'
 $stressProc = $null
 if ($Stress) {
   $a = @('stress', '--gpu', $GpuName, '--seconds', '14400', '--stop-file', $StressStopFile, '--report', $StressReport)

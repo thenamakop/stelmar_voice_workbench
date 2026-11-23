@@ -18,6 +18,8 @@ Set-StrictMode -Version 2
 
 # Evidence is written through the redaction rules; do not depend on the caller having imported it.
 Import-Module (Join-Path $PSScriptRoot 'Redact.psm1') -Force
+# No -Force: a script that loaded GateData itself must keep its own copy (a forced reload would unload it).
+Import-Module (Join-Path $PSScriptRoot 'GateData.psm1')
 
 $script:LockPath = 'D:\Projects\stelmar-gate.lock'
 # Track B (the Phase 5a worktree session) holds this while it is mid-run; gates wait for it.
@@ -97,6 +99,8 @@ function Invoke-WbGate {
     [string]$BuildLockPath = $script:BuildLockPath,
     [string[]]$BuildProcessNames = $script:BuildProcessNames
   )
+  # No gate starts with WB_GATE_DATA_DIR pointing at the operator's real app data folder (GateData.psm1).
+  Assert-WbGateDataEnvNotReal -Gate $Name
   Assert-WbNoOverlayTools
   Assert-WbNoBuilds -BuildLockPath $BuildLockPath -ProcessNames $BuildProcessNames
   # Track B mid-run: wait (check every 30 s) up to 30 minutes, then stop and ask.

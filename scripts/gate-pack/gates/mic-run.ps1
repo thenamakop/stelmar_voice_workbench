@@ -16,6 +16,7 @@ Import-Module (Join-Path $lib 'PackGate.psm1') -Force
 $ctx = Read-PackCtx -CtxFile $CtxFile
 Initialize-PackGate -Ctx $ctx
 Import-Module (Join-Path $lib 'GateRun.psm1') -Force
+Import-Module (Join-Path $lib 'GateData.psm1') -Force
 Import-Module (Join-Path $lib 'CableRig.psm1') -Force
 Import-Module (Join-Path $lib 'PackNative.psm1') -Force
 Import-Module (Join-Path $lib 'LoopbackRig.psm1') -Force
@@ -97,6 +98,9 @@ Invoke-PackGateBody -Ctx $ctx -Id 'mic-run' -ResultFile $ResultFile -Body {
   }
 
   $stopFile = Join-Path $run 'STOP'; $refStop = Join-Path $run 'STOP-REF'; $ref2Stop = Join-Path $run 'STOP-REF2'; $goFile = Join-Path $run 'GO'
+  # The app's own data folder for this run: never the operator's (or the laptop's) real one.
+  $null = Set-WbGateDataDir -Dir (Join-Path $run 'appdata')
+  Assert-WbGateDataDir -Gate 'mic-run'
   $env:WB_GATE_ROOT = $rec; $env:WB_GATE_BACKUP = $backup; $env:WB_GATE_START = "Gate mic $stamp"; $env:WB_GATE_DEVICE = $micName
   $env:WB_GATE_STOP_FILE = $stopFile; $env:WB_GATE_REPORT = Join-Path $run 'stop-report.json'; $env:WB_GATE_STATUS_FILE = Join-Path $run 'status.json'
   foreach ($v in 'WB_GATE_RECOVERY', 'WB_GATE_PANIC_AT_S', 'WB_GATE_RECORDER_PANIC_AT_S', 'WB_GATE_PART_SECONDS') { Set-Item -Path "Env:\$v" -Value '' }
@@ -159,7 +163,7 @@ Invoke-PackGateBody -Ctx $ctx -Id 'mic-run' -ResultFile $ResultFile -Body {
     # Put the microphone and the speakers back whatever happened.
     [void](Invoke-PackNative -FilePath $paths.Testbench -ArgumentList @('mute', '--device', $micName, '--flow', 'capture', '--state', $muteBefore))
     if ($null -ne $volBefore) { [void](Invoke-PackNative -FilePath $paths.Testbench -ArgumentList @('volume', '--device', $speaker, '--flow', 'render', '--level', $volBefore.ToString([Globalization.CultureInfo]::InvariantCulture))) }
-    foreach ($v in 'WB_GATE_ROOT', 'WB_GATE_BACKUP', 'WB_GATE_START', 'WB_GATE_DEVICE', 'WB_GATE_STOP_FILE', 'WB_GATE_REPORT', 'WB_GATE_STATUS_FILE') { Remove-Item "Env:\$v" -ErrorAction SilentlyContinue }
+    foreach ($v in 'WB_GATE_ROOT', 'WB_GATE_BACKUP', 'WB_GATE_START', 'WB_GATE_DEVICE', 'WB_GATE_STOP_FILE', 'WB_GATE_REPORT', 'WB_GATE_STATUS_FILE', 'WB_GATE_DATA_DIR') { Remove-Item "Env:\$v" -ErrorAction SilentlyContinue }
   }
   Write-PackJson -Path (Join-Path $gdir 'mic-windows.json') -Value ([ordered]@{ plan = $plan; windows = $windows; log = @($windowLog.ToArray()); microphone = $micName; speakers = $speaker })
 
