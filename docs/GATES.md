@@ -57,6 +57,7 @@ One row per Verification item that names a machine. Statuses and rules are in `d
 | 3 | Verdicts and tiers on the real laptops | low-baseline and mid laptops | DEFERRED (not before 17 Nov 2026; LEGION-FIRST section 3) | gate pack | |
 | 3 | Quick-check time on the real low-baseline laptop | low-baseline laptop | DEFERRED (not before 17 Nov 2026; LEGION-FIRST section 3) | gate pack | |
 | 3 | Reviewers: design-consistency, asr-quality, offline | Legion | PASS (closed in the PR #6 review rounds of 13 and 14 Nov 2026, see the Open items rows of those dates; merged as 4cfc186) | PR #6 | 14 Nov 2026 |
+| 4 | Queue soak: the recorder beside the app's real transcription queue. Two sessions through the rig: session 1 (public FLEURS speech, English and Hindi) is transcribed by the queue while session 2 (seeded noise) is recorded; both sessions pass the Phase 1 recording rule (one offset per run, 0 dropped, at most 9 counted breaks per 90 minutes, equals both references), 0 overruns and 0 xruns, and session 1's segments are committed in full (no gap, no overlap, no duplicate) | low-baseline and mid laptops | OPEN (gate pack `queue-soak`, owner's brief of 23 Nov 2026; written, not yet run on a laptop) | gate pack | 23 Nov 2026 |
 
 ## Open items
 

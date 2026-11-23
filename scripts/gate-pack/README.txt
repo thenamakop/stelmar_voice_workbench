@@ -66,7 +66,7 @@ What it does, in order
  or the laptop can restart and it carries on where it stopped (run Start-Gates.cmd again as
  administrator and it continues).
 
- Day 1 (about 6 hours per laptop):
+ Day 1 (about 7 hours per laptop):
    - The laptop describes itself and checks its programs (15 minutes).
    - The quick system check and the speed tables on the graphics chip (1 to 2 hours, no cables needed).
    - The restart check. The pack says "A restart is needed" and waits. Type RESTART and press Enter.
@@ -74,6 +74,11 @@ What it does, in order
      start anything yourself after logging in. Let the pack's window open on its own.
    - The recorder checks on the audio interface: 30 minutes under heavy load straight after the
      restart, then a 2-hour recording, then panic and kill tests (about 4 hours in all).
+   - The queue check (about 1 hour, same cable, nothing more to do): two recordings one after the other
+     while the app's own transcription works. The first is public speech (English and Hindi) that the
+     app transcribes while the second, a test noise, is being recorded. The pack checks that both
+     recordings are complete and that the first one's text is complete. It needs the quick system
+     check of this same run first; without it the pack says "waiting" and tells you which check to run.
    - The network test: the pack asks you to switch Wi-Fi OFF (and unplug any network cable), runs a
      25-minute test, then asks you to switch it back ON. Do not forget to switch it back on.
 
