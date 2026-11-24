@@ -454,6 +454,43 @@ langs = ["en", "hi"]
 limit = "eval/clips/phase5-coshe-heldout.txt"
 needs = "phase-2"
 
+# Items 4 and 5: the language-detection rules on the 70 tuning clips (eval/clips/phase5-tune-coshe.txt), production models, Legion GPU
+# (WB_ENGINE = the cuda build, WB_ENGINE_DEVICE = gpu:0), rolling settings. Scored by eval/score_tune.py against the chunk labels
+# of eval/label_chunks.py. (a) is the current rule; (d) is the Hinglish model for every chunk: forced to Hindi, which the
+# Hinglish model writes in Devanagari with English words in Latin (d1: the language is forced; d2: the Hinglish model also detects).
+[[run]]
+name = "tune-turbo-q5_0-a"
+setup = "large-v3-turbo-q5_0"
+dataset = "coshe-eval"
+role = "rolling"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["en", "hi"]
+limit = "eval/clips/phase5-tune-coshe.txt"
+needs = "phase-2"
+
+[[run]]
+name = "tune-hinglish-f16-d1"
+setup = "hinglish-f16"
+dataset = "coshe-eval"
+role = "rolling"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["hi"]
+limit = "eval/clips/phase5-tune-coshe.txt"
+needs = "phase-2"
+
+[[run]]
+name = "tune-hinglish-f16-d2"
+setup = "hinglish-f16"
+dataset = "coshe-eval"
+role = "rolling"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["en", "hi"]
+limit = "eval/clips/phase5-tune-coshe.txt"
+needs = "phase-2"
+
 # Control 1 (GATES.md, Open items of 9 Nov): previous-text context on against off, through the engine. The engine
 # resets its context after a flagged chunk (PLAN section 6), so this is the app's own behaviour, not a harness
 # approximation. Same 20 CoSHE-Eval clips, detection en+hi, stock medium. Report the gap both ways.
