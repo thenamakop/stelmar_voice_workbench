@@ -156,18 +156,39 @@ def run_name(engine: str, setup: Setup, dataset: str, role: str, limit: int | st
     return f"{dataset}__{setup.name}__{role}__{lang_mode}__{engine}" + tag
 
 
-def fingerprint(engine: dict, setup: Setup, settings: Settings, models: dict, dataset_sha: str | None,
-                lang_mode: str, langs: list[str] | None, limit: int | str | None, machine: str | None = None) -> str:
-    """Hash of everything that changes a run's output. A run on disk with another fingerprint is stale:
-    `all` re-runs it, and `run` refuses to resume it without --force."""
+def fingerprint_key(engine: dict, setup: Setup, settings: Settings, models: dict, dataset_sha: str | None,
+                    lang_mode: str, langs: list[str] | None, limit: int | str | None, machine: str | None = None) -> dict:
+    """Everything that goes into a fingerprint, as data. A summary saves it (`fingerprint_inputs`) so that a later
+    mismatch can be explained by comparing two summaries (23 Nov 2026: the clip list changed its line endings in a
+    checkout and the fingerprint changed with it; the summary did not say which input differed)."""
     wcpp = whisper_cpp_info()
-    key = {"engine": engine,
+    return {"engine": engine,
            "whisper_cpp": wcpp.get("commit"), "setup": setup.models, "detector": setup.detector,
            "settings": asdict(settings), "models": {k: v.get("sha256") for k, v in models.items()},
            "dataset": dataset_sha, "lang_mode": lang_mode, "langs": langs, "limit": limit_key(limit),
            # Speed numbers belong to a machine and emulation profile: a summary from another one is stale.
            "machine": {k: v for k, v in machine_info(machine).items() if k in ("name", "emulation")}}
+
+
+def fingerprint(engine: dict, setup: Setup, settings: Settings, models: dict, dataset_sha: str | None,
+                lang_mode: str, langs: list[str] | None, limit: int | str | None, machine: str | None = None) -> str:
+    """Hash of everything that changes a run's output. A run on disk with another fingerprint is stale:
+    `all` re-runs it, and `run` refuses to resume it without --force."""
+    key = fingerprint_key(engine, setup, settings, models, dataset_sha, lang_mode, langs, limit, machine)
     return hashlib.sha256(json.dumps(key, sort_keys=True).encode("utf-8")).hexdigest()
+
+
+CRLF, LF = bytes([13, 10]), bytes([10])
+
+
+def limit_file_info(limit: int | str | None) -> dict | None:
+    """A clip-list limit's file as the fingerprint sees it: the hash of its bytes, the hash with line endings made LF,
+    and whether it has CRLF, so a fingerprint that moved only because of a checkout's line endings can be told apart."""
+    if not isinstance(limit, str):
+        return None
+    data = (REPO / limit).read_bytes()
+    return {"path": limit, "sha256": hashlib.sha256(data).hexdigest(),
+            "sha256_lf": hashlib.sha256(data.replace(CRLF, LF)).hexdigest(), "crlf": CRLF in data}
 
 
 def language_source(lang_mode: str, set_langs: set[str]) -> str:
@@ -221,6 +242,7 @@ def run(engine_name: str, setup: Setup, dataset: str, role: str, limit: int | st
     hashes = model_hashes(setup, settings)
     dataset_sha = dataset_hash(dataset, data_dir)
     fp = fingerprint(engine_desc, setup, settings, hashes, dataset_sha, lang_mode, langs, limit, machine)
+    fp_inputs = fingerprint_key(engine_desc, setup, settings, hashes, dataset_sha, lang_mode, langs, limit, machine)
     fp_path = out_dir / "fingerprint.txt"
     old_fp = fp_path.read_text(encoding="utf-8").strip() if fp_path.exists() else None
     if utt_path.exists() and old_fp != fp and not force:
@@ -270,7 +292,7 @@ def run(engine_name: str, setup: Setup, dataset: str, role: str, limit: int | st
     summary = summarise(records, failures=len(utts) - len(records), lang_mode=lang_mode, dataset=dataset,
                          data_dir=data_dir)
     summary.update(
-        run=name, fingerprint=fp, engine=engine_desc, setup={"name": setup.name, "models": setup.models,
+        run=name, fingerprint=fp, fingerprint_inputs=fp_inputs, limit_file=limit_file_info(limit), engine=engine_desc, setup={"name": setup.name, "models": setup.models,
                                                              "detector": setup.detector},
         **independence_fields(hashes, dataset),
         language_source=language_source(lang_mode, {u.lang for u in utts}),

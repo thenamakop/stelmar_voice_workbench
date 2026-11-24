@@ -465,3 +465,29 @@ def test_the_new_roles_and_control_runs_are_defined():
     for r in runs.values():
         if r["name"].startswith("ctl-"):
             assert r["engine"] == "wb-engine"  # the controls never go through whisper-cli
+
+
+def test_a_summary_saves_every_fingerprint_input_so_a_mismatch_can_be_explained(tmp_path):
+    """23 Nov 2026: a clip list changed its line endings in a checkout and the fingerprint moved; the summary did not say which
+    input differed. Now the inputs are in the summary, they reproduce the fingerprint, and the clip list's own hash is kept
+    with and without its line endings."""
+    import hashlib
+    data_dir = make_set(tmp_path, "mini", [("a", "one two", "en", False)])
+    fx = tmp_path / "fixture"
+    write_fixture(fx, "a", [Segment(0, 900, "one two", "en", 0.9)])
+    s = harness.run("wb-engine", Setup("medium", {"*": "medium"}), "mini", "rolling", fixture=str(fx),
+                    data_dir=data_dir, results_dir=tmp_path / "results", machine="test")
+    inputs = s["fingerprint_inputs"]
+    assert hashlib.sha256(json.dumps(inputs, sort_keys=True).encode("utf-8")).hexdigest() == s["fingerprint"]
+    assert {"engine", "whisper_cpp", "setup", "settings", "models", "dataset", "lang_mode", "limit", "machine"} <= set(inputs)
+    assert s["limit_file"] is None  # no clip list in this run
+
+
+def test_the_clip_list_is_recorded_with_and_without_its_line_endings(tmp_path):
+    clips = REPO / "eval" / "clips" / "phase5-coshe-heldout.txt"
+    info = harness.limit_file_info("eval/clips/phase5-coshe-heldout.txt")
+    data = clips.read_bytes()
+    assert info["crlf"] == (b"\r\n" in data)
+    import hashlib
+    assert info["sha256_lf"] == hashlib.sha256(data.replace(b"\r\n", b"\n")).hexdigest()
+    assert harness.limit_file_info(20) is None

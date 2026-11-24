@@ -440,6 +440,20 @@ langs = ["en", "hi"]
 limit = "eval/clips/phase5-coshe-heldout.txt"
 needs = "phase-2"
 
+# The same ten held-out chunks on the production models (owner, 24 Nov 2026, condition a): detection and decoding by
+# large-v3-turbo-q5_0 on the Legion GPU, rule (a) as it is. Run with WB_ENGINE = the cuda build and WB_ENGINE_DEVICE = gpu:0.
+# This is the "before" of every language-detection change of items 4 and 5; it is a held-out run and is reported as one.
+[[run]]
+name = "prod-turbo-q5_0-coshe-heldout"
+setup = "large-v3-turbo-q5_0"
+dataset = "coshe-eval"
+role = "rolling"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["en", "hi"]
+limit = "eval/clips/phase5-coshe-heldout.txt"
+needs = "phase-2"
+
 # Control 1 (GATES.md, Open items of 9 Nov): previous-text context on against off, through the engine. The engine
 # resets its context after a flagged chunk (PLAN section 6), so this is the app's own behaviour, not a harness
 # approximation. Same 20 CoSHE-Eval clips, detection en+hi, stock medium. Report the gap both ways.
