@@ -1,0 +1,18 @@
+Validation of the reference-only chunk labeller on the 10 held-out chunks (Phase 5, item 4; a held-out run: no decode).
+Method: eval/wbeval/chunklabeller.py; words spread over the utterance duration by characters, labelled by Latin against
+Devanagari share, pure when the smaller share is under 15%, at least 4 words. No text in this file.
+
+n | clip | start-end ms | hand label (main, kind) | derived (main, kind) | latin share | main | kind
+1 | audio_1343 | 0-12975 | hi, mixed | hi, mixed | 0.302 | agree | agree
+2 | audio_350 | 23770-28415 | hi, pure | hi, pure | 0.091 | agree | agree
+3 | audio_147 | 16830-25250 | en, mixed | en, mixed | 0.75 | agree | agree
+4 | audio_1343 | 32145-46790 | hi, mixed | hi, mixed | 0.231 | agree | agree
+5 | audio_350 | 46780-53160 | en, mixed | hi, mixed | 0.308 | DIFFER | agree
+6 | audio_147 | 49840-54600 | en, pure | en, pure | 0.857 | agree | agree
+7 | audio_1343 | 19890-24910 | en, mixed | en, mixed | 0.737 | agree | agree
+8 | audio_350 | 33080-40610 | hi, mixed | hi, mixed | 0.353 | agree | agree
+9 | audio_147 | 34450-43910 | hi, mixed | hi, pure | 0.032 | agree | DIFFER
+10 | audio_147 | 0-3550 | en, mixed | en, pure | 0.889 | agree | DIFFER
+
+labelled 10 of 10; main language agrees 9 of 10; pure against mixed agrees 8 of 10
+pass bar: 9 of 10 on main and 8 of 10 on pure against mixed: PASS

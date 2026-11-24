@@ -373,7 +373,9 @@ def summarise(records: list[dict], failures: int = 0, lang_mode: str = "detect",
         } if lang_mode == "detect" else {"chunks": detection.chunks, "accuracy": None, "accuracy_by_time": None,
                                          "confusion": {}, "reference": "not measured: language given (fixed mode)"},
         # Per-chunk language against hand labels (eval/labels/<dataset>.json), where the dataset has them.
-        "chunk_labels": score_chunks(records, labels) if lang_mode == "detect" and (labels := load_labels(dataset or "", data_dir=data_dir)) else None,
+        # Only the labels of utterances this run holds: a run of the tuning clips has none of the held-out chunks.
+        "chunk_labels": score_chunks(records, labels) if lang_mode == "detect" and (labels := [
+            lab for lab in load_labels(dataset or "", data_dir=data_dir) if lab.id in {r["id"] for r in records}]) else None,
         "audio_s": round(audio_s, 2), "elapsed_s": round(elapsed, 2),
         "rtf": round(elapsed / audio_s, 4) if audio_s else None,
     }
