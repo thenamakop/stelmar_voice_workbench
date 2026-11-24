@@ -36,7 +36,7 @@ try {
   $badHits = @($hits | Where-Object { $_.Count -ne 1 })
   Check ('every ledger match finds exactly one row of docs/GATES.md' + $(if ($badHits.Count) { ': ' + (($badHits | ForEach-Object { $_.Gate + ' ' + $_.Count }) -join ', ') } else { '' })) ($badHits.Count -eq 0)
   $realIds = @($real.gates | ForEach-Object { $_.id })
-  Check 'the registry has the P1 gates in the owner order' ((@($real.gates | Where-Object { $_.priority -eq 'P1' -and -not $_.prepare } | Sort-Object { [int]$_.order } | ForEach-Object { $_.id }) -join ',') -eq 'quick-check,speed-table-igpu,soak,load-cold,load-settled,panic,webview,kill,hashing-1,network-off')
+  Check 'the registry has the P1 gates in the owner order' ((@($real.gates | Where-Object { $_.priority -eq 'P1' -and -not $_.prepare } | Sort-Object { [int]$_.order } | ForEach-Object { $_.id }) -join ',') -eq 'quick-check,speed-table-igpu,soak,queue-soak,load-cold,load-settled,panic,webview,kill,hashing-1,network-off')
   Check 'supervisor-kill is P3' (($real.gates | Where-Object { $_.id -eq 'supervisor-kill' }).priority -eq 'P3')
   Check 'every registry id is unique' (@($realIds | Select-Object -Unique).Count -eq $realIds.Count)
 

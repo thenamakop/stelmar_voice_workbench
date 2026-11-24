@@ -82,7 +82,7 @@ foreach ($f in @(Get-ChildItem -LiteralPath (Join-Path $repo 'scripts\gate-pack\
 # Every library module, except the ones that exist only on the development side.
 foreach ($f in @(Get-ChildItem -LiteralPath (Join-Path $repo 'scripts\lib') -File | Where-Object { $_.Extension -in '.psm1', '.ps1' -and $_.Name -notin @('PackBuild.psm1', 'Ingest.psm1') })) { Copy-Into $f.FullName ('scripts\lib\' + $f.Name) }
 # The older gate scripts the pack calls. None of them needs Python, Cargo or Git on the laptop.
-$legacy = @('recorder-gate.ps1', 'recorder-gate-inner.ps1', 'kill-gate.ps1', 'network-off.ps1', 'engines-only.ps1', 'batch-scripts.ps1', 'rename-engines.ps1', 'xrun-correlate.ps1', 'rig-selftest.ps1')
+$legacy = @('recorder-gate.ps1', 'recorder-gate-inner.ps1', 'queue-soak.ps1', 'kill-gate.ps1', 'network-off.ps1', 'engines-only.ps1', 'batch-scripts.ps1', 'rename-engines.ps1', 'xrun-correlate.ps1', 'rig-selftest.ps1')
 foreach ($n in $legacy) {
   $p = Join-Path $repo ('scripts\gates\' + $n)
   if (Test-Path -LiteralPath $p) { Copy-Into $p ('scripts\gates\' + $n) } else { Note "note: scripts\gates\$n does not exist; gates that call it will say so" }

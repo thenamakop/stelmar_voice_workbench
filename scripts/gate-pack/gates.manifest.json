@@ -68,6 +68,19 @@
       ]
     },
     {
+      "id": "queue-soak",
+      "title": "Queue soak: two sessions through the rig, session 1 (public speech) transcribed by the app's real queue while session 2 (noise) is recorded",
+      "priority": "P1", "order": 45, "script": "gates/queue-soak.ps1", "group": "interface",
+      "needs": { "interface": true, "ac": true }, "interactive": false,
+      "est_minutes": { "low": 75, "mid": 70 },
+      "quick": { "minutes": 25, "note": "two sessions of 5 minutes (speech, then noise) with 2-minute parts instead of 25 and 20 minutes with the app's 10-minute parts" },
+      "threshold": "both sessions pass the Phase 1 recording rule (one offset per run, 0 dropped, at most 9 counted breaks per 90 minutes, equals both references); 0 overruns and 0 xruns; session 1's segments committed in full (job done, no gap, no overlap, no duplicate); the ready-by estimate error and the engine memory peak are information only. Two modes, from the machine's own system check, recorded in the evidence: processing during recording (the queue decodes session 1 while session 2 records, for at least 60 s; session 1 must be done by the app's own ready-by time plus 10% plus 5 minutes, at most 30 minutes in a quick run and 90 in a full run after session 1 stops) or waiting (a batch engine that was running when a recording began is gone within 10 s and none starts during a recording; session 1 still committed in full afterwards). Needs the capability.json of this run's own quick check: without it the gate is waiting (PENDING), never FAIL",
+      "depends_on": [ "quick-check" ],
+      "ledger": [
+        { "table": "gates", "match": "Queue soak: the recorder beside the app's real transcription queue", "kind": "verdict", "needs_hardware_interface": true }
+      ]
+    },
+    {
       "id": "load-cold",
       "title": "30-minute load gate within an hour of a restart",
       "priority": "P1", "order": 50, "script": "gates/load-cold.ps1", "group": "cold",

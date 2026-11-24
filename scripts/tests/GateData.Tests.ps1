@@ -129,6 +129,7 @@ try {
     'gates\recorder-gate.ps1'            = 'Set-WbGateDataDir'
     'gates\recorder-gate-inner.ps1'      = 'Assert-WbGateDataDir'
     'gates\kill-gate.ps1'                = 'Set-WbGateDataDir'
+    'gates\queue-soak.ps1'               = 'Set-WbGateDataDir'
     'gates\rename-engines.ps1'           = 'Set-WbGateDataDir'
     'gates\day-sim.ps1'                  = 'Set-WbGateDataDir'
     'gates\system-check-gate.ps1'        = 'Set-WbGateDataDir'
