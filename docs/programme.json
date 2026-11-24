@@ -26,6 +26,7 @@
       "title": "Inaugural Session & Inaugural Keynote",
       "venue": "Auditorium",
       "transcribe": true,
+      "languages": ["en", "hi"],
       "parallel": false
     },
     {
@@ -52,6 +53,7 @@
       "title": "Parallel Track Sessions I",
       "venue": "Seminar Halls",
       "transcribe": true,
+      "languages": ["en", "hi"],
       "parallel": true
     },
     {
@@ -78,6 +80,7 @@
       "title": "Parallel Track Sessions II",
       "venue": "Seminar Halls",
       "transcribe": true,
+      "languages": ["en", "hi"],
       "parallel": true
     },
     {
@@ -91,6 +94,7 @@
       "title": "Panel Discussion: Responsible Innovation for Sustainable Futures",
       "venue": "Auditorium",
       "transcribe": true,
+      "languages": ["en", "hi"],
       "parallel": false
     },
     {
@@ -104,6 +108,7 @@
       "title": "Keynote Address",
       "venue": "Auditorium",
       "transcribe": true,
+      "languages": ["en", "hi"],
       "parallel": false
     },
     {
@@ -117,6 +122,7 @@
       "title": "Parallel Track Sessions III",
       "venue": "Seminar Halls",
       "transcribe": true,
+      "languages": ["en", "hi"],
       "parallel": true
     },
     {
@@ -156,6 +162,7 @@
       "title": "Valedictory Address",
       "venue": "Auditorium",
       "transcribe": true,
+      "languages": ["en", "hi"],
       "parallel": false
     },
     {
@@ -169,6 +176,7 @@
       "title": "Best Paper & Best Poster Awards, Closing Ceremony",
       "venue": "Auditorium",
       "transcribe": true,
+      "languages": ["en", "hi"],
       "parallel": false
     }
   ]

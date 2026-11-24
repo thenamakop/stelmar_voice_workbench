@@ -323,25 +323,36 @@ pub fn session_has_stopped(
         || recording_dir.is_some_and(|d| std::path::Path::new(d) != dir)
 }
 
-/// The languages a job decodes: `en` stays, Hindi and Urdu become the one language of the organiser's script
-/// (Devanagari `hi`, Nastaliq `ur`).
+/// The languages a job decodes: English, and at most one of Hindi (Devanagari `hi`) or Urdu (Nastaliq `ur`). A
+/// list that names both gets Hindi (owner, 24 Nov 2026); [`language_warning`] says so. The rule is
+/// `wb_queue::languages::session_languages`.
 pub fn job_languages(expected: &[String], script: Option<&str>) -> Vec<String> {
-    let hindi_urdu = if script == Some("nastaliq") {
-        "ur"
-    } else {
-        "hi"
-    };
-    let mut out: Vec<String> = Vec::new();
-    for l in expected {
-        let mapped = match l.as_str() {
-            "hi" | "ur" => hindi_urdu.to_owned(),
-            other => other.to_owned(),
-        };
-        if !out.contains(&mapped) {
-            out.push(mapped);
-        }
+    wb_queue::languages::session_languages("", expected, script).languages
+}
+
+/// Writes the one-language warning (naming the session) to the Queue log. Never blocks anything.
+fn log_language_warning(
+    queue: &Queue,
+    dir: &std::path::Path,
+    expected: &[String],
+    script: Option<&str>,
+) {
+    let name = dir
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("this session");
+    if let Some(w) = language_warning(name, expected, script) {
+        queue.core.push_log(w);
     }
-    out
+}
+
+/// What to tell the organiser about a session whose languages broke the one-language rule, naming the session.
+pub fn language_warning(
+    session: &str,
+    expected: &[String],
+    script: Option<&str>,
+) -> Option<String> {
+    wb_queue::languages::session_languages(session, expected, script).warning
 }
 
 fn models_json(models: &std::collections::BTreeMap<String, String>) -> serde_json::Value {
@@ -1000,6 +1011,7 @@ pub fn on_session_started(app: &AppHandle, dir: &str, expected: &[String], scrip
     let mut laps = Laps::start();
     let languages = job_languages(expected, script);
     let dir = PathBuf::from(dir);
+    log_language_warning(&queue, &dir, expected, script);
     let Some(profile) = queue.profile() else {
         queue.core.push_log(
             "no system check has run: the session is recorded and not transcribed yet".into(),
@@ -1419,7 +1431,11 @@ pub(crate) fn lock_language_now(
     let (dir, languages) = {
         let snap = lock(&st.snapshot);
         let s = snap.session.as_ref().ok_or("No session is open.")?;
-        (PathBuf::from(&s.dir), s.expected_languages.clone())
+        // A resumed session whose folder lists both Hindi and Urdu locks only among English and Hindi.
+        (
+            PathBuf::from(&s.dir),
+            job_languages(&s.expected_languages, None),
+        )
     };
     if let Some(l) = lang
         && !langlock::accepted(l, &languages)
@@ -1456,6 +1472,7 @@ pub(crate) fn import_now(app: &AppHandle, source: &str) -> Result<String, String
     // The imported session is processed like a recording that has ended.
     let expected = read_expected_languages(&dest);
     let languages = job_languages(&expected.0, expected.1.as_deref());
+    log_language_warning(&q, &dest, &expected.0, expected.1.as_deref());
     q.register(dest.clone(), &languages, &profile)?;
     let mut open = plock(&q.open);
     if let Some(s) = open.iter_mut().find(|s| s.dir == dest) {
@@ -1767,14 +1784,24 @@ mod tests {
     }
 
     #[test]
-    fn hindi_and_urdu_become_one_language_in_the_organisers_script() {
+    fn a_session_that_lists_both_hindi_and_urdu_is_decoded_in_hindi_and_the_log_names_it() {
         let expected = vec!["en".to_string(), "hi".to_string(), "ur".to_string()];
-        assert_eq!(job_languages(&expected, None), vec!["en", "hi"]);
+        // The script no longer picks Urdu for a list that names both (owner, 24 Nov 2026).
+        for script in [None, Some("devanagari"), Some("nastaliq")] {
+            assert_eq!(job_languages(&expected, script), vec!["en", "hi"]);
+            assert!(
+                language_warning("Panel", &expected, script)
+                    .is_some_and(|w| w.starts_with("Panel lists both")),
+            );
+        }
         assert_eq!(
-            job_languages(&expected, Some("devanagari")),
-            vec!["en", "hi"]
+            job_languages(&["en".to_string(), "ur".to_string()], Some("nastaliq")),
+            vec!["en", "ur"]
         );
-        assert_eq!(job_languages(&expected, Some("nastaliq")), vec!["en", "ur"]);
+        // A lock to Urdu is refused in such a session, and a lock to Hindi is accepted.
+        let session = job_languages(&expected, None);
+        assert!(!langlock::accepted("ur", &session));
+        assert!(langlock::accepted("hi", &session));
         assert_eq!(
             job_languages(&["en".to_string()], Some("nastaliq")),
             vec!["en"]

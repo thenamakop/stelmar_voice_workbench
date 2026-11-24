@@ -4,7 +4,15 @@ import { Badge, Button, Icon, IconButton, ProgressBar, Select, Switch, Tabs, Tag
 import type { BadgeTone } from "../ds";
 import { px } from "../ds/units";
 import type { MirrorStatus, QueueJob, QueueSegment, RecorderStatus, Snapshot } from "../ipc";
-import { clock, istDateTime, languages, meterPercent, minutes, partFile } from "../recording/format";
+import {
+  clock,
+  istDateTime,
+  languages,
+  meterPercent,
+  minutes,
+  partFile,
+  sessionLanguages,
+} from "../recording/format";
 import type { Level, Recorder } from "../recording/useRecorder";
 import type { QueueState } from "../queue/useQueue";
 import {
@@ -413,7 +421,7 @@ export function RecordScreen({ hasProfile, recorder, capability, queue }: Record
               </span>
               <Badge>Session</Badge>
               <Badge tone="info">Record + post-process</Badge>
-              <Badge>{languages(session.expected_languages)}</Badge>
+              <Badge>{languages(sessionLanguages(session.expected_languages))}</Badge>
             </>
           ) : (
             <>
@@ -510,7 +518,9 @@ export function RecordScreen({ hasProfile, recorder, capability, queue }: Record
             <SideCard title="Language">
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 {LOCK_LANGUAGES.map(([code, name]) => {
-                  const expected = (session?.expected_languages ?? ["en", "hi"]).includes(code);
+                  const expected = sessionLanguages(session?.expected_languages ?? ["en", "hi"]).includes(
+                    code,
+                  );
                   const operable = recording && expected;
                   return (
                     <Tag

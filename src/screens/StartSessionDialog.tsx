@@ -4,7 +4,7 @@ import { Badge, Button, Checkbox, Dialog, Input, Radio, Select } from "../ds";
 import { px } from "../ds/units";
 import { sessionPlan } from "../ipc";
 import type { HindiUrduScript, InputDevice, SessionPlan } from "../ipc";
-import { format } from "../recording/format";
+import { format, initialChoice } from "../recording/format";
 import { Note } from "../shell/layout";
 import { LANG_NAME, recordPostText } from "../system/view";
 
@@ -34,6 +34,8 @@ export interface StartSessionDialogProps {
   profileKey: string;
   initialTitle?: string;
   initialHall?: string;
+  /** The programme's languages for this session ("en", and one of "hi" or "ur"); English and Hindi when absent. */
+  initialLanguages?: string[];
 }
 
 const MODE_GROUP = "start-mode";
@@ -121,12 +123,14 @@ export function StartSessionDialog({
   profileKey,
   initialTitle = "Unscheduled Session",
   initialHall = "",
+  initialLanguages,
 }: StartSessionDialogProps) {
+  const initial = initialChoice(initialLanguages);
   const [title, setTitle] = useState(initialTitle);
   const [hall, setHall] = useState(initialHall);
-  const [english, setEnglish] = useState(true);
-  const [hindiUrdu, setHindiUrdu] = useState(true);
-  const [script, setScript] = useState<HindiUrduScript>("devanagari");
+  const [english, setEnglish] = useState(initial.english);
+  const [hindiUrdu, setHindiUrdu] = useState(initial.hindiUrdu);
+  const [script, setScript] = useState<HindiUrduScript>(initial.script);
   const [mode, setMode] = useState<"record_post" | "live_post">("record_post");
   const [plan, setPlan] = useState<SessionPlan | null>(null);
   const [planError, setPlanError] = useState<string | null>(null);

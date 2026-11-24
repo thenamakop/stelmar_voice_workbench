@@ -265,14 +265,36 @@ pub async fn start_recording(
 /// recorder starts without waiting for anything else.
 pub fn start_with_mode(
     app: &AppHandle,
-    request: SessionRequest,
+    mut request: SessionRequest,
 ) -> Result<crate::state::SessionInfo, String> {
-    let languages = request
+    let listed = request
         .base
         .expected_languages
         .clone()
         .filter(|l| !l.is_empty())
         .unwrap_or_else(|| vec!["en".into(), "hi".into()]);
+    // English plus at most one of Hindi or Urdu (owner, 24 Nov 2026). A list that breaks the rule (the day plan, an
+    // old folder, a hand-edited programme) never blocks the recording: it is loaded with Hindi in Devanagari and a
+    // warning that names the session. The recorder receives the normalised list.
+    let normal = wb_queue::languages::session_languages(
+        &request.base.title,
+        &listed,
+        request.hindi_urdu_script.as_deref(),
+    );
+    if let Some(warning) = &normal.warning {
+        tracing::warn!("{warning}");
+        let _ = app
+            .state::<AppState>()
+            .events
+            .send(wb_recorder::events::Notice::event(
+                wb_recorder::events::NoticeLevel::Warning,
+                "languages",
+                warning.clone(),
+            ));
+    }
+    let languages = normal.languages;
+    request.base.expected_languages = Some(languages.clone());
+    request.hindi_urdu_script = normal.script.map(str::to_owned);
     let mode = match request.mode.as_deref() {
         None | Some("record_post") => "record_post",
         Some("live_post") => {
