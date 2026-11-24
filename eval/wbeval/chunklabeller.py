@@ -84,19 +84,21 @@ def validate_against_hand_labels(hand: list, references: dict[str, tuple[str, fl
             "kind_agree": sum(1 for r in labelled if r["derived_kind"] == r["hand_kind"]), "rows": rows}
 
 
-def sample_for_ear_check(chunks: list[dict], n: int, seed: int, near: float = 0.10) -> list[dict]:
-    """A random sample of `n` chunks for the owner's ear check: half led in English and half in Hindi where the labels
-    allow, and at least three within `near` of the pure threshold (when that many exist)."""
+def sample_for_ear_check(chunks: list[dict], n: int, seed: int, near: float = 0.05) -> list[dict]:
+    """A random, stratified sample of `n` chunks for the owner's ear check: two chunks within `near` of the pure threshold
+    (where a label is least certain), then equal numbers from the four classes (English-led and Hindi-led, mixed and pure)
+    for the rest, so the mixed chunks, which the rules are about, are not drowned by the pure ones."""
     rng = random.Random(seed)
     close = [c for c in chunks if abs(min(c["latin_share"], 1 - c["latin_share"]) - PURE_BELOW) <= near]
-    picked = rng.sample(close, min(3, len(close)))
+    picked = rng.sample(close, min(2, len(close)))
     rest = [c for c in chunks if c not in picked]
-    for main in ("en", "hi"):
-        pool = [c for c in rest if c["main"] == main]
-        want = n // 2 - sum(1 for c in picked if c["main"] == main)
-        take = rng.sample(pool, max(0, min(want, len(pool))))
+    classes = [("en", "mixed"), ("hi", "mixed"), ("en", "pure"), ("hi", "pure")]
+    per = max(1, (n - len(picked)) // len(classes))
+    for main, kind in classes:
+        pool = [c for c in rest if c["main"] == main and c["kind"] == kind]
+        take = rng.sample(pool, min(per, len(pool)))
         picked += take
         rest = [c for c in rest if c not in take]
     if len(picked) < n:
         picked += rng.sample(rest, min(n - len(picked), len(rest)))
-    return sorted(picked, key=lambda c: (c["id"], c["start_ms"]))
+    return sorted(picked[:n], key=lambda c: (c["id"], c["start_ms"]))

@@ -1,0 +1,15 @@
+Ear check of the chunk labels (10 random chunks of the tuning clips; seed 24112026).
+Listen to each chunk (the clip's audio between start and end) and mark agree or disagree with the proposed label.
+main = the language that leads the chunk; pure = one language only; mixed = both languages.
+
+n | clip | start | end | proposed main | proposed kind | agree / disagree
+1 | audio_1203 | 00:17.59 | 00:23.09 | hi | pure |
+2 | audio_1469 | 00:09.53 | 00:22.46 | en | mixed |
+3 | audio_1521 | 00:49.72 | 00:57.30 | hi | mixed |
+4 | audio_1668 | 00:37.34 | 00:48.20 | hi | pure |
+5 | audio_187 | 00:37.82 | 00:51.37 | hi | mixed |
+6 | audio_1892 | 00:37.28 | 00:49.91 | en | pure |
+7 | audio_1918 | 00:22.75 | 00:35.10 | en | pure |
+8 | audio_1971 | 00:26.20 | 00:40.33 | hi | pure |
+9 | audio_355 | 00:54.88 | 00:58.50 | en | pure |
+10 | audio_834 | 00:24.66 | 00:38.34 | en | mixed |

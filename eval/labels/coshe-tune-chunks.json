@@ -1,0 +1,3402 @@
+{
+ "dataset": "coshe-eval",
+ "heldout": false,
+ "about": "Chunk labels of the tuning clips, derived from the reference text alone by eval/label_chunks.py (spread over the duration by characters, Latin against Devanagari share, pure under 15%). Ranges come from the engine's segments in tune-turbo-q5_0-a. No text, no audio. Tuning only.",
+ "from_run": "tune-turbo-q5_0-a",
+ "skipped": {
+  "too_short": 1,
+  "too_few_words": 0
+ },
+ "chunks": [
+  {
+   "id": "audio_1055",
+   "start_ms": 90,
+   "end_ms": 12040,
+   "main": "en",
+   "kind": "pure",
+   "latin": 44,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1055",
+   "start_ms": 12090,
+   "end_ms": 22720,
+   "main": "en",
+   "kind": "pure",
+   "latin": 36,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1055",
+   "start_ms": 22720,
+   "end_ms": 34385,
+   "main": "en",
+   "kind": "pure",
+   "latin": 35,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1055",
+   "start_ms": 34385,
+   "end_ms": 46690,
+   "main": "en",
+   "kind": "pure",
+   "latin": 33,
+   "devanagari": 2,
+   "latin_share": 0.943
+  },
+  {
+   "id": "audio_1055",
+   "start_ms": 46690,
+   "end_ms": 49200,
+   "main": "en",
+   "kind": "pure",
+   "latin": 12,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1077",
+   "start_ms": 0,
+   "end_ms": 14370,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 40,
+   "devanagari": 17,
+   "latin_share": 0.702
+  },
+  {
+   "id": "audio_1077",
+   "start_ms": 14490,
+   "end_ms": 29215,
+   "main": "en",
+   "kind": "pure",
+   "latin": 40,
+   "devanagari": 7,
+   "latin_share": 0.851
+  },
+  {
+   "id": "audio_1077",
+   "start_ms": 29215,
+   "end_ms": 40975,
+   "main": "en",
+   "kind": "pure",
+   "latin": 34,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1077",
+   "start_ms": 40975,
+   "end_ms": 54560,
+   "main": "en",
+   "kind": "pure",
+   "latin": 45,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1077",
+   "start_ms": 54560,
+   "end_ms": 57960,
+   "main": "en",
+   "kind": "pure",
+   "latin": 11,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1144",
+   "start_ms": 90,
+   "end_ms": 11460,
+   "main": "en",
+   "kind": "pure",
+   "latin": 38,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1144",
+   "start_ms": 11460,
+   "end_ms": 15565,
+   "main": "en",
+   "kind": "pure",
+   "latin": 16,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1144",
+   "start_ms": 15565,
+   "end_ms": 26650,
+   "main": "en",
+   "kind": "pure",
+   "latin": 38,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1144",
+   "start_ms": 26650,
+   "end_ms": 40340,
+   "main": "en",
+   "kind": "pure",
+   "latin": 49,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1144",
+   "start_ms": 40340,
+   "end_ms": 50370,
+   "main": "en",
+   "kind": "pure",
+   "latin": 36,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1144",
+   "start_ms": 50370,
+   "end_ms": 56500,
+   "main": "en",
+   "kind": "pure",
+   "latin": 24,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1203",
+   "start_ms": 90,
+   "end_ms": 9235,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 24,
+   "devanagari": 7,
+   "latin_share": 0.774
+  },
+  {
+   "id": "audio_1203",
+   "start_ms": 9235,
+   "end_ms": 17510,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 13,
+   "devanagari": 13,
+   "latin_share": 0.5
+  },
+  {
+   "id": "audio_1203",
+   "start_ms": 17590,
+   "end_ms": 23088,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 2,
+   "devanagari": 18,
+   "latin_share": 0.1
+  },
+  {
+   "id": "audio_1203",
+   "start_ms": 23088,
+   "end_ms": 26930,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 2,
+   "devanagari": 11,
+   "latin_share": 0.154
+  },
+  {
+   "id": "audio_1203",
+   "start_ms": 26930,
+   "end_ms": 33875,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 4,
+   "devanagari": 23,
+   "latin_share": 0.148
+  },
+  {
+   "id": "audio_1203",
+   "start_ms": 33875,
+   "end_ms": 39910,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 1,
+   "devanagari": 23,
+   "latin_share": 0.042
+  },
+  {
+   "id": "audio_1203",
+   "start_ms": 39930,
+   "end_ms": 53990,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 29,
+   "devanagari": 19,
+   "latin_share": 0.604
+  },
+  {
+   "id": "audio_1210",
+   "start_ms": 60,
+   "end_ms": 13555,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 19,
+   "devanagari": 23,
+   "latin_share": 0.452
+  },
+  {
+   "id": "audio_1210",
+   "start_ms": 13555,
+   "end_ms": 25610,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 13,
+   "devanagari": 23,
+   "latin_share": 0.361
+  },
+  {
+   "id": "audio_1210",
+   "start_ms": 26300,
+   "end_ms": 39590,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 26,
+   "devanagari": 11,
+   "latin_share": 0.703
+  },
+  {
+   "id": "audio_1210",
+   "start_ms": 39930,
+   "end_ms": 51910,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 22,
+   "devanagari": 17,
+   "latin_share": 0.564
+  },
+  {
+   "id": "audio_1210",
+   "start_ms": 52310,
+   "end_ms": 58000,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 5,
+   "devanagari": 13,
+   "latin_share": 0.278
+  },
+  {
+   "id": "audio_1238",
+   "start_ms": 150,
+   "end_ms": 13770,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 14,
+   "devanagari": 33,
+   "latin_share": 0.298
+  },
+  {
+   "id": "audio_1238",
+   "start_ms": 14010,
+   "end_ms": 27880,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 9,
+   "devanagari": 37,
+   "latin_share": 0.196
+  },
+  {
+   "id": "audio_1238",
+   "start_ms": 28440,
+   "end_ms": 43370,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 26,
+   "devanagari": 19,
+   "latin_share": 0.578
+  },
+  {
+   "id": "audio_1238",
+   "start_ms": 43390,
+   "end_ms": 54125,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 20,
+   "devanagari": 5,
+   "latin_share": 0.8
+  },
+  {
+   "id": "audio_1238",
+   "start_ms": 54125,
+   "end_ms": 59300,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 5,
+   "devanagari": 12,
+   "latin_share": 0.294
+  },
+  {
+   "id": "audio_1239",
+   "start_ms": 0,
+   "end_ms": 10145,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 15,
+   "devanagari": 14,
+   "latin_share": 0.517
+  },
+  {
+   "id": "audio_1239",
+   "start_ms": 10145,
+   "end_ms": 20625,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 20,
+   "devanagari": 8,
+   "latin_share": 0.714
+  },
+  {
+   "id": "audio_1239",
+   "start_ms": 20625,
+   "end_ms": 29730,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 9,
+   "devanagari": 18,
+   "latin_share": 0.333
+  },
+  {
+   "id": "audio_1239",
+   "start_ms": 29980,
+   "end_ms": 42660,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 25,
+   "devanagari": 9,
+   "latin_share": 0.735
+  },
+  {
+   "id": "audio_1239",
+   "start_ms": 42810,
+   "end_ms": 46690,
+   "main": "en",
+   "kind": "pure",
+   "latin": 6,
+   "devanagari": 1,
+   "latin_share": 0.857
+  },
+  {
+   "id": "audio_1239",
+   "start_ms": 46690,
+   "end_ms": 54800,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 10,
+   "devanagari": 16,
+   "latin_share": 0.385
+  },
+  {
+   "id": "audio_1239",
+   "start_ms": 54800,
+   "end_ms": 59200,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 4,
+   "devanagari": 10,
+   "latin_share": 0.286
+  },
+  {
+   "id": "audio_1288",
+   "start_ms": 60,
+   "end_ms": 13630,
+   "main": "en",
+   "kind": "pure",
+   "latin": 29,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1288",
+   "start_ms": 13630,
+   "end_ms": 28370,
+   "main": "en",
+   "kind": "pure",
+   "latin": 36,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1288",
+   "start_ms": 28370,
+   "end_ms": 42990,
+   "main": "en",
+   "kind": "pure",
+   "latin": 37,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1288",
+   "start_ms": 42990,
+   "end_ms": 56130,
+   "main": "en",
+   "kind": "pure",
+   "latin": 33,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1288",
+   "start_ms": 56410,
+   "end_ms": 59400,
+   "main": "en",
+   "kind": "pure",
+   "latin": 6,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1299",
+   "start_ms": 0,
+   "end_ms": 9640,
+   "main": "en",
+   "kind": "pure",
+   "latin": 13,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_13",
+   "start_ms": 30,
+   "end_ms": 13245,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 20,
+   "devanagari": 30,
+   "latin_share": 0.4
+  },
+  {
+   "id": "audio_13",
+   "start_ms": 13245,
+   "end_ms": 22340,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 8,
+   "devanagari": 29,
+   "latin_share": 0.216
+  },
+  {
+   "id": "audio_13",
+   "start_ms": 22360,
+   "end_ms": 35665,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 16,
+   "devanagari": 46,
+   "latin_share": 0.258
+  },
+  {
+   "id": "audio_13",
+   "start_ms": 35665,
+   "end_ms": 50110,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 12,
+   "devanagari": 41,
+   "latin_share": 0.226
+  },
+  {
+   "id": "audio_13",
+   "start_ms": 50110,
+   "end_ms": 58980,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 19,
+   "devanagari": 15,
+   "latin_share": 0.559
+  },
+  {
+   "id": "audio_130",
+   "start_ms": 0,
+   "end_ms": 13470,
+   "main": "en",
+   "kind": "pure",
+   "latin": 38,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_130",
+   "start_ms": 13470,
+   "end_ms": 25000,
+   "main": "en",
+   "kind": "pure",
+   "latin": 29,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_130",
+   "start_ms": 25180,
+   "end_ms": 33760,
+   "main": "en",
+   "kind": "pure",
+   "latin": 28,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_130",
+   "start_ms": 33760,
+   "end_ms": 45640,
+   "main": "en",
+   "kind": "pure",
+   "latin": 33,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_130",
+   "start_ms": 46010,
+   "end_ms": 56500,
+   "main": "en",
+   "kind": "pure",
+   "latin": 26,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_131",
+   "start_ms": 0,
+   "end_ms": 13520,
+   "main": "en",
+   "kind": "pure",
+   "latin": 37,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_131",
+   "start_ms": 13520,
+   "end_ms": 27490,
+   "main": "en",
+   "kind": "pure",
+   "latin": 39,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_131",
+   "start_ms": 27490,
+   "end_ms": 42150,
+   "main": "en",
+   "kind": "pure",
+   "latin": 40,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_131",
+   "start_ms": 42680,
+   "end_ms": 57030,
+   "main": "en",
+   "kind": "pure",
+   "latin": 45,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1335",
+   "start_ms": 0,
+   "end_ms": 8335,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 2,
+   "devanagari": 21,
+   "latin_share": 0.087
+  },
+  {
+   "id": "audio_1335",
+   "start_ms": 8335,
+   "end_ms": 19880,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 12,
+   "devanagari": 19,
+   "latin_share": 0.387
+  },
+  {
+   "id": "audio_1335",
+   "start_ms": 20120,
+   "end_ms": 26530,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 12,
+   "devanagari": 6,
+   "latin_share": 0.667
+  },
+  {
+   "id": "audio_1335",
+   "start_ms": 26680,
+   "end_ms": 36520,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 9,
+   "devanagari": 20,
+   "latin_share": 0.31
+  },
+  {
+   "id": "audio_1335",
+   "start_ms": 36570,
+   "end_ms": 50210,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 16,
+   "devanagari": 32,
+   "latin_share": 0.333
+  },
+  {
+   "id": "audio_1335",
+   "start_ms": 50210,
+   "end_ms": 58300,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 13,
+   "devanagari": 11,
+   "latin_share": 0.542
+  },
+  {
+   "id": "audio_1341",
+   "start_ms": 30,
+   "end_ms": 4400,
+   "main": "en",
+   "kind": "pure",
+   "latin": 19,
+   "devanagari": 1,
+   "latin_share": 0.95
+  },
+  {
+   "id": "audio_1341",
+   "start_ms": 4400,
+   "end_ms": 18480,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 32,
+   "devanagari": 17,
+   "latin_share": 0.653
+  },
+  {
+   "id": "audio_1341",
+   "start_ms": 18480,
+   "end_ms": 25985,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 14,
+   "devanagari": 19,
+   "latin_share": 0.424
+  },
+  {
+   "id": "audio_1341",
+   "start_ms": 25985,
+   "end_ms": 34450,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 7,
+   "devanagari": 34,
+   "latin_share": 0.171
+  },
+  {
+   "id": "audio_1341",
+   "start_ms": 34450,
+   "end_ms": 45250,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 12,
+   "devanagari": 34,
+   "latin_share": 0.261
+  },
+  {
+   "id": "audio_1341",
+   "start_ms": 45250,
+   "end_ms": 55810,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 22,
+   "devanagari": 17,
+   "latin_share": 0.564
+  },
+  {
+   "id": "audio_1342",
+   "start_ms": 120,
+   "end_ms": 5140,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 2,
+   "devanagari": 21,
+   "latin_share": 0.087
+  },
+  {
+   "id": "audio_1342",
+   "start_ms": 5140,
+   "end_ms": 13470,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 2,
+   "devanagari": 28,
+   "latin_share": 0.067
+  },
+  {
+   "id": "audio_1342",
+   "start_ms": 13470,
+   "end_ms": 17490,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 9,
+   "devanagari": 5,
+   "latin_share": 0.643
+  },
+  {
+   "id": "audio_1342",
+   "start_ms": 17490,
+   "end_ms": 28970,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 17,
+   "devanagari": 30,
+   "latin_share": 0.362
+  },
+  {
+   "id": "audio_1342",
+   "start_ms": 29080,
+   "end_ms": 36870,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 14,
+   "devanagari": 15,
+   "latin_share": 0.483
+  },
+  {
+   "id": "audio_1342",
+   "start_ms": 37080,
+   "end_ms": 52000,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 12,
+   "devanagari": 45,
+   "latin_share": 0.211
+  },
+  {
+   "id": "audio_1406",
+   "start_ms": 60,
+   "end_ms": 13960,
+   "main": "en",
+   "kind": "pure",
+   "latin": 35,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1406",
+   "start_ms": 14170,
+   "end_ms": 27940,
+   "main": "en",
+   "kind": "pure",
+   "latin": 35,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1406",
+   "start_ms": 27940,
+   "end_ms": 42280,
+   "main": "en",
+   "kind": "pure",
+   "latin": 33,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1406",
+   "start_ms": 43230,
+   "end_ms": 56100,
+   "main": "en",
+   "kind": "pure",
+   "latin": 26,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1406",
+   "start_ms": 56190,
+   "end_ms": 59400,
+   "main": "en",
+   "kind": "pure",
+   "latin": 8,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1454",
+   "start_ms": 0,
+   "end_ms": 11460,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 31,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1469",
+   "start_ms": 0,
+   "end_ms": 9250,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 7,
+   "devanagari": 27,
+   "latin_share": 0.206
+  },
+  {
+   "id": "audio_1469",
+   "start_ms": 9530,
+   "end_ms": 22465,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 24,
+   "devanagari": 16,
+   "latin_share": 0.6
+  },
+  {
+   "id": "audio_1469",
+   "start_ms": 22465,
+   "end_ms": 36290,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 10,
+   "devanagari": 32,
+   "latin_share": 0.238
+  },
+  {
+   "id": "audio_1469",
+   "start_ms": 36290,
+   "end_ms": 50950,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 14,
+   "devanagari": 32,
+   "latin_share": 0.304
+  },
+  {
+   "id": "audio_1469",
+   "start_ms": 51160,
+   "end_ms": 57800,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 6,
+   "devanagari": 13,
+   "latin_share": 0.316
+  },
+  {
+   "id": "audio_1473",
+   "start_ms": 0,
+   "end_ms": 4915,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 2,
+   "devanagari": 8,
+   "latin_share": 0.2
+  },
+  {
+   "id": "audio_1473",
+   "start_ms": 4915,
+   "end_ms": 14690,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 8,
+   "devanagari": 15,
+   "latin_share": 0.348
+  },
+  {
+   "id": "audio_1473",
+   "start_ms": 14690,
+   "end_ms": 29380,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 11,
+   "devanagari": 18,
+   "latin_share": 0.379
+  },
+  {
+   "id": "audio_1473",
+   "start_ms": 29750,
+   "end_ms": 40815,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 2,
+   "devanagari": 28,
+   "latin_share": 0.067
+  },
+  {
+   "id": "audio_1473",
+   "start_ms": 40815,
+   "end_ms": 45410,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 2,
+   "devanagari": 8,
+   "latin_share": 0.2
+  },
+  {
+   "id": "audio_1473",
+   "start_ms": 45410,
+   "end_ms": 51738,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 1,
+   "devanagari": 15,
+   "latin_share": 0.062
+  },
+  {
+   "id": "audio_1473",
+   "start_ms": 51738,
+   "end_ms": 57600,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 6,
+   "devanagari": 7,
+   "latin_share": 0.462
+  },
+  {
+   "id": "audio_1477",
+   "start_ms": 120,
+   "end_ms": 5135,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 5,
+   "devanagari": 14,
+   "latin_share": 0.263
+  },
+  {
+   "id": "audio_1477",
+   "start_ms": 5135,
+   "end_ms": 13450,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 3,
+   "devanagari": 30,
+   "latin_share": 0.091
+  },
+  {
+   "id": "audio_1477",
+   "start_ms": 14070,
+   "end_ms": 27240,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 11,
+   "devanagari": 36,
+   "latin_share": 0.234
+  },
+  {
+   "id": "audio_1477",
+   "start_ms": 27290,
+   "end_ms": 40260,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 18,
+   "devanagari": 25,
+   "latin_share": 0.419
+  },
+  {
+   "id": "audio_1477",
+   "start_ms": 40350,
+   "end_ms": 54065,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 26,
+   "devanagari": 16,
+   "latin_share": 0.619
+  },
+  {
+   "id": "audio_1477",
+   "start_ms": 54065,
+   "end_ms": 57600,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 2,
+   "devanagari": 8,
+   "latin_share": 0.2
+  },
+  {
+   "id": "audio_1496",
+   "start_ms": 0,
+   "end_ms": 10255,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 4,
+   "devanagari": 24,
+   "latin_share": 0.143
+  },
+  {
+   "id": "audio_1496",
+   "start_ms": 10255,
+   "end_ms": 14400,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 6,
+   "devanagari": 4,
+   "latin_share": 0.6
+  },
+  {
+   "id": "audio_1496",
+   "start_ms": 14400,
+   "end_ms": 28740,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 15,
+   "devanagari": 16,
+   "latin_share": 0.484
+  },
+  {
+   "id": "audio_1496",
+   "start_ms": 29180,
+   "end_ms": 42280,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 10,
+   "devanagari": 22,
+   "latin_share": 0.312
+  },
+  {
+   "id": "audio_1496",
+   "start_ms": 42780,
+   "end_ms": 55620,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 5,
+   "devanagari": 25,
+   "latin_share": 0.167
+  },
+  {
+   "id": "audio_1496",
+   "start_ms": 55770,
+   "end_ms": 58300,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 2,
+   "devanagari": 3,
+   "latin_share": 0.4
+  },
+  {
+   "id": "audio_152",
+   "start_ms": 0,
+   "end_ms": 13160,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 14,
+   "devanagari": 34,
+   "latin_share": 0.292
+  },
+  {
+   "id": "audio_152",
+   "start_ms": 14520,
+   "end_ms": 18960,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 4,
+   "devanagari": 10,
+   "latin_share": 0.286
+  },
+  {
+   "id": "audio_152",
+   "start_ms": 18960,
+   "end_ms": 28290,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 18,
+   "devanagari": 8,
+   "latin_share": 0.692
+  },
+  {
+   "id": "audio_152",
+   "start_ms": 28380,
+   "end_ms": 41410,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 22,
+   "devanagari": 13,
+   "latin_share": 0.629
+  },
+  {
+   "id": "audio_152",
+   "start_ms": 41470,
+   "end_ms": 55690,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 15,
+   "devanagari": 31,
+   "latin_share": 0.326
+  },
+  {
+   "id": "audio_152",
+   "start_ms": 55870,
+   "end_ms": 57800,
+   "main": "en",
+   "kind": "pure",
+   "latin": 4,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1521",
+   "start_ms": 0,
+   "end_ms": 7940,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 7,
+   "devanagari": 24,
+   "latin_share": 0.226
+  },
+  {
+   "id": "audio_1521",
+   "start_ms": 8030,
+   "end_ms": 18410,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 14,
+   "devanagari": 27,
+   "latin_share": 0.341
+  },
+  {
+   "id": "audio_1521",
+   "start_ms": 18460,
+   "end_ms": 30430,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 6,
+   "devanagari": 37,
+   "latin_share": 0.14
+  },
+  {
+   "id": "audio_1521",
+   "start_ms": 30430,
+   "end_ms": 42530,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 8,
+   "devanagari": 30,
+   "latin_share": 0.211
+  },
+  {
+   "id": "audio_1521",
+   "start_ms": 42530,
+   "end_ms": 49715,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 5,
+   "devanagari": 17,
+   "latin_share": 0.227
+  },
+  {
+   "id": "audio_1521",
+   "start_ms": 49715,
+   "end_ms": 57300,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 7,
+   "devanagari": 19,
+   "latin_share": 0.269
+  },
+  {
+   "id": "audio_1588",
+   "start_ms": 0,
+   "end_ms": 4343,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 7,
+   "devanagari": 11,
+   "latin_share": 0.389
+  },
+  {
+   "id": "audio_1588",
+   "start_ms": 4343,
+   "end_ms": 13965,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 12,
+   "devanagari": 26,
+   "latin_share": 0.316
+  },
+  {
+   "id": "audio_1588",
+   "start_ms": 13965,
+   "end_ms": 18760,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 6,
+   "devanagari": 12,
+   "latin_share": 0.333
+  },
+  {
+   "id": "audio_1592",
+   "start_ms": 0,
+   "end_ms": 9190,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 24,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1649",
+   "start_ms": 120,
+   "end_ms": 14790,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 40,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1649",
+   "start_ms": 15320,
+   "end_ms": 27490,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 36,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1649",
+   "start_ms": 27960,
+   "end_ms": 41870,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 36,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1649",
+   "start_ms": 41870,
+   "end_ms": 56490,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 43,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1656",
+   "start_ms": 90,
+   "end_ms": 13800,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 39,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1656",
+   "start_ms": 13880,
+   "end_ms": 27590,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 37,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1656",
+   "start_ms": 27960,
+   "end_ms": 41570,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 44,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1656",
+   "start_ms": 41750,
+   "end_ms": 55370,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 40,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1656",
+   "start_ms": 55580,
+   "end_ms": 58340,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 8,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1668",
+   "start_ms": 60,
+   "end_ms": 12190,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 33,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1668",
+   "start_ms": 12190,
+   "end_ms": 23470,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 27,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1668",
+   "start_ms": 23470,
+   "end_ms": 37000,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 35,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1668",
+   "start_ms": 37340,
+   "end_ms": 48200,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 29,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1668",
+   "start_ms": 49110,
+   "end_ms": 58200,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 24,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1713",
+   "start_ms": 0,
+   "end_ms": 14410,
+   "main": "en",
+   "kind": "pure",
+   "latin": 49,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1713",
+   "start_ms": 14460,
+   "end_ms": 28770,
+   "main": "en",
+   "kind": "pure",
+   "latin": 43,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1713",
+   "start_ms": 28890,
+   "end_ms": 43760,
+   "main": "en",
+   "kind": "pure",
+   "latin": 38,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1713",
+   "start_ms": 43760,
+   "end_ms": 58100,
+   "main": "en",
+   "kind": "pure",
+   "latin": 42,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_18",
+   "start_ms": 0,
+   "end_ms": 14820,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 36,
+   "devanagari": 23,
+   "latin_share": 0.61
+  },
+  {
+   "id": "audio_18",
+   "start_ms": 15900,
+   "end_ms": 22980,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 5,
+   "devanagari": 28,
+   "latin_share": 0.152
+  },
+  {
+   "id": "audio_18",
+   "start_ms": 23260,
+   "end_ms": 37090,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 12,
+   "devanagari": 52,
+   "latin_share": 0.188
+  },
+  {
+   "id": "audio_18",
+   "start_ms": 37630,
+   "end_ms": 51850,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 12,
+   "devanagari": 59,
+   "latin_share": 0.169
+  },
+  {
+   "id": "audio_18",
+   "start_ms": 52030,
+   "end_ms": 56360,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 3,
+   "devanagari": 15,
+   "latin_share": 0.167
+  },
+  {
+   "id": "audio_1836",
+   "start_ms": 30,
+   "end_ms": 11650,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 20,
+   "devanagari": 9,
+   "latin_share": 0.69
+  },
+  {
+   "id": "audio_1836",
+   "start_ms": 11740,
+   "end_ms": 25960,
+   "main": "en",
+   "kind": "pure",
+   "latin": 30,
+   "devanagari": 4,
+   "latin_share": 0.882
+  },
+  {
+   "id": "audio_1836",
+   "start_ms": 26140,
+   "end_ms": 38950,
+   "main": "en",
+   "kind": "pure",
+   "latin": 29,
+   "devanagari": 1,
+   "latin_share": 0.967
+  },
+  {
+   "id": "audio_1836",
+   "start_ms": 39320,
+   "end_ms": 53890,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 22,
+   "devanagari": 14,
+   "latin_share": 0.611
+  },
+  {
+   "id": "audio_1836",
+   "start_ms": 53890,
+   "end_ms": 58800,
+   "main": "en",
+   "kind": "pure",
+   "latin": 10,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1844",
+   "start_ms": 0,
+   "end_ms": 9715,
+   "main": "en",
+   "kind": "pure",
+   "latin": 27,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1844",
+   "start_ms": 9715,
+   "end_ms": 22280,
+   "main": "en",
+   "kind": "pure",
+   "latin": 36,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1844",
+   "start_ms": 22430,
+   "end_ms": 36015,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 30,
+   "devanagari": 16,
+   "latin_share": 0.652
+  },
+  {
+   "id": "audio_1844",
+   "start_ms": 36015,
+   "end_ms": 50605,
+   "main": "en",
+   "kind": "pure",
+   "latin": 45,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1844",
+   "start_ms": 50605,
+   "end_ms": 58980,
+   "main": "en",
+   "kind": "pure",
+   "latin": 26,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1850",
+   "start_ms": 30,
+   "end_ms": 13425,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 36,
+   "devanagari": 12,
+   "latin_share": 0.75
+  },
+  {
+   "id": "audio_1850",
+   "start_ms": 13425,
+   "end_ms": 26980,
+   "main": "en",
+   "kind": "pure",
+   "latin": 37,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1850",
+   "start_ms": 27390,
+   "end_ms": 41535,
+   "main": "en",
+   "kind": "pure",
+   "latin": 44,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1850",
+   "start_ms": 41535,
+   "end_ms": 54015,
+   "main": "en",
+   "kind": "pure",
+   "latin": 35,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1850",
+   "start_ms": 54015,
+   "end_ms": 57130,
+   "main": "en",
+   "kind": "pure",
+   "latin": 7,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_187",
+   "start_ms": 0,
+   "end_ms": 9990,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 24,
+   "devanagari": 8,
+   "latin_share": 0.75
+  },
+  {
+   "id": "audio_187",
+   "start_ms": 10200,
+   "end_ms": 24290,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 21,
+   "devanagari": 17,
+   "latin_share": 0.553
+  },
+  {
+   "id": "audio_187",
+   "start_ms": 24290,
+   "end_ms": 36930,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 24,
+   "devanagari": 15,
+   "latin_share": 0.615
+  },
+  {
+   "id": "audio_187",
+   "start_ms": 37820,
+   "end_ms": 51370,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 17,
+   "devanagari": 28,
+   "latin_share": 0.378
+  },
+  {
+   "id": "audio_187",
+   "start_ms": 51670,
+   "end_ms": 57480,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 14,
+   "devanagari": 6,
+   "latin_share": 0.7
+  },
+  {
+   "id": "audio_1887",
+   "start_ms": 90,
+   "end_ms": 14125,
+   "main": "en",
+   "kind": "pure",
+   "latin": 29,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1887",
+   "start_ms": 14125,
+   "end_ms": 23295,
+   "main": "en",
+   "kind": "pure",
+   "latin": 25,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1887",
+   "start_ms": 23295,
+   "end_ms": 33075,
+   "main": "en",
+   "kind": "pure",
+   "latin": 27,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1887",
+   "start_ms": 33075,
+   "end_ms": 46320,
+   "main": "en",
+   "kind": "pure",
+   "latin": 30,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1887",
+   "start_ms": 46320,
+   "end_ms": 57400,
+   "main": "en",
+   "kind": "pure",
+   "latin": 27,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1892",
+   "start_ms": 0,
+   "end_ms": 12305,
+   "main": "en",
+   "kind": "pure",
+   "latin": 24,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1892",
+   "start_ms": 12305,
+   "end_ms": 24240,
+   "main": "en",
+   "kind": "pure",
+   "latin": 28,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1892",
+   "start_ms": 24240,
+   "end_ms": 37280,
+   "main": "en",
+   "kind": "pure",
+   "latin": 31,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1892",
+   "start_ms": 37280,
+   "end_ms": 49905,
+   "main": "en",
+   "kind": "pure",
+   "latin": 31,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1892",
+   "start_ms": 49905,
+   "end_ms": 58890,
+   "main": "en",
+   "kind": "pure",
+   "latin": 21,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1893",
+   "start_ms": 90,
+   "end_ms": 14890,
+   "main": "en",
+   "kind": "pure",
+   "latin": 37,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1893",
+   "start_ms": 14940,
+   "end_ms": 27280,
+   "main": "en",
+   "kind": "pure",
+   "latin": 26,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1893",
+   "start_ms": 27280,
+   "end_ms": 39370,
+   "main": "en",
+   "kind": "pure",
+   "latin": 32,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1893",
+   "start_ms": 39390,
+   "end_ms": 46180,
+   "main": "en",
+   "kind": "pure",
+   "latin": 18,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1893",
+   "start_ms": 46910,
+   "end_ms": 57600,
+   "main": "en",
+   "kind": "pure",
+   "latin": 29,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1918",
+   "start_ms": 0,
+   "end_ms": 14065,
+   "main": "en",
+   "kind": "pure",
+   "latin": 31,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1918",
+   "start_ms": 14065,
+   "end_ms": 22750,
+   "main": "en",
+   "kind": "pure",
+   "latin": 20,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1918",
+   "start_ms": 22750,
+   "end_ms": 35105,
+   "main": "en",
+   "kind": "pure",
+   "latin": 34,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1918",
+   "start_ms": 35105,
+   "end_ms": 45570,
+   "main": "en",
+   "kind": "pure",
+   "latin": 27,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1918",
+   "start_ms": 45630,
+   "end_ms": 59300,
+   "main": "en",
+   "kind": "pure",
+   "latin": 35,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_1955",
+   "start_ms": 0,
+   "end_ms": 11050,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 2,
+   "devanagari": 29,
+   "latin_share": 0.065
+  },
+  {
+   "id": "audio_1955",
+   "start_ms": 11160,
+   "end_ms": 24450,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 44,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1955",
+   "start_ms": 24630,
+   "end_ms": 38210,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 43,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1955",
+   "start_ms": 38390,
+   "end_ms": 52520,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 3,
+   "devanagari": 41,
+   "latin_share": 0.068
+  },
+  {
+   "id": "audio_1955",
+   "start_ms": 52630,
+   "end_ms": 59650,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 21,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1962",
+   "start_ms": 60,
+   "end_ms": 14605,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 48,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1962",
+   "start_ms": 14605,
+   "end_ms": 28450,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 44,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1962",
+   "start_ms": 28790,
+   "end_ms": 42630,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 47,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1962",
+   "start_ms": 42750,
+   "end_ms": 56900,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 47,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1964",
+   "start_ms": 1660,
+   "end_ms": 15650,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 44,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1964",
+   "start_ms": 15710,
+   "end_ms": 26790,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 34,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1964",
+   "start_ms": 26910,
+   "end_ms": 39370,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 37,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1964",
+   "start_ms": 39420,
+   "end_ms": 45040,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 17,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1964",
+   "start_ms": 45040,
+   "end_ms": 54350,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 28,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1964",
+   "start_ms": 54350,
+   "end_ms": 55970,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 5,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1967",
+   "start_ms": 0,
+   "end_ms": 13950,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 43,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1967",
+   "start_ms": 13950,
+   "end_ms": 28130,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 43,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1967",
+   "start_ms": 28310,
+   "end_ms": 42790,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 43,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1967",
+   "start_ms": 42810,
+   "end_ms": 56040,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 45,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1967",
+   "start_ms": 56060,
+   "end_ms": 58890,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 10,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1971",
+   "start_ms": 30,
+   "end_ms": 13160,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 44,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1971",
+   "start_ms": 13270,
+   "end_ms": 26195,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 43,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1971",
+   "start_ms": 26195,
+   "end_ms": 40330,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 47,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1971",
+   "start_ms": 40600,
+   "end_ms": 53290,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 42,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1971",
+   "start_ms": 53530,
+   "end_ms": 57700,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 11,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1972",
+   "start_ms": 0,
+   "end_ms": 13770,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 47,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1972",
+   "start_ms": 14040,
+   "end_ms": 27010,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 43,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1972",
+   "start_ms": 27190,
+   "end_ms": 33520,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 21,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1972",
+   "start_ms": 33520,
+   "end_ms": 41985,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 1,
+   "devanagari": 28,
+   "latin_share": 0.034
+  },
+  {
+   "id": "audio_1972",
+   "start_ms": 41985,
+   "end_ms": 53800,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 3,
+   "devanagari": 33,
+   "latin_share": 0.083
+  },
+  {
+   "id": "audio_1972",
+   "start_ms": 53820,
+   "end_ms": 57250,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 12,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1980",
+   "start_ms": 120,
+   "end_ms": 14730,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 46,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1980",
+   "start_ms": 14940,
+   "end_ms": 29770,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 44,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1980",
+   "start_ms": 29980,
+   "end_ms": 42690,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 41,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1980",
+   "start_ms": 42710,
+   "end_ms": 56290,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 39,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_1980",
+   "start_ms": 56670,
+   "end_ms": 58900,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 8,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_218",
+   "start_ms": 0,
+   "end_ms": 12240,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 18,
+   "devanagari": 18,
+   "latin_share": 0.5
+  },
+  {
+   "id": "audio_218",
+   "start_ms": 12240,
+   "end_ms": 20360,
+   "main": "en",
+   "kind": "pure",
+   "latin": 24,
+   "devanagari": 1,
+   "latin_share": 0.96
+  },
+  {
+   "id": "audio_231",
+   "start_ms": 0,
+   "end_ms": 6530,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 3,
+   "devanagari": 18,
+   "latin_share": 0.143
+  },
+  {
+   "id": "audio_231",
+   "start_ms": 7960,
+   "end_ms": 15300,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 10,
+   "devanagari": 8,
+   "latin_share": 0.556
+  },
+  {
+   "id": "audio_231",
+   "start_ms": 15800,
+   "end_ms": 26130,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 4,
+   "devanagari": 25,
+   "latin_share": 0.138
+  },
+  {
+   "id": "audio_231",
+   "start_ms": 26130,
+   "end_ms": 29860,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 0,
+   "devanagari": 9,
+   "latin_share": 0.0
+  },
+  {
+   "id": "audio_231",
+   "start_ms": 29950,
+   "end_ms": 44650,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 1,
+   "devanagari": 43,
+   "latin_share": 0.023
+  },
+  {
+   "id": "audio_231",
+   "start_ms": 44700,
+   "end_ms": 59110,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 16,
+   "devanagari": 26,
+   "latin_share": 0.381
+  },
+  {
+   "id": "audio_256",
+   "start_ms": 60,
+   "end_ms": 13250,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 21,
+   "devanagari": 8,
+   "latin_share": 0.724
+  },
+  {
+   "id": "audio_256",
+   "start_ms": 13250,
+   "end_ms": 24170,
+   "main": "en",
+   "kind": "pure",
+   "latin": 24,
+   "devanagari": 3,
+   "latin_share": 0.889
+  },
+  {
+   "id": "audio_256",
+   "start_ms": 24280,
+   "end_ms": 37105,
+   "main": "en",
+   "kind": "pure",
+   "latin": 38,
+   "devanagari": 1,
+   "latin_share": 0.974
+  },
+  {
+   "id": "audio_256",
+   "start_ms": 37105,
+   "end_ms": 50270,
+   "main": "en",
+   "kind": "pure",
+   "latin": 37,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_256",
+   "start_ms": 50270,
+   "end_ms": 54950,
+   "main": "en",
+   "kind": "pure",
+   "latin": 12,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_290",
+   "start_ms": 0,
+   "end_ms": 14850,
+   "main": "en",
+   "kind": "pure",
+   "latin": 27,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_290",
+   "start_ms": 15930,
+   "end_ms": 30280,
+   "main": "en",
+   "kind": "pure",
+   "latin": 25,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_290",
+   "start_ms": 31290,
+   "end_ms": 44260,
+   "main": "en",
+   "kind": "pure",
+   "latin": 26,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_290",
+   "start_ms": 44470,
+   "end_ms": 58200,
+   "main": "en",
+   "kind": "pure",
+   "latin": 26,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_3",
+   "start_ms": 90,
+   "end_ms": 8420,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 13,
+   "devanagari": 16,
+   "latin_share": 0.448
+  },
+  {
+   "id": "audio_3",
+   "start_ms": 8570,
+   "end_ms": 20400,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 20,
+   "devanagari": 21,
+   "latin_share": 0.488
+  },
+  {
+   "id": "audio_3",
+   "start_ms": 20400,
+   "end_ms": 33860,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 20,
+   "devanagari": 27,
+   "latin_share": 0.426
+  },
+  {
+   "id": "audio_3",
+   "start_ms": 34230,
+   "end_ms": 46630,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 21,
+   "devanagari": 23,
+   "latin_share": 0.477
+  },
+  {
+   "id": "audio_3",
+   "start_ms": 46750,
+   "end_ms": 58850,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 21,
+   "devanagari": 11,
+   "latin_share": 0.656
+  },
+  {
+   "id": "audio_321",
+   "start_ms": 0,
+   "end_ms": 11905,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 10,
+   "devanagari": 30,
+   "latin_share": 0.25
+  },
+  {
+   "id": "audio_321",
+   "start_ms": 11905,
+   "end_ms": 22530,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 14,
+   "devanagari": 20,
+   "latin_share": 0.412
+  },
+  {
+   "id": "audio_321",
+   "start_ms": 22530,
+   "end_ms": 37380,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 20,
+   "devanagari": 40,
+   "latin_share": 0.333
+  },
+  {
+   "id": "audio_321",
+   "start_ms": 37660,
+   "end_ms": 50730,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 21,
+   "devanagari": 21,
+   "latin_share": 0.5
+  },
+  {
+   "id": "audio_321",
+   "start_ms": 50970,
+   "end_ms": 55400,
+   "main": "en",
+   "kind": "pure",
+   "latin": 8,
+   "devanagari": 1,
+   "latin_share": 0.889
+  },
+  {
+   "id": "audio_355",
+   "start_ms": 30,
+   "end_ms": 13070,
+   "main": "en",
+   "kind": "pure",
+   "latin": 25,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_355",
+   "start_ms": 13070,
+   "end_ms": 27630,
+   "main": "en",
+   "kind": "pure",
+   "latin": 34,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_355",
+   "start_ms": 27630,
+   "end_ms": 41890,
+   "main": "en",
+   "kind": "pure",
+   "latin": 37,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_355",
+   "start_ms": 42140,
+   "end_ms": 54880,
+   "main": "en",
+   "kind": "pure",
+   "latin": 26,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_355",
+   "start_ms": 54880,
+   "end_ms": 58500,
+   "main": "en",
+   "kind": "pure",
+   "latin": 7,
+   "devanagari": 1,
+   "latin_share": 0.875
+  },
+  {
+   "id": "audio_377",
+   "start_ms": 0,
+   "end_ms": 11940,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 6,
+   "devanagari": 26,
+   "latin_share": 0.188
+  },
+  {
+   "id": "audio_377",
+   "start_ms": 12250,
+   "end_ms": 25570,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 18,
+   "devanagari": 17,
+   "latin_share": 0.514
+  },
+  {
+   "id": "audio_377",
+   "start_ms": 26070,
+   "end_ms": 39850,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 13,
+   "devanagari": 19,
+   "latin_share": 0.406
+  },
+  {
+   "id": "audio_377",
+   "start_ms": 40860,
+   "end_ms": 55010,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 6,
+   "devanagari": 31,
+   "latin_share": 0.162
+  },
+  {
+   "id": "audio_410",
+   "start_ms": 0,
+   "end_ms": 12275,
+   "main": "en",
+   "kind": "pure",
+   "latin": 38,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_410",
+   "start_ms": 12275,
+   "end_ms": 20490,
+   "main": "en",
+   "kind": "pure",
+   "latin": 23,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_434",
+   "start_ms": 0,
+   "end_ms": 10735,
+   "main": "en",
+   "kind": "pure",
+   "latin": 34,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_434",
+   "start_ms": 10735,
+   "end_ms": 20060,
+   "main": "en",
+   "kind": "pure",
+   "latin": 28,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_434",
+   "start_ms": 20060,
+   "end_ms": 33570,
+   "main": "en",
+   "kind": "pure",
+   "latin": 39,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_434",
+   "start_ms": 33660,
+   "end_ms": 41280,
+   "main": "en",
+   "kind": "pure",
+   "latin": 22,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_434",
+   "start_ms": 41280,
+   "end_ms": 52430,
+   "main": "en",
+   "kind": "pure",
+   "latin": 36,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_434",
+   "start_ms": 52430,
+   "end_ms": 56600,
+   "main": "en",
+   "kind": "pure",
+   "latin": 12,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_584",
+   "start_ms": 90,
+   "end_ms": 3150,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 2,
+   "devanagari": 10,
+   "latin_share": 0.167
+  },
+  {
+   "id": "audio_584",
+   "start_ms": 3150,
+   "end_ms": 14920,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 8,
+   "devanagari": 31,
+   "latin_share": 0.205
+  },
+  {
+   "id": "audio_584",
+   "start_ms": 15190,
+   "end_ms": 26160,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 3,
+   "devanagari": 38,
+   "latin_share": 0.073
+  },
+  {
+   "id": "audio_584",
+   "start_ms": 26160,
+   "end_ms": 37220,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 7,
+   "devanagari": 29,
+   "latin_share": 0.194
+  },
+  {
+   "id": "audio_584",
+   "start_ms": 37270,
+   "end_ms": 50340,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 9,
+   "devanagari": 36,
+   "latin_share": 0.2
+  },
+  {
+   "id": "audio_584",
+   "start_ms": 50460,
+   "end_ms": 59000,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 5,
+   "devanagari": 28,
+   "latin_share": 0.152
+  },
+  {
+   "id": "audio_610",
+   "start_ms": 1090,
+   "end_ms": 15060,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 11,
+   "devanagari": 42,
+   "latin_share": 0.208
+  },
+  {
+   "id": "audio_610",
+   "start_ms": 15060,
+   "end_ms": 28560,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 11,
+   "devanagari": 32,
+   "latin_share": 0.256
+  },
+  {
+   "id": "audio_610",
+   "start_ms": 28560,
+   "end_ms": 35100,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 3,
+   "devanagari": 24,
+   "latin_share": 0.111
+  },
+  {
+   "id": "audio_632",
+   "start_ms": 0,
+   "end_ms": 12800,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 13,
+   "devanagari": 33,
+   "latin_share": 0.283
+  },
+  {
+   "id": "audio_632",
+   "start_ms": 12800,
+   "end_ms": 27330,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 14,
+   "devanagari": 39,
+   "latin_share": 0.264
+  },
+  {
+   "id": "audio_632",
+   "start_ms": 27330,
+   "end_ms": 37155,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 8,
+   "devanagari": 31,
+   "latin_share": 0.205
+  },
+  {
+   "id": "audio_632",
+   "start_ms": 37155,
+   "end_ms": 49200,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 9,
+   "devanagari": 39,
+   "latin_share": 0.188
+  },
+  {
+   "id": "audio_638",
+   "start_ms": 0,
+   "end_ms": 7470,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 7,
+   "devanagari": 16,
+   "latin_share": 0.304
+  },
+  {
+   "id": "audio_638",
+   "start_ms": 7470,
+   "end_ms": 21700,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 15,
+   "devanagari": 29,
+   "latin_share": 0.341
+  },
+  {
+   "id": "audio_638",
+   "start_ms": 22140,
+   "end_ms": 25700,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 1,
+   "devanagari": 11,
+   "latin_share": 0.083
+  },
+  {
+   "id": "audio_638",
+   "start_ms": 26040,
+   "end_ms": 37410,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 6,
+   "devanagari": 31,
+   "latin_share": 0.162
+  },
+  {
+   "id": "audio_638",
+   "start_ms": 37630,
+   "end_ms": 49880,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 9,
+   "devanagari": 32,
+   "latin_share": 0.22
+  },
+  {
+   "id": "audio_638",
+   "start_ms": 49880,
+   "end_ms": 56100,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 4,
+   "devanagari": 19,
+   "latin_share": 0.174
+  },
+  {
+   "id": "audio_670",
+   "start_ms": 120,
+   "end_ms": 6255,
+   "main": "en",
+   "kind": "pure",
+   "latin": 20,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_670",
+   "start_ms": 6255,
+   "end_ms": 18020,
+   "main": "en",
+   "kind": "pure",
+   "latin": 26,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_670",
+   "start_ms": 18710,
+   "end_ms": 33350,
+   "main": "en",
+   "kind": "pure",
+   "latin": 43,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_670",
+   "start_ms": 34360,
+   "end_ms": 48490,
+   "main": "en",
+   "kind": "pure",
+   "latin": 47,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_670",
+   "start_ms": 48890,
+   "end_ms": 58890,
+   "main": "en",
+   "kind": "pure",
+   "latin": 28,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_701",
+   "start_ms": 60,
+   "end_ms": 11105,
+   "main": "en",
+   "kind": "pure",
+   "latin": 30,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_701",
+   "start_ms": 11105,
+   "end_ms": 24330,
+   "main": "en",
+   "kind": "pure",
+   "latin": 36,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_701",
+   "start_ms": 26650,
+   "end_ms": 40160,
+   "main": "en",
+   "kind": "pure",
+   "latin": 37,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_701",
+   "start_ms": 40160,
+   "end_ms": 43650,
+   "main": "en",
+   "kind": "pure",
+   "latin": 8,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_701",
+   "start_ms": 43650,
+   "end_ms": 46470,
+   "main": "en",
+   "kind": "pure",
+   "latin": 9,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_715",
+   "start_ms": 30,
+   "end_ms": 11120,
+   "main": "en",
+   "kind": "pure",
+   "latin": 35,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_715",
+   "start_ms": 11120,
+   "end_ms": 25990,
+   "main": "en",
+   "kind": "pure",
+   "latin": 46,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_715",
+   "start_ms": 26010,
+   "end_ms": 31460,
+   "main": "en",
+   "kind": "pure",
+   "latin": 18,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_792",
+   "start_ms": 0,
+   "end_ms": 11580,
+   "main": "en",
+   "kind": "pure",
+   "latin": 47,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_792",
+   "start_ms": 11580,
+   "end_ms": 18160,
+   "main": "en",
+   "kind": "pure",
+   "latin": 26,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_792",
+   "start_ms": 18160,
+   "end_ms": 32770,
+   "main": "en",
+   "kind": "pure",
+   "latin": 54,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_792",
+   "start_ms": 32770,
+   "end_ms": 46305,
+   "main": "en",
+   "kind": "pure",
+   "latin": 47,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_792",
+   "start_ms": 46305,
+   "end_ms": 52900,
+   "main": "en",
+   "kind": "pure",
+   "latin": 32,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_834",
+   "start_ms": 540,
+   "end_ms": 8545,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 10,
+   "devanagari": 8,
+   "latin_share": 0.556
+  },
+  {
+   "id": "audio_834",
+   "start_ms": 8545,
+   "end_ms": 14735,
+   "main": "en",
+   "kind": "pure",
+   "latin": 13,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_834",
+   "start_ms": 14735,
+   "end_ms": 24655,
+   "main": "en",
+   "kind": "pure",
+   "latin": 23,
+   "devanagari": 3,
+   "latin_share": 0.885
+  },
+  {
+   "id": "audio_834",
+   "start_ms": 24655,
+   "end_ms": 38340,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 24,
+   "devanagari": 8,
+   "latin_share": 0.75
+  },
+  {
+   "id": "audio_834",
+   "start_ms": 38550,
+   "end_ms": 52200,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 27,
+   "devanagari": 6,
+   "latin_share": 0.818
+  },
+  {
+   "id": "audio_839",
+   "start_ms": 30,
+   "end_ms": 12030,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 13,
+   "devanagari": 8,
+   "latin_share": 0.619
+  },
+  {
+   "id": "audio_839",
+   "start_ms": 12030,
+   "end_ms": 22000,
+   "main": "en",
+   "kind": "pure",
+   "latin": 21,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_839",
+   "start_ms": 22000,
+   "end_ms": 36170,
+   "main": "en",
+   "kind": "pure",
+   "latin": 26,
+   "devanagari": 1,
+   "latin_share": 0.963
+  },
+  {
+   "id": "audio_839",
+   "start_ms": 36310,
+   "end_ms": 51170,
+   "main": "en",
+   "kind": "pure",
+   "latin": 28,
+   "devanagari": 3,
+   "latin_share": 0.903
+  },
+  {
+   "id": "audio_839",
+   "start_ms": 51870,
+   "end_ms": 55800,
+   "main": "en",
+   "kind": "pure",
+   "latin": 7,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_888",
+   "start_ms": 0,
+   "end_ms": 13830,
+   "main": "en",
+   "kind": "pure",
+   "latin": 32,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_888",
+   "start_ms": 13830,
+   "end_ms": 21410,
+   "main": "en",
+   "kind": "pure",
+   "latin": 22,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_888",
+   "start_ms": 23900,
+   "end_ms": 36680,
+   "main": "en",
+   "kind": "pure",
+   "latin": 27,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_888",
+   "start_ms": 36760,
+   "end_ms": 44360,
+   "main": "en",
+   "kind": "pure",
+   "latin": 18,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_888",
+   "start_ms": 44380,
+   "end_ms": 57500,
+   "main": "en",
+   "kind": "pure",
+   "latin": 26,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_894",
+   "start_ms": 0,
+   "end_ms": 14050,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 32,
+   "devanagari": 13,
+   "latin_share": 0.711
+  },
+  {
+   "id": "audio_894",
+   "start_ms": 14140,
+   "end_ms": 26560,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 29,
+   "devanagari": 7,
+   "latin_share": 0.806
+  },
+  {
+   "id": "audio_894",
+   "start_ms": 26560,
+   "end_ms": 37560,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 22,
+   "devanagari": 17,
+   "latin_share": 0.564
+  },
+  {
+   "id": "audio_894",
+   "start_ms": 37560,
+   "end_ms": 51850,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 19,
+   "devanagari": 36,
+   "latin_share": 0.345
+  },
+  {
+   "id": "audio_894",
+   "start_ms": 51960,
+   "end_ms": 55600,
+   "main": "en",
+   "kind": "pure",
+   "latin": 14,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_924",
+   "start_ms": 0,
+   "end_ms": 13960,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 26,
+   "devanagari": 14,
+   "latin_share": 0.65
+  },
+  {
+   "id": "audio_924",
+   "start_ms": 14620,
+   "end_ms": 25090,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 10,
+   "devanagari": 21,
+   "latin_share": 0.323
+  },
+  {
+   "id": "audio_924",
+   "start_ms": 25090,
+   "end_ms": 38340,
+   "main": "hi",
+   "kind": "pure",
+   "latin": 7,
+   "devanagari": 44,
+   "latin_share": 0.137
+  },
+  {
+   "id": "audio_924",
+   "start_ms": 39000,
+   "end_ms": 50865,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 10,
+   "devanagari": 29,
+   "latin_share": 0.256
+  },
+  {
+   "id": "audio_924",
+   "start_ms": 50865,
+   "end_ms": 58200,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 4,
+   "devanagari": 21,
+   "latin_share": 0.16
+  },
+  {
+   "id": "audio_954",
+   "start_ms": 0,
+   "end_ms": 14210,
+   "main": "en",
+   "kind": "pure",
+   "latin": 41,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_954",
+   "start_ms": 14270,
+   "end_ms": 22925,
+   "main": "hi",
+   "kind": "mixed",
+   "latin": 12,
+   "devanagari": 14,
+   "latin_share": 0.462
+  },
+  {
+   "id": "audio_954",
+   "start_ms": 22925,
+   "end_ms": 31330,
+   "main": "en",
+   "kind": "mixed",
+   "latin": 16,
+   "devanagari": 12,
+   "latin_share": 0.571
+  },
+  {
+   "id": "audio_954",
+   "start_ms": 31610,
+   "end_ms": 45135,
+   "main": "en",
+   "kind": "pure",
+   "latin": 42,
+   "devanagari": 2,
+   "latin_share": 0.955
+  },
+  {
+   "id": "audio_954",
+   "start_ms": 45135,
+   "end_ms": 53350,
+   "main": "en",
+   "kind": "pure",
+   "latin": 27,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_96",
+   "start_ms": 0,
+   "end_ms": 13965,
+   "main": "en",
+   "kind": "pure",
+   "latin": 47,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_96",
+   "start_ms": 13965,
+   "end_ms": 26180,
+   "main": "en",
+   "kind": "pure",
+   "latin": 40,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_96",
+   "start_ms": 26180,
+   "end_ms": 39490,
+   "main": "en",
+   "kind": "pure",
+   "latin": 47,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_96",
+   "start_ms": 39490,
+   "end_ms": 48690,
+   "main": "en",
+   "kind": "pure",
+   "latin": 26,
+   "devanagari": 0,
+   "latin_share": 1.0
+  },
+  {
+   "id": "audio_96",
+   "start_ms": 48690,
+   "end_ms": 57830,
+   "main": "en",
+   "kind": "pure",
+   "latin": 22,
+   "devanagari": 0,
+   "latin_share": 1.0
+  }
+ ]
+}

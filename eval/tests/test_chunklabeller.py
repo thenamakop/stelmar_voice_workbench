@@ -45,9 +45,16 @@ def test_the_label_does_not_depend_on_anything_but_the_reference_and_the_range()
     assert a == b
 
 
-def test_the_ear_check_sample_is_random_but_repeatable_and_balanced():
-    chunks = [{"id": f"c{i}", "start_ms": i, "end_ms": i + 5000, "main": "en" if i % 2 else "hi",
-               "kind": "mixed", "latin_share": 0.9 if i % 2 else 0.1} for i in range(40)]
+def test_the_ear_check_sample_is_random_but_repeatable_and_stratified():
+    chunks = []
+    for i in range(80):
+        main = "en" if i % 2 else "hi"
+        kind = "mixed" if i % 4 < 2 else "pure"
+        share = (0.7 if main == "en" else 0.3) if kind == "mixed" else (0.95 if main == "en" else 0.05)
+        chunks.append({"id": f"c{i}", "start_ms": i, "end_ms": i + 5000, "main": main, "kind": kind, "latin_share": share})
     one = cl.sample_for_ear_check(chunks, 10, seed=1)
     assert one == cl.sample_for_ear_check(chunks, 10, seed=1)
-    assert len(one) == 10 and sum(1 for c in one if c["main"] == "en") == 5
+    assert len(one) == 10
+    for main in ("en", "hi"):
+        for kind in ("mixed", "pure"):
+            assert sum(1 for c in one if c["main"] == main and c["kind"] == kind) >= 2
