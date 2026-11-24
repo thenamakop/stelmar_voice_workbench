@@ -474,7 +474,7 @@ $lines += 'run:'
 $lines += ('  mode: {0}; session 1 {1} s of public speech (FLEURS English and Hindi, CC BY 4.0), session 2 {2} s of seeded noise; part length {3}' -f $r.Settings.Mode, $Session1Seconds, $Session2Seconds, $(if ($PartSeconds -gt 0) { "$PartSeconds s" } else { 'the app default (10 min)' }))
 $lines += ('  real duration of the gate: {0:n1} min (from the first check to the app''s exit); session 1 was {1} when the app was told to stop' -f $durMin, $(if ($r.DecodeWaitedOut) { 'NOT yet transcribed' } else { 'transcribed' }))
 if ($r.WaitBasis) { $lines += ('  wait for session 1''s transcript: {0}; it {1}' -f $r.WaitBasis, $(if ($r.DecodeWaitedOut) { 'was not finished when that time came' } else { 'was finished in time' })) }
-if ($r.AllRecorded -and $r.S1Complete) { $lines += ('  session 1 finished transcribing {0:n1} min after both sessions were recorded' -f (($r.S1Complete - $r.AllRecorded).TotalMinutes)) }
+if ($r.AllRecorded -and $r.S1Complete) { $dm = ($r.S1Complete - $r.AllRecorded).TotalMinutes; $lines += ('  session 1 finished transcribing {0:n1} min {1} both sessions were recorded' -f [math]::Abs($dm), $(if ($dm -lt 0) { 'before' } else { 'after' })) }
 if ($RigPrefer) { $lines += Get-PackRigLines -Rig $r.CableRig } else { $lines += Get-WbCableRigLines -Rig $r.CableRig -SelfTest $r.CableTest }
 $lines += ''
 $lines += 'progress:'

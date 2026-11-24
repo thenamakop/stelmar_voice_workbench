@@ -215,7 +215,8 @@ function Get-WbQueueSoakLogInfo {
   $estimateClock = $null; $completeClock = $null
   foreach ($l in @($Lines)) {
     if ($null -eq $l) { continue }
-    $p = [regex]::Match($l, 'engine peak (\d+) MiB against limit (\d+) MiB')
+    # Only the lines of a finished unit: the pause finder's lines carry another engine's peak and limit (104 MiB, 1128 MiB).
+    $p = [regex]::Match($l, 'unit \d+ of post-\d+ done in .*engine peak (\d+) MiB against limit (\d+) MiB')
     if ($p.Success -and $l -match [regex]::Escape($Slug)) { $peaks += [int]$p.Groups[1].Value; $limits += [int]$p.Groups[2].Value }
     $e = [regex]::Match($l, ('^(\d{1,2}:\d{2})\s+' + [regex]::Escape($Slug) + ': stopped\. All transcripts ready by (\d{1,2}:\d{2}) IST'))
     if ($e.Success -and $null -eq $estimateClock) { $estimateClock = [pscustomobject]@{ At = $e.Groups[1].Value; ReadyBy = $e.Groups[2].Value } }

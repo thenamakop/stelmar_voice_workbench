@@ -152,6 +152,8 @@ try {
   $li = Get-WbQueueSoakLogInfo -Lines $log -Slug $slug
   Check 'the estimate error is the completion minus the estimate (10:16 against 10:13 = +3 min)' ($li.EstimatedReadyBy -eq '10:13' -and $li.CompletedAt -eq '10:16' -and $li.EstimateErrorMinutes -eq 3)
   Check 'the engine peak is the highest of this session''s lines and the limit the tightest (1535 MiB, 3000 MiB; the other session is ignored)' ($li.EnginePeakMiB -eq 1535 -and $li.EngineLimitMiB -eq 3000)
+  $pf = Get-WbQueueSoakLogInfo -Lines (@($log) + @("10:07${tab}${slug}: pauses of part 2 found (1 pauses, 0 fallback cuts) in 1.1 s; engine peak 104 MiB against limit 1128 MiB (measured peak)")) -Slug $slug
+  Check 'the pause finder''s peak and limit (another engine) are not mixed into the batch units'' (104 MiB and 1128 MiB)' ($pf.EnginePeakMiB -eq 1535 -and $pf.EngineLimitMiB -eq 3000)
   $late = Get-WbQueueSoakLogInfo -Lines @("23:55${tab}${slug}: stopped. All transcripts ready by 23:58 IST", "00:03${tab}${slug}: post-1 transcript complete") -Slug $slug
   Check 'the estimate error survives midnight (23:58 to 00:03 = +5 min)' ($late.EstimateErrorMinutes -eq 5)
   $none = Get-WbQueueSoakLogInfo -Lines @() -Slug $slug
