@@ -454,6 +454,30 @@ langs = ["en", "hi"]
 limit = "eval/clips/phase5-coshe-heldout.txt"
 needs = "phase-2"
 
+# The two final candidates of rule (d2) on the ten held-out chunks (owner, 25 Nov 2026): the Hinglish model decodes and detects
+# every chunk, as the f16 file and as q5_0. Held-out runs; each is reported as one. Production cuda engine, gpu:0.
+[[run]]
+name = "heldout-hinglish-f16-d2"
+setup = "hinglish-f16"
+dataset = "coshe-eval"
+role = "rolling"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["en", "hi"]
+limit = "eval/clips/phase5-coshe-heldout.txt"
+needs = "phase-2"
+
+[[run]]
+name = "heldout-hinglish-q5_0-d2"
+setup = "hinglish-q5_0"
+dataset = "coshe-eval"
+role = "rolling"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["en", "hi"]
+limit = "eval/clips/phase5-coshe-heldout.txt"
+needs = "phase-2"
+
 # Items 4 and 5: the language-detection rules on the 70 tuning clips (eval/clips/phase5-tune-coshe.txt), production models, Legion GPU
 # (WB_ENGINE = the cuda build, WB_ENGINE_DEVICE = gpu:0), rolling settings. Scored by eval/score_tune.py against the chunk labels
 # of eval/label_chunks.py. (a) is the current rule; (d) is the Hinglish model for every chunk: forced to Hindi, which the
