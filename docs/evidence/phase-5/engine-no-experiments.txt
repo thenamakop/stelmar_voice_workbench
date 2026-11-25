@@ -1,10 +1,10 @@
 Language-rule experiment switch against the engines on disk (D:\Projects\stelmar_voice_workbench\src-tauri\binaries). Written by scripts/check-engine-no-experiments.ps1.
 Looked for: WB_LANG_EXPERIMENT, lang-experiments, lang::experiment, always_both, each as ASCII and as UTF-16.
 
-shipped    wb-engine-avx2-x86_64-pc-windows-msvc.exe  3.6 MB  fb167d4ea68397c8  clean: none of the strings
+shipped    wb-engine-avx2-x86_64-pc-windows-msvc.exe  3.6 MB  0a95e5f6f892903c  clean: none of the strings
 shipped    wb-engine-avx512-x86_64-pc-windows-msvc.exe  3.6 MB  271c5003ac260608  clean: none of the strings
 shipped    wb-engine-cuda-x86_64-pc-windows-msvc.exe  69.4 MB  3f81d2a32f959971  clean: none of the strings
 shipped    wb-engine-vulkan-x86_64-pc-windows-msvc.exe  46.6 MB  312de4131d96fa1b  clean: none of the strings
-experiment wb-engine-cuda-lang-experiments-x86_64-pc-windows-msvc.exe  69.5 MB  e0669024f46d004d  control: the scan finds WB_LANG_EXPERIMENT (ASCII)
+experiment wb-engine-cuda-lang-experiments-x86_64-pc-windows-msvc.exe  69.5 MB  88baa047ad33fba4  control: the scan finds WB_LANG_EXPERIMENT (ASCII)
 
 RESULT: PASS: no shipped engine contains the switch; the scan finds it in the experiment engine.

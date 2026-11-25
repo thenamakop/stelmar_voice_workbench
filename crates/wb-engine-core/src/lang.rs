@@ -212,6 +212,9 @@ pub mod experiment {
     pub const VARIABLE: &str = "WB_LANG_EXPERIMENT";
     /// Rule (c): decode every chunk of a two-language session in both languages.
     pub const ALWAYS_BOTH: &str = "c";
+    /// Rule (e): the model for Hindi detects the language of every chunk (it also decodes the chunks it calls Hindi);
+    /// the model for English decodes only the chunks the Hindi model calls English.
+    pub const DETECT_WITH_HINDI_MODEL: &str = "e";
 
     pub fn requested() -> Option<String> {
         std::env::var(VARIABLE).ok().filter(|v| !v.is_empty())
