@@ -1,0 +1,43 @@
+Hinglish model speed and memory (Phase 5, rule (d2)), table A: profile emu-low
+date: 2026-11-26 00:01 to 2026-11-26 02:17 (IST); machine: Legion; profile: emu-low (wb-emulate: affinity mask and 11 GB job limit, reported as 16 GB; the Intel UHD is the only graphics adapter)
+engines: avx2 sha256 0a95e5f6f892903ca4b53897d5e46e4352b66479cd86b0f18a9d44b2c188e478; vulkan sha256 312de4131d96fa1be83d8fb0fd7cf4f6469b17498a05d00665d48987e63e8137
+whisper.cpp printed by the engine: 1.9.5-dev commit d1be6fde11ac6e0407606b4e42fe72d34add8037 tree e736b4c9a5be2bc0e9b294102e261fe69c2a439976652ff6107b0c361f8667fb
+method: wb-engine bench, the same 60 s clips as the Phase 2 speed tables (en 68.7 s, hi 60.2 s), 1 warm-up and the median of 3 timed runs (warm-up plus 1 timed run where the warm-up RTF is over 2 under emulation); rolling = beam 5, temperature fallback, 15 s chunks; near-live = greedy.
+bars: rolling RTF <= 0.75, near-live <= 0.262, live stand-in <= 0.188 (the 1.00, 0.35 and 0.25 bars times 0.75 headroom); night pass fits when RTF x 3 h of audio <= 12 h (the system check's rule), i.e. RTF <= 4.00; until 08:00 after a 17:30 end there are 14.5 h (RTF <= 4.83).
+memory: peak working set and peak commit of the engine process while it ran (an integrated GPU's memory counts as RAM); under emulation the job limit is 11 GB.
+
+== CPU avx2, 4 threads
+model | lang | role | threads | RTF median (runs) | warm-up RTF | load s | peak working set GiB | peak commit GiB | bar | meets bar | night: hours for 3 h of audio | night fits 12 h | night fits until 08:00
+hinglish f16 | en | rolling | 4 | 5.119 (single timed run) (5.119) | 5.243 | 3.6 | 3.87 | 4.41 | 0.750 | no | 15.4 | no | no
+hinglish f16 | hi | rolling | 4 | 8.983 (single timed run) (8.983) | 11.092 | 3.6 | 3.93 | 4.42 | 0.750 | no | 26.9 | no | no
+hinglish q8_0 | en | rolling | 4 | 2.280 (single timed run) (2.280) | 2.296 | 1.7 | 2.52 | 3.06 | 0.750 | no | 6.8 | yes | yes
+hinglish q8_0 | hi | rolling | 4 | 4.446 (single timed run) (4.446) | 4.471 | 1.6 | 2.58 | 3.07 | 0.750 | no | 13.3 | no | yes
+hinglish q5_0 | en | rolling | 4 | 3.187 (single timed run) (3.187) | 3.174 | 1.1 | 1.98 | 2.53 | 0.750 | no | 9.6 | yes | yes
+hinglish q5_0 | hi | rolling | 4 | 5.859 (single timed run) (5.859) | 5.858 | 1.2 | 2.05 | 2.53 | 0.750 | no | 17.6 | no | no
+
+== vulkan on the UHD (device 0), 2 CPU threads
+model | lang | role | threads | RTF median (runs) | warm-up RTF | load s | peak working set GiB | peak commit GiB | bar | meets bar | night: hours for 3 h of audio | night fits 12 h | night fits until 08:00
+hinglish f16 | en | rolling | 2 | 0.669 (0.669, 0.668, 0.672) | 0.781 | 4.1 | 4.15 | 4.62 | 0.750 | yes | 2.0 | yes | yes
+hinglish f16 | hi | rolling | 2 | 1.691 (1.691, 1.694, 1.679) | 1.704 | 3.5 | 4.11 | 4.59 | 0.750 | no | 5.1 | yes | yes
+hinglish q8_0 | en | rolling | 2 | 0.744 (0.744, 0.746, 0.742) | 0.800 | 2.0 | 2.83 | 3.30 | 0.750 | yes | 2.2 | yes | yes
+hinglish q8_0 | hi | rolling | 2 | 1.752 (1.750, 1.752, 1.752) | 1.755 | 1.8 | 2.79 | 3.26 | 0.750 | no | 5.3 | yes | yes
+hinglish q5_0 | en | rolling | 2 | 0.523 (0.523, 0.523, 0.526) | 0.583 | 1.2 | 2.29 | 2.76 | 0.750 | yes | 1.6 | yes | yes
+hinglish q5_0 | hi | rolling | 2 | 1.546 (1.546, 1.547, 1.542) | 1.551 | 1.2 | 2.25 | 2.72 | 0.750 | no | 4.6 | yes | yes
+
+== CPU avx2, near-live (greedy), 2 threads
+model | lang | role | threads | RTF median (runs) | warm-up RTF | load s | peak working set GiB | peak commit GiB | bar | meets bar | night: hours for 3 h of audio | night fits 12 h | night fits until 08:00
+hinglish f16 | hi | near-live | 2 | 12.640 (single timed run) (12.640) | 12.634 | 3.4 | 3.44 | 3.93 | 0.262 | no |  | | 
+hinglish q8_0 | hi | near-live | 2 | 5.807 (single timed run) (5.807) | 5.745 | 1.8 | 2.10 | 2.58 | 0.262 | no |  | | 
+hinglish q5_0 | hi | near-live | 2 | 7.507 (single timed run) (7.507) | 7.576 | 1.2 | 1.56 | 2.04 | 0.262 | no |  | | 
+
+== Summary by model and role (the slowest language of the fastest row; Hindi decides the system check's rule)
+model | role | fastest row for the slower language | RTF | meets bar
+hinglish f16 | near-live | CPU avx2, near-live (greedy), 2 threads | 12.640 | no (bar 0.262)
+hinglish f16 | rolling | vulkan on the UHD (device 0), 2 CPU threads | 1.691 | no (bar 0.750)
+hinglish q5_0 | near-live | CPU avx2, near-live (greedy), 2 threads | 7.507 | no (bar 0.262)
+hinglish q5_0 | rolling | vulkan on the UHD (device 0), 2 CPU threads | 1.546 | no (bar 0.750)
+hinglish q8_0 | near-live | CPU avx2, near-live (greedy), 2 threads | 5.807 | no (bar 0.262)
+hinglish q8_0 | rolling | vulkan on the UHD (device 0), 2 CPU threads | 1.752 | no (bar 0.750)
+
+cells: 15 (ok 15, does not fit 0, other 0)
+Emulation is optimistic for CPU speed and pessimistic for integrated-GPU speed (LEGION-FIRST section 2): the CPU rows are a ceiling for a real laptop and the UHD rows are a floor.
