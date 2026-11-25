@@ -36,6 +36,12 @@ param(
   # could be found" (found 10 Nov 2026; docs/BUILD.md).
   [string]$TargetRoot = $(if (Test-Path 'D:\') { 'D:\wbt' } else { Join-Path $env:SystemDrive 'wbt' }),
   [switch]$Rebuild,
+  # Development only (Phase 5, items 4 and 5): also compiles the language-rule experiments (cargo feature
+  # lang-experiments of wb-engine-core and wb-engine) and writes wb-engine-<variant>-lang-experiments-<triple>.exe next to the
+  # normal engines. The normal names are never written by this switch, the release bundle and the gate pack do not
+  # list the new name, and scripts/check-engine-no-experiments.ps1 proves that no shipped engine contains the switch.
+  # It reuses the variant's target folder, so the next normal build recompiles the engine crates (not whisper.cpp).
+  [switch]$LangExperiments,
   # Write -Evidence from the saved results of earlier builds instead of building.
   [switch]$EvidenceOnly,
   [string]$BuildLock = 'D:\Projects\stelmar-build.lock',
@@ -223,7 +229,11 @@ try {
     if ($Rebuild -and (Test-Path -LiteralPath $target)) { Remove-Item -LiteralPath $target -Recurse -Force }
     $started = Get-Date
     Write-Host "== $v : building (flags: $(($plan.Flags.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join ' '))"
-    $cargoArgs = @('build', '--release', '-p', 'wb-engine', '--target-dir', $target) + $plan.Features
+    $features = $plan.Features
+    if ($LangExperiments) {
+      $features = if ($features.Count -gt 0) { @('--features', "$($features[1]),lang-experiments") } else { @('--features', 'lang-experiments') }
+    }
+    $cargoArgs = @('build', '--release', '-p', 'wb-engine', '--target-dir', $target) + $features
     # cargo writes progress to stderr: collect everything as text (no native-stderr redirect).
     $res = Invoke-WbNative -FilePath 'cargo' -ArgumentList $cargoArgs
     $res.Output + $res.Error | Set-Content -LiteralPath $log -Encoding utf8
@@ -264,7 +274,7 @@ try {
     if ($v -ne 'avx512' -and ($configure | Where-Object { $_ -match 'arch:AVX512' })) { $problems += 'an AVX-512 CPU variant was configured in a build that must not have one' }
     if ($v -ne 'avx512' -and ($configure | Where-Object { $_ -match 'Adding CPU backend variant' -and $_ -match 'AVX512' })) { $problems += 'AVX-512 appears in the CPU variant line' }
 
-    $dest = Join-Path $binDir "wb-engine-$v-$triple.exe"
+    $dest = Join-Path $binDir $(if ($LangExperiments) { "wb-engine-$v-lang-experiments-$triple.exe" } else { "wb-engine-$v-$triple.exe" })
     Copy-Item -LiteralPath $exe -Destination $dest -Force
     $sha = (Get-FileHash -LiteralPath $dest -Algorithm SHA256).Hash.ToLowerInvariant()
     $r = [pscustomobject]@{
@@ -273,7 +283,7 @@ try {
       CudaArchitectures = $(if ($v -eq 'cuda') { $CudaArchitectures } else { $null })
     }
     $results += $r
-    $r | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath "$target.result.json" -Encoding utf8
+    $r | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $(if ($LangExperiments) { "$target.lang-experiments.result.json" } else { "$target.result.json" }) -Encoding utf8
     if ($problems.Count -gt 0) { throw "$v : the build did not get what was asked for: $($problems -join '; ')" }
     Write-Host ("   ok: {0} ({1:n1} MB, {2} s)" -f $dest, ($r.Bytes / 1MB), $seconds)
   }
