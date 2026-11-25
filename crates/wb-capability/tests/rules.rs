@@ -649,6 +649,63 @@ fn hinglish_uses_its_own_cell_or_the_same_size_proxy() {
 }
 
 #[test]
+fn the_hinglish_model_is_chosen_only_when_its_own_cell_meets_the_bar_and_the_verdict_says_what_is_kept()
+ {
+    let mut p = emu_low();
+    // Only the same-size proxy: never chosen, and the verdict says it was not measured.
+    let d = decide_with(&p, false);
+    assert_eq!(d.hinglish.chosen_model(), None);
+    assert_eq!(d.hinglish.model, None);
+    assert!(
+        d.verdict
+            .iter()
+            .any(|l| l.contains("not measured on this computer") && l.contains("keep")),
+        "{:#?}",
+        d.verdict
+    );
+    // Its own cell, too slow: not chosen; today's models stay and the verdict names the cost.
+    p.measurements.push(rolling(
+        "hinglish-f16",
+        Lang::Hi,
+        DeviceConfig::Gpu { index: 0 },
+        1.4,
+        4.0,
+        Some(3.0),
+    ));
+    let d = decide_with(&p, false);
+    assert!(!d.hinglish.ok);
+    assert_eq!(d.hinglish.model.as_deref(), Some("hinglish-f16"));
+    assert_eq!(d.hinglish.chosen_model(), None);
+    assert!(
+        d.verdict
+            .iter()
+            .any(|l| l.contains("too slow to run on every chunk") && l.contains("keep")),
+        "{:#?}",
+        d.verdict
+    );
+    // Its own cell, fast enough: chosen.
+    p.measurements.retain(|m| m.model != "hinglish-f16");
+    p.measurements.push(rolling(
+        "hinglish-f16",
+        Lang::Hi,
+        DeviceConfig::Gpu { index: 0 },
+        0.6,
+        2.7,
+        Some(2.0),
+    ));
+    let d = decide_with(&p, false);
+    assert!(d.hinglish.ok, "{:?}", d.hinglish);
+    assert_eq!(d.hinglish.chosen_model(), Some("hinglish-f16"));
+    assert!(
+        d.verdict
+            .iter()
+            .any(|l| l.contains("use the code-switching (Hinglish) model hinglish-f16")),
+        "{:#?}",
+        d.verdict
+    );
+}
+
+#[test]
 fn spoken_hindi_and_urdu_are_one_language_with_a_chosen_script() {
     assert_eq!(
         session_langs(true, true, HindiUrduScript::Devanagari),

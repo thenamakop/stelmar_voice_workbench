@@ -114,7 +114,8 @@
     "hinglish": {
       "ok": false,
       "rtf": null,
-      "source": "unmeasured"
+      "source": "unmeasured",
+      "model": null
     },
     "dual_decode_en_hi": false,
     "provisional": true,

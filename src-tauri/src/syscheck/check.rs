@@ -49,6 +49,15 @@ const HYBRID_CPU_LIMIT_FULL_S: u64 = 300;
 /// A cell whose warm-up runs slower than this gets one timed run only ("impractical: single run").
 const SINGLE_RUN_ABOVE_RTF: f64 = 2.0;
 const VAD_ID: &str = "silero-v6.2.0";
+/// The Hinglish model the check measures for rule (d2) (Phase 5, 25 Nov 2026: f16 is the candidate; a quantised file is
+/// never measured in its place, and a file that was not measured is never chosen).
+const HINGLISH_CANDIDATE: &str = "hinglish-f16";
+/// The quick check measures the Hinglish model only when this many seconds of its target are left.
+const HINGLISH_QUICK_MIN_S: f64 = 120.0;
+/// How many times slower than the rolling model the Hinglish model is at the least, from the Hindi cells of the Phase 2
+/// speed tables (a large-v3-sized model against turbo q5_0 on the same device: 1.78 to 2.09). The quick check skips the
+/// measurement when even this ratio puts the model over the bar; it never skips one that would have fitted.
+const HINGLISH_MIN_SLOWDOWN: f64 = 1.5;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CheckError {
@@ -824,6 +833,12 @@ impl Run<'_> {
         if !self.over_budget() {
             self.night()?;
         }
+        // Rule (d2): the Hinglish model itself, on the configuration the rules choose now.
+        if !self.over_budget()
+            && let Some(config) = self.best_config()
+        {
+            self.hinglish_step(config)?;
+        }
         Ok(())
     }
 
@@ -1437,19 +1452,48 @@ impl Run<'_> {
                 }
             }
         }
-        if self.full() {
-            self.hinglish(config)?;
-        }
         Ok(())
+    }
+
+    /// Rule (d2) rests on a measurement of the Hinglish model itself: always in the full check; in the quick check when
+    /// the time target allows and the Hindi speed of the rolling model does not already rule the model out.
+    fn hinglish_step(&mut self, config: DeviceConfig) -> Result<(), CheckError> {
+        if self.full() {
+            return self.hinglish(config);
+        }
+        let bar = wb_capability::bars(&self.profile).rolling_rtf;
+        let hi_rtf = self
+            .decided()
+            .languages
+            .get(&Lang::Hi)
+            .and_then(|l| l.rolling.as_ref().map(|r| r.rtf));
+        match hi_rtf {
+            Some(r) if r * HINGLISH_MIN_SLOWDOWN > bar => {
+                self.skip(
+                    "Hinglish model speed",
+                    format!(
+                        "not measured: Hindi already runs at {r:.2}x real time with the rolling model, and the Hinglish model is at least {HINGLISH_MIN_SLOWDOWN} times slower, over the {bar:.2} bar"
+                    ),
+                );
+                Ok(())
+            }
+            _ => {
+                if self.fits_target(HINGLISH_QUICK_MIN_S, "Hinglish model speed") {
+                    self.hinglish(config)
+                } else {
+                    Ok(())
+                }
+            }
+        }
     }
 
     /// The Hinglish model on the alternating English/Hindi clip, so rule (d) rests on a measurement.
     fn hinglish(&mut self, config: DeviceConfig) -> Result<(), CheckError> {
-        if self.env.manifest.find("hinglish-q5_0").is_err() {
+        if self.env.manifest.find(HINGLISH_CANDIDATE).is_err() {
             return Ok(());
         }
         self.measure(Spec {
-            model: "hinglish-q5_0",
+            model: HINGLISH_CANDIDATE,
             lang: Lang::Hi,
             mode: Mode::Rolling,
             config,

@@ -561,7 +561,8 @@
     "hinglish": {
       "ok": true,
       "rtf": 0.25,
-      "source": "measured"
+      "source": "measured",
+      "model": "hinglish-q5_0"
     },
     "dual_decode_en_hi": true,
     "provisional": true,
@@ -572,7 +573,7 @@
       "English: medium, about 0 minutes after Stop.",
       "Hindi (Devanagari): large-v3-turbo-q5_0 (quality unverified), about 1 minutes after Stop.",
       "Urdu (Nastaliq): medium, about 2 minutes after Stop.",
-      "The code-switching (Hinglish) model is fast enough to run on every chunk.",
+      "English and Hindi sessions use the code-switching (Hinglish) model hinglish-q5_0 for every chunk (0.25× real time here, needs 1.00).",
       "The model choice is provisional until the models have been checked for accuracy."
     ],
     "process_while_recording": true,

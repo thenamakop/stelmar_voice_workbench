@@ -39,6 +39,10 @@ pub struct ProfileView {
     pub changes: Vec<String>,
     rolling: BTreeMap<String, String>,
     night: BTreeMap<String, String>,
+    /// The Hinglish model measured on this computer that meets the rolling bar (`Hinglish::chosen_model`): a session in
+    /// English and Hindi decodes every chunk with it (rule (d2), Phase 5, 25 Nov 2026). None where it was not measured
+    /// or does not fit the bar or the memory: today's per-language choice stays.
+    hinglish: Option<String>,
     peaks: Vec<Peak>,
 }
 
@@ -99,18 +103,45 @@ impl ProfileView {
             changes,
             rolling,
             night,
+            hinglish: d.hinglish.chosen_model().map(str::to_owned),
             peaks,
         }
+    }
+
+    /// Whether a session with these languages decodes every chunk with the Hinglish model: English and Hindi
+    /// together, and the system check chose the model. Urdu sessions and single-language sessions keep their picks.
+    pub fn uses_hinglish(&self, languages: &[String]) -> bool {
+        self.hinglish.is_some()
+            && languages.iter().any(|l| l == "en")
+            && languages.iter().any(|l| l == "hi")
     }
 
     /// `models_by_lang` ids of the rolling pass for the session's languages: each language's own pick, and `*`
     /// (any other language) from the first language that has one. Empty when no language has a pick.
     pub fn rolling_models(&self, languages: &[String]) -> BTreeMap<String, String> {
+        if let Some(model) = self
+            .hinglish
+            .as_ref()
+            .filter(|_| self.uses_hinglish(languages))
+        {
+            // One model for every chunk of the session: detection and decoding by the same model, so a Hindi
+            // sentence is never decoded as English text by a model that translates it.
+            let mut m: BTreeMap<String, String> = languages
+                .iter()
+                .map(|l| (l.clone(), model.clone()))
+                .collect();
+            m.insert("*".into(), model.clone());
+            return m;
+        }
         Self::pick(&self.rolling, languages)
     }
 
     /// The night pass models: only languages that have a night pick; the others keep their rolling model.
     pub fn night_models(&self, languages: &[String]) -> BTreeMap<String, String> {
+        if self.uses_hinglish(languages) {
+            // The rolling pass already used the Hinglish model: no night model is more accurate for these sessions.
+            return self.rolling_models(languages);
+        }
         let mut m = Self::pick(&self.rolling, languages);
         for l in languages {
             if let Some(n) = self.night.get(l) {
@@ -335,6 +366,63 @@ mod tests {
             "../../../crates/wb-capability/fixtures/tier-r.json"
         ))
         .unwrap()
+    }
+
+    #[test]
+    fn english_and_hindi_sessions_use_the_hinglish_model_only_where_the_check_chose_it() {
+        use wb_capability::Hinglish;
+        let langs: Vec<String> = vec!["en".into(), "hi".into()];
+        // Not measured here (or too slow): today's per-language picks stay.
+        let mut cap = tier_g();
+        cap.decision.hinglish = Hinglish {
+            ok: false,
+            rtf: Some(1.4),
+            source: "measured".into(),
+            model: Some("hinglish-f16".into()),
+        };
+        let kept = ProfileView::from_capability(&cap, vec![]);
+        assert!(!kept.uses_hinglish(&langs));
+        assert!(
+            !kept
+                .rolling_models(&langs)
+                .values()
+                .any(|m| m == "hinglish-f16")
+        );
+        // The proxy never chooses it: `ok` without its own cell has no model.
+        cap.decision.hinglish = Hinglish {
+            ok: true,
+            rtf: Some(0.4),
+            source: "proxy: large-v3-q5_0 (same size)".into(),
+            model: None,
+        };
+        assert!(!ProfileView::from_capability(&cap, vec![]).uses_hinglish(&langs));
+        // Measured and within the bar: every chunk of an English + Hindi session, both passes, one model.
+        cap.decision.hinglish = Hinglish {
+            ok: true,
+            rtf: Some(0.4),
+            source: "measured".into(),
+            model: Some("hinglish-f16".into()),
+        };
+        let v = ProfileView::from_capability(&cap, vec![]);
+        assert!(v.uses_hinglish(&langs));
+        let rolling = v.rolling_models(&langs);
+        assert_eq!(rolling.len(), 3, "{rolling:?}");
+        assert!(rolling.values().all(|m| m == "hinglish-f16"), "{rolling:?}");
+        assert_eq!(v.night_models(&langs), rolling, "no night model beats it");
+        // English only, Hindi only and English + Urdu keep their own picks.
+        for other in [
+            vec!["en".to_string()],
+            vec!["hi".to_string()],
+            vec!["en".to_string(), "ur".to_string()],
+        ] {
+            assert!(!v.uses_hinglish(&other), "{other:?}");
+            assert!(
+                !v.rolling_models(&other)
+                    .values()
+                    .any(|m| m == "hinglish-f16"),
+                "{other:?}"
+            );
+        }
     }
 
     #[test]

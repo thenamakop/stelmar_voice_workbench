@@ -398,6 +398,19 @@ pub struct Hinglish {
     pub rtf: Option<f64>,
     /// "measured" (a hinglish cell), "proxy: large-v3-q5_0" (same size) or "unmeasured".
     pub source: String,
+    /// The Hinglish model whose own cell was measured (`source` is "measured"): the model an English + Hindi
+    /// session decodes every chunk with when `ok`. None for a proxy or no measurement: a model that was not
+    /// measured here is never chosen (Phase 5, 25 Nov 2026).
+    #[serde(default)]
+    pub model: Option<String>,
+}
+
+impl Hinglish {
+    /// The model English + Hindi sessions use for every chunk: only a Hinglish model that was measured on this
+    /// computer and meets the rolling bar.
+    pub fn chosen_model(&self) -> Option<&str> {
+        self.model.as_deref().filter(|_| self.ok)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

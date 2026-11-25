@@ -500,6 +500,7 @@ fn hinglish(p: &Profile, o: &Options, b: &Bars, config: DeviceConfig) -> Hinglis
             && m.config == measured_on
             && !m.live_standin
     });
+    let measured_model = direct.map(|m| m.model.clone());
     let (m, source) = match direct {
         Some(m) => (Some(m), "measured".to_string()),
         None => (
@@ -519,11 +520,13 @@ fn hinglish(p: &Profile, o: &Options, b: &Bars, config: DeviceConfig) -> Hinglis
             ok: m.rtf <= b.rolling_rtf && memory_ok(p, m, o),
             rtf: Some(m.rtf),
             source,
+            model: measured_model,
         },
         None => Hinglish {
             ok: false,
             rtf: None,
             source: "unmeasured".to_string(),
+            model: None,
         },
     }
 }
@@ -610,6 +613,7 @@ pub fn decide(p: &Profile, r: &Rankings, o: &Options) -> Decision {
                 ok: false,
                 rtf: None,
                 source: "unmeasured".into(),
+                model: None,
             },
             dual_decode_en_hi: false,
             provisional,
@@ -766,6 +770,47 @@ pub fn decide(p: &Profile, r: &Rankings, o: &Options) -> Decision {
     }
 }
 
+/// What the verdict says about the Hinglish model: the one that every English + Hindi chunk is decoded with when it
+/// was measured on this computer and meets the rolling bar; otherwise what the sessions keep, and why.
+fn hinglish_line(languages: &BTreeMap<Lang, LangDecision>, h: &Hinglish, b: &Bars) -> String {
+    let mut kept: Vec<String> = Vec::new();
+    for lang in [Lang::En, Lang::Hi] {
+        if let Some(r) = languages.get(&lang).and_then(|d| d.rolling.as_ref())
+            && !kept.contains(&r.model)
+        {
+            kept.push(r.model.clone());
+        }
+    }
+    let kept = if kept.is_empty() {
+        "their own models".to_string()
+    } else {
+        kept.join(" and ")
+    };
+    match (h.chosen_model(), h.rtf, h.model.as_deref()) {
+        (Some(model), Some(rtf), _) => format!(
+            "English and Hindi sessions use the code-switching (Hinglish) model {model} for every chunk ({rtf:.2}× real time here, needs {:.2}).",
+            b.rolling_rtf
+        ),
+        (None, Some(rtf), Some(model)) if rtf <= b.rolling_rtf => format!(
+            "The code-switching (Hinglish) model does not fit in this computer's free memory ({model}: {rtf:.2}× real time). \
+             English and Hindi sessions keep {kept}, which can write a Hindi sentence as English text; the organiser decides what to do."
+        ),
+        (None, Some(rtf), Some(model)) => format!(
+            "The code-switching (Hinglish) model is too slow to run on every chunk here ({model}: {rtf:.2}× real time, needs {:.2}). \
+             English and Hindi sessions keep {kept}, which can write a Hindi sentence as English text; the organiser decides what to do.",
+            b.rolling_rtf
+        ),
+        (None, Some(_), None) => format!(
+            "The code-switching (Hinglish) model was not measured on this computer (only a model of its size was); English and Hindi \
+             sessions keep {kept}, which can write a Hindi sentence as English text. Run the full system check to measure it."
+        ),
+        _ => format!(
+            "The code-switching (Hinglish) model has not been measured on this computer; English and Hindi sessions keep {kept}, \
+             which can write a Hindi sentence as English text. Run the full system check to measure it."
+        ),
+    }
+}
+
 fn verdict_lines(
     tier: &Tier,
     cfg: &ConfigChoice,
@@ -826,11 +871,7 @@ fn verdict_lines(
             ));
         }
     }
-    v.push(if hinglish.ok {
-        "The code-switching (Hinglish) model is fast enough to run on every chunk.".to_string()
-    } else {
-        "The code-switching (Hinglish) model is too slow to run on every chunk here.".to_string()
-    });
+    v.push(hinglish_line(languages, hinglish, b));
     if partial {
         v.push("Some measurements are still to come: this verdict is partial.".to_string());
     }

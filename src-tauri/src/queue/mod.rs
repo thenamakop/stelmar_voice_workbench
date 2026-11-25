@@ -852,7 +852,8 @@ impl Queue {
                         Some(JobState::Paused) => s.night_cancelled,
                         Some(_) => false,
                     };
-                    if !s.night_handled && wants_night {
+                    // A session decoded with the Hinglish model in the rolling pass has no more accurate night model.
+                    if !s.night_handled && wants_night && !profile.uses_hinglish(&s.languages) {
                         candidates.push(i);
                     }
                 }
