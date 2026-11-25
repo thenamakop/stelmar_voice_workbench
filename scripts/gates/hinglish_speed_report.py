@@ -30,6 +30,14 @@ def gib(v) -> str:
     return "n/a" if v in (None, 0) else f"{v / GIB:.2f}"
 
 
+def mib(r: dict) -> str:
+    """The engine process's graphics memory (DXGI local / shared) in MiB; empty for a processor-only row."""
+    local, shared = r.get("gpu_local_bytes"), r.get("gpu_shared_bytes")
+    if not local and not shared:
+        return ""
+    return f"{(local or 0) / 2**20:.0f} / {(shared or 0) / 2**20:.0f}"
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--results", required=True, type=Path)
@@ -70,6 +78,7 @@ def main() -> int:
     for name in row_names:
         L.append(f"== {name}")
         L.append("model | lang | role | threads | RTF median (runs) | warm-up RTF | load s | peak working set GiB | peak commit GiB | "
+                 "graphics memory MiB (process, local / shared) | "
                  "bar | meets bar | night: hours for 3 h of audio | night fits 12 h | night fits until 08:00")
         for r in [x for x in rows if x["row"] == name]:
             standin = "stand-in" in name
@@ -77,7 +86,7 @@ def main() -> int:
             bar = (LIVE_STANDIN_BAR if standin else BARS[r["mode"]]) * k
             if r["status"] != "ok":
                 L.append(f"{r['model']} | {r['lang']} | {role} | {r['threads']} | {r['status'].upper().replace('_', ' ')} | | | "
-                         f"{gib(r.get('peak_ws'))} | {gib(r.get('peak_commit'))} | {bar:.3f} | no | | | ")
+                         f"{gib(r.get('peak_ws'))} | {gib(r.get('peak_commit'))} | | {bar:.3f} | no | | | ")
                 continue
             rtf = r["rtf_median"]
             runs = ", ".join(f"{x:.3f}" for x in r["rtf_runs"])
@@ -89,7 +98,7 @@ def main() -> int:
             else:
                 night = " | | "
             L.append(f"{r['model']} | {r['lang']} | {role} | {r['threads']} | {rtf:.3f}{single} ({runs}) | {r['warmup_rtf']:.3f} | "
-                     f"{r['load_s']:.1f} | {gib(r.get('peak_ws'))} | {gib(r.get('peak_commit'))} | {bar:.3f} | "
+                     f"{r['load_s']:.1f} | {gib(r.get('peak_ws'))} | {gib(r.get('peak_commit'))} | {mib(r)} | {bar:.3f} | "
                      f"{'yes' if rtf <= bar else 'no'} | {night}")
             best.setdefault((r["model"], role), []).append((rtf, name, r["lang"]))
         L.append("")
