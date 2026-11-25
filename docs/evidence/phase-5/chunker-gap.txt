@@ -1,0 +1,45 @@
+Chunker merge-gap cap, before and after (Phase 5, item 5). Written by scripts/gates/chunker_gap.py; nobody edits it.
+before engine: wb-engine-before-cap.exe sha256 0a95e5f6f892903c
+after engine:  wb-engine-avx2-x86_64-pc-windows-msvc.exe sha256 3f13ee3a69f63c30
+method: wb-engine chunks (VAD and chunker only, default settings: 15 s limit, sentence split, the cap of the after engine is 2 s)
+bar: a chunk whose speech share is under 0.3 is dropped by the engine (PLAN section 6)
+
+== synthetic: the first 1.2 s or 2.0 s of FLEURS English and Hindi utterances, 32 of them, 206.1 s, pauses of 0.8 to 15 s
+engine | chunks | chunks under the speech bar | seconds of speech in them | longest chunk s
+before | 12 | 1 | 1.8 | 8.0
+after  | 15 | 0 | 0 | 4.0
+
+== CoSHE-Eval, the first 20 clips (counts only)
+clip | chunks before | chunks after | under the bar before | under the bar after
+clip 01 | 11 | 11 | 0 | 0
+clip 02 | 9 | 9 | 0 | 0
+clip 03 | 9 | 9 | 0 | 0
+clip 04 | 8 | 8 | 0 | 0
+clip 05 | 4 | 4 | 0 | 0
+clip 06 | 11 | 11 | 0 | 0
+clip 07 | 3 | 3 | 0 | 0
+clip 08 | 5 | 5 | 0 | 0
+clip 09 | 7 | 7 | 0 | 0
+clip 10 | 8 | 8 | 0 | 0
+clip 11 | 5 | 5 | 0 | 0
+clip 12 | 4 | 4 | 0 | 0
+clip 13 | 3 | 3 | 0 | 0
+clip 14 | 5 | 5 | 0 | 0
+clip 15 | 8 | 8 | 0 | 0
+clip 16 | 6 | 6 | 0 | 0
+clip 17 | 7 | 7 | 0 | 0
+clip 18 | 9 | 9 | 0 | 0
+clip 19 | 8 | 8 | 0 | 0
+clip 20 | 2 | 2 | 0 | 0
+total | 132 | 132 | 0 | 0; clips with identical chunk boundaries: 20 of 20
+
+== the 60 FLEURS clips of the Phase 2 parity gate
+files 60; chunks before 77, after 77; chunks under the speech bar before 0 (0.0 s of speech), after 0 (0.0 s); files with identical chunk boundaries 60 of 60
+
+== day-simulation sessions (4 files, 361 min)
+files 4; chunks before 2585, after 2711; chunks under the speech bar before 7 (15.3 s of speech), after 0 (0.0 s); files with identical chunk boundaries 0 of 4
+  differs: inaugural.wav: 618 -> 683 chunks
+  differs: panel.wav: 621 -> 663 chunks
+  differs: parallel-i.wav: 728 -> 741 chunks
+  differs: parallel-ii.wav: 618 -> 624 chunks
+
