@@ -505,6 +505,66 @@ langs = ["en", "hi"]
 limit = "eval/clips/phase5-tune-coshe.txt"
 needs = "phase-2"
 
+# Rule (d2) with a quantised Hinglish model (converted locally from the f16 file with scripts/models/quantize_models.py;
+# never committed): does the translated count stay 0, and what do WER and the real-time factor become?
+[[run]]
+name = "tune-hinglish-q8_0-d2"
+setup = "hinglish-q8_0"
+dataset = "coshe-eval"
+role = "rolling"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["en", "hi"]
+limit = "eval/clips/phase5-tune-coshe.txt"
+needs = "phase-2"
+
+[[run]]
+name = "tune-hinglish-q5_0-d2"
+setup = "hinglish-q5_0"
+dataset = "coshe-eval"
+role = "rolling"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["en", "hi"]
+limit = "eval/clips/phase5-tune-coshe.txt"
+needs = "phase-2"
+
+# Rule (e), the hybrid: the Hinglish model detects the language of every chunk and decodes the chunks it calls Hindi;
+# turbo q5_0 decodes the chunks it calls English. Needs the experiment engine with WB_LANG_EXPERIMENT=e (the fingerprint
+# records the variable). Run with the f16, q8_0 and q5_0 Hinglish files.
+[[run]]
+name = "tune-hybrid-f16-e"
+setup = "en=large-v3-turbo-q5_0,hi=hinglish-f16"
+dataset = "coshe-eval"
+role = "rolling"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["en", "hi"]
+limit = "eval/clips/phase5-tune-coshe.txt"
+needs = "phase-2"
+
+[[run]]
+name = "tune-hybrid-q8_0-e"
+setup = "en=large-v3-turbo-q5_0,hi=hinglish-q8_0"
+dataset = "coshe-eval"
+role = "rolling"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["en", "hi"]
+limit = "eval/clips/phase5-tune-coshe.txt"
+needs = "phase-2"
+
+[[run]]
+name = "tune-hybrid-q5_0-e"
+setup = "en=large-v3-turbo-q5_0,hi=hinglish-q5_0"
+dataset = "coshe-eval"
+role = "rolling"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["en", "hi"]
+limit = "eval/clips/phase5-tune-coshe.txt"
+needs = "phase-2"
+
 # Control 1 (GATES.md, Open items of 9 Nov): previous-text context on against off, through the engine. The engine
 # resets its context after a flagged chunk (PLAN section 6), so this is the app's own behaviour, not a harness
 # approximation. Same 20 CoSHE-Eval clips, detection en+hi, stock medium. Report the gap both ways.

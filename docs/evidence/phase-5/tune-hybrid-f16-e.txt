@@ -1,0 +1,14 @@
+Tuning-clip score of tune-hybrid-f16-e (Phase 5, items 4 and 5). Numbers only; written by eval/score_tune.py.
+engine: wb-engine 0.1.0 (cuda, whisper.cpp v1.9.5 commit d1be6fde11ac tree e736b4c9a5be); device gpu:0; setup en-large-v3-turbo-q5_0+hi-hinglish-f16 models {'en': 'large-v3-turbo-q5_0', 'hi': 'hinglish-f16'}; threads 8; machine legion-native; languages ['en', 'hi']; clips 70; experiment rule e
+labels: 339 chunks from tune-turbo-q5_0-a (derived from the reference script; not hand labels)
+
+class | chunks | language matches | translated | nothing decoded
+mixed, English-led | 45 | 0 | 0 | 0
+mixed, Hindi-led | 89 | 89 | 0 | 0
+pure English | 134 | 103 | 0 | 0
+pure Hindi | 71 | 71 | 0 | 0
+
+all labelled chunks: 339; language matches 263; translated 0; nothing decoded 0
+WER 18.4%; CER 13.7%; truncated utterances 1
+English (Latin) reference words 5950: kept in Latin 4695, written in Devanagari 714 (12.0%), deleted 541
+decode time 1145.56 s for 3690.8 s of audio: RTF 0.3104

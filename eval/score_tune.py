@@ -23,17 +23,15 @@ from wbeval.labels import ChunkLabel, score_chunks  # noqa: E402
 EVAL = Path(__file__).resolve().parent
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("run", type=Path)
-    ap.add_argument("--out", type=Path)
-    a = ap.parse_args()
+def score(run: Path) -> dict:
+    """The tuning-clip score of one finished run: per class counts, totals and the summary figures."""
     raw = json.loads((EVAL / "labels" / "coshe-tune-chunks.json").read_text(encoding="utf-8"))
     if raw.get("heldout"):
         raise SystemExit("these are not tuning labels")
     labels = [ChunkLabel(c["id"], c["start_ms"], c["end_ms"], c["kind"], c["main"]) for c in raw["chunks"]]
-    records = [json.loads(x) for x in (a.run / "utterances.jsonl").read_text(encoding="utf-8").splitlines() if x.strip()]
-    summary = json.loads((a.run / "summary.json").read_text(encoding="utf-8"))
+    records = [json.loads(x) for x in (run / "utterances.jsonl").read_text(encoding="utf-8").splitlines()
+               if x.strip() and "error" not in json.loads(x)]
+    summary = json.loads((run / "summary.json").read_text(encoding="utf-8"))
     sc = score_chunks(records, labels)
     classes: dict[str, Counter] = {}
     for row, lab in zip(sc["rows"], labels):
@@ -45,12 +43,20 @@ def main() -> int:
             continue
         c["language matches"] += row["result"] == "match"
         c["translated"] += bool(row.get("translated"))
+    return {"run": run.name, "labels": len(labels), "from_run": raw["from_run"], "classes": classes, "totals": sc,
+            "summary": summary}
+
+
+def render(r: dict) -> str:
+    summary, sc, classes = r["summary"], r["totals"], r["classes"]
     lw = summary["latin_words"]
-    L = [f"Tuning-clip score of {a.run.name} (Phase 5, items 4 and 5). Numbers only; written by eval/score_tune.py.",
+    experiment = (summary.get("fingerprint_inputs") or {}).get("lang_experiment")
+    L = [f"Tuning-clip score of {r['run']} (Phase 5, items 4 and 5). Numbers only; written by eval/score_tune.py.",
          f"engine: {summary['engine'].get('version')}; device {summary['engine'].get('device')}; setup {summary['setup']['name']} "
          f"models {summary['setup']['models']}; threads {summary['settings']['threads']}; machine {summary['machine']['name']}; "
-         f"languages {summary['expected_langs']}; clips {summary['utterances']}",
-         f"labels: {len(labels)} chunks from {raw['from_run']} (derived from the reference script; not hand labels)", "",
+         f"languages {summary['expected_langs']}; clips {summary['utterances']}"
+         + (f"; experiment rule {experiment}" if experiment else ""),
+         f"labels: {r['labels']} chunks from {r['from_run']} (derived from the reference script; not hand labels)", "",
          "class | chunks | language matches | translated | nothing decoded"]
     for k in sorted(classes):
         c = classes[k]
@@ -61,7 +67,15 @@ def main() -> int:
           f"English (Latin) reference words {lw['ref_latin_words']}: kept in Latin {lw['kept_latin']}, written in Devanagari "
           f"{lw['in_devanagari']} ({100 * lw['devanagari_rate']:.1f}%), deleted {lw['deleted']}",
           f"decode time {summary['elapsed_s']} s for {summary['audio_s']} s of audio: RTF {summary['rtf']}"]
-    text = "\n".join(L) + "\n"
+    return "\n".join(L) + "\n"
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("run", type=Path)
+    ap.add_argument("--out", type=Path)
+    a = ap.parse_args()
+    text = render(score(a.run))
     if a.out:
         a.out.parent.mkdir(parents=True, exist_ok=True)
         a.out.write_text(text, encoding="utf-8")

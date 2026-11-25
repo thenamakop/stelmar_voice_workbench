@@ -1,5 +1,5 @@
 Tuning-clip score of tune-turbo-q5_0-c (Phase 5, items 4 and 5). Numbers only; written by eval/score_tune.py.
-engine: wb-engine 0.1.0 (cuda, whisper.cpp v1.9.5 commit d1be6fde11ac tree e736b4c9a5be); device gpu:0; setup large-v3-turbo-q5_0 models {'*': 'large-v3-turbo-q5_0'}; threads 8; machine legion-native; languages ['en', 'hi']; clips 70
+engine: wb-engine 0.1.0 (cuda, whisper.cpp v1.9.5 commit d1be6fde11ac tree e736b4c9a5be); device gpu:0; setup large-v3-turbo-q5_0 models {'*': 'large-v3-turbo-q5_0'}; threads 8; machine legion-native; languages ['en', 'hi']; clips 70; experiment rule c
 labels: 339 chunks from tune-turbo-q5_0-a (derived from the reference script; not hand labels)
 
 class | chunks | language matches | translated | nothing decoded
