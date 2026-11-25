@@ -491,6 +491,20 @@ langs = ["en", "hi"]
 limit = "eval/clips/phase5-tune-coshe.txt"
 needs = "phase-2"
 
+# Rule (c): every chunk of the en+hi session is decoded in both languages (detected language first, the other second) and
+# the better candidate is kept. Needs the experiment engine (wb-engine-cuda-lang-experiments-*.exe, cargo feature
+# lang-experiments, development only) with WB_LANG_EXPERIMENT=c in the environment; the fingerprint records the variable.
+[[run]]
+name = "tune-turbo-q5_0-c"
+setup = "large-v3-turbo-q5_0"
+dataset = "coshe-eval"
+role = "rolling"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["en", "hi"]
+limit = "eval/clips/phase5-tune-coshe.txt"
+needs = "phase-2"
+
 # Control 1 (GATES.md, Open items of 9 Nov): previous-text context on against off, through the engine. The engine
 # resets its context after a flagged chunk (PLAN section 6), so this is the app's own behaviour, not a harness
 # approximation. Same 20 CoSHE-Eval clips, detection en+hi, stock medium. Report the gap both ways.

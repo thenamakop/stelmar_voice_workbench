@@ -162,7 +162,10 @@ def fingerprint_key(engine: dict, setup: Setup, settings: Settings, models: dict
     mismatch can be explained by comparing two summaries (23 Nov 2026: the clip list changed its line endings in a
     checkout and the fingerprint changed with it; the summary did not say which input differed)."""
     wcpp = whisper_cpp_info()
-    return {"engine": engine,
+    # An experiment engine (cargo feature lang-experiments, development only) reads WB_LANG_EXPERIMENT; the same binary
+    # decodes differently with it set, so a set variable is part of the key (left out when unset: existing hashes hold).
+    experiment = {"lang_experiment": os.environ["WB_LANG_EXPERIMENT"]} if os.environ.get("WB_LANG_EXPERIMENT") else {}
+    return {**experiment, "engine": engine,
            "whisper_cpp": wcpp.get("commit"), "setup": setup.models, "detector": setup.detector,
            "settings": asdict(settings), "models": {k: v.get("sha256") for k, v in models.items()},
            "dataset": dataset_sha, "lang_mode": lang_mode, "langs": langs, "limit": limit_key(limit),
