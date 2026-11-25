@@ -233,7 +233,9 @@
       "ok": false,
       "rtf": null,
       "source": "unmeasured",
-      "model": null
+      "model": null,
+      "night_ok": false,
+      "night_hours": null
     },
     "dual_decode_en_hi": false,
     "provisional": true,
@@ -244,7 +246,7 @@
       "English: medium, about 6 minutes after Stop.",
       "Hindi (Devanagari): large-v3-turbo-q5_0 (quality unverified), about 7 minutes after Stop.",
       "Urdu (Nastaliq): medium, about 8 minutes after Stop.",
-      "The code-switching (Hinglish) model has not been measured on this computer; English and Hindi sessions keep medium and large-v3-turbo-q5_0, which can write a Hindi sentence as English text. Run the full system check to measure it.",
+      "The code-switching (Hinglish) model has not been measured on this computer; English and Hindi sessions keep medium and large-v3-turbo-q5_0, which can write a Hindi sentence as English text. Run the full system check to measure it. A session that cannot be finished with it here is marked \"best finished on a faster machine\".",
       "Some measurements are still to come: this verdict is partial.",
       "The model choice is provisional until the models have been checked for accuracy.",
       "The recorder safety test has not run for this setup, so transcription waits until the recording stops."

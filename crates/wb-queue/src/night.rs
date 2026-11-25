@@ -141,6 +141,84 @@ pub fn plan(
     }
 }
 
+/// The speeds a night plan is made with: the RTF of each language's night model, and of what the job decodes.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Speeds {
+    pub night_rtf: BTreeMap<String, f64>,
+    pub decode_rtf: BTreeMap<String, f64>,
+}
+
+/// Which models the night job uses (Phase 5, 26 Nov 2026).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Route {
+    /// The Hinglish model decodes the night pass of the English + Hindi sessions: its plan finishes before 08:00.
+    Hinglish,
+    /// Today's night models (or none): the Hinglish plan does not finish before 08:00, or there is no measured model.
+    Today,
+}
+
+/// A night plan and the models it uses.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Routed {
+    pub route: Route,
+    pub plan: Plan,
+    /// Why the Hinglish plan was not used, when one was tried (shown in the log and on the session).
+    pub hinglish_skip: Option<SkipReason>,
+}
+
+/// The file in a session folder that marks it "best finished on a faster machine" (written by the app, never by the
+/// recorder): why the Hinglish model could not finish it here, so the export screen can offer it (Phase 6).
+pub const FASTER_MACHINE_FILE: &str = "faster-machine.json";
+
+/// The text of [`FASTER_MACHINE_FILE`].
+pub fn faster_machine_json(reason: &str, hinglish_model: Option<&str>, now_ms: u64) -> String {
+    serde_json::json!({
+        "version": 1,
+        "best_finished_on": "a faster machine",
+        "reason": reason,
+        "model": hinglish_model,
+        "marked_at_ms": now_ms,
+    })
+    .to_string()
+}
+
+/// Plans the night with the Hinglish model when that finishes before 08:00 and with today's models otherwise.
+/// `hinglish` is the sessions that would use it (English + Hindi) with their speeds, `None` where the system check
+/// did not measure the model or it does not fit the night here; the sessions of `today` are the same ones, with the
+/// languages that Hinglish sessions use under their own names when a day mixes both kinds. The Hinglish plan is
+/// tried first and used only when it is a `Run`: a night that cannot finish must not be started, and a session left
+/// with today's models (or none) is marked "best finished on a faster machine" by the caller.
+pub fn route(
+    start_ms: u64,
+    today_sessions: &[SessionAudio],
+    hinglish: Option<(&[SessionAudio], &Speeds)>,
+    today: &Speeds,
+) -> Routed {
+    let mut hinglish_skip = None;
+    if let Some((sessions, h)) = hinglish {
+        match plan(start_ms, sessions, &h.night_rtf, &h.decode_rtf) {
+            run @ Plan::Run { .. } => {
+                return Routed {
+                    route: Route::Hinglish,
+                    plan: run,
+                    hinglish_skip: None,
+                };
+            }
+            Plan::Skip(reason) => hinglish_skip = Some(reason),
+        }
+    }
+    Routed {
+        route: Route::Today,
+        plan: plan(
+            start_ms,
+            today_sessions,
+            &today.night_rtf,
+            &today.decode_rtf,
+        ),
+        hinglish_skip,
+    }
+}
+
 /// Days from 1970-01-01 to a civil date (proleptic Gregorian; Howard Hinnant's algorithm).
 fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
     let y = if m <= 2 { y - 1 } else { y };
@@ -572,5 +650,120 @@ mod tests {
         assert!(may_start(at(18, 0), false, false, end));
         assert!(!may_start(at(18, 0), true, false, end));
         assert!(!may_start(at(18, 0), false, true, end));
+    }
+
+    fn speeds(en: f64, hi: f64) -> Speeds {
+        let m = BTreeMap::from([("en".to_owned(), en), ("hi".to_owned(), hi)]);
+        Speeds {
+            night_rtf: m.clone(),
+            decode_rtf: m,
+        }
+    }
+
+    /// Day 1's seminar hall: 3 h of English + Hindi audio, the night starts at 18:00 and has 14 h.
+    fn three_hours() -> Vec<SessionAudio> {
+        vec![session("a", 90, 90)]
+    }
+
+    #[test]
+    fn the_night_uses_the_hinglish_model_when_its_plan_finishes_before_08_00() {
+        // The UHD floor: Hinglish f16 at 0.67 (en) and 1.69 (hi) takes about 3.5 h for 3 h of audio.
+        let hinglish = speeds(0.67, 1.69);
+        let today = speeds(0.5, 1.0);
+        let r = route(
+            at(18, 0),
+            &three_hours(),
+            Some((&three_hours(), &hinglish)),
+            &today,
+        );
+        assert_eq!(r.route, Route::Hinglish);
+        assert!(matches!(r.plan, Plan::Run { .. }), "{r:?}");
+        assert_eq!(r.hinglish_skip, None);
+    }
+
+    #[test]
+    fn a_hinglish_night_that_would_run_past_08_00_is_not_started_and_today_s_models_run_instead() {
+        // Hinglish on a slow processor: 9 h per hour of audio, 27 h for 3 h; today's model needs 2.5 h.
+        let hinglish = speeds(5.0, 9.0);
+        let today = speeds(0.5, 1.0);
+        let r = route(
+            at(18, 0),
+            &three_hours(),
+            Some((&three_hours(), &hinglish)),
+            &today,
+        );
+        assert_eq!(r.route, Route::Today);
+        assert!(matches!(r.plan, Plan::Run { .. }), "{r:?}");
+        assert!(matches!(
+            r.hinglish_skip,
+            Some(SkipReason::DoesNotFit { needed_s, .. }) if needed_s > 14.0 * 3600.0
+        ));
+    }
+
+    #[test]
+    fn neither_model_fitting_skips_the_night_and_keeps_the_reason_for_the_marker() {
+        let r = route(
+            at(18, 0),
+            &three_hours(),
+            Some((&three_hours(), &speeds(5.0, 9.0))),
+            &speeds(5.0, 9.0),
+        );
+        assert_eq!(r.route, Route::Today);
+        assert!(
+            matches!(r.plan, Plan::Skip(SkipReason::DoesNotFit { .. })),
+            "{r:?}"
+        );
+        assert!(r.hinglish_skip.is_some());
+    }
+
+    #[test]
+    fn without_a_measured_hinglish_model_the_plan_is_today_s_alone() {
+        let today = speeds(0.5, 1.0);
+        let r = route(at(18, 0), &three_hours(), None, &today);
+        assert_eq!(r.route, Route::Today);
+        assert_eq!(
+            r.plan,
+            plan(
+                at(18, 0),
+                &three_hours(),
+                &today.night_rtf,
+                &today.decode_rtf
+            )
+        );
+        assert_eq!(r.hinglish_skip, None);
+    }
+
+    #[test]
+    fn the_hinglish_plan_counts_the_hours_left_from_the_real_start_time() {
+        // 6 h of audio at 1.69 (all Hindi) is 10.1 h: fits the 14 h of an 18:00 start, not the 6.5 h left at 01:30.
+        let all_hindi = vec![session("a", 0, 360)];
+        let hinglish = speeds(0.67, 1.69);
+        let today = speeds(0.5, 1.0);
+        assert_eq!(
+            route(at(18, 0), &all_hindi, Some((&all_hindi, &hinglish)), &today).route,
+            Route::Hinglish
+        );
+        let late = route(
+            at(24 + 1, 30),
+            &all_hindi,
+            Some((&all_hindi, &hinglish)),
+            &today,
+        );
+        assert_eq!(late.route, Route::Today);
+        assert!(late.hinglish_skip.is_some());
+    }
+
+    #[test]
+    fn the_marker_file_says_why_and_which_model_was_tried() {
+        let text = faster_machine_json(
+            "it would need about 27.0 h and only 14.0 h are left",
+            Some("hinglish-f16"),
+            42,
+        );
+        let v: serde_json::Value = serde_json::from_str(&text).expect("json");
+        assert_eq!(v["version"], 1);
+        assert_eq!(v["model"], "hinglish-f16");
+        assert!(v["reason"].as_str().is_some_and(|r| r.contains("27.0 h")));
+        assert_eq!(FASTER_MACHINE_FILE, "faster-machine.json");
     }
 }

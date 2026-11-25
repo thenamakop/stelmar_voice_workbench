@@ -115,7 +115,9 @@
       "ok": false,
       "rtf": null,
       "source": "unmeasured",
-      "model": null
+      "model": null,
+      "night_ok": false,
+      "night_hours": null
     },
     "dual_decode_en_hi": false,
     "provisional": true,

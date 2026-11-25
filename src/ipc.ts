@@ -371,7 +371,7 @@ export interface CapDecision {
     recorder_safety_passed: boolean | null;
   } | null;
   languages: Partial<Record<CapLang, LangDecision>>;
-  hinglish: { ok: boolean; rtf: number | null; source: string; model?: string | null };
+  hinglish: { ok: boolean; rtf: number | null; source: string; model?: string | null; night_ok?: boolean; night_hours?: number | null };
   dual_decode_en_hi: boolean;
   provisional: boolean;
   partial: boolean;

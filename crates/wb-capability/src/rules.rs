@@ -516,17 +516,25 @@ fn hinglish(p: &Profile, o: &Options, b: &Bars, config: DeviceConfig) -> Hinglis
         ),
     };
     match m {
-        Some(m) => Hinglish {
-            ok: m.rtf <= b.rolling_rtf && memory_ok(p, m, o),
-            rtf: Some(m.rtf),
-            source,
-            model: measured_model,
-        },
+        Some(m) => {
+            let fits_memory = memory_ok(p, m, o);
+            let hours = m.rtf * o.day_audio_hours;
+            Hinglish {
+                ok: m.rtf <= b.rolling_rtf && fits_memory,
+                rtf: Some(m.rtf),
+                source: source.clone(),
+                night_ok: measured_model.is_some() && fits_memory && hours <= o.night_window_hours,
+                night_hours: measured_model.is_some().then_some(hours),
+                model: measured_model,
+            }
+        }
         None => Hinglish {
             ok: false,
             rtf: None,
             source: "unmeasured".to_string(),
             model: None,
+            night_ok: false,
+            night_hours: None,
         },
     }
 }
@@ -614,6 +622,8 @@ pub fn decide(p: &Profile, r: &Rankings, o: &Options) -> Decision {
                 rtf: None,
                 source: "unmeasured".into(),
                 model: None,
+                night_ok: false,
+                night_hours: None,
             },
             dual_decode_en_hi: false,
             provisional,
@@ -773,6 +783,7 @@ pub fn decide(p: &Profile, r: &Rankings, o: &Options) -> Decision {
 /// What the verdict says about the Hinglish model: the one that every English + Hindi chunk is decoded with when it
 /// was measured on this computer and meets the rolling bar; otherwise what the sessions keep, and why.
 fn hinglish_line(languages: &BTreeMap<Lang, LangDecision>, h: &Hinglish, b: &Bars) -> String {
+    const FASTER: &str = "A session that cannot be finished with it here is marked \"best finished on a faster machine\".";
     let mut kept: Vec<String> = Vec::new();
     for lang in [Lang::En, Lang::Hi] {
         if let Some(r) = languages.get(&lang).and_then(|d| d.rolling.as_ref())
@@ -786,7 +797,14 @@ fn hinglish_line(languages: &BTreeMap<Lang, LangDecision>, h: &Hinglish, b: &Bar
     } else {
         kept.join(" and ")
     };
-    match (h.chosen_model(), h.rtf, h.model.as_deref()) {
+    if let (Some(model), Some(rtf), Some(hours)) = (h.night_model(), h.rtf, h.night_hours) {
+        return format!(
+            "English and Hindi sessions keep {kept} while recording; the night pass decodes them again with the \
+             code-switching (Hinglish) model {model} ({rtf:.2}× real time here, about {hours:.1} h for a day's audio) when that \
+             finishes by 08:00. {FASTER}"
+        );
+    }
+    let line = match (h.chosen_model(), h.rtf, h.model.as_deref()) {
         (Some(model), Some(rtf), _) => format!(
             "English and Hindi sessions use the code-switching (Hinglish) model {model} for every chunk ({rtf:.2}× real time here, needs {:.2}).",
             b.rolling_rtf
@@ -808,6 +826,11 @@ fn hinglish_line(languages: &BTreeMap<Lang, LangDecision>, h: &Hinglish, b: &Bar
             "The code-switching (Hinglish) model has not been measured on this computer; English and Hindi sessions keep {kept}, \
              which can write a Hindi sentence as English text. Run the full system check to measure it."
         ),
+    };
+    if h.chosen_model().is_some() {
+        line
+    } else {
+        format!("{line} {FASTER}")
     }
 }
 

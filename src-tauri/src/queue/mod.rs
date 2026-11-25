@@ -14,6 +14,7 @@ pub mod feed;
 #[cfg(feature = "gate-hooks")]
 pub mod gate_hooks;
 pub mod langlock;
+pub mod night_route;
 pub mod profile;
 
 use std::collections::BTreeSet;
@@ -878,11 +879,9 @@ impl Queue {
         {
             return;
         }
-        let mut audio = Vec::new();
-        let mut languages: BTreeSet<String> = BTreeSet::new();
+        let mut audio: Vec<night_route::NightSession> = Vec::new();
         for &i in &candidates {
             let s = &open[i];
-            languages.extend(s.languages.iter().cloned());
             let q = plock(&s.handle.queue);
             let jobs = q.jobs().unwrap_or_default();
             let rolling_total = jobs
@@ -898,14 +897,17 @@ impl Queue {
                 .and_then(|j| q.remaining_audio_ms(j.id).ok())
                 .unwrap_or(rolling_total);
             let mix = language_mix(&q, "post-1");
-            audio.push(SessionAudio {
-                id: s.name.clone(),
-                audio_ms_by_lang: wb_queue::estimate::split_by_mix(total, &s.languages, &mix)
-                    .into_iter()
-                    .collect(),
+            audio.push(night_route::NightSession {
+                name: s.name.clone(),
+                languages: s.languages.clone(),
+                audio: SessionAudio {
+                    id: s.name.clone(),
+                    audio_ms_by_lang: wb_queue::estimate::split_by_mix(total, &s.languages, &mix)
+                        .into_iter()
+                        .collect(),
+                },
             });
         }
-        let langs: Vec<String> = languages.into_iter().collect();
         // The profile's night speeds, moved to what this computer's finished units showed (the profile alone
         // promised 1.48 for a night unit that ran at 2.73 in the second smoke). Until a unit of a session with
         // several languages has finished, such a session is planned with the provisional emu-low detection
@@ -918,17 +920,23 @@ impl Queue {
             wb_queue::speed::Pass::Night,
             if multi { 2 } else { 1 },
         );
-        let rtf: std::collections::BTreeMap<String, f64> = profile
-            .night_rtf(&langs)
-            .into_iter()
-            .map(|(l, r)| (l, wb_queue::speed::scaled(r, Some(factor))))
-            .collect();
-        let decode_rtf: std::collections::BTreeMap<String, f64> = profile
-            .night_decode_rtf(&langs)
-            .into_iter()
-            .map(|(l, r)| (l, wb_queue::speed::scaled(r, Some(factor))))
-            .collect();
-        match night::plan(now, &audio, &rtf, &decode_rtf) {
+        // The Hinglish model decodes the night of the English + Hindi sessions when the plan made from the audio really
+        // recorded finishes before 08:00; otherwise today's models run and those sessions are marked.
+        let decision = night_route::decide(&profile, now, &audio, factor);
+        for (name, why) in &decision.marks {
+            let Some(s) = open.iter().find(|s| &s.name == name) else {
+                continue;
+            };
+            self.core
+                .push_log(format!("{name}: best finished on a faster machine: {why}"));
+            let text = night::faster_machine_json(why, profile.hinglish_night_model(), now);
+            if let Err(e) = std::fs::write(s.dir.join(night::FASTER_MACHINE_FILE), text) {
+                self.core.push_log(format!(
+                    "{name}: the faster-machine note could not be written: {e}"
+                ));
+            }
+        }
+        match decision.routed.plan.clone() {
             Plan::Run {
                 sessions,
                 estimate_s,
@@ -938,7 +946,11 @@ impl Queue {
                     let Some(s) = open.iter().find(|s| &s.name == name) else {
                         continue;
                     };
-                    let models = profile.night_models(&s.languages);
+                    let models = if decision.hinglish.contains(name) {
+                        profile.hinglish_night_models(&s.languages)
+                    } else {
+                        profile.night_models(&s.languages)
+                    };
                     let created = plock(&s.handle.queue).create_night_job(
                         &s.name,
                         models_json(&models),
@@ -966,8 +978,9 @@ impl Queue {
                     (None, false) => "the profile's speed: no unit has finished yet".to_owned(),
                 };
                 self.core.push_log(format!(
-                    "night pass planned for {} session(s): about {:.1} h, ready by {} IST ({basis})",
+                    "night pass planned for {} session(s), {} with the Hinglish model: about {:.1} h, ready by {} IST ({basis})",
                     sessions.len(),
+                    decision.hinglish.len(),
                     estimate_s / 3600.0,
                     wb_queue::estimate::format_ist_hhmm(finish_ms)
                 ));

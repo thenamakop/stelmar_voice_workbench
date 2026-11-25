@@ -562,7 +562,9 @@
       "ok": true,
       "rtf": 0.25,
       "source": "measured",
-      "model": "hinglish-q5_0"
+      "model": "hinglish-q5_0",
+      "night_ok": true,
+      "night_hours": 0.75
     },
     "dual_decode_en_hi": true,
     "provisional": true,

@@ -403,9 +403,23 @@ pub struct Hinglish {
     /// measured here is never chosen (Phase 5, 25 Nov 2026).
     #[serde(default)]
     pub model: Option<String>,
+    /// The measured Hinglish model also fits the night pass here (`rtf` times the typical day's audio fits the night
+    /// window, and the model fits in memory), whether or not it keeps up while recording. The queue plans the real
+    /// night from the audio the sessions recorded; this says it may try (Phase 5, 26 Nov 2026).
+    #[serde(default)]
+    pub night_ok: bool,
+    /// Hours the Hinglish model needs for the typical day's audio (`Options::day_audio_hours`) at its measured speed.
+    #[serde(default)]
+    pub night_hours: Option<f64>,
 }
 
 impl Hinglish {
+    /// The model an English + Hindi session decodes at night when it did not decode the recording with it: measured
+    /// on this computer, fits the night window and the memory, and does not already run during the recording.
+    pub fn night_model(&self) -> Option<&str> {
+        self.model.as_deref().filter(|_| self.night_ok && !self.ok)
+    }
+
     /// The model English + Hindi sessions use for every chunk: only a Hinglish model that was measured on this
     /// computer and meets the rolling bar.
     pub fn chosen_model(&self) -> Option<&str> {

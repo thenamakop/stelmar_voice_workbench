@@ -371,7 +371,9 @@
       "ok": false,
       "rtf": null,
       "source": "unmeasured",
-      "model": null
+      "model": null,
+      "night_ok": false,
+      "night_hours": null
     },
     "dual_decode_en_hi": false,
     "provisional": true,
@@ -382,7 +384,7 @@
       "English: small (quality unverified). It is within the 25% safety margin of real time (0.95×, needs 0.75); about 9 minutes after Stop.",
       "Hindi (Devanagari): small (quality unverified). Processing will lag behind recording: about 67 minutes after the end of a 90-minute talk.",
       "Urdu (Nastaliq): small (quality unverified). Processing will lag behind recording: about 67 minutes after the end of a 90-minute talk.",
-      "The code-switching (Hinglish) model has not been measured on this computer; English and Hindi sessions keep small, which can write a Hindi sentence as English text. Run the full system check to measure it.",
+      "The code-switching (Hinglish) model has not been measured on this computer; English and Hindi sessions keep small, which can write a Hindi sentence as English text. Run the full system check to measure it. A session that cannot be finished with it here is marked \"best finished on a faster machine\".",
       "The model choice is provisional until the models have been checked for accuracy."
     ],
     "process_while_recording": true,

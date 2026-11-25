@@ -663,12 +663,12 @@ fn the_hinglish_model_is_chosen_only_when_its_own_cell_meets_the_bar_and_the_ver
         "{:#?}",
         d.verdict
     );
-    // Its own cell, too slow: not chosen; today's models stay and the verdict names the cost.
+    // Its own cell, too slow even for the night: not chosen; today's models stay and the verdict names the cost.
     p.measurements.push(rolling(
         "hinglish-f16",
         Lang::Hi,
         DeviceConfig::Gpu { index: 0 },
-        1.4,
+        5.0,
         4.0,
         Some(3.0),
     ));
@@ -700,6 +700,79 @@ fn the_hinglish_model_is_chosen_only_when_its_own_cell_meets_the_bar_and_the_ver
         d.verdict
             .iter()
             .any(|l| l.contains("use the code-switching (Hinglish) model hinglish-f16")),
+        "{:#?}",
+        d.verdict
+    );
+}
+
+#[test]
+fn a_hinglish_model_too_slow_for_the_recording_may_still_run_at_night_and_the_verdict_says_so() {
+    let mut p = emu_low();
+    // 1.4x real time: over the rolling bar, but 3 h of audio take 4.2 h of the 12-hour night window.
+    p.measurements.push(rolling(
+        "hinglish-f16",
+        Lang::Hi,
+        DeviceConfig::Gpu { index: 0 },
+        1.4,
+        4.0,
+        Some(3.0),
+    ));
+    let d = decide_with(&p, false);
+    assert!(!d.hinglish.ok);
+    assert!(d.hinglish.night_ok, "{:?}", d.hinglish);
+    assert_eq!(d.hinglish.night_model(), Some("hinglish-f16"));
+    assert_eq!(
+        d.hinglish.chosen_model(),
+        None,
+        "the recording keeps today's models"
+    );
+    assert!(
+        d.verdict
+            .iter()
+            .any(|l| l.contains("night pass decodes them again")
+                && l.contains("hinglish-f16")
+                && l.contains("best finished on a faster machine")),
+        "{:#?}",
+        d.verdict
+    );
+    // 5x real time: 15 h for 3 h of audio, over the window: no night model either, and the verdict marks it.
+    p.measurements.retain(|m| m.model != "hinglish-f16");
+    p.measurements.push(rolling(
+        "hinglish-f16",
+        Lang::Hi,
+        DeviceConfig::Gpu { index: 0 },
+        5.0,
+        4.0,
+        Some(3.0),
+    ));
+    let d = decide_with(&p, false);
+    assert!(!d.hinglish.ok && !d.hinglish.night_ok, "{:?}", d.hinglish);
+    assert_eq!(d.hinglish.night_model(), None);
+    assert!(
+        d.verdict
+            .iter()
+            .any(|l| l.contains("too slow to run on every chunk")
+                && l.contains("best finished on a faster machine")),
+        "{:#?}",
+        d.verdict
+    );
+    // A model that runs during the recording needs no night pass of its own.
+    p.measurements.retain(|m| m.model != "hinglish-f16");
+    p.measurements.push(rolling(
+        "hinglish-f16",
+        Lang::Hi,
+        DeviceConfig::Gpu { index: 0 },
+        0.6,
+        2.7,
+        Some(2.0),
+    ));
+    let d = decide_with(&p, false);
+    assert!(d.hinglish.ok);
+    assert_eq!(d.hinglish.night_model(), None);
+    assert!(
+        d.verdict
+            .iter()
+            .all(|l| !l.contains("best finished on a faster machine")),
         "{:#?}",
         d.verdict
     );

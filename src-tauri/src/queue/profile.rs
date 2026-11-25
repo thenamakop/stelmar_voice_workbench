@@ -43,6 +43,10 @@ pub struct ProfileView {
     /// English and Hindi decodes every chunk with it (rule (d2), Phase 5, 25 Nov 2026). None where it was not measured
     /// or does not fit the bar or the memory: today's per-language choice stays.
     hinglish: Option<String>,
+    /// The measured Hinglish model that does not keep up while recording but fits the night window and the memory
+    /// (`Hinglish::night_model`): the night pass may decode English + Hindi sessions with it (Phase 5, 26 Nov 2026);
+    /// the queue plans the real night from the audio and uses it only when that finishes before 08:00.
+    hinglish_night: Option<String>,
     peaks: Vec<Peak>,
 }
 
@@ -104,8 +108,77 @@ impl ProfileView {
             rolling,
             night,
             hinglish: d.hinglish.chosen_model().map(str::to_owned),
+            hinglish_night: d.hinglish.night_model().map(str::to_owned),
             peaks,
         }
+    }
+
+    /// A measured cell for the tests: `model` on a clip of `lang`, on the chosen kind of device.
+    #[cfg(test)]
+    pub fn set_cell_for_test(&mut self, model: &str, lang: &str, rtf: f64) {
+        let gpu = self.uses_gpu();
+        self.peaks.push(Peak {
+            model: model.to_owned(),
+            lang: lang.to_owned(),
+            rolling: true,
+            gpu,
+            peak_commit_bytes: 0,
+            gpu_local_bytes: 0,
+            engine_build: String::new(),
+            rtf,
+        });
+    }
+
+    /// Whether the night pass may decode a session with these languages with the Hinglish model: English and Hindi
+    /// together, a measured model that fits the night, and the recording was not already decoded with it.
+    pub fn may_use_hinglish_at_night(&self, languages: &[String]) -> bool {
+        self.hinglish_night.is_some()
+            && !self.uses_hinglish(languages)
+            && languages.iter().any(|l| l == "en")
+            && languages.iter().any(|l| l == "hi")
+    }
+
+    /// Whether a session in English and Hindi is left with today's models, because the Hinglish model was not
+    /// measured here, is too slow, or does not fit (the session is "best finished on a faster machine" unless the
+    /// night pass turns out to run the Hinglish model).
+    pub fn lacks_hinglish(&self, languages: &[String]) -> bool {
+        !self.uses_hinglish(languages)
+            && languages.iter().any(|l| l == "en")
+            && languages.iter().any(|l| l == "hi")
+    }
+
+    /// The name of the Hinglish model the night pass may use (for the log and the marker).
+    pub fn hinglish_night_model(&self) -> Option<&str> {
+        self.hinglish_night.as_deref()
+    }
+
+    /// The models of a night job that decodes with the Hinglish model: every language and the catch-all.
+    pub fn hinglish_night_models(&self, languages: &[String]) -> BTreeMap<String, String> {
+        let Some(model) = self.hinglish_night.as_ref() else {
+            return BTreeMap::new();
+        };
+        let mut m: BTreeMap<String, String> = languages
+            .iter()
+            .map(|l| (l.clone(), model.clone()))
+            .collect();
+        m.insert("*".into(), model.clone());
+        m
+    }
+
+    /// The speed of the Hinglish night model for each language of a session (the slowest measured one where a
+    /// language has no cell of its own, never 0): the night plan's `night_rtf` and `decode_rtf` for such sessions.
+    pub fn hinglish_night_rtf(&self, languages: &[String]) -> BTreeMap<String, f64> {
+        let Some(model) = self.hinglish_night.as_ref() else {
+            return BTreeMap::new();
+        };
+        let gpu = self.uses_gpu();
+        languages
+            .iter()
+            .map(|l| {
+                let rtf = self.rtf_for_lang(model, l, gpu);
+                (l.clone(), if rtf > 0.0 { rtf } else { 1.0 })
+            })
+            .collect()
     }
 
     /// Whether a session with these languages decodes every chunk with the Hinglish model: English and Hindi
@@ -379,6 +452,8 @@ mod tests {
             rtf: Some(1.4),
             source: "measured".into(),
             model: Some("hinglish-f16".into()),
+            night_ok: false,
+            night_hours: None,
         };
         let kept = ProfileView::from_capability(&cap, vec![]);
         assert!(!kept.uses_hinglish(&langs));
@@ -394,6 +469,8 @@ mod tests {
             rtf: Some(0.4),
             source: "proxy: large-v3-q5_0 (same size)".into(),
             model: None,
+            night_ok: false,
+            night_hours: None,
         };
         assert!(!ProfileView::from_capability(&cap, vec![]).uses_hinglish(&langs));
         // Measured and within the bar: every chunk of an English + Hindi session, both passes, one model.
@@ -402,6 +479,8 @@ mod tests {
             rtf: Some(0.4),
             source: "measured".into(),
             model: Some("hinglish-f16".into()),
+            night_ok: false,
+            night_hours: None,
         };
         let v = ProfileView::from_capability(&cap, vec![]);
         assert!(v.uses_hinglish(&langs));
