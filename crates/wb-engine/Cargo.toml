@@ -14,8 +14,6 @@ default = []
 # GGML_* CPU flags through the environment and WB_ENGINE_VARIANT to the variant's name.
 vulkan = ["whisper-rs/vulkan"]
 cuda = ["whisper-rs/cuda"]
-# Development only: see wb-engine-core. Not a default and not part of any shipped variant.
-lang-experiments = ["wb-engine-core/lang-experiments"]
 
 [dependencies]
 anyhow.workspace = true

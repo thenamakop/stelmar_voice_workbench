@@ -516,8 +516,9 @@ limit = "eval/clips/phase5-tune-coshe.txt"
 needs = "phase-2"
 
 # Rule (c): every chunk of the en+hi session is decoded in both languages (detected language first, the other second) and
-# the better candidate is kept. Needs the experiment engine (wb-engine-cuda-lang-experiments-*.exe, cargo feature
-# lang-experiments, development only) with WB_LANG_EXPERIMENT=c in the environment; the fingerprint records the variable.
+# the better candidate is kept. A record of the Phase 5 comparison: it needed an experiment engine (cargo feature
+# lang-experiments) with WB_LANG_EXPERIMENT=c, which was removed from the engine on 25 Nov 2026 once rule (d2) was chosen;
+# to repeat it, check out commit f1d9251, where the feature still exists. The fingerprint records the variable.
 [[run]]
 name = "tune-turbo-q5_0-c"
 setup = "large-v3-turbo-q5_0"
@@ -554,8 +555,8 @@ limit = "eval/clips/phase5-tune-coshe.txt"
 needs = "phase-2"
 
 # Rule (e), the hybrid: the Hinglish model detects the language of every chunk and decodes the chunks it calls Hindi;
-# turbo q5_0 decodes the chunks it calls English. Needs the experiment engine with WB_LANG_EXPERIMENT=e (the fingerprint
-# records the variable). Run with the f16, q8_0 and q5_0 Hinglish files.
+# turbo q5_0 decodes the chunks it calls English. A record only: it needed the experiment engine with WB_LANG_EXPERIMENT=e
+# (removed on 25 Nov 2026; see the note above). Run with the f16, q8_0 and q5_0 Hinglish files.
 [[run]]
 name = "tune-hybrid-f16-e"
 setup = "en=large-v3-turbo-q5_0,hi=hinglish-f16"

@@ -64,14 +64,6 @@ impl Models {
     /// The model that detects languages: the one for English (a multilingual model), else the
     /// catch-all, else the first.
     fn detector_index(&self) -> usize {
-        // Rule (e), development builds only (cargo feature lang-experiments): the model for Hindi detects.
-        #[cfg(feature = "lang-experiments")]
-        if wb_engine_core::lang::experiment::requested().as_deref()
-            == Some(wb_engine_core::lang::experiment::DETECT_WITH_HINDI_MODEL)
-            && let Some(i) = self.by_lang.get("hi")
-        {
-            return *i;
-        }
         self.by_lang
             .get("en")
             .or_else(|| self.by_lang.get("*"))

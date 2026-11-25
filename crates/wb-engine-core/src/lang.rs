@@ -149,12 +149,6 @@ pub fn decide(
             reason: Reason::OnlyLanguage,
         };
     };
-    #[cfg(feature = "lang-experiments")]
-    if experiment::requested().as_deref() == Some(experiment::ALWAYS_BOTH)
-        && let Some(plan) = experiment::always_both(&best, languages)
-    {
-        return plan;
-    }
     // Rule 3: short and unsure.
     if duration_s < rules.short_chunk_s && best_p < rules.short_chunk_sure {
         let pick = match (prev, next) {
@@ -199,34 +193,6 @@ pub fn decide(
     Plan::Single {
         lang: best,
         reason: Reason::Detected,
-    }
-}
-
-/// Experiments with the language rule (Phase 5, items 4 and 5). Compiled only with the cargo feature
-/// `lang-experiments`, which no shipped engine has; the variable below is read only in such a build.
-#[cfg(feature = "lang-experiments")]
-pub mod experiment {
-    use super::Plan;
-
-    /// The environment variable that picks an experiment.
-    pub const VARIABLE: &str = "WB_LANG_EXPERIMENT";
-    /// Rule (c): decode every chunk of a two-language session in both languages.
-    pub const ALWAYS_BOTH: &str = "c";
-    /// Rule (e): the model for Hindi detects the language of every chunk (it also decodes the chunks it calls Hindi);
-    /// the model for English decodes only the chunks the Hindi model calls English.
-    pub const DETECT_WITH_HINDI_MODEL: &str = "e";
-
-    pub fn requested() -> Option<String> {
-        std::env::var(VARIABLE).ok().filter(|v| !v.is_empty())
-    }
-
-    /// Rule (c): the detected language first, the other expected language second.
-    pub fn always_both(best: &str, languages: &[String]) -> Option<Plan> {
-        let other = languages.iter().find(|l| l.as_str() != best)?;
-        Some(Plan::Both {
-            first: best.to_string(),
-            second: other.clone(),
-        })
     }
 }
 
@@ -282,22 +248,6 @@ mod tests {
             ("ur".to_string(), ur),
         ];
         Detection::restrict(&raw, &langs(&["en", "hi", "ur"]))
-    }
-
-    /// Rule (c) in an experiment build: the detected language first and the other expected language second, whatever
-    /// the probabilities say. A release engine has neither this code nor the variable.
-    #[cfg(feature = "lang-experiments")]
-    #[test]
-    fn always_both_decodes_the_detected_language_first_and_the_other_second() {
-        let both = langs(&["en", "hi"]);
-        assert_eq!(
-            experiment::always_both("hi", &both),
-            Some(Plan::Both {
-                first: "hi".into(),
-                second: "en".into()
-            })
-        );
-        assert_eq!(experiment::always_both("hi", &langs(&["hi"])), None);
     }
 
     fn det2(en: f32, hi: f32) -> Detection {
