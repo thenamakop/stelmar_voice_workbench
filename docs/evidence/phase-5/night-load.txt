@@ -1,0 +1,53 @@
+Night load per conference day and the hours the Hinglish f16 night pass needs (Phase 5). Written by scripts/gates/night_load.py; nobody edits it.
+inputs: docs/programme.json (8 sessions to transcribe, all English + Hindi), docs/evidence/phase-5/hinglish-speed-A/B/C.txt (Legion; emu-low and emu-mid PROVISIONAL)
+rule as coded (crates/wb-queue/src/night.rs): start 30 min after the last session to transcribe ends; finish by 8:00 IST the next morning; the whole recorded audio is decoded
+RTF factor applied to the benchmark speeds: x1.25 (the night detection allowance for a session with several languages, provisional)
+
+== English + Hindi audio the night pass decodes, per conference day and per kind of machine
+machine | date | audio h | last session ends | night starts | hours until 08:00
+main hall (keynotes, panel, awards: not the parallel tracks) | 2027-02-08 | 3.00 | 17.50 | 18.00 | 14.0
+main hall (keynotes, panel, awards: not the parallel tracks) | 2027-02-09 | 3.00 | 16.50 | 17.00 | 15.0
+seminar hall (parallel tracks only) | 2027-02-08 | 3.00 | 17.50 | 18.00 | 14.0
+seminar hall (parallel tracks only) | 2027-02-09 | 2.00 | 16.50 | 17.00 | 15.0
+one machine for every slot (upper bound: each parallel slot counted once) | 2027-02-08 | 6.00 | 17.50 | 18.00 | 14.0
+one machine for every slot (upper bound: each parallel slot counted once) | 2027-02-09 | 5.00 | 16.50 | 17.00 | 15.0
+
+== Hours of Hinglish f16 per night, by tier and device (Hindi share 0 / 50 / 100% of the audio), against the hours left
+tier | device | RTF en | RTF hi | machine | date | audio h | hours at 0% / 50% / 100% Hindi | hours left | finishes by 08:00 (at 50% / at 100% Hindi)
+emu-low | CPU avx2, 4 threads | 5.119 | 8.983 | all | 2027-02-08 | 6.00 | 38.4 / 52.9 / 67.4 | 14.0 | NO / NO
+emu-low | CPU avx2, 4 threads | 5.119 | 8.983 | all | 2027-02-09 | 5.00 | 32.0 / 44.1 / 56.1 | 15.0 | NO / NO
+emu-low | CPU avx2, 4 threads | 5.119 | 8.983 | hall | 2027-02-08 | 3.00 | 19.2 / 26.4 / 33.7 | 14.0 | NO / NO
+emu-low | CPU avx2, 4 threads | 5.119 | 8.983 | hall | 2027-02-09 | 2.00 | 12.8 / 17.6 / 22.5 | 15.0 | NO / NO
+emu-low | CPU avx2, 4 threads | 5.119 | 8.983 | main | 2027-02-08 | 3.00 | 19.2 / 26.4 / 33.7 | 14.0 | NO / NO
+emu-low | CPU avx2, 4 threads | 5.119 | 8.983 | main | 2027-02-09 | 3.00 | 19.2 / 26.4 / 33.7 | 15.0 | NO / NO
+emu-low | vulkan on the UHD (device 0), 2 CPU threads | 0.669 | 1.691 | all | 2027-02-08 | 6.00 | 5.0 / 8.9 / 12.7 | 14.0 | yes / yes
+emu-low | vulkan on the UHD (device 0), 2 CPU threads | 0.669 | 1.691 | all | 2027-02-09 | 5.00 | 4.2 / 7.4 / 10.6 | 15.0 | yes / yes
+emu-low | vulkan on the UHD (device 0), 2 CPU threads | 0.669 | 1.691 | hall | 2027-02-08 | 3.00 | 2.5 / 4.4 / 6.3 | 14.0 | yes / yes
+emu-low | vulkan on the UHD (device 0), 2 CPU threads | 0.669 | 1.691 | hall | 2027-02-09 | 2.00 | 1.7 / 3.0 / 4.2 | 15.0 | yes / yes
+emu-low | vulkan on the UHD (device 0), 2 CPU threads | 0.669 | 1.691 | main | 2027-02-08 | 3.00 | 2.5 / 4.4 / 6.3 | 14.0 | yes / yes
+emu-low | vulkan on the UHD (device 0), 2 CPU threads | 0.669 | 1.691 | main | 2027-02-09 | 3.00 | 2.5 / 4.4 / 6.3 | 15.0 | yes / yes
+emu-mid | CPU avx2, 12 threads | 1.789 | 3.295 | all | 2027-02-08 | 6.00 | 13.4 / 19.1 / 24.7 | 14.0 | NO / NO
+emu-mid | CPU avx2, 12 threads | 1.789 | 3.295 | all | 2027-02-09 | 5.00 | 11.2 / 15.9 / 20.6 | 15.0 | NO / NO
+emu-mid | CPU avx2, 12 threads | 1.789 | 3.295 | hall | 2027-02-08 | 3.00 | 6.7 / 9.5 / 12.4 | 14.0 | yes / yes
+emu-mid | CPU avx2, 12 threads | 1.789 | 3.295 | hall | 2027-02-09 | 2.00 | 4.5 / 6.4 / 8.2 | 15.0 | yes / yes
+emu-mid | CPU avx2, 12 threads | 1.789 | 3.295 | main | 2027-02-08 | 3.00 | 6.7 / 9.5 / 12.4 | 14.0 | yes / yes
+emu-mid | CPU avx2, 12 threads | 1.789 | 3.295 | main | 2027-02-09 | 3.00 | 6.7 / 9.5 / 12.4 | 15.0 | yes / yes
+emu-mid | vulkan on the UHD (device 0), 2 CPU threads | 0.651 | 1.615 | all | 2027-02-08 | 6.00 | 4.9 / 8.5 / 12.1 | 14.0 | yes / yes
+emu-mid | vulkan on the UHD (device 0), 2 CPU threads | 0.651 | 1.615 | all | 2027-02-09 | 5.00 | 4.1 / 7.1 / 10.1 | 15.0 | yes / yes
+emu-mid | vulkan on the UHD (device 0), 2 CPU threads | 0.651 | 1.615 | hall | 2027-02-08 | 3.00 | 2.4 / 4.2 / 6.1 | 14.0 | yes / yes
+emu-mid | vulkan on the UHD (device 0), 2 CPU threads | 0.651 | 1.615 | hall | 2027-02-09 | 2.00 | 1.6 / 2.8 / 4.0 | 15.0 | yes / yes
+emu-mid | vulkan on the UHD (device 0), 2 CPU threads | 0.651 | 1.615 | main | 2027-02-08 | 3.00 | 2.4 / 4.2 / 6.1 | 14.0 | yes / yes
+emu-mid | vulkan on the UHD (device 0), 2 CPU threads | 0.651 | 1.615 | main | 2027-02-09 | 3.00 | 2.4 / 4.2 / 6.1 | 15.0 | yes / yes
+native RTX 4070 | cuda on the RTX (device 0), 8 CPU threads | 0.050 | 0.189 | all | 2027-02-08 | 6.00 | 0.4 / 0.9 / 1.4 | 14.0 | yes / yes
+native RTX 4070 | cuda on the RTX (device 0), 8 CPU threads | 0.050 | 0.189 | all | 2027-02-09 | 5.00 | 0.3 / 0.7 / 1.2 | 15.0 | yes / yes
+native RTX 4070 | cuda on the RTX (device 0), 8 CPU threads | 0.050 | 0.189 | hall | 2027-02-08 | 3.00 | 0.2 / 0.4 / 0.7 | 14.0 | yes / yes
+native RTX 4070 | cuda on the RTX (device 0), 8 CPU threads | 0.050 | 0.189 | hall | 2027-02-09 | 2.00 | 0.1 / 0.3 / 0.5 | 15.0 | yes / yes
+native RTX 4070 | cuda on the RTX (device 0), 8 CPU threads | 0.050 | 0.189 | main | 2027-02-08 | 3.00 | 0.2 / 0.4 / 0.7 | 14.0 | yes / yes
+native RTX 4070 | cuda on the RTX (device 0), 8 CPU threads | 0.050 | 0.189 | main | 2027-02-09 | 3.00 | 0.2 / 0.4 / 0.7 | 15.0 | yes / yes
+
+== Summary: does the Hinglish f16 night pass finish by 08:00 IST on every conference day? (yes = even if all the audio is Hindi; 50% = only if Hindi is half the audio or less; NO = not at 50% Hindi either)
+emu-low: CPU avx2, 4 threads: main: NO; hall: NO; all: NO
+emu-low: vulkan on the UHD (device 0), 2 CPU threads: main: yes; hall: yes; all: yes
+emu-mid: CPU avx2, 12 threads: main: yes; hall: yes; all: NO
+emu-mid: vulkan on the UHD (device 0), 2 CPU threads: main: yes; hall: yes; all: yes
+native RTX 4070: cuda on the RTX (device 0), 8 CPU threads: main: yes; hall: yes; all: yes
