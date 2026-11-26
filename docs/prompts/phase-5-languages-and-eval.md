@@ -18,7 +18,7 @@ Correct rendering for Devanagari, right-to-left Nastaliq Urdu and mixed Hindi–
 
 ## Verification
 - `eval/REPORT.md` is committed with numbers for every candidate, setup, dataset and role, regenerable with one command.
-- The chosen setup beats zero-shot Whisper medium on every local set, including the code-switched set, and detects the chunk language correctly at least 90% of the time there.
+- The chosen setup beats zero-shot Whisper medium on every local set, including the code-switched set, and detects the chunk language correctly at least 90% of the time there. (Restated by the owner on 26 Nov 2026 for the Hinglish pairs: the gate is 0 translated chunks on the tuning and held-out sets and held-out WER at most 23.5, with chunk language as information; see `docs/GATES.md`.)
 - No chunk in the local code-switched set comes back as an English translation of Hindi speech.
 - Re-running the system check picks up the new defaults on both laptops (attach the `capability.json` diffs).
 - Screenshots: Hindi, Urdu and mixed segments render correctly on Record and Review (no missing-glyph boxes; Urdu right-aligned; English words in mixed segments in Latin script where the model produced them).
