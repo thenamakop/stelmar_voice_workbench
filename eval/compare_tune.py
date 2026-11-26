@@ -4,8 +4,10 @@
 
 Columns: translated chunks (a Hindi-led chunk decoded as English text), chunks whose language matches the label for pure
 chunks, English-led mixed chunks and Hindi-led mixed chunks (each on its own), WER, CER, English words written in Devanagari,
-the real-time factor and truncated utterances. The labels are derived from the reference text and stay provisional until the
-owner's ear check is done (Phase 5, 25 Nov 2026).
+the real-time factor and truncated utterances. The labels are derived from the reference text; they are validated by the
+owner's ear check of 26 Nov 2026 (main language 10 of 10, pure against mixed 9 of 10; docs/evidence/phase-5/ear-check.txt)
+and by the ten held-out hand labels (9 of 10 and 8 of 10; labeller-validation.txt). The one chunk the ear check changed is
+applied.
 """
 
 from __future__ import annotations
@@ -49,7 +51,8 @@ def main() -> int:
     first = score(a.runs[0])["summary"]
     L = [f"Tuning-set comparison (Phase 5, items 4 and 5): {first['utterances']} clips; machine {first['machine']['name']}; "
          f"threads {first['settings']['threads']}; device {first['engine'].get('device')}; whisper.cpp {first['engine'].get('version')}.",
-         "Chunk-language numbers are PROVISIONAL: the labels come from the reference text and the owner's ear check is not done.",
+         "Chunk-language labels: from the reference text, validated on the 10 held-out hand labels (main 9/10, pure against mixed "
+         "8/10) and by the owner's ear check of 26 Nov 2026 (10/10 and 9/10, one chunk corrected to English mixed); no longer provisional.",
          "* RTF indicative only: the run was decoded without the gate lock and its idle check (quality numbers are unaffected).", ""]
     L += [" | ".join(r) for r in rows]
     text = "\n".join(L) + "\n"

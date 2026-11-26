@@ -2553,10 +2553,11 @@
    "start_ms": 54880,
    "end_ms": 58500,
    "main": "en",
-   "kind": "pure",
+   "kind": "mixed",
    "latin": 7,
    "devanagari": 1,
-   "latin_share": 0.875
+   "latin_share": 0.875,
+   "ear_check": "owner"
   },
   {
    "id": "audio_377",

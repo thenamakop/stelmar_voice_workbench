@@ -3,9 +3,9 @@ engine: wb-engine 0.1.0 (cuda, whisper.cpp v1.9.5 commit d1be6fde11ac tree e736b
 labels: 339 chunks from tune-turbo-q5_0-a (derived from the reference script; not hand labels)
 
 class | chunks | language matches | translated | nothing decoded
-mixed, English-led | 45 | 44 | 0 | 0
+mixed, English-led | 46 | 45 | 0 | 0
 mixed, Hindi-led | 89 | 46 | 41 | 0
-pure English | 134 | 134 | 0 | 0
+pure English | 133 | 133 | 0 | 0
 pure Hindi | 71 | 60 | 7 | 0
 
 all labelled chunks: 339; language matches 284; translated 48; nothing decoded 0

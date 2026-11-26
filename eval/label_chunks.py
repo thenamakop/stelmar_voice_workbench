@@ -11,6 +11,10 @@ main language and 8 of 10 on pure against mixed.
 VAD and the chunker, which do not depend on the language rule) and labels each range from the reference words. The file
 holds ids, time ranges, labels and shares: no text and no audio.
 `sample` picks the random chunks of the owner's ear check and writes a plain list: clip id, start, end, proposed label.
+`ear-check` reads the owner's marks (eval/labels/coshe-tune-ear-check.json, a person's data), counts agreement against the
+same bar as `validate` (main 9 of 10, pure against mixed 8 of 10), applies the owner's corrections to the label file and
+writes the result to docs/evidence/phase-5/ear-check.txt. `build` applies the same corrections, so a rebuilt label file
+keeps them.
 The written files are evidence: scripts write them, nobody edits them.
 """
 
@@ -30,7 +34,27 @@ from wbeval.labels import load_labels  # noqa: E402
 
 EVAL = Path(__file__).resolve().parent
 TUNE_CHUNKS = EVAL / "labels" / "coshe-tune-chunks.json"
+EAR_MARKS = EVAL / "labels" / "coshe-tune-ear-check.json"
 MIN_CHUNK_S = 1.5
+
+
+def apply_ear_check(chunks: list[dict]) -> int:
+    """Sets a chunk's label to what the owner heard where the ear check disagreed with the derived label; returns how many."""
+    changed = 0
+    if not EAR_MARKS.exists():
+        return changed
+    for m in json.loads(EAR_MARKS.read_text(encoding="utf-8"))["marks"]:
+        if m["mark"] != "disagree":
+            continue
+        hit = [c for c in chunks if (c["id"], c["start_ms"], c["end_ms"]) == (m["id"], m["start_ms"], m["end_ms"])]
+        if len(hit) != 1:
+            raise SystemExit(f"ear-check chunk {m['n']} ({m['id']} {m['start_ms']}-{m['end_ms']}) is not in the label file")
+        c = hit[0]
+        if (c["main"], c["kind"]) != (m["heard_main"], m["heard_kind"]):
+            c["main"], c["kind"] = m["heard_main"], m["heard_kind"]
+            changed += 1
+        c["ear_check"] = "owner"
+    return changed
 
 
 def clock(ms: int) -> str:
@@ -87,10 +111,12 @@ def cmd_build(args) -> int:
                 skipped["too_few_words"] += 1
                 continue
             chunks.append({"id": rec["id"], "start_ms": int(seg["start_ms"]), "end_ms": int(seg["end_ms"]), **got})
+    corrected = apply_ear_check(chunks)
     out = {"dataset": "coshe-eval", "heldout": False,
            "about": "Chunk labels of the tuning clips, derived from the reference text alone by eval/label_chunks.py (spread over "
                     "the duration by characters, Latin against Devanagari share, pure under 15%). Ranges come from the engine's "
-                    f"segments in {run.name}. No text, no audio. Tuning only.",
+                    f"segments in {run.name}. Where the owner's ear check disagreed ({corrected} chunk(s)) the label is what the "
+                    "owner heard (eval/labels/coshe-tune-ear-check.json). No text, no audio. Tuning only.",
            "from_run": run.name, "skipped": skipped, "chunks": chunks}
     path = args.out or TUNE_CHUNKS
     path.write_text(json.dumps(out, indent=1) + "\n", encoding="utf-8")
@@ -114,6 +140,38 @@ def cmd_sample(args) -> int:
     return 0
 
 
+def cmd_ear_check(args) -> int:
+    marks = json.loads(EAR_MARKS.read_text(encoding="utf-8"))
+    raw = json.loads(TUNE_CHUNKS.read_text(encoding="utf-8"))
+    rows = marks["marks"]
+    main_ok = sum(1 for m in rows if m["heard_main"] == m["proposed_main"])
+    kind_ok = sum(1 for m in rows if m["heard_kind"] == m["proposed_kind"])
+    ok = main_ok >= 9 and kind_ok >= 8 and len(rows) == 10
+    changed = apply_ear_check(raw["chunks"])
+    if changed:
+        TUNE_CHUNKS.write_text(json.dumps(raw, indent=1) + "\n", encoding="utf-8")
+    L = [f"Ear check of the chunk labels ({len(rows)} random chunks of the tuning clips; seed {marks['seed']}); marks by {marks['by']}, "
+         f"{marks['date']}; written by eval/label_chunks.py ear-check from {EAR_MARKS.name}.",
+         "main = the language that leads the chunk; pure = one language only; mixed = both languages.",
+         "A mark of disagree sets the chunk's label to what the owner heard; where the owner did not change the main language, "
+         "the main language stays.", "",
+         "n | clip | start | end | proposed (main, kind) | latin share | mark | owner's label (main, kind)"]
+    for m in rows:
+        L.append(f"{m['n']} | {m['id']} | {clock(m['start_ms'])} | {clock(m['end_ms'])} | {m['proposed_main']}, {m['proposed_kind']} | "
+                 f"{m['latin_share']} | {m['mark']} | {m['heard_main']}, {m['heard_kind']}")
+    miss = [m for m in rows if m["heard_kind"] != m["proposed_kind"]]
+    L += ["", f"main language agrees {main_ok} of {len(rows)}; pure against mixed agrees {kind_ok} of {len(rows)}",
+          f"pass bar: 9 of 10 on main and 8 of 10 on pure against mixed: {'PASS' if ok else 'FAIL'}",
+          f"label file {TUNE_CHUNKS.name}: {sum(1 for m in rows if m['mark'] == 'disagree')} chunk(s) carry the owner's label "
+          "(`build` keeps the corrections)"]
+    for m in miss:
+        L.append(f"disagreement {m['n']}: the labeller said {m['proposed_kind']} ({m['latin_share']} Latin share, so the smaller "
+                 f"share was {min(m['latin_share'], 1 - m['latin_share']):.3f}, under the {PURE_BELOW:.0%} limit) and the owner hears "
+                 f"{m['heard_kind']}")
+    write(args.out, "\n".join(L) + "\n")
+    return 0 if ok else 1
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -129,6 +187,9 @@ def main() -> int:
     s.add_argument("--seed", type=int, default=24112026)
     s.add_argument("--out", type=Path)
     s.set_defaults(fn=cmd_sample)
+    e = sub.add_parser("ear-check")
+    e.add_argument("--out", type=Path)
+    e.set_defaults(fn=cmd_ear_check)
     args = ap.parse_args()
     return args.fn(args)
 

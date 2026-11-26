@@ -58,3 +58,22 @@ def test_the_ear_check_sample_is_random_but_repeatable_and_stratified():
     for main in ("en", "hi"):
         for kind in ("mixed", "pure"):
             assert sum(1 for c in one if c["main"] == main and c["kind"] == kind) >= 2
+
+
+def test_the_owners_ear_check_correction_is_applied_to_the_label_file_and_survives_a_rebuild():
+    import json
+
+    import label_chunks as lc
+
+    marks = json.loads(lc.EAR_MARKS.read_text(encoding="utf-8"))["marks"]
+    wrong = [m for m in marks if m["mark"] == "disagree"]
+    assert len(wrong) == 1 and (wrong[0]["proposed_kind"], wrong[0]["heard_kind"]) == ("pure", "mixed")
+    m = wrong[0]
+    derived = {"id": m["id"], "start_ms": m["start_ms"], "end_ms": m["end_ms"], "main": m["proposed_main"],
+               "kind": m["proposed_kind"], "latin_share": m["latin_share"]}
+    other = {"id": "other", "start_ms": 0, "end_ms": 4000, "main": "hi", "kind": "pure", "latin_share": 0.0}
+    chunks = [dict(derived), dict(other)]
+    assert lc.apply_ear_check(chunks) == 1
+    assert (chunks[0]["main"], chunks[0]["kind"]) == (m["proposed_main"], "mixed")
+    assert chunks[1] == other
+    assert lc.apply_ear_check(chunks) == 0  # idempotent: a rebuild keeps the correction and changes nothing more
