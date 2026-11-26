@@ -436,6 +436,8 @@ impl Queue {
             .ensure_rolling_job(&name, models_json(&models), languages.to_vec(), clock_ms())
             .map_err(|e| e.to_string())?;
         laps.lap("rolling job");
+        // A night job held for a later session before the app was closed is still held: the hold is the job's own state.
+        let night_held = queue.night_job_is_held().unwrap_or(false);
         let work_dir = dir.join("work");
         let handle = Arc::new(SessionHandle {
             name: name.clone(),
@@ -455,7 +457,7 @@ impl Queue {
             finished: false,
             ended_ms: None,
             night_handled: false,
-            night_cancelled: false,
+            night_cancelled: night_held,
         });
         laps.lap("open-sessions list");
         self.ensure_slots(profile);

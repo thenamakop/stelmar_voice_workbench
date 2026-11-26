@@ -400,6 +400,11 @@ impl SessionQueue {
         Ok(id)
     }
 
+    /// The note a held night job carries in its error column. A hold is the job's own persisted state (Paused with this
+    /// note), so it survives a restart of the app: an operator's Pause leaves the column empty and is not a hold
+    /// (item 3 of the auditor of 20 Nov 2026, owner's decision of 27 Nov 2026).
+    pub const NIGHT_HELD_NOTE: &'static str = "held: another session started after the night pass was planned; it is planned again after the last session";
+
     /// The night pass of this session is cancelled because another session started after it was planned (owner,
     /// 19 Nov 2026): the night job is held, with every unit it already committed, until the pass is planned again
     /// after the last session. True when a night job that had not finished was held.
@@ -417,7 +422,23 @@ impl SessionQueue {
             return Ok(false);
         }
         self.set_paused(night.id, true, now_ms)?;
+        self.transcript.store_mut().set_job_state(
+            night.id,
+            JobState::Paused,
+            Some(Self::NIGHT_HELD_NOTE),
+            now_ms,
+        )?;
         Ok(true)
+    }
+
+    /// The night job of this session is held for a later session (as [`Self::hold_night_job`] left it, possibly before
+    /// the app was restarted): Paused with the hold's note.
+    pub fn night_job_is_held(&self) -> Result<bool> {
+        Ok(self.transcript.store().jobs()?.into_iter().any(|j| {
+            j.kind == JobKind::Night
+                && j.state == JobState::Paused
+                && j.error.as_deref() == Some(Self::NIGHT_HELD_NOTE)
+        }))
     }
 
     /// The night pass was held for a new session and the plan made after the last session does not run it (the
@@ -1575,6 +1596,57 @@ mod tests {
             Some("post-2")
         );
         assert_eq!(q.transcript().store().segment_count("post-2").unwrap(), 2);
+    }
+
+    /// Item 3 of the auditor of 20 Nov 2026 (owner, 27 Nov 2026): the hold is the night job's own persisted state, so a
+    /// hold survives a restart of the app and the pass is planned again for it; an operator's Pause is not a hold.
+    #[test]
+    fn a_night_hold_survives_an_app_restart_and_an_operators_pause_is_not_a_hold() {
+        let (mut q, job, dir) = queue_with_units("night-hold-restart", 2);
+        for _ in 0..2 {
+            let c = q.claim(Device::Cpu, 1).unwrap().unwrap();
+            stage(
+                &c,
+                &[ev(
+                    c.unit.idx,
+                    0,
+                    c.unit.start_ms + 10,
+                    c.unit.end_ms - 10,
+                    "r",
+                )],
+            );
+            q.complete(&c, "t", 2).unwrap();
+        }
+        q.add_part(1, 0, 20_000, 48_000, &no_pauses()).unwrap();
+        q.plan_units(job, true).unwrap();
+        let night = q
+            .create_night_job("s", serde_json::json!({"hi": "big"}), vec!["hi".into()], 3)
+            .unwrap();
+        assert!(!q.night_job_is_held().unwrap(), "not held yet");
+        // The operator's own Pause is not a hold.
+        q.set_paused(night, true, 4).unwrap();
+        assert!(!q.night_job_is_held().unwrap(), "an operator's Pause");
+        q.set_paused(night, false, 5).unwrap();
+        // Another session starts: held. The app is closed and opened again.
+        assert!(q.hold_night_job(6).unwrap());
+        assert!(q.night_job_is_held().unwrap());
+        drop(q);
+        let mut q = SessionQueue::open(&dir).unwrap();
+        assert!(
+            q.night_job_is_held().unwrap(),
+            "the hold is still there after a restart"
+        );
+        // Planned again after the last session: the same job goes on, and it is no longer held.
+        assert!(q.resume_night_job(7).unwrap());
+        assert!(!q.night_job_is_held().unwrap());
+        let night_job = q
+            .jobs()
+            .unwrap()
+            .into_iter()
+            .find(|j| j.kind == JobKind::Night)
+            .unwrap();
+        assert_eq!(night_job.state, JobState::Queued);
+        assert!(night_job.error.is_none(), "the hold's note is gone");
     }
 
     #[test]
