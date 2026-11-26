@@ -563,6 +563,7 @@
       "rtf": 0.25,
       "source": "measured",
       "model": "hinglish-q5_0",
+      "detector": null,
       "night_ok": true,
       "night_hours": 0.75
     },

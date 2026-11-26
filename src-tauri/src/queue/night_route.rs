@@ -236,6 +236,7 @@ mod tests {
             rtf: Some(rtf_hi),
             source: "measured".into(),
             model: Some("hinglish-f16".into()),
+            detector: None,
             night_ok,
             night_hours: Some(rtf_hi * 3.0),
         };

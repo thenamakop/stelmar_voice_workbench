@@ -1120,24 +1120,96 @@ fn a_model_is_used_on_a_discrete_card_only_if_its_peak_plus_half_a_gigabyte_fits
     }
 }
 
+/// A pair cell on the Legion's card (index 1): the Hinglish model with `small-q5_0` in front of it, as the system check
+/// measures it (a batch decode with detection on; memory is the two models' cells added up).
+fn pair_cell(model: &str, rtf: f64, local_gib: f64) -> Measurement {
+    let mut m = rolling(
+        model,
+        Lang::Hi,
+        DeviceConfig::Gpu { index: 1 },
+        rtf,
+        6.0,
+        Some(local_gib),
+    );
+    m.detector = Some("small-q5_0".to_string());
+    m
+}
+
 #[test]
-fn the_hinglish_model_and_the_live_model_must_fit_the_card_together() {
-    // The live stand-in (turbo) peaks at 1.0 GiB in the fixture and runs beside the Hinglish batch engine on the same
-    // card. q8_0 (2.67) + 1.0 + 0.5 = 4.17 GiB: no on a 4 GB card, yes on 6 GB; f16 (4.01) + 1.0 + 0.5 = 5.51: no on
-    // 4 GB, yes on 6 GB.
-    for (model, peak, card, fits) in [
-        ("hinglish-q8_0", 2.67, 4.0, false),
-        ("hinglish-q8_0", 2.67, 6.0, true),
-        ("hinglish-f16", 4.01, 6.0, true),
-        ("hinglish-f16", 4.01, 4.0, false),
-    ] {
-        let d = decide_with(&legion_with_card(card, Some((model, peak))), false);
+fn a_pair_that_meets_the_bar_and_fits_the_card_is_chosen_over_the_model_alone() {
+    // 8 GB card: f16 alone (0.19) and f16 with the small detector (0.25, 4.5 GiB for both) were measured.
+    let mut p = legion_with_card(8.0, Some(("hinglish-f16", 4.01)));
+    p.measurements.push(pair_cell("hinglish-f16", 0.25, 4.5));
+    let d = decide_with(&p, false);
+    assert!(d.hinglish.ok, "{:?}", d.hinglish);
+    assert_eq!(d.hinglish.chosen_model(), Some("hinglish-f16"));
+    assert_eq!(d.hinglish.chosen_detector(), Some("small-q5_0"));
+    assert_eq!(d.hinglish.rtf, Some(0.25));
+    assert!(
+        d.verdict.iter().any(|l| l.contains(
+            "hinglish-f16 for the Hindi chunks, with the small model small-q5_0 in front of it"
+        )),
+        "{:#?}",
+        d.verdict
+    );
+    // The pair is slower than the bar: the model alone, which meets it, is chosen.
+    let mut p = legion_with_card(8.0, Some(("hinglish-f16", 4.01)));
+    p.measurements.push(pair_cell("hinglish-f16", 5.0, 4.5));
+    let d = decide_with(&p, false);
+    assert_eq!(d.hinglish.chosen_model(), Some("hinglish-f16"));
+    assert_eq!(d.hinglish.chosen_detector(), None);
+}
+
+#[test]
+fn a_pair_that_does_not_fit_the_card_is_not_chosen_and_the_model_alone_may_be() {
+    // f16 with the detector peaks at 4.5 GiB: with the headroom it needs 5.0 GiB, so a 4 GB card cannot take it.
+    let mut p = legion_with_card(4.0, None);
+    p.measurements.push(pair_cell("hinglish-f16", 0.25, 4.5));
+    let d = decide_with(&p, false);
+    assert_eq!(d.hinglish.chosen_model(), None, "{:?}", d.hinglish);
+    assert!(!d.hinglish.ok);
+}
+
+#[test]
+fn a_four_gigabyte_card_gets_the_q8_0_pair_and_live_text_gives_way() {
+    // q8_0 with the small detector peaked at 3.18 GiB (3255 MiB, RTX 4070): 3.68 GiB with the headroom fits 4 GB.
+    for (card, live_offered) in [(4.0, false), (6.0, true), (8.0, true)] {
+        let mut p = legion_with_card(card, None);
+        p.measurements.push(pair_cell("hinglish-q8_0", 0.25, 3.18));
+        let d = decide_with(&p, false);
+        assert!(d.hinglish.ok, "{card} GB: {:?}", d.hinglish);
         assert_eq!(
-            d.hinglish.ok, fits,
-            "{model} on {card} GB: {:?}",
-            d.hinglish
+            d.hinglish.chosen_model(),
+            Some("hinglish-q8_0"),
+            "{card} GB"
         );
+        assert_eq!(
+            d.hinglish.chosen_detector(),
+            Some("small-q5_0"),
+            "{card} GB"
+        );
+        let live = &d.languages[&Lang::En].live;
+        assert_eq!(live.offered, live_offered, "{card} GB: {live:?}");
+        let says_beside = live.hard_reasons.iter().any(|r| {
+            r.contains("does not fit this card's memory beside hinglish-q8_0 with small-q5_0")
+        });
+        assert_eq!(says_beside, !live_offered, "{card} GB: {live:?}");
     }
+}
+
+#[test]
+fn only_a_pair_the_evaluation_accepted_is_ever_chosen() {
+    assert!(
+        HINGLISH_PAIRS
+            .iter()
+            .all(|(h, d)| h.starts_with("hinglish") && *d == "small-q5_0")
+    );
+    let mut p = legion_with_card(8.0, None);
+    let mut m = pair_cell("hinglish-f16", 0.25, 4.5);
+    m.detector = Some("tiny".to_string());
+    p.measurements.push(m);
+    let d = decide_with(&p, false);
+    assert_eq!(d.hinglish.chosen_model(), None, "{:?}", d.hinglish);
 }
 
 #[test]

@@ -524,6 +524,7 @@
       "rtf": 1.532,
       "source": "proxy: large-v3-q5_0 (same size)",
       "model": null,
+      "detector": null,
       "night_ok": false,
       "night_hours": null
     },

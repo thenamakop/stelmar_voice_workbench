@@ -177,6 +177,7 @@ pub fn cell(
         gpu_local_bytes: local_gib.map(gib),
         truncated_chunks: truncated,
         live_standin: false,
+        detector: None,
     }
 }
 

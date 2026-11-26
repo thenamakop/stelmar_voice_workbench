@@ -20,6 +20,9 @@ struct Peak {
     gpu_local_bytes: u64,
     engine_build: String,
     rtf: f64,
+    /// Set on a pair cell (a Hinglish model with the small detector in front of it): the generic lookups below leave these
+    /// rows out, and the pair lookups use only them.
+    detector: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -47,6 +50,11 @@ pub struct ProfileView {
     /// (`Hinglish::night_model`): the night pass may decode English + Hindi sessions with it (Phase 5, 26 Nov 2026);
     /// the queue plans the real night from the audio and uses it only when that finishes before 08:00.
     hinglish_night: Option<String>,
+    /// The small model in front of `hinglish` when the check chose a pair (`Hinglish::chosen_detector`): English chunks
+    /// decode with it, Hindi chunks with the Hinglish model (Phase 5, 26 Nov 2026).
+    hinglish_detector: Option<String>,
+    /// The same for the night model (`Hinglish::night_detector`).
+    hinglish_night_detector: Option<String>,
     peaks: Vec<Peak>,
 }
 
@@ -93,6 +101,7 @@ impl ProfileView {
                 gpu_local_bytes: m.gpu_local_bytes.unwrap_or(0),
                 engine_build: m.engine_build.clone(),
                 rtf: m.rtf,
+                detector: m.detector.clone(),
             })
             .collect();
         Self {
@@ -109,6 +118,8 @@ impl ProfileView {
             night,
             hinglish: d.hinglish.chosen_model().map(str::to_owned),
             hinglish_night: d.hinglish.night_model().map(str::to_owned),
+            hinglish_detector: d.hinglish.chosen_detector().map(str::to_owned),
+            hinglish_night_detector: d.hinglish.night_detector().map(str::to_owned),
             peaks,
         }
     }
@@ -126,6 +137,7 @@ impl ProfileView {
             gpu_local_bytes: 0,
             engine_build: String::new(),
             rtf,
+            detector: None,
         });
     }
 
@@ -157,11 +169,27 @@ impl ProfileView {
         let Some(model) = self.hinglish_night.as_ref() else {
             return BTreeMap::new();
         };
+        Self::hinglish_models(model, self.hinglish_night_detector.as_deref(), languages)
+    }
+
+    /// The models of a job that decodes with a Hinglish model: the model for every language and the catch-all, or, when a
+    /// small detector stands in front of it, the detector for English and the Hinglish model for the rest.
+    fn hinglish_models(
+        model: &str,
+        detector: Option<&str>,
+        languages: &[String],
+    ) -> BTreeMap<String, String> {
         let mut m: BTreeMap<String, String> = languages
             .iter()
-            .map(|l| (l.clone(), model.clone()))
+            .map(|l| {
+                let id = match (detector, l.as_str()) {
+                    (Some(d), "en") => d,
+                    _ => model,
+                };
+                (l.clone(), id.to_owned())
+            })
             .collect();
-        m.insert("*".into(), model.clone());
+        m.insert("*".into(), model.to_owned());
         m
     }
 
@@ -172,10 +200,14 @@ impl ProfileView {
             return BTreeMap::new();
         };
         let gpu = self.uses_gpu();
+        let pair = self
+            .hinglish_night_detector
+            .as_deref()
+            .and_then(|d| self.pair_rtf(model, d, gpu));
         languages
             .iter()
             .map(|l| {
-                let rtf = self.rtf_for_lang(model, l, gpu);
+                let rtf = pair.unwrap_or_else(|| self.rtf_for_lang(model, l, gpu));
                 (l.clone(), if rtf > 0.0 { rtf } else { 1.0 })
             })
             .collect()
@@ -197,14 +229,10 @@ impl ProfileView {
             .as_ref()
             .filter(|_| self.uses_hinglish(languages))
         {
-            // One model for every chunk of the session: detection and decoding by the same model, so a Hindi
-            // sentence is never decoded as English text by a model that translates it.
-            let mut m: BTreeMap<String, String> = languages
-                .iter()
-                .map(|l| (l.clone(), model.clone()))
-                .collect();
-            m.insert("*".into(), model.clone());
-            return m;
+            // One model decodes every Hindi chunk: it detects the language itself, or a small detector in front of it does
+            // and decodes the English chunks, so a Hindi sentence is never decoded as English text by a model that
+            // translates it (the pair was measured and accepted: `wb_capability::HINGLISH_PAIRS`).
+            return Self::hinglish_models(model, self.hinglish_detector.as_deref(), languages);
         }
         Self::pick(&self.rolling, languages)
     }
@@ -266,11 +294,15 @@ impl ProfileView {
     pub fn night_decode_rtf(&self, languages: &[String]) -> BTreeMap<String, f64> {
         let gpu = self.uses_gpu();
         let models = self.night_models(languages);
+        let pair = match (models.get("en"), models.get("hi")) {
+            (Some(en), Some(hi)) => self.pair_rtf(hi, en, gpu),
+            _ => None,
+        };
         languages
             .iter()
             .filter_map(|l| {
                 let model = models.get(l).or_else(|| models.get("*"))?;
-                let rtf = self.rtf_for(model, gpu);
+                let rtf = pair.unwrap_or_else(|| self.rtf_for(model, gpu));
                 // A model that was never timed counts as slow (1.0), not free.
                 Some((l.clone(), if rtf > 0.0 { rtf } else { 1.0 }))
             })
@@ -296,7 +328,7 @@ impl ProfileView {
         let exact = self
             .peaks
             .iter()
-            .filter(|p| p.model == model && p.gpu == gpu)
+            .filter(|p| p.model == model && p.gpu == gpu && p.detector.is_none())
             .max_by_key(|p| p.peak_commit_bytes);
         if let Some(p) = exact {
             return (p.peak_commit_bytes, p.gpu_local_bytes);
@@ -304,7 +336,7 @@ impl ProfileView {
         let same_model = self
             .peaks
             .iter()
-            .filter(|p| p.model == model)
+            .filter(|p| p.model == model && p.detector.is_none())
             .max_by_key(|p| p.peak_commit_bytes);
         if let Some(p) = same_model {
             return (p.peak_commit_bytes, if gpu { p.gpu_local_bytes } else { 0 });
@@ -323,13 +355,30 @@ impl ProfileView {
         model_ids: impl IntoIterator<Item = &'a str>,
         gpu: bool,
     ) -> (u64, u64) {
-        let distinct: std::collections::BTreeSet<&str> = model_ids.into_iter().collect();
-        distinct
-            .into_iter()
-            .fold((0u64, 0u64), |(peak, local), id| {
-                let (p, l) = self.peak_for(id, gpu);
-                (peak.saturating_add(p), local.saturating_add(l))
-            })
+        let mut distinct: std::collections::BTreeSet<&str> = model_ids.into_iter().collect();
+        // A pair (a Hinglish model and its detector in one engine) counts its own measured cell once: the two models'
+        // own cells added up, never the detector's peak on top of it.
+        let mut start = (0u64, 0u64);
+        let pairs: Vec<(String, String)> = self
+            .peaks
+            .iter()
+            .filter(|p| p.gpu == gpu)
+            .filter_map(|p| Some((p.model.clone(), p.detector.clone()?)))
+            .collect();
+        for (model, detector) in pairs {
+            if distinct.contains(model.as_str())
+                && distinct.contains(detector.as_str())
+                && let Some((p, l)) = self.pair_peak(&model, &detector, gpu)
+            {
+                distinct.remove(model.as_str());
+                distinct.remove(detector.as_str());
+                start = (start.0.saturating_add(p), start.1.saturating_add(l));
+            }
+        }
+        distinct.into_iter().fold(start, |(peak, local), id| {
+            let (p, l) = self.peak_for(id, gpu);
+            (peak.saturating_add(p), local.saturating_add(l))
+        })
     }
 
     fn largest_peak(&self, gpu: bool) -> (u64, u64) {
@@ -347,7 +396,9 @@ impl ProfileView {
         let of = |only_model: bool| {
             self.peaks
                 .iter()
-                .filter(|p| p.gpu == gpu && (!only_model || p.model == model))
+                .filter(|p| {
+                    p.gpu == gpu && p.detector.is_none() && (!only_model || p.model == model)
+                })
                 .map(|p| p.rtf)
                 .fold(0.0, f64::max)
         };
@@ -362,7 +413,13 @@ impl ProfileView {
         let exact = self
             .peaks
             .iter()
-            .filter(|p| p.rolling && p.gpu == gpu && p.model == model && p.lang == lang)
+            .filter(|p| {
+                p.rolling
+                    && p.gpu == gpu
+                    && p.model == model
+                    && p.lang == lang
+                    && p.detector.is_none()
+            })
             .map(|p| p.rtf)
             .fold(0.0, f64::max);
         if exact > 0.0 {
@@ -370,6 +427,37 @@ impl ProfileView {
         } else {
             self.rtf_for(model, gpu)
         }
+    }
+
+    /// The pair cell of `model` with `detector` on a kind of device: (peak commit, graphics memory).
+    fn pair_peak(&self, model: &str, detector: &str, gpu: bool) -> Option<(u64, u64)> {
+        self.peaks
+            .iter()
+            .filter(|p| p.gpu == gpu && p.model == model && p.detector.as_deref() == Some(detector))
+            .max_by_key(|p| p.peak_commit_bytes)
+            .map(|p| (p.peak_commit_bytes, p.gpu_local_bytes))
+    }
+
+    /// The real-time factor measured for `model` with `detector` in front of it (a batch decode with language detection
+    /// on, over the code-switched clip): it holds for every language of a job that uses the pair.
+    fn pair_rtf(&self, model: &str, detector: &str, gpu: bool) -> Option<f64> {
+        self.peaks
+            .iter()
+            .filter(|p| p.gpu == gpu && p.model == model && p.detector.as_deref() == Some(detector))
+            .map(|p| p.rtf)
+            .fold(None, |a: Option<f64>, r| Some(a.map_or(r, |x| x.max(r))))
+    }
+
+    /// The pair a job's models name: `en` is a detector, `hi` the Hinglish model it stands in front of (both measured
+    /// together by the system check).
+    fn pair_of(
+        &self,
+        models: &serde_json::Map<String, serde_json::Value>,
+        gpu: bool,
+    ) -> Option<f64> {
+        let en = models.get("en")?.as_str()?;
+        let hi = models.get("hi")?.as_str()?;
+        self.pair_rtf(hi, en, gpu)
     }
 
     /// The profile's real-time factor for the audio of one unit: each language's measured factor for the model
@@ -387,12 +475,13 @@ impl ProfileView {
             return None;
         }
         let mut weighted = 0.0;
+        let pair = self.pair_of(models, gpu);
         for (lang, ms) in mix_ms {
             let id = models
                 .get(lang)
                 .or_else(|| models.get("*"))
                 .and_then(|v| v.as_str())?;
-            let rtf = self.rtf_for_lang(id, lang, gpu);
+            let rtf = pair.unwrap_or_else(|| self.rtf_for_lang(id, lang, gpu));
             if rtf <= 0.0 {
                 return None;
             }
@@ -409,6 +498,7 @@ impl ProfileView {
         languages: &[String],
         gpu: bool,
     ) -> BTreeMap<String, f64> {
+        let pair = self.pair_of(models, gpu);
         languages
             .iter()
             .filter_map(|l| {
@@ -416,7 +506,7 @@ impl ProfileView {
                     .get(l)
                     .or_else(|| models.get("*"))
                     .and_then(|v| v.as_str())?;
-                let rtf = self.rtf_for_lang(id, l, gpu);
+                let rtf = pair.unwrap_or_else(|| self.rtf_for_lang(id, l, gpu));
                 (rtf > 0.0).then(|| (l.clone(), rtf))
             })
             .collect()
@@ -451,6 +541,78 @@ mod tests {
         .unwrap()
     }
 
+    /// 26 Nov 2026: a pair (the Hinglish model with a small detector in front of it) sends English chunks to the detector
+    /// and the rest to the Hinglish model; it is one engine holding both models, so its memory is the pair's own measured
+    /// cell once, and every language runs at the pair's measured speed, which includes the detection.
+    #[test]
+    fn a_pair_gives_english_to_the_detector_and_counts_its_own_cell_for_memory_and_speed() {
+        use wb_capability::Hinglish;
+        let langs = vec!["en".to_string(), "hi".to_string()];
+        let mut cap = tier_g();
+        let mut single = cap.profile.measurements[0].clone();
+        single.model = "hinglish-q8_0".into();
+        single.lang = wb_capability::Lang::Hi;
+        single.mode = wb_capability::Mode::Rolling;
+        single.config = wb_capability::DeviceConfig::Gpu { index: 1 };
+        single.live_standin = false;
+        single.rtf = 0.20;
+        single.peak_commit_bytes = 3 << 30;
+        single.gpu_local_bytes = Some(2 << 30);
+        let mut pair = single.clone();
+        pair.detector = Some("small-q5_0".into());
+        pair.rtf = 0.30;
+        pair.peak_commit_bytes = 4 << 30;
+        pair.gpu_local_bytes = Some(3 << 30);
+        cap.profile.measurements.extend([single, pair]);
+        cap.decision.config = Some(wb_capability::ConfigChoice {
+            config: wb_capability::DeviceConfig::Gpu { index: 1 },
+            cpu_threads: 4,
+            ..cap.decision.config.clone().unwrap()
+        });
+        cap.decision.hinglish = Hinglish {
+            ok: true,
+            rtf: Some(0.30),
+            source: "measured".into(),
+            model: Some("hinglish-q8_0".into()),
+            detector: Some("small-q5_0".into()),
+            night_ok: false,
+            night_hours: None,
+        };
+        let v = ProfileView::from_capability(&cap, vec![]);
+        let rolling = v.rolling_models(&langs);
+        assert_eq!(rolling["en"], "small-q5_0", "{rolling:?}");
+        assert_eq!(rolling["hi"], "hinglish-q8_0", "{rolling:?}");
+        assert_eq!(rolling["*"], "hinglish-q8_0", "{rolling:?}");
+        // Memory: the pair's own cell once (4 GiB commit, 3 GiB card), not the model's cell plus the detector's peak.
+        let (commit, local) = v.memory_for_models(["small-q5_0", "hinglish-q8_0"], true);
+        assert_eq!((commit, local), (4 << 30, 3 << 30));
+        // The model alone, used elsewhere, keeps its own cell.
+        assert_eq!(v.peak_for("hinglish-q8_0", true), (3 << 30, 2 << 30));
+        // Speed: every language of a job that uses the pair runs at the pair's measured speed.
+        let models: serde_json::Map<String, serde_json::Value> = rolling
+            .iter()
+            .map(|(k, m)| (k.clone(), serde_json::Value::String(m.clone())))
+            .collect();
+        let by_lang = v.rtf_by_lang(&models, &langs, true);
+        assert_eq!(by_lang["en"], 0.30);
+        assert_eq!(by_lang["hi"], 0.30);
+        let mix = BTreeMap::from([("en".to_string(), 1000u64), ("hi".to_string(), 3000u64)]);
+        assert!((v.expected_rtf(&models, &mix, true).unwrap() - 0.30).abs() < 1e-9);
+        // Without the detector the model alone is used for every language at its own speed.
+        cap.decision.hinglish.detector = None;
+        let alone = ProfileView::from_capability(&cap, vec![]);
+        let rolling = alone.rolling_models(&langs);
+        assert!(
+            rolling.values().all(|m| m == "hinglish-q8_0"),
+            "{rolling:?}"
+        );
+        let models: serde_json::Map<String, serde_json::Value> = rolling
+            .iter()
+            .map(|(k, m)| (k.clone(), serde_json::Value::String(m.clone())))
+            .collect();
+        assert_eq!(alone.rtf_by_lang(&models, &langs, true)["hi"], 0.20);
+    }
+
     #[test]
     fn english_and_hindi_sessions_use_the_hinglish_model_only_where_the_check_chose_it() {
         use wb_capability::Hinglish;
@@ -462,6 +624,7 @@ mod tests {
             rtf: Some(1.4),
             source: "measured".into(),
             model: Some("hinglish-f16".into()),
+            detector: None,
             night_ok: false,
             night_hours: None,
         };
@@ -479,6 +642,7 @@ mod tests {
             rtf: Some(0.4),
             source: "proxy: large-v3-q5_0 (same size)".into(),
             model: None,
+            detector: None,
             night_ok: false,
             night_hours: None,
         };
@@ -489,6 +653,7 @@ mod tests {
             rtf: Some(0.4),
             source: "measured".into(),
             model: Some("hinglish-f16".into()),
+            detector: None,
             night_ok: false,
             night_hours: None,
         };

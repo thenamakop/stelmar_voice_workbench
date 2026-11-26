@@ -71,6 +71,40 @@
       }
     },
     {
+      "id": "hinglish-q8_0",
+      "file": "converted/ggml-hinglish-q8_0.bin",
+      "sha256": "5217487dcd6dedb99bb1643e6ce2956bf75b20e8f3bd30c95e1c48c7f8dca990",
+      "bytes": 1656538283,
+      "kind": "whisper",
+      "base": "large-v3",
+      "quant": "q8_0",
+      "languages": [
+        "hi",
+        "en"
+      ],
+      "candidate_roles": [
+        "rolling",
+        "night",
+        "live"
+      ],
+      "validated_roles": [],
+      "licence": "Apache-2.0",
+      "source": {
+        "repo": "Trelis/whisper-hinglish-preview",
+        "revision": "eab1188fd2d0e91f2584229b32b3bfe1901c896c"
+      },
+      "conversion": {
+        "script": "whisper-quantize",
+        "settings": {
+          "type": "q8_0",
+          "input": "f16"
+        },
+        "input_sha256": "e8e126837031c14c86848db0aa9f50b3340382dc647dd3bd7d35294e4d91ea5a",
+        "whisper_cpp_commit": "d1be6fde11ac6e0407606b4e42fe72d34add8037",
+        "deterministic": true
+      }
+    },
+    {
       "id": "large-v3-q5_0",
       "file": "ggml-large-v3-q5_0.bin",
       "sha256": "d75795ecff3f83b5faa89d1900604ad8c780abd5739fae406de19f23ecd98ad1",

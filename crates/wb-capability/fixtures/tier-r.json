@@ -116,6 +116,7 @@
       "rtf": null,
       "source": "unmeasured",
       "model": null,
+      "detector": null,
       "night_ok": false,
       "night_hours": null
     },

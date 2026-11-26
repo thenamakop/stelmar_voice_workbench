@@ -166,6 +166,11 @@ pub struct Measurement {
     /// The measurement is the tier G live stand-in (near-live settings on the GPU), not a streaming run.
     #[serde(default)]
     pub live_standin: bool,
+    /// A pair cell (Phase 5, 26 Nov 2026): `model` is a Hinglish model and this is the small model in front of it that
+    /// detects the language of every chunk (the engine's model for English); the speed is a batch decode of the
+    /// code-switched clip with language detection on, and the memory figures are the two models' own cells added up.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detector: Option<String>,
 }
 
 /// A CPU engine and a GPU engine decoding at the same time, on different clips of the same model.
@@ -413,6 +418,11 @@ pub struct Hinglish {
     /// measured here is never chosen (Phase 5, 25 Nov 2026).
     #[serde(default)]
     pub model: Option<String>,
+    /// The small model that detects the language of every chunk in front of `model` (a pair measured here, accepted by
+    /// `HINGLISH_PAIRS`): English chunks decode with it and Hindi chunks with `model` (Phase 5, 26 Nov 2026). None when
+    /// `model` detects and decodes every chunk alone.
+    #[serde(default)]
+    pub detector: Option<String>,
     /// The measured Hinglish model also fits the night pass here (`rtf` times the typical day's audio fits the night
     /// window, and the model fits in memory), whether or not it keeps up while recording. The queue plans the real
     /// night from the audio the sessions recorded; this says it may try (Phase 5, 26 Nov 2026).
@@ -434,6 +444,18 @@ impl Hinglish {
     /// computer and meets the rolling bar.
     pub fn chosen_model(&self) -> Option<&str> {
         self.model.as_deref().filter(|_| self.ok)
+    }
+
+    /// The detector in front of the chosen model, when the chosen setup is a pair.
+    pub fn chosen_detector(&self) -> Option<&str> {
+        self.chosen_model()?;
+        self.detector.as_deref()
+    }
+
+    /// The detector in front of the night model, when the night model is a pair.
+    pub fn night_detector(&self) -> Option<&str> {
+        self.night_model()?;
+        self.detector.as_deref()
     }
 }
 
