@@ -11,7 +11,7 @@ use std::time::Duration;
 use wb_models::{Cache, Manifest};
 use wb_protocol::{ModelRef, Settings};
 use wb_queue::store::Device;
-use wb_runner::exec::{UnitContext, UnitEnd, UnitExecutor, run_unit};
+use wb_runner::exec::{CpuFallback, UnitContext, UnitEnd, UnitExecutor, run_unit};
 use wb_runner::gate::Grant;
 use wb_runner::session_queue::Claim;
 use wb_supervisor::{Cancel, Observer, Policy, Priority};
@@ -199,6 +199,44 @@ impl UnitExecutor for AppExecutor {
             return (if p == 0 { 6 << 30 } else { p }, l);
         }
         (peak, local)
+    }
+
+    fn cpu_fallback(&self, job: &wb_queue::store::Job) -> CpuFallback {
+        let Some(profile) = (self.env.profile)() else {
+            return CpuFallback::NoCell("there is no capability profile".into());
+        };
+        // Only a graphics-only profile has nothing else to move to; any other setup keeps its own rules.
+        if !matches!(
+            profile.config,
+            Some(wb_capability::DeviceConfig::Gpu { .. })
+        ) {
+            return CpuFallback::NotApplicable;
+        }
+        let rankings = crate::syscheck::rankings::from_manifest(&self.env.manifest);
+        let night = job.kind == wb_queue::store::JobKind::Night;
+        let ranked = |lang: &str| -> Vec<String> {
+            let Some(l) = wb_capability::Lang::parse(lang) else {
+                return Vec::new();
+            };
+            let mut list: Vec<String> = Vec::new();
+            let sources = if night {
+                [&rankings.night, &rankings.rolling]
+            } else {
+                [&rankings.rolling, &rankings.rolling]
+            };
+            for source in sources {
+                for r in source.get(&l).map(Vec::as_slice).unwrap_or_default() {
+                    if !list.contains(&r.model) {
+                        list.push(r.model.clone());
+                    }
+                }
+            }
+            list
+        };
+        match profile.cpu_fallback_models(&job.languages, &ranked) {
+            Ok(m) => CpuFallback::Models(super::models_json(&m)),
+            Err(why) => CpuFallback::NoCell(why),
+        }
     }
 
     fn expected_rtf(&self, claim: &Claim, mix_ms: &BTreeMap<String, u64>) -> Option<f64> {

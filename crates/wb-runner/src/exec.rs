@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use wb_protocol::{
     BatchRequest, Device as ProtoDevice, LangLogEntry, ModelRef, Settings, Source, Unit,
 };
-use wb_queue::store::Device;
+use wb_queue::store::{Device, Job};
 use wb_supervisor::{Cancel, Committer, Observer, Policy, RunError, RunReport, run_batch_with};
 
 use crate::gate::Grant;
@@ -24,6 +24,18 @@ pub enum UnitEnd {
     Cancelled,
     /// The supervisor gave up (the engine kept failing, or reported an error a restart cannot fix).
     Failed(String),
+}
+
+/// What a job decodes with on the processor when the graphics engine of a graphics-only profile gave up on it
+/// (auditor item 6 of 20 Nov 2026).
+#[derive(Debug, Clone, PartialEq)]
+pub enum CpuFallback {
+    /// Not a case for a fallback (the profile has no graphics-only setup, or the executor knows nothing of one).
+    NotApplicable,
+    /// The best measured processor setup for the job: its `models_by_lang`.
+    Models(serde_json::Value),
+    /// The profile has no measured processor cell for the job's languages; the text says which. The units wait.
+    NoCell(String),
 }
 
 /// What the app tells the executor about the session and the machine for one unit.
@@ -52,6 +64,13 @@ pub trait UnitExecutor: Send + Sync {
     /// speed. `None` when the profile has nothing for the unit (the unit then says nothing about speed).
     fn expected_rtf(&self, _claim: &Claim, _mix_ms: &BTreeMap<String, u64>) -> Option<f64> {
         None
+    }
+
+    /// Where a graphics-only profile goes when its graphics engine keeps failing (a driver fault): the models the best
+    /// measured processor setup uses for this job, or why there is none. The manager asks it when a unit is given up
+    /// on the graphics device with no other device to move to, and again for every unit it then runs on the processor.
+    fn cpu_fallback(&self, _job: &Job) -> CpuFallback {
+        CpuFallback::NotApplicable
     }
 
     /// Runs the unit to the end (or until `cancel`). The grant carries the per-process memory limit.

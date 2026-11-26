@@ -8,7 +8,7 @@
 //! overrun) the manager cancels the running engines: their staged files resume them when the rules allow it.
 //! The recorder is never touched: nothing in here shares a lock with it.
 
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
@@ -21,7 +21,7 @@ use wb_queue::store::{Device, Retry, Segment};
 use wb_supervisor::{Cancel, Notice, Observer, RunReport};
 
 use crate::chunks::{ChunksError, ChunksJob, PeakTracker, pauses_for_part};
-use crate::exec::{UnitEnd, UnitExecutor};
+use crate::exec::{CpuFallback, UnitEnd, UnitExecutor};
 use crate::gate::{GateEvent, StartGate, StartRequest, wait_for_gate};
 use crate::session_queue::{Claim, SessionQueue, read_staged};
 
@@ -105,6 +105,11 @@ pub struct Manager {
     /// Slots turned off for this run after a fatal failure of their device.
     disabled: Mutex<Vec<Device>>,
     other_device: Mutex<bool>,
+    /// The graphics engine of a graphics-only profile kept failing and its units go to the processor for the rest of
+    /// this run (auditor item 6 of 20 Nov 2026): the graphics slot works as a processor slot from then on.
+    gpu_abandoned: AtomicBool,
+    /// Jobs whose waiting for a processor setup has been said already (once each).
+    fallback_noted: Mutex<BTreeSet<String>>,
     /// What each running engine may still grow by (its measured peak minus what it has reached): the engine that
     /// starts next must leave room for it (AGENTS.md memory rules for two engines at once).
     headroom: Mutex<BTreeMap<String, u64>>,
@@ -133,6 +138,8 @@ impl Manager {
             plan_tx: Mutex::new(None),
             disabled: Mutex::new(Vec::new()),
             other_device: Mutex::new(false),
+            gpu_abandoned: AtomicBool::new(false),
+            fallback_noted: Mutex::new(BTreeSet::new()),
             headroom: Mutex::new(BTreeMap::new()),
             speed: Mutex::new(SpeedLog::default()),
         })
@@ -191,6 +198,11 @@ impl Manager {
     /// device then move to the other.
     pub fn set_other_device_available(&self, yes: bool) {
         *lock(&self.other_device) = yes;
+    }
+
+    /// Whether the graphics engine was given up on for this run and its slot now decodes on the processor.
+    pub fn gpu_abandoned(&self) -> bool {
+        self.gpu_abandoned.load(Ordering::SeqCst)
     }
 
     pub fn add_session(&self, handle: Arc<SessionHandle>) {
@@ -521,10 +533,20 @@ impl Manager {
                 self.sleep_a_little(self.cfg.gate_poll);
                 continue;
             }
-            let Some((session, claim)) = self.claim_any(slot.device) else {
+            // After a graphics-only profile gave up on its graphics engine, this slot decodes on the processor.
+            let device = if slot.device == Device::Gpu && self.gpu_abandoned() {
+                Device::Cpu
+            } else {
+                slot.device
+            };
+            let Some((session, mut claim)) = self.claim_any(device) else {
                 self.sleep_a_little(Duration::from_millis(1000));
                 continue;
             };
+            if device != slot.device && !self.adapt_to_cpu(&session, &mut claim) {
+                self.sleep_a_little(Duration::from_millis(1000));
+                continue;
+            }
             let what = format!(
                 "unit {} of {} job {} on {}",
                 claim.unit.idx, claim.job.revision, claim.job.id, slot.name
@@ -574,6 +596,90 @@ impl Manager {
             };
             self.finish_unit(&session, &claim, slot, end, timing, grant);
             self.events.changed();
+        }
+    }
+
+    /// A unit claimed for the processor after the graphics engine was given up on: the job's models are the processor
+    /// setup the profile measured for it (a job planned for the graphics card may name a model only the card can
+    /// carry). `false` when there is none: the unit is released and waits, with the reason logged once.
+    fn adapt_to_cpu(&self, session: &Arc<SessionHandle>, claim: &mut Claim) -> bool {
+        match self.executor.cpu_fallback(&claim.job) {
+            CpuFallback::NotApplicable => true,
+            CpuFallback::Models(models) => {
+                if claim.job.models_by_lang != models {
+                    if let Err(e) = lock(&session.queue).change_models(claim.job.id, &models) {
+                        self.events.problem(&format!(
+                            "{}: could not switch job {} to the processor's models: {e}",
+                            session.name, claim.job.id
+                        ));
+                        let _ = lock(&session.queue).release(claim);
+                        return false;
+                    }
+                    claim.job.models_by_lang = models;
+                }
+                true
+            }
+            CpuFallback::NoCell(why) => {
+                let _ = lock(&session.queue).release(claim);
+                let key = format!("{}#{}", session.name, claim.job.id);
+                if lock(&self.fallback_noted).insert(key) {
+                    let text = format!(
+                        "{}: the graphics engine was given up on and {why}, so the units of job {} wait; nothing is lost.",
+                        session.name, claim.job.id
+                    );
+                    self.events.log(LogLevel::Warn, &text);
+                    self.events.problem(&text);
+                }
+                false
+            }
+        }
+    }
+
+    /// A unit was given up on the graphics device and the profile has no other device (a graphics-only setup, a driver
+    /// fault): the job goes on with the best measured processor setup for the rest of the run, or, with none measured,
+    /// waits parked with the reason. The unit and everything committed are kept either way (auditor item 6).
+    fn graphics_gave_up(&self, session: &Arc<SessionHandle>, claim: &Claim, error: &str, now: u64) {
+        let job = claim.job.id;
+        match self.executor.cpu_fallback(&claim.job) {
+            CpuFallback::Models(models) => {
+                let moved = {
+                    let mut q = lock(&session.queue);
+                    q.change_models(job, &models)
+                        .and_then(|()| q.set_paused(job, false, now))
+                };
+                match moved {
+                    Ok(()) => {
+                        self.gpu_abandoned.store(true, Ordering::SeqCst);
+                        let text = format!(
+                            "{}: the graphics engine failed {} times on unit {} ({error}); the rest of this run continues on the processor with {}. It is slower; nothing is lost.",
+                            session.name,
+                            wb_queue::store::ATTEMPTS_PER_DEVICE,
+                            claim.unit.idx,
+                            models
+                        );
+                        self.events.log(LogLevel::Warn, &text);
+                        self.events.problem(&text);
+                        self.poke();
+                    }
+                    Err(e) => self.events.problem(&format!(
+                        "{}: unit {} failed on the graphics engine: {error}; switching to the processor failed too: {e}. The job is parked.",
+                        session.name, claim.unit.idx
+                    )),
+                }
+            }
+            CpuFallback::NoCell(why) => {
+                let text = format!(
+                    "{}: unit {} failed on the graphics engine ({error}) and {why}, so there is nothing to fall back on. The job is parked and its units wait; nothing is lost. Run the system check, or resume the job after the graphics driver is fixed.",
+                    session.name, claim.unit.idx
+                );
+                let _ = lock(&session.queue).park_job(job, &text, now);
+                self.events.log(LogLevel::Warn, &text);
+                self.events.problem(&text);
+            }
+            CpuFallback::NotApplicable => self.events.problem(&format!(
+                "{}: unit {} failed on every device: {error}. The job is parked.",
+                session.name, claim.unit.idx
+            )),
         }
     }
 
@@ -692,6 +798,9 @@ impl Manager {
                             d.as_str()
                         ),
                     ),
+                    Ok(Retry::GiveUp) if claim.device == Device::Gpu && !other => {
+                        self.graphics_gave_up(session, claim, &error, now);
+                    }
                     Ok(Retry::GiveUp) => self.events.problem(&format!(
                         "{}: unit {} failed on every device: {error}. The job is parked.",
                         session.name, claim.unit.idx

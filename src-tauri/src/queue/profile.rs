@@ -309,6 +309,68 @@ impl ProfileView {
             .collect()
     }
 
+    /// The models a job decodes with on the processor when its graphics engine was given up on (auditor item 6 of
+    /// 20 Nov 2026): for each language the best-ranked model that has a measured processor cell for that language, one
+    /// that keeps up with real time on this computer first, else the fastest measured; `*` takes the first language's
+    /// pick, as `pick` does. `ranked` is the manifest's order for the job's role (best first). `Err` names what is
+    /// missing when some language has no measured processor cell (a pair is never assumed on the processor).
+    pub fn cpu_fallback_models(
+        &self,
+        languages: &[String],
+        ranked: &dyn Fn(&str) -> Vec<String>,
+    ) -> Result<BTreeMap<String, String>, String> {
+        let mut out = BTreeMap::new();
+        let mut missing = Vec::new();
+        for lang in languages {
+            let cell = |model: &str| {
+                self.peaks
+                    .iter()
+                    .filter(|p| {
+                        p.rolling
+                            && !p.gpu
+                            && p.detector.is_none()
+                            && p.model == model
+                            && p.lang == *lang
+                    })
+                    .map(|p| p.rtf)
+                    .fold(None, |a: Option<f64>, r| Some(a.map_or(r, |x| x.max(r))))
+            };
+            let measured: Vec<(String, f64)> = ranked(lang)
+                .into_iter()
+                .filter_map(|m| cell(&m).filter(|r| *r > 0.0).map(|r| (m, r)))
+                .collect();
+            let best = measured
+                .iter()
+                .find(|(_, r)| *r <= 1.0)
+                .or_else(|| {
+                    measured
+                        .iter()
+                        .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+                })
+                .map(|(m, _)| m.clone());
+            match best {
+                Some(m) => {
+                    out.insert(lang.clone(), m);
+                }
+                None => missing.push(lang.clone()),
+            }
+        }
+        if !missing.is_empty() || out.is_empty() {
+            return Err(format!(
+                "the system check has no measured processor speed for {}",
+                if missing.is_empty() {
+                    "the session's languages".to_owned()
+                } else {
+                    missing.join(", ")
+                }
+            ));
+        }
+        if let Some(any) = languages.iter().find_map(|l| out.get(l).cloned()) {
+            out.insert("*".into(), any);
+        }
+        Ok(out)
+    }
+
     fn pick(from: &BTreeMap<String, String>, languages: &[String]) -> BTreeMap<String, String> {
         let mut m = BTreeMap::new();
         for l in languages {
@@ -539,6 +601,57 @@ mod tests {
             "../../../crates/wb-capability/fixtures/tier-r.json"
         ))
         .unwrap()
+    }
+
+    fn cpu_cell(model: &str, lang: wb_capability::Lang, rtf: f64) -> wb_capability::Measurement {
+        let mut m = tier_g().profile.measurements[0].clone();
+        m.model = model.into();
+        m.lang = lang;
+        m.mode = wb_capability::Mode::Rolling;
+        m.config = wb_capability::DeviceConfig::Cpu;
+        m.live_standin = false;
+        m.detector = None;
+        m.rtf = rtf;
+        m
+    }
+
+    /// Auditor item 6 (27 Nov 2026): the processor setup a graphics-only profile falls back to is, for each language, the
+    /// best-ranked model with a measured processor cell that keeps up with real time, else the fastest measured; a language
+    /// with no processor cell is named and there is no fallback (the units wait).
+    #[test]
+    fn the_processor_fallback_is_the_best_ranked_measured_model_that_keeps_up_and_names_what_is_missing()
+     {
+        let langs = vec!["hi".to_string()];
+        let ranked = |_: &str| vec!["big".to_string(), "mid".to_string(), "tiny".to_string()];
+        let mut cap = tier_g();
+        cap.profile.measurements.clear();
+        cap.profile.measurements.extend([
+            cpu_cell("big", wb_capability::Lang::Hi, 1.8),
+            cpu_cell("mid", wb_capability::Lang::Hi, 0.9),
+            cpu_cell("tiny", wb_capability::Lang::Hi, 0.3),
+        ]);
+        let v = ProfileView::from_capability(&cap, vec![]);
+        let m = v.cpu_fallback_models(&langs, &ranked).unwrap();
+        assert_eq!(m["hi"], "mid", "best ranked that keeps up: {m:?}");
+        assert_eq!(m["*"], "mid");
+        // None keeps up: the fastest measured one.
+        cap.profile.measurements.clear();
+        cap.profile.measurements.extend([
+            cpu_cell("big", wb_capability::Lang::Hi, 2.5),
+            cpu_cell("mid", wb_capability::Lang::Hi, 1.6),
+        ]);
+        let v = ProfileView::from_capability(&cap, vec![]);
+        assert_eq!(v.cpu_fallback_models(&langs, &ranked).unwrap()["hi"], "mid");
+        // A graphics cell is no processor cell; a language without a cell is named.
+        let mut gpu = cpu_cell("tiny", wb_capability::Lang::Hi, 0.2);
+        gpu.config = wb_capability::DeviceConfig::Gpu { index: 0 };
+        cap.profile.measurements = vec![gpu];
+        let v = ProfileView::from_capability(&cap, vec![]);
+        let err = v.cpu_fallback_models(&langs, &ranked).unwrap_err();
+        assert!(
+            err.contains("no measured processor speed") && err.contains("hi"),
+            "{err}"
+        );
     }
 
     /// 26 Nov 2026: a pair (the Hinglish model with a small detector in front of it) sends English chunks to the detector
