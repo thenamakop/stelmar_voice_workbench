@@ -125,6 +125,92 @@ pub fn decide(
     }
 }
 
+/// A night job decoding an English + Hindi session with the Hinglish model, as the re-check sees it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct HinglishNightJob {
+    pub name: String,
+    pub languages: Vec<String>,
+    /// The audio the job has left to decode, per language.
+    pub remaining_ms_by_lang: BTreeMap<String, u64>,
+    /// A unit of the job has started or committed: the job stays as it is (a running unit is never stopped, and a
+    /// session is not decoded with two models).
+    pub started: bool,
+}
+
+/// What the night safety switch found.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Recheck {
+    /// Seconds the Hinglish night jobs still need at the speed the night's own units showed.
+    pub needed_s: f64,
+    pub finish_ms: u64,
+    pub deadline_ms: u64,
+    /// The sessions whose night job has not started: they go back to today's models and are marked.
+    pub switch: Vec<String>,
+    /// Seconds the work still needs once those sessions use today's models (the sessions that keep Hinglish at
+    /// the Hinglish speed, the others at today's night speed, all at the measured factor).
+    pub needed_after_s: f64,
+}
+
+impl Recheck {
+    /// The reason written in the Queue log and in `faster-machine.json`.
+    pub fn reason(&self) -> String {
+        format!(
+            "the night ran slower than planned: the Hinglish night pass needs about {:.1} h more at the speed the first night units showed and would end at {} IST, after 08:00 IST",
+            self.needed_s / 3600.0,
+            wb_queue::estimate::format_ist_hhmm(self.finish_ms)
+        )
+    }
+}
+
+/// The night safety switch. After the first night units of the night have finished, `night_factor` is how much slower
+/// (above 1) or faster than the profile this computer really ran them. If the Hinglish night jobs that are left will
+/// not finish before 08:00 IST at that speed, the sessions that have not started go back to today's models.
+/// None when the Hinglish night still finishes in time, or when no Hinglish job is left.
+pub fn recheck(
+    profile: &ProfileView,
+    now_ms: u64,
+    jobs: &[HinglishNightJob],
+    night_factor: f64,
+) -> Option<Recheck> {
+    if jobs.is_empty() {
+        return None;
+    }
+    let seconds = |rtf: &BTreeMap<String, f64>, j: &HinglishNightJob| -> f64 {
+        let slowest = rtf.values().copied().fold(1.0, f64::max);
+        j.remaining_ms_by_lang
+            .iter()
+            .map(|(l, ms)| {
+                *ms as f64 / 1000.0
+                    * scaled(rtf.get(l).copied().unwrap_or(slowest), Some(night_factor))
+            })
+            .sum()
+    };
+    let hinglish_s = |j: &HinglishNightJob| seconds(&profile.hinglish_night_rtf(&j.languages), j);
+    let today_s = |j: &HinglishNightJob| seconds(&profile.night_decode_rtf(&j.languages), j);
+    let needed_s: f64 = jobs.iter().map(hinglish_s).sum();
+    let deadline = night::deadline_ms(now_ms);
+    let finish_ms = now_ms.saturating_add((needed_s * 1000.0).round() as u64);
+    if finish_ms <= deadline {
+        return None;
+    }
+    let switch: Vec<String> = jobs
+        .iter()
+        .filter(|j| !j.started)
+        .map(|j| j.name.clone())
+        .collect();
+    let needed_after_s: f64 = jobs
+        .iter()
+        .map(|j| if j.started { hinglish_s(j) } else { today_s(j) })
+        .sum();
+    Some(Recheck {
+        needed_s,
+        finish_ms,
+        deadline_ms: deadline,
+        switch,
+        needed_after_s,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -230,5 +316,72 @@ mod tests {
             "an English-only session is not an English + Hindi session: {:?}",
             d.marks
         );
+    }
+
+    fn hinglish_job(name: &str, started: bool, en_min: u64, hi_min: u64) -> HinglishNightJob {
+        HinglishNightJob {
+            name: name.into(),
+            languages: vec!["en".into(), "hi".into()],
+            remaining_ms_by_lang: BTreeMap::from([
+                ("en".to_owned(), en_min * 60_000),
+                ("hi".to_owned(), hi_min * 60_000),
+            ]),
+            started,
+        }
+    }
+
+    /// 26 Nov 2026: the night safety switch. Three English + Hindi sessions of 3 h each at Hindi 1.69 / English 0.68 need
+    /// about 3.55 h each: 10.7 h at the profile's speed (fits the 14 h before 08:00), 17 h at 1.6 times that (does not).
+    #[test]
+    fn a_night_that_runs_slower_than_planned_sends_the_sessions_not_yet_started_back_to_todays_models()
+     {
+        let p = profile(true, 1.69, false);
+        let jobs = [
+            hinglish_job("first", true, 45, 45),
+            hinglish_job("second", false, 90, 90),
+            hinglish_job("third", false, 90, 90),
+        ];
+        // At the planned speed the Hinglish night still finishes: nothing changes.
+        assert_eq!(recheck(&p, six_pm(), &jobs, 1.0), None);
+        // The first units showed 1.6 times the profile's speed: the second and third go back; the running first stays.
+        let r =
+            recheck(&p, six_pm(), &jobs, 1.6).expect("the Hinglish night would end after 08:00");
+        assert_eq!(r.switch, vec!["second".to_string(), "third".to_string()]);
+        assert!(r.finish_ms > r.deadline_ms);
+        assert!(r.needed_s / 3600.0 > 14.0, "{}", r.needed_s);
+        assert!(r.needed_after_s < r.needed_s);
+        assert!(r.reason().contains("after 08:00 IST"), "{}", r.reason());
+    }
+
+    #[test]
+    fn a_hinglish_night_that_misses_08_00_with_every_session_already_started_changes_no_model() {
+        let p = profile(true, 1.69, false);
+        let jobs = [
+            hinglish_job("only", true, 90, 90),
+            hinglish_job("other", true, 90, 90),
+        ];
+        let r = recheck(&p, six_pm(), &jobs, 4.0).expect("slower than the night allows");
+        assert!(r.switch.is_empty(), "{:?}", r.switch);
+        assert_eq!(recheck(&p, six_pm(), &[], 4.0), None);
+    }
+
+    /// The night allowance of the device class reaches the Hinglish decision: three sessions the integrated graphics can
+    /// finish (10.8 h at the bench's speed, 13.5 h with its allowance, 14 h before 08:00) are sent to a faster machine on
+    /// a processor-only laptop (15.4 h with the processor's allowance).
+    #[test]
+    fn the_hinglish_night_decision_uses_the_allowance_of_the_device_class() {
+        // Hindi 4.0, English 1.6 (the measured ratio is about 2.5); 90 minutes of audio per session.
+        let p = profile(true, 4.0, false);
+        let three = [
+            session("a", 60, 30),
+            session("b", 60, 30),
+            session("c", 60, 30),
+        ];
+        let gpu = decide(&p, six_pm(), &three, wb_queue::speed::NIGHT_ALLOWANCE_GPU);
+        let cpu = decide(&p, six_pm(), &three, wb_queue::speed::NIGHT_ALLOWANCE_CPU);
+        assert_eq!(gpu.routed.route, Route::Hinglish, "{gpu:?}");
+        assert!(gpu.marks.is_empty(), "{:?}", gpu.marks);
+        assert_eq!(cpu.routed.route, Route::Today, "{cpu:?}");
+        assert_eq!(cpu.marks.len(), 3, "{:?}", cpu.marks);
     }
 }

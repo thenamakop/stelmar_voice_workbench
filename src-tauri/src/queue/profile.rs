@@ -227,6 +227,16 @@ impl ProfileView {
         m
     }
 
+    /// The class of device the night allowance is chosen by: a graphics adapter alone, or the processor (a hybrid
+    /// configuration, a processor-only one, and a profile without a configuration all count as the processor: the
+    /// estimate must not be more hopeful than the slower engine of the pair).
+    pub fn night_class(&self) -> wb_queue::speed::DeviceClass {
+        match self.config {
+            Some(DeviceConfig::Gpu { .. }) => wb_queue::speed::DeviceClass::Gpu,
+            _ => wb_queue::speed::DeviceClass::Cpu,
+        }
+    }
+
     /// Whether the chosen configuration decodes on a graphics adapter (alone or beside the processor).
     pub fn uses_gpu(&self) -> bool {
         matches!(

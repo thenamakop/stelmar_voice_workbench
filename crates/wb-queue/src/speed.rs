@@ -27,6 +27,9 @@ pub struct UnitSpeed {
     /// The unit's session has more than one language, so the engine detected the language of every chunk (which
     /// the profile's bench never does). Units of the two kinds are not compared with each other.
     pub multi_language: bool,
+    /// The unit belongs to a night job. The night safety switch judges the night by night units alone: the day's
+    /// rolling units ran other models, often on another mix of devices.
+    pub night: bool,
 }
 
 impl UnitSpeed {
@@ -87,6 +90,24 @@ impl SpeedLog {
         )
     }
 
+    /// How many kept units are night units of one kind of session.
+    pub fn night_units_for(&self, multi_language: bool) -> usize {
+        self.recent
+            .iter()
+            .filter(|u| u.night && u.multi_language == multi_language)
+            .count()
+    }
+
+    /// Measured over promised for the night units of one kind of session, `None` until one has finished. The night
+    /// safety switch uses it: after the first night units it knows what the night really runs at.
+    pub fn night_factor_for(&self, multi_language: bool) -> Option<f64> {
+        median_ratio(
+            self.recent
+                .iter()
+                .filter(|u| u.night && u.multi_language == multi_language),
+        )
+    }
+
     /// Measured over promised: the median, over all the kept units, of observed RTF divided by the profile's RTF
     /// for the unit. 1.0 means the profile was right; `None` until a unit has finished.
     pub fn factor(&self) -> Option<f64> {
@@ -114,11 +135,19 @@ pub fn scaled(profile_rtf: f64, factor: Option<f64>) -> f64 {
     profile_rtf * factor.unwrap_or(1.0)
 }
 
-/// Which pass an estimate is for: the day's rolling pass or the night pass.
+/// The kind of device a night pass decodes on. A hybrid configuration counts as a processor: its processor engine
+/// works on a share of the units and the plan must not be more hopeful than that engine.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeviceClass {
+    Cpu,
+    Gpu,
+}
+
+/// Which pass an estimate is for: the day's rolling pass or the night pass on a class of device.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Pass {
     Rolling,
-    Night,
+    Night(DeviceClass),
 }
 
 // PROVISIONAL emu-low figures (owner, 17 Nov 2026): replace them with the real laptops' measurements (the gate
@@ -131,18 +160,32 @@ pub enum Pass {
 // Evidence: docs/evidence/phase-4/speed-diagnosis-emu-low.txt.
 /// How much slower than the profile a rolling pass of a session with several languages runs (emu-low, provisional).
 pub const ROLLING_DETECTION_ALLOWANCE: f64 = 1.011 / 0.753;
-/// The same for the night pass (emu-low, provisional).
-pub const NIGHT_DETECTION_ALLOWANCE: f64 = 1.868 / 1.498;
+/// The same for the night pass on a graphics adapter (emu-low UHD, provisional: the queue's request over the night
+/// model alone). The Hinglish model's batch runs measured 1.13 to 1.17 times its bench there
+/// (docs/evidence/phase-5/fit-and-fallback.txt against hinglish-speed-A/B.txt), so this figure covers both.
+pub const NIGHT_ALLOWANCE_GPU: f64 = 1.868 / 1.498;
+/// The same on a processor (provisional): the Hinglish f16 batch over its bench, emu-low 12.82 / 8.98 = 1.43 and emu-mid
+/// 4.49 / 3.30 = 1.36. Both come from one 74 s English + Hindi clip, whose first-chunk and detection overhead weighs more than
+/// in a night of hours, so they are an upper bound; the real laptops' measurements replace them (gate pack).
+pub const NIGHT_ALLOWANCE_CPU: f64 = 12.82 / 8.983;
+
+/// The night allowance of a class of device.
+pub fn night_allowance(class: DeviceClass) -> f64 {
+    match class {
+        DeviceClass::Gpu => NIGHT_ALLOWANCE_GPU,
+        DeviceClass::Cpu => NIGHT_ALLOWANCE_CPU,
+    }
+}
 
 /// The detection allowance for a pass over a session with `languages` languages: 1.0 for one language, the
-/// provisional emu-low figure for more.
+/// provisional figure of the pass (and, at night, of the device class) for more.
 pub fn detection_allowance(pass: Pass, languages: usize) -> f64 {
     if languages <= 1 {
         return 1.0;
     }
     match pass {
         Pass::Rolling => ROLLING_DETECTION_ALLOWANCE,
-        Pass::Night => NIGHT_DETECTION_ALLOWANCE,
+        Pass::Night(class) => night_allowance(class),
     }
 }
 
@@ -173,7 +216,7 @@ pub fn basis_text(
             multi,
             multi_units,
             format!(
-                "provisional emu-low detection allowance (x{ROLLING_DETECTION_ALLOWANCE:.2} rolling, x{NIGHT_DETECTION_ALLOWANCE:.2} night) until a unit of such a session finishes"
+                "provisional emu-low detection allowance (x{ROLLING_DETECTION_ALLOWANCE:.2} rolling, x{NIGHT_ALLOWANCE_GPU:.2} night on a graphics adapter, x{NIGHT_ALLOWANCE_CPU:.2} on a processor) until a unit of such a session finishes"
             ),
         ),
         part(
@@ -197,6 +240,7 @@ mod tests {
             took_s,
             expected_rtf: expected,
             multi_language: false,
+            night: false,
         }
     }
 
@@ -286,10 +330,14 @@ mod tests {
     #[test]
     fn the_detection_allowance_is_the_measured_emu_low_ratio_and_only_for_several_languages() {
         assert!((ROLLING_DETECTION_ALLOWANCE - 1.011 / 0.753).abs() < 1e-12);
-        assert!((NIGHT_DETECTION_ALLOWANCE - 1.868 / 1.498).abs() < 1e-12);
+        assert!((NIGHT_ALLOWANCE_GPU - 1.868 / 1.498).abs() < 1e-12);
         assert!((ROLLING_DETECTION_ALLOWANCE - 1.3426).abs() < 1e-3);
-        assert!((NIGHT_DETECTION_ALLOWANCE - 1.2470).abs() < 1e-3);
-        for pass in [Pass::Rolling, Pass::Night] {
+        assert!((NIGHT_ALLOWANCE_GPU - 1.2470).abs() < 1e-3);
+        for pass in [
+            Pass::Rolling,
+            Pass::Night(DeviceClass::Gpu),
+            Pass::Night(DeviceClass::Cpu),
+        ] {
             assert_eq!(detection_allowance(pass, 0), 1.0);
             assert_eq!(detection_allowance(pass, 1), 1.0);
         }
@@ -298,13 +346,20 @@ mod tests {
             ROLLING_DETECTION_ALLOWANCE
         );
         assert_eq!(
-            detection_allowance(Pass::Night, 3),
-            NIGHT_DETECTION_ALLOWANCE
+            detection_allowance(Pass::Night(DeviceClass::Gpu), 3),
+            NIGHT_ALLOWANCE_GPU
+        );
+        assert_eq!(
+            detection_allowance(Pass::Night(DeviceClass::Cpu), 3),
+            NIGHT_ALLOWANCE_CPU
         );
         // Applied to the profile's cells it lands near what the quiet emu-low runs measured for the queue's
         // request: rolling 0.696 -> 0.93 (measured 1.011), night 1.479 -> 1.84 (measured 1.868).
         let rolling = scaled(0.696, Some(planning_factor(None, Pass::Rolling, 2)));
-        let night = scaled(1.479, Some(planning_factor(None, Pass::Night, 2)));
+        let night = scaled(
+            1.479,
+            Some(planning_factor(None, Pass::Night(DeviceClass::Gpu), 2)),
+        );
         assert!((rolling - 1.011).abs() / 1.011 < 0.10, "{rolling}");
         assert!((night - 1.868).abs() / 1.868 < 0.03, "{night}");
         // Without the allowance the profile was 31% and 21% under.
@@ -360,7 +415,10 @@ mod tests {
             .map(|(l, r)| {
                 (
                     l.clone(),
-                    scaled(*r, Some(planning_factor(None, Pass::Night, 2))),
+                    scaled(
+                        *r,
+                        Some(planning_factor(None, Pass::Night(DeviceClass::Gpu), 2)),
+                    ),
                 )
             })
             .collect();
@@ -370,6 +428,69 @@ mod tests {
         ));
     }
 
+    /// 26 Nov 2026: the night estimate was too optimistic on a processor. The Hinglish f16 batch ran at 1.36 to 1.43 times
+    /// its bench on the emulated processors and 1.13 to 1.17 on the integrated graphics; the night allowance follows the
+    /// device class, for the ready-by estimate and for the choice of the Hinglish model alike.
+    #[test]
+    fn the_night_allowance_follows_the_device_class_and_a_processor_night_is_judged_longer() {
+        const H: u64 = 3_600_000;
+        const { assert!(NIGHT_ALLOWANCE_CPU > NIGHT_ALLOWANCE_GPU) };
+        assert!((NIGHT_ALLOWANCE_CPU - 1.427).abs() < 1e-3);
+        // 22:30 IST: 9.5 h to 08:00. 2.9 h of Hindi at a bench RTF of 2.5 is 7.25 h: it fits on the bench's word, and
+        // on a graphics adapter (x1.25 is 9.04 h); on a processor (x1.43 is 10.35 h) it does not.
+        let start = 1_800_000_000_000u64 - 1_800_000_000_000 % (24 * H) + 17 * H;
+        let audio = vec![SessionAudio {
+            id: "a".into(),
+            audio_ms_by_lang: BTreeMap::from([("hi".to_string(), 2 * H + 54 * 60_000)]),
+        }];
+        let bench = BTreeMap::from([("hi".to_string(), 2.5)]);
+        let at = |class| -> BTreeMap<String, f64> {
+            bench
+                .iter()
+                .map(|(l, r)| {
+                    (
+                        l.clone(),
+                        scaled(*r, Some(planning_factor(None, Pass::Night(class), 2))),
+                    )
+                })
+                .collect()
+        };
+        let gpu = at(DeviceClass::Gpu);
+        let cpu = at(DeviceClass::Cpu);
+        assert!(matches!(
+            plan(start, &audio, &bench, &bench),
+            Plan::Run { .. }
+        ));
+        assert!(matches!(plan(start, &audio, &gpu, &gpu), Plan::Run { .. }));
+        assert!(matches!(
+            plan(start, &audio, &cpu, &cpu),
+            Plan::Skip(SkipReason::DoesNotFit { .. })
+        ));
+    }
+
+    #[test]
+    fn night_units_are_judged_apart_from_the_day_units_of_the_same_log() {
+        let mut log = SpeedLog::default();
+        // Three day units ran at the profile's word; the first night unit ran 1.6 times slower.
+        for _ in 0..3 {
+            log.record(UnitSpeed {
+                multi_language: true,
+                ..unit(300, 300.0 * 0.7, 0.7)
+            });
+        }
+        assert_eq!(log.night_factor_for(true), None);
+        log.record(UnitSpeed {
+            multi_language: true,
+            night: true,
+            ..unit(300, 300.0 * 1.6 * 2.0, 2.0)
+        });
+        assert_eq!(log.night_units_for(true), 1);
+        let night = log.night_factor_for(true).unwrap();
+        assert!((night - 1.6).abs() < 1e-9, "{night}");
+        // The all-units median is still the day's 1.0: it would have hidden the slow night.
+        assert!((log.factor_for(true).unwrap() - 1.0).abs() < 1e-9);
+    }
+
     #[test]
     fn the_basis_text_says_whether_the_allowance_or_a_measurement_is_in_use() {
         let first = basis_text(None, 0, None, 0);
@@ -377,7 +498,11 @@ mod tests {
             first.contains("provisional emu-low detection allowance"),
             "{first}"
         );
-        assert!(first.contains("x1.34 rolling, x1.25 night"), "{first}");
+        assert!(
+            first
+                .contains("x1.34 rolling, x1.25 night on a graphics adapter, x1.43 on a processor"),
+            "{first}"
+        );
         assert!(
             first.contains("the profile's speed until a unit finishes"),
             "{first}"

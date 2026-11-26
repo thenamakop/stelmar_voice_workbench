@@ -146,6 +146,17 @@ impl Manager {
         lock(&self.speed).factor_for(multi_language)
     }
 
+    /// Measured over promised for the night units alone (the night safety switch): `None` until a night unit of that
+    /// kind of session has finished from its start.
+    pub fn night_speed_factor(&self, multi_language: bool) -> Option<f64> {
+        lock(&self.speed).night_factor_for(multi_language)
+    }
+
+    /// How many finished night units the night speed factor rests on.
+    pub fn night_speed_units(&self, multi_language: bool) -> usize {
+        lock(&self.speed).night_units_for(multi_language)
+    }
+
     /// How many finished units of that kind the speed factor rests on.
     pub fn speed_units(&self, multi_language: bool) -> usize {
         lock(&self.speed).units_for(multi_language)
@@ -172,6 +183,7 @@ impl Manager {
             took_s: took.as_secs_f64(),
             expected_rtf: expected,
             multi_language: claim.job.languages.len() > 1,
+            night: claim.job.kind == wb_queue::store::JobKind::Night,
         });
     }
 

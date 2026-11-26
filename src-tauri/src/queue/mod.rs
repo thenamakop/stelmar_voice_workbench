@@ -285,6 +285,8 @@ pub struct Queue {
     executor: Arc<AppExecutor>,
     open: Arc<Mutex<Vec<OpenSession>>>,
     slots_started: AtomicBool,
+    /// The night safety switch has said once that no Hinglish night job is left to send back (it says it once).
+    night_switch_said: AtomicBool,
     feed: Arc<Feed>,
     /// Read by the gate build's report (how often and how slowly the profile was read).
     #[cfg(feature = "gate-hooks")]
@@ -663,6 +665,7 @@ pub fn init(app: &AppHandle, feed: Arc<Feed>, parts_rx: Receiver<PartRecord>) {
         executor,
         open,
         slots_started: AtomicBool::new(false),
+        night_switch_said: AtomicBool::new(false),
         feed,
         #[cfg(feature = "gate-hooks")]
         readings: readings.clone(),
@@ -694,6 +697,7 @@ pub fn init(app: &AppHandle, feed: Arc<Feed>, parts_rx: Receiver<PartRecord>) {
                 if last_night.elapsed() >= NIGHT_CHECK {
                     last_night = Instant::now();
                     q.night_step();
+                    q.night_recheck();
                 }
                 let announced = parts_rx.try_iter().count() > 0;
                 if announced || last_parts.elapsed() >= PARTS_RECHECK {
@@ -917,7 +921,7 @@ impl Queue {
         let measured = self.manager.speed_factor(multi);
         let factor = wb_queue::speed::planning_factor(
             measured,
-            wb_queue::speed::Pass::Night,
+            wb_queue::speed::Pass::Night(profile.night_class()),
             if multi { 2 } else { 1 },
         );
         // The Hinglish model decodes the night of the English + Hindi sessions when the plan made from the audio really
@@ -1005,6 +1009,125 @@ impl Queue {
             open[i].night_handled = true;
             open[i].night_cancelled = false;
         }
+    }
+
+    /// The night safety switch (owner, 26 Nov 2026). The night pass chose the Hinglish model from a plan made before any
+    /// night unit had run. Once night units have finished, this compares what the Hinglish night jobs still have to
+    /// decode, at the speed those units really ran, with 08:00 IST. If it will not finish, the night jobs that have not
+    /// started (no unit running, decoded or committed) go back to today's night models for their remaining units and the
+    /// session is marked "best finished on a faster machine". A running unit is never stopped and a session that has
+    /// started stays with the Hinglish model (it is not decoded with two models); the Queue log says what was done.
+    fn night_recheck(&self) {
+        use wb_queue::night;
+        let Some(profile) = self.profile() else {
+            return;
+        };
+        let Some(hinglish_model) = profile.hinglish_night_model().map(str::to_owned) else {
+            return;
+        };
+        if profile.record_only {
+            return;
+        }
+        // Until a night unit of an English + Hindi session has finished there is nothing to learn from: the plan made
+        // with the allowance stands.
+        let Some(factor) = self.manager.night_speed_factor(true) else {
+            return;
+        };
+        let now = clock_ms();
+        let open = plock(&self.open);
+        let mut jobs: Vec<night_route::HinglishNightJob> = Vec::new();
+        for s in open.iter() {
+            let q = plock(&s.handle.queue);
+            let Some(job) = q.jobs().unwrap_or_default().into_iter().find(|j| {
+                j.kind == JobKind::Night && matches!(j.state, JobState::Queued | JobState::Running)
+            }) else {
+                continue;
+            };
+            let uses_hinglish = job.models_by_lang.as_object().is_some_and(|m| {
+                m.values()
+                    .any(|v| v.as_str() == Some(hinglish_model.as_str()))
+            });
+            if !uses_hinglish {
+                continue;
+            }
+            let started = q
+                .units(job.id)
+                .unwrap_or_default()
+                .iter()
+                .any(|u| u.state != UnitState::Pending);
+            let remaining = q.remaining_audio_ms(job.id).unwrap_or(0);
+            let mix = language_mix(&q, "post-1");
+            jobs.push(night_route::HinglishNightJob {
+                name: s.name.clone(),
+                languages: s.languages.clone(),
+                remaining_ms_by_lang: wb_queue::estimate::split_by_mix(
+                    remaining,
+                    &s.languages,
+                    &mix,
+                )
+                .into_iter()
+                .collect(),
+                started,
+            });
+        }
+        let Some(check) = night_route::recheck(&profile, now, &jobs, factor) else {
+            return;
+        };
+        let reason = check.reason();
+        if check.switch.is_empty() {
+            if !self.night_switch_said.swap(true, Ordering::SeqCst) {
+                self.core.push_log(format!(
+                    "night safety switch: {reason}; every session has started, so none goes back to today's models"
+                ));
+            }
+            return;
+        }
+        for name in &check.switch {
+            let Some(s) = open.iter().find(|s| &s.name == name) else {
+                continue;
+            };
+            let models = profile.night_models(&s.languages);
+            let q = plock(&s.handle.queue);
+            let Some(job) = q.jobs().unwrap_or_default().into_iter().find(|j| {
+                j.kind == JobKind::Night && matches!(j.state, JobState::Queued | JobState::Running)
+            }) else {
+                continue;
+            };
+            // The job may have started since the check began: then it keeps the model it started with.
+            let started = q
+                .units(job.id)
+                .unwrap_or_default()
+                .iter()
+                .any(|u| u.state != UnitState::Pending);
+            if started {
+                continue;
+            }
+            drop(q);
+            let changed = plock(&s.handle.queue).change_models(job.id, &models_json(&models));
+            match changed {
+                Ok(()) => {
+                    self.core.push_log(format!(
+                        "night safety switch: {name} goes back to today's night models (the Hinglish night pass: {reason}); best finished on a faster machine"
+                    ));
+                    let text =
+                        night::faster_machine_json(&reason, Some(hinglish_model.as_str()), now);
+                    if let Err(e) = std::fs::write(s.dir.join(night::FASTER_MACHINE_FILE), text) {
+                        self.core.push_log(format!(
+                            "{name}: the faster-machine note could not be written: {e}"
+                        ));
+                    }
+                }
+                Err(e) => self.core.push_log(format!(
+                    "night safety switch: the models of {name} could not be changed: {e}"
+                )),
+            }
+        }
+        self.core.push_log(format!(
+            "night safety switch: with today's models for the sessions not yet started the rest needs about {:.1} h (the Hinglish night pass needed {:.1} h)",
+            check.needed_after_s / 3600.0,
+            check.needed_s / 3600.0
+        ));
+        self.manager.poke();
     }
 
     /// The profile in use, read fresh (`store::in_use`: safe defaults after a fingerprint change).
@@ -1177,9 +1300,13 @@ fn language_mix(q: &SessionQueue, revision: &str) -> std::collections::BTreeMap<
 /// The factor the 'ready by' estimate multiplies a job's profile speeds by: the measured one for sessions of its
 /// kind once a unit of one has finished, and until then the provisional emu-low detection allowance when the job
 /// has more than one language (owner, 17 Nov 2026; replace the allowance with the laptops' measurements).
-fn job_planning_factor(job: &wb_queue::store::Job, measured: Option<f64>) -> f64 {
+fn job_planning_factor(
+    job: &wb_queue::store::Job,
+    measured: Option<f64>,
+    class: wb_queue::speed::DeviceClass,
+) -> f64 {
     let pass = if job.kind == JobKind::Night {
-        wb_queue::speed::Pass::Night
+        wb_queue::speed::Pass::Night(class)
     } else {
         wb_queue::speed::Pass::Rolling
     };
@@ -1251,8 +1378,14 @@ impl Queue {
                 if matches!(j.state, JobState::Queued | JobState::Running) {
                     // This computer's measured speed for sessions of this kind once a unit of one has finished;
                     // until then the provisional detection allowance for several languages (owner, 17 Nov 2026).
-                    let factor =
-                        job_planning_factor(&j, self.manager.speed_factor(j.languages.len() > 1));
+                    let class = profile
+                        .as_ref()
+                        .map_or(wb_queue::speed::DeviceClass::Cpu, |p| p.night_class());
+                    let factor = job_planning_factor(
+                        &j,
+                        self.manager.speed_factor(j.languages.len() > 1),
+                        class,
+                    );
                     seconds.push(job_seconds_left(
                         profile.as_ref(),
                         &j,
@@ -1563,7 +1696,8 @@ pub(crate) fn report_json(app: &AppHandle) -> serde_json::Value {
             q.manager.speed_units(false),
         ),
         "detection_allowance_rolling": wb_queue::speed::ROLLING_DETECTION_ALLOWANCE,
-        "detection_allowance_night": wb_queue::speed::NIGHT_DETECTION_ALLOWANCE,
+        "detection_allowance_night": wb_queue::speed::NIGHT_ALLOWANCE_GPU,
+        "detection_allowance_night_cpu": wb_queue::speed::NIGHT_ALLOWANCE_CPU,
         "profile_reads": q.readings.profile_reads.load(Ordering::Relaxed),
         "profile_read_max_us": q.readings.profile_read_max_us.load(Ordering::Relaxed),
         "profile_read_total_us": q.readings.profile_read_total_us.load(Ordering::Relaxed),
@@ -1711,17 +1845,24 @@ mod tests {
         let one = rolling_job(json, &["hi"]);
         // Before any unit has finished: x1.34 for two languages, the profile's word for one.
         assert_eq!(
-            job_planning_factor(&both, None),
+            job_planning_factor(&both, None, wb_queue::speed::DeviceClass::Gpu),
             wb_queue::speed::ROLLING_DETECTION_ALLOWANCE
         );
-        assert_eq!(job_planning_factor(&one, None), 1.0);
+        assert_eq!(
+            job_planning_factor(&one, None, wb_queue::speed::DeviceClass::Gpu),
+            1.0
+        );
         let promised = job_seconds_left(Some(&tier_g), &both, hour, &mix, Some(1.0));
         let first = job_seconds_left(
             Some(&tier_g),
             &both,
             hour,
             &mix,
-            Some(job_planning_factor(&both, None)),
+            Some(job_planning_factor(
+                &both,
+                None,
+                wb_queue::speed::DeviceClass::Gpu,
+            )),
         );
         assert!(
             (first / promised - wb_queue::speed::ROLLING_DETECTION_ALLOWANCE).abs() < 1e-9,
@@ -1731,11 +1872,19 @@ mod tests {
         let mut night = rolling_job(serde_json::json!({}), &["en", "hi"]);
         night.kind = JobKind::Night;
         assert_eq!(
-            job_planning_factor(&night, None),
-            wb_queue::speed::NIGHT_DETECTION_ALLOWANCE
+            job_planning_factor(&night, None, wb_queue::speed::DeviceClass::Gpu),
+            wb_queue::speed::NIGHT_ALLOWANCE_GPU
+        );
+        // On a processor the night is judged longer (26 Nov 2026).
+        assert_eq!(
+            job_planning_factor(&night, None, wb_queue::speed::DeviceClass::Cpu),
+            wb_queue::speed::NIGHT_ALLOWANCE_CPU
         );
         // Once a unit of such a session has finished, the measurement replaces the allowance.
-        assert_eq!(job_planning_factor(&both, Some(1.46)), 1.46);
+        assert_eq!(
+            job_planning_factor(&both, Some(1.46), wb_queue::speed::DeviceClass::Gpu),
+            1.46
+        );
     }
 
     #[test]
