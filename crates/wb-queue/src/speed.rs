@@ -160,14 +160,18 @@ pub enum Pass {
 // Evidence: docs/evidence/phase-4/speed-diagnosis-emu-low.txt.
 /// How much slower than the profile a rolling pass of a session with several languages runs (emu-low, provisional).
 pub const ROLLING_DETECTION_ALLOWANCE: f64 = 1.011 / 0.753;
-/// The same for the night pass on a graphics adapter (emu-low UHD, provisional: the queue's request over the night
-/// model alone). The Hinglish model's batch runs measured 1.13 to 1.17 times its bench there
-/// (docs/evidence/phase-5/fit-and-fallback.txt against hinglish-speed-A/B.txt), so this figure covers both.
-pub const NIGHT_ALLOWANCE_GPU: f64 = 1.868 / 1.498;
-/// The same on a processor (provisional): the Hinglish f16 batch over its bench, emu-low 12.82 / 8.98 = 1.43 and emu-mid
-/// 4.49 / 3.30 = 1.36. Both come from one 74 s English + Hindi clip, whose first-chunk and detection overhead weighs more than
-/// in a night of hours, so they are an upper bound; the real laptops' measurements replace them (gate pack).
-pub const NIGHT_ALLOWANCE_CPU: f64 = 12.82 / 8.983;
+/// The night allowance on a graphics adapter: 1.5 until the laptops are measured (owner, 26 Nov 2026). The short
+/// emulated runs gave smaller figures (the queue's request over the night model alone on the emu-low UHD, 1.868 / 1.498 =
+/// 1.25; the Hinglish model's batch over its bench, 1.13 to 1.17, docs/evidence/phase-5/fit-and-fallback.txt against
+/// hinglish-speed-A/B.txt), but the 21 Nov 2026 night ran 1.50 times its profile (1.14 against 0.76 engine seconds per
+/// audio second), and a night plan that is too short is the dangerous error (bar: planned within 10% of what ran, late
+/// side first). Provisional: the gate pack on the real laptops replaces it.
+pub const NIGHT_ALLOWANCE_GPU: f64 = 1.5;
+/// The night allowance on a processor: 1.5 as well until the laptops are measured. The Hinglish f16 batch ran 1.43
+/// (emu-low, 12.82 / 8.98) and 1.36 (emu-mid, 4.49 / 3.30) times its bench from one 74 s English + Hindi clip, whose
+/// first-chunk and detection overhead weighs more than in a night of hours (an upper bound for that clip), and the 21 Nov
+/// night ran 1.50 times its profile. The two classes stay apart so that a measurement can set them separately.
+pub const NIGHT_ALLOWANCE_CPU: f64 = 1.5;
 
 /// The night allowance of a class of device.
 pub fn night_allowance(class: DeviceClass) -> f64 {
@@ -330,9 +334,9 @@ mod tests {
     #[test]
     fn the_detection_allowance_is_the_measured_emu_low_ratio_and_only_for_several_languages() {
         assert!((ROLLING_DETECTION_ALLOWANCE - 1.011 / 0.753).abs() < 1e-12);
-        assert!((NIGHT_ALLOWANCE_GPU - 1.868 / 1.498).abs() < 1e-12);
         assert!((ROLLING_DETECTION_ALLOWANCE - 1.3426).abs() < 1e-3);
-        assert!((NIGHT_ALLOWANCE_GPU - 1.2470).abs() < 1e-3);
+        assert_eq!(NIGHT_ALLOWANCE_GPU, 1.5);
+        assert_eq!(NIGHT_ALLOWANCE_CPU, 1.5);
         for pass in [
             Pass::Rolling,
             Pass::Night(DeviceClass::Gpu),
@@ -353,15 +357,23 @@ mod tests {
             detection_allowance(Pass::Night(DeviceClass::Cpu), 3),
             NIGHT_ALLOWANCE_CPU
         );
-        // Applied to the profile's cells it lands near what the quiet emu-low runs measured for the queue's
-        // request: rolling 0.696 -> 0.93 (measured 1.011), night 1.479 -> 1.84 (measured 1.868).
+        // Applied to the profile's cells the rolling figure lands near what the quiet emu-low runs measured for the
+        // queue's request (0.696 -> 0.93, measured 1.011). The night figure is deliberately on the late-safe side of
+        // that run (1.479 -> 2.22, measured 1.868: 19% above it) because the 21 Nov night ran 1.50 times its profile.
         let rolling = scaled(0.696, Some(planning_factor(None, Pass::Rolling, 2)));
         let night = scaled(
             1.479,
             Some(planning_factor(None, Pass::Night(DeviceClass::Gpu), 2)),
         );
         assert!((rolling - 1.011).abs() / 1.011 < 0.10, "{rolling}");
-        assert!((night - 1.868).abs() / 1.868 < 0.03, "{night}");
+        assert!(night >= 1.868 && night <= 1.868 * 1.25, "{night}");
+        // The 21 Nov 2026 night: profile 0.76, ran 1.14 (1.50 times). The plan must not fall short of it by more than 10%.
+        assert!(0.76 * night_allowance(DeviceClass::Gpu) >= 1.14 * 0.90);
+        assert!(0.76 * night_allowance(DeviceClass::Cpu) >= 1.14 * 0.90);
+        assert!(
+            0.76 * 1.247 < 1.14 * 0.90,
+            "the earlier 1.25 would have been 17% short"
+        );
         // Without the allowance the profile was 31% and 21% under.
         assert!((0.696f64 - 1.011).abs() / 1.011 > 0.30);
         assert!((1.479f64 - 1.868).abs() / 1.868 > 0.20);
@@ -428,16 +440,17 @@ mod tests {
         ));
     }
 
-    /// 26 Nov 2026: the night estimate was too optimistic on a processor. The Hinglish f16 batch ran at 1.36 to 1.43 times
-    /// its bench on the emulated processors and 1.13 to 1.17 on the integrated graphics; the night allowance follows the
-    /// device class, for the ready-by estimate and for the choice of the Hinglish model alike.
+    /// 26 Nov 2026: the night estimate was too optimistic. The 21 Nov night ran 1.50 times its profile and the Hinglish
+    /// f16 batch ran 1.36 to 1.43 times its bench on the emulated processors; until the laptops are measured both device
+    /// classes plan a night at 1.5 times the profile, for the ready-by estimate and for the choice of the Hinglish model
+    /// alike (owner, 26 Nov 2026).
     #[test]
-    fn the_night_allowance_follows_the_device_class_and_a_processor_night_is_judged_longer() {
+    fn the_night_allowance_is_1_5_on_both_device_classes_until_the_laptops_are_measured() {
         const H: u64 = 3_600_000;
-        const { assert!(NIGHT_ALLOWANCE_CPU > NIGHT_ALLOWANCE_GPU) };
-        assert!((NIGHT_ALLOWANCE_CPU - 1.427).abs() < 1e-3);
-        // 22:30 IST: 9.5 h to 08:00. 2.9 h of Hindi at a bench RTF of 2.5 is 7.25 h: it fits on the bench's word, and
-        // on a graphics adapter (x1.25 is 9.04 h); on a processor (x1.43 is 10.35 h) it does not.
+        assert_eq!(night_allowance(DeviceClass::Gpu), 1.5);
+        assert_eq!(night_allowance(DeviceClass::Cpu), 1.5);
+        // 22:30 IST: 9.5 h to 08:00. 2.9 h of Hindi at a bench RTF of 2.5 is 7.25 h: it fits on the bench's word and
+        // with the earlier graphics-adapter figure (x1.25 is 9.04 h), and does not fit at x1.5 (10.9 h) on either class.
         let start = 1_800_000_000_000u64 - 1_800_000_000_000 % (24 * H) + 17 * H;
         let audio = vec![SessionAudio {
             id: "a".into(),
@@ -457,15 +470,25 @@ mod tests {
         };
         let gpu = at(DeviceClass::Gpu);
         let cpu = at(DeviceClass::Cpu);
+        let earlier: BTreeMap<String, f64> =
+            bench.iter().map(|(l, r)| (l.clone(), r * 1.25)).collect();
         assert!(matches!(
             plan(start, &audio, &bench, &bench),
             Plan::Run { .. }
         ));
-        assert!(matches!(plan(start, &audio, &gpu, &gpu), Plan::Run { .. }));
         assert!(matches!(
-            plan(start, &audio, &cpu, &cpu),
-            Plan::Skip(SkipReason::DoesNotFit { .. })
+            plan(start, &audio, &earlier, &earlier),
+            Plan::Run { .. }
         ));
+        for (what, rtf) in [("graphics adapter", &gpu), ("processor", &cpu)] {
+            assert!(
+                matches!(
+                    plan(start, &audio, rtf, rtf),
+                    Plan::Skip(SkipReason::DoesNotFit { .. })
+                ),
+                "{what}"
+            );
+        }
     }
 
     #[test]
@@ -500,7 +523,7 @@ mod tests {
         );
         assert!(
             first
-                .contains("x1.34 rolling, x1.25 night on a graphics adapter, x1.43 on a processor"),
+                .contains("x1.34 rolling, x1.50 night on a graphics adapter, x1.50 on a processor"),
             "{first}"
         );
         assert!(

@@ -1875,7 +1875,7 @@ mod tests {
             job_planning_factor(&night, None, wb_queue::speed::DeviceClass::Gpu),
             wb_queue::speed::NIGHT_ALLOWANCE_GPU
         );
-        // On a processor the night is judged longer (26 Nov 2026).
+        // On a processor the night is planned at the same 1.5 until the laptops are measured (26 Nov 2026).
         assert_eq!(
             job_planning_factor(&night, None, wb_queue::speed::DeviceClass::Cpu),
             wb_queue::speed::NIGHT_ALLOWANCE_CPU

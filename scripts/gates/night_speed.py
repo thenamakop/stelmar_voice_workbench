@@ -23,7 +23,7 @@ PLAN = re.compile(r"night pass planned for (\d+) session\(s\): about ([0-9.]+) h
 NIGHT = re.compile(r"night units finished: (\d+); audio ([0-9.]+) of ([0-9.]+) min; engine time ([0-9.]+) min")
 ESTIMATE = re.compile(r"the pass would finish at about (\d\d:\d\d:\d\d)")
 # The night allowances of crates/wb-queue/src/speed.rs (26 Nov 2026): used before any unit has finished, per device class.
-ALLOWANCE = {"graphics adapter": 1.868 / 1.498, "processor": 12.82 / 8.983}
+ALLOWANCE = {"graphics adapter": 1.5, "processor": 1.5}
 HOURS_TO_DEADLINE = 13.5  # from about 18:30 to 08:00 IST: the room a night plan has on a conference day
 
 

@@ -365,11 +365,11 @@ mod tests {
         assert_eq!(recheck(&p, six_pm(), &[], 4.0), None);
     }
 
-    /// The night allowance of the device class reaches the Hinglish decision: three sessions the integrated graphics can
-    /// finish (10.8 h at the bench's speed, 13.5 h with its allowance, 14 h before 08:00) are sent to a faster machine on
-    /// a processor-only laptop (15.4 h with the processor's allowance).
+    /// The night allowance reaches the Hinglish decision: three sessions that the earlier graphics-adapter allowance (1.25:
+    /// 10.8 h at the bench's speed, 13.5 h, 14 h before 08:00) let through are sent to a faster machine at the allowance of
+    /// both device classes (1.5: 16.2 h); two sessions (7.2 h at the bench, 10.8 h) still run Hinglish.
     #[test]
-    fn the_hinglish_night_decision_uses_the_allowance_of_the_device_class() {
+    fn the_hinglish_night_decision_uses_the_night_allowance_of_both_device_classes() {
         // Hindi 4.0, English 1.6 (the measured ratio is about 2.5); 90 minutes of audio per session.
         let p = profile(true, 4.0, false);
         let three = [
@@ -379,9 +379,14 @@ mod tests {
         ];
         let gpu = decide(&p, six_pm(), &three, wb_queue::speed::NIGHT_ALLOWANCE_GPU);
         let cpu = decide(&p, six_pm(), &three, wb_queue::speed::NIGHT_ALLOWANCE_CPU);
-        assert_eq!(gpu.routed.route, Route::Hinglish, "{gpu:?}");
-        assert!(gpu.marks.is_empty(), "{:?}", gpu.marks);
-        assert_eq!(cpu.routed.route, Route::Today, "{cpu:?}");
-        assert_eq!(cpu.marks.len(), 3, "{:?}", cpu.marks);
+        let earlier = decide(&p, six_pm(), &three, 1.25);
+        assert_eq!(earlier.routed.route, Route::Hinglish, "{earlier:?}");
+        for (what, d) in [("graphics adapter", &gpu), ("processor", &cpu)] {
+            assert_eq!(d.routed.route, Route::Today, "{what}: {d:?}");
+            assert_eq!(d.marks.len(), 3, "{what}: {:?}", d.marks);
+        }
+        let two = [session("a", 60, 30), session("b", 60, 30)];
+        let ok = decide(&p, six_pm(), &two, wb_queue::speed::NIGHT_ALLOWANCE_GPU);
+        assert_eq!(ok.routed.route, Route::Hinglish, "{ok:?}");
     }
 }
