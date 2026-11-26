@@ -7,6 +7,10 @@ Night plan against the night units (Phase 5, item 7). Numbers only; written by s
   night audio 180.9 min; the plan assumed 1.86 engine seconds per audio second, the units needed 1.14: actual over planned 0.62
   extrapolated finish of the whole night pass at the speed the units showed: 21:29:58 (planned: 23:40)
   room before 08:00 (13.5 h): the plan accepts up to 436 min of night audio, the units' speed would have fitted 708 min: between those two the plan says it will not finish and the night would have finished
+  re-judged with the night allowances (the profile's night speed here: 0.76 engine seconds per audio second):
+    graphics adapter, allowance x1.25: 0.95 engine seconds per audio second, 2.9 h for 180.9 min of audio, ready by 20:56 IST; units needed 1.14: planned over actual 0.83; room for 853 min of night audio against 708
+    processor, allowance x1.43: 1.09 engine seconds per audio second, 3.3 h for 180.9 min of audio, ready by 21:21 IST; units needed 1.14: planned over actual 0.95; room for 746 min of night audio against 708
+    as run: x2.44 (learned from the rolling pass): 5.6 h, ready by 23:40 IST; planned over actual 1.62
   rolling against night speed: 1.16 against 1.14 engine seconds per audio second (the rolling units ran beside the recorder; in this run the night units ran alone)
 
 == smoke5-emu-low-20261123-055853

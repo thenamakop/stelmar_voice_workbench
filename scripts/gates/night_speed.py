@@ -22,6 +22,8 @@ PLAN = re.compile(r"night pass planned for (\d+) session\(s\): about ([0-9.]+) h
                   r"\(measured speed: ([0-9.]+) times the profile's, from (\d+) finished unit")
 NIGHT = re.compile(r"night units finished: (\d+); audio ([0-9.]+) of ([0-9.]+) min; engine time ([0-9.]+) min")
 ESTIMATE = re.compile(r"the pass would finish at about (\d\d:\d\d:\d\d)")
+# The night allowances of crates/wb-queue/src/speed.rs (26 Nov 2026): used before any unit has finished, per device class.
+ALLOWANCE = {"graphics adapter": 1.868 / 1.498, "processor": 12.82 / 8.983}
 HOURS_TO_DEADLINE = 13.5  # from about 18:30 to 08:00 IST: the room a night plan has on a conference day
 
 
@@ -70,6 +72,20 @@ def report(run: Path, P) -> None:
     cap_real = HOURS_TO_DEADLINE * 3600.0 / nite / 60.0
     P(f"  room before 08:00 ({HOURS_TO_DEADLINE:.1f} h): the plan accepts up to {cap_plan:.0f} min of night audio, the units' speed would "
       f"have fitted {cap_real:.0f} min: between those two the plan says it will not finish and the night would have finished")
+    # Re-judged with the allowances the queue now uses before any unit has finished (numbers only). The profile's own night
+    # speed is the plan's speed divided by the factor it was multiplied by.
+    profile_speed = planned_speed / factor
+    h, m = ready.split(":")
+    start_min = (int(h) * 60 + int(m) - round(hours * 60)) % 1440
+    P(f"  re-judged with the night allowances (the profile's night speed here: {profile_speed:.2f} engine seconds per audio second):")
+    for name, allowance in ALLOWANCE.items():
+        speed = profile_speed * allowance
+        needed_h = audio_total * 60.0 * speed / 3600.0
+        end = (start_min + round(needed_h * 60)) % 1440
+        P(f"    {name}, allowance x{allowance:.2f}: {speed:.2f} engine seconds per audio second, {needed_h:.1f} h for {audio_total:.1f} min of audio, "
+          f"ready by {end // 60:02d}:{end % 60:02d} IST; units needed {nite:.2f}: planned over actual {speed / nite:.2f}; room for "
+          f"{HOURS_TO_DEADLINE * 3600.0 / speed / 60.0:.0f} min of night audio against {cap_real:.0f}")
+    P(f"    as run: x{factor:.2f} (learned from the rolling pass): {hours:.1f} h, ready by {ready} IST; planned over actual {planned_speed / nite:.2f}")
     P(f"  rolling against night speed: {roll:.2f} against {nite:.2f} engine seconds per audio second "
       "(the rolling units ran beside the recorder; in this run the night units ran alone)")
 
