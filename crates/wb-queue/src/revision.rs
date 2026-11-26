@@ -36,6 +36,11 @@ pub struct Transcript {
     revisions: HashMap<String, RevisionFile>,
     /// A commit that fails on purpose (tests); never set in a real run.
     fail_after: Option<u32>,
+    /// Segments already written to the JSONL (the truth) that SQLite does not have yet because its insert failed. The next
+    /// commit inserts them before anything else, and a repeat of one of them is not refused (N3 of the auditor of 20 Nov 2026).
+    unindexed: Vec<Segment>,
+    /// The next SQLite insert fails once (tests).
+    fail_index_once: bool,
 }
 
 pub fn jsonl_path(dir: &Path, revision: &str) -> PathBuf {
@@ -141,6 +146,8 @@ impl Transcript {
             store,
             revisions,
             fail_after: None,
+            unindexed: Vec::new(),
+            fail_index_once: false,
         })
     }
 
@@ -149,6 +156,26 @@ impl Transcript {
     #[doc(hidden)]
     pub fn inject_commit_failure_after(&mut self, ok_commits: u32) {
         self.fail_after = Some(ok_commits);
+    }
+
+    /// The next SQLite insert of a commit fails once, after the JSONL was written (tests of the retry).
+    #[doc(hidden)]
+    pub fn inject_index_failure_once(&mut self) {
+        self.fail_index_once = true;
+    }
+
+    /// Inserts into SQLite the segments the JSONL has and SQLite lacks; returns how many were added.
+    fn index_pending(&mut self) -> Result<usize> {
+        if self.unindexed.is_empty() {
+            return Ok(0);
+        }
+        if std::mem::take(&mut self.fail_index_once) {
+            return Err(Error::Invalid("index failure injected by a test".into()));
+        }
+        self.store.insert_segments(&self.unindexed)?;
+        let n = self.unindexed.len();
+        self.unindexed.clear();
+        Ok(n)
     }
 
     pub fn store(&self) -> &Store {
@@ -201,13 +228,27 @@ impl Transcript {
             Some(n) => self.fail_after = Some(n - 1),
             None => {}
         }
+        // A commit whose SQLite insert failed left its segments in the JSONL only: put them into SQLite first. A retry that
+        // offers the same segments again is then not a repeat to refuse: they count as written (they became visible now).
+        let pending: Vec<(u64, u64, String)> = self
+            .unindexed
+            .iter()
+            .filter(|u| u.revision == revision)
+            .map(|u| (u.start_ms, u.end_ms, u.text.clone()))
+            .collect();
+        let mut indexed_now = self.index_pending()?;
         let mut accepted: Vec<&Segment> = Vec::new();
         let mut refused = 0;
+        let mut retried = 0;
         {
             let file = self.revision_file(revision)?;
             let mut end = file.committed_end_ms;
             for s in segments {
-                if s.start_ms < end || s.end_ms < s.start_ms {
+                if pending.iter().any(|(a, b, t)| {
+                    (*a, *b, t.as_str()) == (s.start_ms, s.end_ms, s.text.as_str())
+                }) {
+                    retried += 1;
+                } else if s.start_ms < end || s.end_ms < s.start_ms {
                     refused += 1;
                 } else {
                     end = s.end_ms.max(s.start_ms);
@@ -216,8 +257,9 @@ impl Transcript {
             }
         }
         if accepted.is_empty() {
+            indexed_now = indexed_now.min(retried);
             return Ok(Committed {
-                written: 0,
+                written: indexed_now,
                 refused,
             });
         }
@@ -252,8 +294,9 @@ impl Transcript {
             file.committed_end_ms = new_end;
         }
         let owned: Vec<Segment> = accepted.into_iter().cloned().collect();
-        let written = owned.len();
-        self.store.insert_segments(&owned)?;
+        let written = owned.len() + indexed_now.min(retried);
+        self.unindexed.extend(owned);
+        self.index_pending()?;
         Ok(Committed { written, refused })
     }
 }
@@ -262,6 +305,34 @@ impl Transcript {
 mod tests {
     use super::*;
     use crate::testutil::{seg, temp};
+
+    /// N3 (auditor of 20 Nov 2026): the JSONL write succeeded and the SQLite insert failed. The retry of the same segments
+    /// used to be refused as repeats (the committed end had moved) and SQLite lacked them until the next open.
+    #[test]
+    fn a_retry_after_a_failed_sqlite_insert_puts_the_segments_into_sqlite_and_refuses_nothing() {
+        let dir = temp("rev-index-retry");
+        let mut t = Transcript::open(&dir).unwrap();
+        let segs = [seg("post-1", 0, 900, "a"), seg("post-1", 1_000, 1_900, "b")];
+        t.inject_index_failure_once();
+        assert!(t.commit("post-1", &segs).is_err());
+        assert_eq!(t.committed_end_ms("post-1"), 1_900, "the JSONL has them");
+        assert_eq!(
+            t.store().segment_count("post-1").unwrap(),
+            0,
+            "SQLite does not"
+        );
+        let c = t.commit("post-1", &segs).unwrap();
+        assert_eq!((c.written, c.refused), (2, 0));
+        assert_eq!(t.store().segment_count("post-1").unwrap(), 2);
+        // A genuine repeat afterwards is refused as before, and the next unit commits normally.
+        let again = t.commit("post-1", &segs).unwrap();
+        assert_eq!((again.written, again.refused), (0, 2));
+        let next = t
+            .commit("post-1", &[seg("post-1", 2_000, 2_500, "c")])
+            .unwrap();
+        assert_eq!((next.written, next.refused), (1, 0));
+        assert_eq!(t.store().segment_count("post-1").unwrap(), 3);
+    }
 
     #[test]
     fn a_commit_is_in_the_jsonl_and_in_sqlite() {
