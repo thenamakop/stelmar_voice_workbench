@@ -366,12 +366,13 @@ mod tests {
             Some(planning_factor(None, Pass::Night(DeviceClass::Gpu), 2)),
         );
         assert!((rolling - 1.011).abs() / 1.011 < 0.10, "{rolling}");
-        assert!(night >= 1.868 && night <= 1.868 * 1.25, "{night}");
+        assert!((1.868..=1.868 * 1.25).contains(&night), "{night}");
         // The 21 Nov 2026 night: profile 0.76, ran 1.14 (1.50 times). The plan must not fall short of it by more than 10%.
         assert!(0.76 * night_allowance(DeviceClass::Gpu) >= 1.14 * 0.90);
         assert!(0.76 * night_allowance(DeviceClass::Cpu) >= 1.14 * 0.90);
+        let earlier = std::hint::black_box(1.247);
         assert!(
-            0.76 * 1.247 < 1.14 * 0.90,
+            0.76 * earlier < 1.14 * 0.90,
             "the earlier 1.25 would have been 17% short"
         );
         // Without the allowance the profile was 31% and 21% under.
