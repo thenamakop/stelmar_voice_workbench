@@ -708,3 +708,16 @@ lang_mode = "detect"
 langs = ["en", "hi"]
 limit = "eval/clips/phase5-tune-coshe.txt"
 needs = "phase-2"
+
+# For 6 and 8 GB cards (owner, 26 Nov 2026): the small detector in front of the Hinglish f16 file. Run with
+# scripts/gates/eval-under-gate.ps1 (quiet-machine check, then the gate lock).
+[[run]]
+name = "tune-small-detect-f16"
+setup = "en=small-q5_0,hi=hinglish-f16"
+dataset = "coshe-eval"
+role = "rolling"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["en", "hi"]
+limit = "eval/clips/phase5-tune-coshe.txt"
+needs = "phase-2"

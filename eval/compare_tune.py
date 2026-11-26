@@ -19,6 +19,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from score_tune import score  # noqa: E402
 
 
+# Runs decoded without the gate lock and its idle check (26 Nov 2026: nobody held a lock, but the rule is to take it). Their
+# quality numbers stand; their real-time factors are indicative only and are marked with an asterisk.
+RTF_INDICATIVE = {"tune-turbo-detect-q8_0", "tune-small-detect-q8_0"}
+
+
 def cell(classes, key: str) -> str:
     c = classes.get(key)
     return f"{c['language matches']}/{c['chunks']}" if c else "-"
@@ -39,11 +44,13 @@ def main() -> int:
                      (s.get("fingerprint_inputs") or {}).get("lang_experiment") or "-", str(r["totals"]["translated"]),
                      cell(cl, "pure English"), cell(cl, "pure Hindi"), cell(cl, "mixed, English-led"), cell(cl, "mixed, Hindi-led"),
                      f"{r['totals']['matches']}/{r['totals']['chunks']}", f"{100 * s['wer']:.1f}", f"{100 * s['cer']:.1f}",
-                     f"{100 * s['latin_words']['devanagari_rate']:.1f}", f"{s['rtf']}", str(s.get("truncated_utterances"))])
+                     f"{100 * s['latin_words']['devanagari_rate']:.1f}", f"{s['rtf']}{'*' if r['run'] in RTF_INDICATIVE else ''}",
+                     str(s.get("truncated_utterances"))])
     first = score(a.runs[0])["summary"]
     L = [f"Tuning-set comparison (Phase 5, items 4 and 5): {first['utterances']} clips; machine {first['machine']['name']}; "
          f"threads {first['settings']['threads']}; device {first['engine'].get('device')}; whisper.cpp {first['engine'].get('version')}.",
-         "Chunk-language numbers are PROVISIONAL: the labels come from the reference text and the owner's ear check is not done.", ""]
+         "Chunk-language numbers are PROVISIONAL: the labels come from the reference text and the owner's ear check is not done.",
+         "* RTF indicative only: the run was decoded without the gate lock and its idle check (quality numbers are unaffected).", ""]
     L += [" | ".join(r) for r in rows]
     text = "\n".join(L) + "\n"
     if a.out:
