@@ -1325,12 +1325,12 @@ fn a_card_whose_memory_could_not_be_read_is_not_judged() {
     assert!(decide_with(&p, false).hinglish.ok);
 }
 
-/// Phase 5, item 6: the bench decodes one language with no detection, a session with several languages detects every
-/// chunk and runs slower. With an allowance the pick carries the slower figure and the verdict warns where the pick
-/// meets the bar without it and not with it; the pick itself (the model) is never changed by it.
+/// Phase 5, item 6 (owner, 27 Nov 2026): the bench decodes one language with no detection, a session with several languages
+/// detects every chunk and runs slower. A pick must meet the bar WITH the allowance: a model that passes on the bench figure
+/// and fails with the allowance is not a pick that meets the bar, and the verdict says why. The measured figure stays.
 #[test]
-fn a_detection_allowance_warns_but_never_changes_the_pick() {
-    let p = avx512_crash();
+fn a_pick_must_meet_the_bar_with_the_detection_allowance_not_only_on_the_bench_figure() {
+    let p = avx512_crash(); // English medium 0.60, Hindi turbo 0.70, Urdu medium 0.80; bar 1.0 (not emulated)
     let none = decide(&p, &rankings(false), &Options::default());
     let o = Options {
         rolling_detection_allowance: 1.5,
@@ -1339,10 +1339,11 @@ fn a_detection_allowance_warns_but_never_changes_the_pick() {
     let with = decide(&p, &rankings(false), &o);
     for lang in [Lang::En, Lang::Hi, Lang::Ur] {
         let (a, b) = (rolling_of(&none, lang), rolling_of(&with, lang));
+        assert!(a.meets_bar, "{lang:?} meets the bench bar");
         assert_eq!(
-            (&a.model, a.rtf, a.meets_bar),
-            (&b.model, b.rtf, b.meets_bar),
-            "{lang:?}"
+            (&a.model, a.rtf),
+            (&b.model, b.rtf),
+            "{lang:?}: the measured figure stays"
         );
         assert_eq!(a.rtf_with_detection, None, "{lang:?}");
         assert!(
@@ -1350,26 +1351,35 @@ fn a_detection_allowance_warns_but_never_changes_the_pick() {
             "{lang:?}"
         );
     }
-    assert_eq!(none.tier, with.tier);
-    let warned = |d: &Decision, l: &str| {
-        d.verdict
-            .iter()
-            .any(|v| v.starts_with(l) && v.contains("detects the language of every chunk"))
+    // 0.60 x 1.5 = 0.90 still meets the bar; 0.70 x 1.5 = 1.05 and 0.80 x 1.5 = 1.2 do not.
+    assert!(rolling_of(&with, Lang::En).meets_bar);
+    assert!(!rolling_of(&with, Lang::Hi).meets_bar);
+    assert!(!rolling_of(&with, Lang::Ur).meets_bar);
+    assert!(rolling_of(&with, Lang::Hi).lags && !rolling_of(&none, Lang::Hi).lags);
+    assert_eq!(
+        (
+            rolling_of(&none, Lang::Hi).k_max,
+            rolling_of(&with, Lang::Hi).k_max
+        ),
+        (1, 0)
+    );
+    let says = |d: &Decision, lang: &str| {
+        d.verdict.iter().any(|v| {
+            v.starts_with(lang)
+                && v.contains("meets the bar on one language")
+                && v.contains("detects the language of every chunk")
+        })
     };
+    assert!(
+        says(&with, "Hindi") && says(&with, "Urdu"),
+        "{:?}",
+        with.verdict
+    );
+    assert!(!says(&with, "English"));
     assert!(
         !none
             .verdict
             .iter()
             .any(|v| v.contains("detects the language of every chunk"))
-    );
-    assert!(
-        !warned(&with, "English"),
-        "0.60 x 1.5 = 0.90 still meets the bar: {:?}",
-        with.verdict
-    );
-    assert!(
-        warned(&with, "Hindi"),
-        "0.70 x 1.5 = 1.05 is over the bar: {:?}",
-        with.verdict
     );
 }

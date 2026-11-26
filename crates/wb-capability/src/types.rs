@@ -305,8 +305,8 @@ pub struct Options {
     pub vram_file_factor: f64,
     pub vram_overhead_bytes: u64,
     /// How much slower than the bench a rolling pass runs in a session with several languages (the engine detects the
-    /// language of every chunk, and the bench decodes one language with no detection). 1.0 means no figure: the app sets the
-    /// emulated emu-low ratio until the laptops are measured. It only adds a warning to the verdict; it never changes a pick.
+    /// language of every chunk, and the bench decodes one language with no detection). A rolling pick must meet the bar
+    /// with it. 1.0 means no figure; the app sets the emulated emu-low ratio until the laptops are measured.
     #[serde(default = "one")]
     pub rolling_detection_allowance: f64,
 }
@@ -388,7 +388,7 @@ pub struct RollingPick {
     pub lags: bool,
     /// The speed in a session with several languages, whose engine detects the language of every chunk: the measured
     /// RTF times `Options::rolling_detection_allowance` (a provisional emulated figure). `None` when the allowance is 1.
-    /// The choice of model is made on `rtf`; this is the figure the verdict warns with (item 6, Phase 5).
+    /// `meets_bar`, `k_max`, `lags` and `ready_after_stop_min` are taken from this figure (item 6, Phase 5, 27 Nov 2026).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rtf_with_detection: Option<f64>,
 }

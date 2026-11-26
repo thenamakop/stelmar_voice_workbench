@@ -198,50 +198,50 @@ fn candidate_configs(p: &Profile, o: &Options) -> Vec<DeviceConfig> {
     out
 }
 
-fn rolling_pick(bar: f64, rk: &Ranked, rtf: f64) -> RollingPick {
+/// A rolling pick. A session with several languages detects the language of every chunk and runs slower than the bench
+/// (which decodes one language with no detection), so the pick must meet the bar WITH `allowance` (owner, 27 Nov 2026,
+/// item 6; the factor is the provisional emu-low ratio until the laptops measure it): `meets_bar`, `k_max`, `lags` and the
+/// time after Stop are all taken from the slower figure, and `rtf` stays the measured one. 1.0 means no allowance.
+fn rolling_pick(bar: f64, allowance: f64, rk: &Ranked, rtf: f64) -> RollingPick {
+    let a = allowance.max(1.0);
+    let eff = rtf * a;
     RollingPick {
         model: rk.model.clone(),
         rtf,
-        meets_bar: rtf <= bar,
+        meets_bar: eff <= bar,
         quality_unverified: rk.quality_unverified,
-        k_max: if rtf > 0.0 {
-            (bar / rtf).floor() as u32
+        k_max: if eff > 0.0 {
+            (bar / eff).floor() as u32
         } else {
             0
         },
-        ready_after_stop_min: ready_after_stop_min(rtf),
-        lags: rtf > 1.0,
-        rtf_with_detection: None,
+        ready_after_stop_min: ready_after_stop_min(eff),
+        lags: eff > 1.0,
+        rtf_with_detection: (a > 1.0).then_some(eff),
     }
 }
 
-/// Sessions with several languages run slower than the bench measured (every chunk's language is detected): the measured
-/// figure times the allowance goes on each pick, and a pick that meets the bar without it but not with it is said so.
-/// The model is still chosen on the bench figure (the plan's decision); the warning tells the operator that the day's
-/// processing will run behind and the night pass catches up (item 6 of Phase 5; PROVISIONAL, the allowance is the emu-low ratio).
-fn detection_notes(
-    languages: &mut BTreeMap<Lang, LangDecision>,
-    o: &Options,
-    b: &Bars,
-) -> Vec<String> {
+/// Said where a model that meets the bar on the bench (one language, no detection) does not meet it with the detection
+/// allowance of a session with several languages: the rules then prefer a model that does, and if none does the fastest is
+/// kept and the day's processing falls behind the recording, which the night pass makes up (item 6 of Phase 5).
+fn detection_notes(languages: &BTreeMap<Lang, LangDecision>, o: &Options, b: &Bars) -> Vec<String> {
     let a = o.rolling_detection_allowance;
     let mut notes = Vec::new();
     if a <= 1.0 {
         return notes;
     }
-    for (lang, d) in languages.iter_mut() {
-        let Some(r) = d.rolling.as_mut() else {
+    for (lang, d) in languages {
+        let Some(r) = d.rolling.as_ref() else {
             continue;
         };
-        let with = r.rtf * a;
-        r.rtf_with_detection = Some(with);
-        if r.meets_bar && with > b.rolling_rtf {
+        if r.rtf <= b.rolling_rtf && !r.meets_bar {
             notes.push(format!(
-                "{}: in a session with several languages the engine detects the language of every chunk and runs about {:.0}% slower ({:.2}× instead of {:.2}×, above the {:.2} bar), so the day's processing will fall behind the recording and the night pass catches up. The factor is an emulated figure until the laptops are measured.",
+                "{}: {} meets the bar on one language ({:.2}×) but not in a session with several languages, where the engine detects the language of every chunk and runs about {:.0}% slower ({:.2}×, the bar is {:.2}), so the day's processing will fall behind the recording and the night pass catches up. The factor is an emulated figure until the laptops are measured.",
                 lang.name(),
-                (a - 1.0) * 100.0,
-                with,
+                r.model,
                 r.rtf,
+                (a - 1.0) * 100.0,
+                r.rtf * a,
                 b.rolling_rtf
             ));
         }
@@ -285,7 +285,7 @@ fn rolling_picks(
             {
                 rtf = rtf.min(eff);
             }
-            let pick = rolling_pick(b.rolling_rtf, rk, rtf);
+            let pick = rolling_pick(b.rolling_rtf, o.rolling_detection_allowance, rk, rtf);
             if pick.meets_bar && first_meeting.is_none() {
                 first_meeting = Some(pick.clone());
             }
@@ -345,7 +345,10 @@ fn fit_pair_on_card(
                 .and_then(|l| l.iter().find(|rk| &rk.model == model));
             match (ranked, find(p, model, *lang, Mode::Rolling, config, false)) {
                 (Some(rk), Some(m)) if memory_ok(p, m, o) => {
-                    cand.insert(*lang, rolling_pick(b.rolling_rtf, rk, m.rtf));
+                    cand.insert(
+                        *lang,
+                        rolling_pick(b.rolling_rtf, o.rolling_detection_allowance, rk, m.rtf),
+                    );
                 }
                 _ => break,
             }
@@ -1044,7 +1047,7 @@ pub fn decide(p: &Profile, r: &Rankings, o: &Options) -> Decision {
     let partial = p.check.partial
         || Lang::ALL.iter().take(2).any(|l| !picks.contains_key(l))
         || safety.is_none();
-    let detection = detection_notes(&mut languages, o, &b);
+    let detection = detection_notes(&languages, o, &b);
     let mut verdict = verdict_lines(&tier, &cfg, &languages, &hing, partial, provisional, &b);
     verdict.extend(detection);
     // A model that does not fit the discrete card's memory (and a pair that does not fit it together) is said so.
@@ -1188,7 +1191,7 @@ fn verdict_lines(
         } else if !rp.meets_bar {
             v.push(format!(
                 "{}: {}{}. It is within the {:.0}% safety margin of real time ({:.2}×, needs {:.2}); about {:.0} minutes after Stop.",
-                lang.name(), rp.model, tag, (1.0 - b.headroom_factor) * 100.0, rp.rtf, b.rolling_rtf, rp.ready_after_stop_min
+                lang.name(), rp.model, tag, (1.0 - b.headroom_factor) * 100.0, rp.rtf_with_detection.unwrap_or(rp.rtf), b.rolling_rtf, rp.ready_after_stop_min
             ));
         } else {
             v.push(format!(
