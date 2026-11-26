@@ -292,6 +292,13 @@ pub struct Options {
     /// A hybrid configuration is chosen only if it measured at least this much faster (a ratio: 1.15 is 15%;
     /// owner's decision of 14 Nov 2026, after the gain on emu-mid measured +11.7% in one run and +3.4% in the next).
     pub hybrid_min_gain: f64,
+    /// Video memory a discrete card must keep free after a model (or the pair of models loaded together) is loaded
+    /// (owner, 26 Nov 2026: the card also draws the screen).
+    pub vram_headroom_bytes: u64,
+    /// Before a model is measured its video memory is estimated as its file size times this factor plus
+    /// `vram_overhead_bytes` (the Hinglish f16 file is 3.1 GB and peaked at 4.1 GB, q8_0 1.66 GB and 2.7 GB).
+    pub vram_file_factor: f64,
+    pub vram_overhead_bytes: u64,
 }
 
 impl Default for Options {
@@ -301,6 +308,9 @@ impl Default for Options {
             day_audio_hours: 3.0,
             min_free_ram_bytes: 3 * GIB,
             hybrid_min_gain: 1.15,
+            vram_headroom_bytes: GIB / 2,
+            vram_file_factor: 1.15,
+            vram_overhead_bytes: GIB / 2,
         }
     }
 }

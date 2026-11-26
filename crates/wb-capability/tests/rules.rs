@@ -1058,3 +1058,179 @@ fn hybrid_is_refused_when_two_engines_do_not_fit_in_memory() {
         d.config
     );
 }
+
+// ---- video memory of a discrete card (owner, 26 Nov 2026) ----
+
+/// The Legion with its RTX card made `card_gib` large and the Hinglish f16 (4.01 GiB peak) or q8_0 (2.67 GiB peak) cell
+/// measured on it, as in docs/evidence/phase-5/fit-and-fallback.txt.
+fn legion_with_card(card_gib: f64, hinglish: Option<(&str, f64)>) -> Profile {
+    let mut p = legion_native();
+    for g in p.hardware.gpus.iter_mut().filter(|g| g.index == 1) {
+        g.dedicated_bytes = gib(card_gib);
+        g.local_bytes = gib(card_gib);
+    }
+    p.measurements.retain(|m| !m.model.starts_with("hinglish"));
+    if let Some((model, peak_gib)) = hinglish {
+        p.measurements.push(rolling(
+            model,
+            Lang::Hi,
+            DeviceConfig::Gpu { index: 1 },
+            0.19,
+            5.0,
+            Some(peak_gib),
+        ));
+    }
+    p
+}
+
+#[test]
+fn a_model_is_used_on_a_discrete_card_only_if_its_peak_plus_half_a_gigabyte_fits_the_card() {
+    // f16 peaks at 4.01 GiB: with 0.5 GiB kept free it needs 4.51 GiB, so a 4 GB card cannot take it.
+    for (card, f16_fits) in [(4.0, false), (6.0, true), (8.0, true)] {
+        let d = decide_with(&legion_with_card(card, Some(("hinglish-f16", 4.01))), false);
+        assert_eq!(d.hinglish.ok, f16_fits, "{card} GB card: {:?}", d.hinglish);
+        assert_eq!(
+            d.hinglish.chosen_model(),
+            f16_fits.then_some("hinglish-f16"),
+            "{card} GB card"
+        );
+        let says_no_fit = d
+            .verdict
+            .iter()
+            .any(|l| l.contains("hinglish-f16 does not fit this card's memory"));
+        assert_eq!(says_no_fit, !f16_fits, "{card} GB card: {:#?}", d.verdict);
+    }
+    // q8_0 peaks at 2.67 GiB: it fits all three (with no live model beside it).
+    for card in [4.0, 6.0, 8.0] {
+        let mut p = legion_with_card(card, Some(("hinglish-q8_0", 2.67)));
+        p.measurements.retain(|m| !m.live_standin);
+        let d = decide_with(&p, false);
+        assert_eq!(
+            d.hinglish.chosen_model(),
+            Some("hinglish-q8_0"),
+            "{card} GB card"
+        );
+        assert!(
+            !d.verdict
+                .iter()
+                .any(|l| l.contains("does not fit this card's memory")),
+            "{card} GB card: {:#?}",
+            d.verdict
+        );
+    }
+}
+
+#[test]
+fn the_hinglish_model_and_the_live_model_must_fit_the_card_together() {
+    // The live stand-in (turbo) peaks at 1.0 GiB in the fixture and runs beside the Hinglish batch engine on the same
+    // card. q8_0 (2.67) + 1.0 + 0.5 = 4.17 GiB: no on a 4 GB card, yes on 6 GB; f16 (4.01) + 1.0 + 0.5 = 5.51: no on
+    // 4 GB, yes on 6 GB.
+    for (model, peak, card, fits) in [
+        ("hinglish-q8_0", 2.67, 4.0, false),
+        ("hinglish-q8_0", 2.67, 6.0, true),
+        ("hinglish-f16", 4.01, 6.0, true),
+        ("hinglish-f16", 4.01, 4.0, false),
+    ] {
+        let d = decide_with(&legion_with_card(card, Some((model, peak))), false);
+        assert_eq!(
+            d.hinglish.ok, fits,
+            "{model} on {card} GB: {:?}",
+            d.hinglish
+        );
+    }
+}
+
+#[test]
+fn a_measured_model_that_does_not_fit_the_card_is_not_used_for_the_rolling_pass_either() {
+    // Medium peaks at 2.26 GiB in the fixture; on a 2.5 GiB card it leaves less than 0.5 GiB: it must not be chosen.
+    let d = decide_with(&legion_with_card(2.5, None), false);
+    for lang in [Lang::En, Lang::Hi] {
+        if let Some(r) = d.languages[&lang].rolling.as_ref() {
+            assert_ne!(r.model, "medium", "{lang:?}");
+        }
+    }
+    assert!(
+        d.verdict
+            .iter()
+            .any(|l| l.contains("medium does not fit this card's memory")),
+        "{:#?}",
+        d.verdict
+    );
+}
+
+#[test]
+fn two_models_that_do_not_fit_the_card_together_become_one_model_for_every_language() {
+    // Medium (2.26 GiB) beside turbo (0.9 GiB) is 3.16 GiB; with 0.5 GiB free a 3.5 GiB card cannot hold both.
+    let p = legion_with_card(3.5, None);
+    let d = decide_with(&p, false);
+    let models: std::collections::BTreeSet<&str> = Lang::ALL
+        .iter()
+        .filter_map(|l| d.languages[l].rolling.as_ref().map(|r| r.model.as_str()))
+        .collect();
+    assert_eq!(models.len(), 1, "{models:?}");
+    assert!(
+        d.verdict
+            .iter()
+            .any(|l| l.contains("together do not fit this card's memory")
+                && l.contains("decodes every language")),
+        "{:#?}",
+        d.verdict
+    );
+    // On the 8 GB card both stay: medium for English, turbo for Hindi.
+    let d8 = decide_with(&legion_with_card(8.0, None), false);
+    assert_eq!(rolling_of(&d8, Lang::En).model, "medium");
+    assert_eq!(rolling_of(&d8, Lang::Hi).model, "large-v3-turbo-q5_0");
+    assert!(!d8.verdict.iter().any(|l| l.contains("this card's memory")));
+}
+
+#[test]
+fn before_measuring_a_model_is_tried_on_a_card_only_if_its_file_times_1_15_plus_half_a_gigabyte_fits()
+ {
+    let o = Options::default();
+    let f16_file = 3_095_033_483u64; // the Hinglish f16 file
+    let q8_file = 1_656_538_283u64;
+    for (card, f16_fits) in [(4.0, false), (6.0, true), (8.0, true)] {
+        let p = legion_with_card(card, None);
+        let gpu = DeviceConfig::Gpu { index: 1 };
+        assert_eq!(
+            model_fits_card(&p, gpu, f16_file, &o),
+            f16_fits,
+            "{card} GB card"
+        );
+        assert_eq!(
+            model_fits_card(&p, DeviceConfig::Hybrid { gpu: 1 }, f16_file, &o),
+            f16_fits,
+            "{card} GB card, hybrid"
+        );
+        assert!(model_fits_card(&p, gpu, q8_file, &o), "{card} GB card");
+        // The processor and an integrated adapter have no card to fill.
+        assert!(model_fits_card(&p, DeviceConfig::Cpu, f16_file, &o));
+        assert!(model_fits_card(
+            &p,
+            DeviceConfig::Gpu { index: 0 },
+            f16_file,
+            &o
+        ));
+    }
+    assert_eq!(
+        estimated_vram_bytes(1_000_000_000, &o),
+        1_150_000_000 + (1u64 << 29)
+    );
+    assert!(vram_fits(gib(4.0), gib(3.5), &o));
+    assert!(!vram_fits(gib(4.0), gib(3.6), &o));
+}
+
+#[test]
+fn a_card_whose_memory_could_not_be_read_is_not_judged() {
+    let mut p = legion_with_card(8.0, Some(("hinglish-f16", 4.01)));
+    for g in p.hardware.gpus.iter_mut().filter(|g| g.index == 1) {
+        g.dedicated_bytes = 0;
+    }
+    assert!(model_fits_card(
+        &p,
+        DeviceConfig::Gpu { index: 1 },
+        10_000_000_000,
+        &Options::default()
+    ));
+    assert!(decide_with(&p, false).hinglish.ok);
+}

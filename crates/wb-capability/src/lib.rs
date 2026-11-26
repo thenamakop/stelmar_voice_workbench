@@ -13,7 +13,10 @@ pub mod types;
 
 pub use fingerprint::{Fingerprint, GpuPrint};
 pub use inuse::{InUse, SavedFile, choose_in_use, route_new_check, safe_defaults, unidentified};
-pub use rules::{bars, decide, memory_ok, model_fits, ready_after_stop_min};
+pub use rules::{
+    bars, decide, estimated_vram_bytes, memory_ok, model_fits, model_fits_card,
+    ready_after_stop_min, vram_fits,
+};
 pub use session::{
     HindiUrduScript, LiveState, SessionModel, SessionPlan, live_state_for, override_applies,
     override_enabled, plan_session, session_langs, set_override,

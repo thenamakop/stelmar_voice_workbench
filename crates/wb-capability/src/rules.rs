@@ -52,9 +52,42 @@ fn find<'a>(
     })
 }
 
+/// The discrete graphics card a configuration decodes on (alone or beside the processor). `None` for the processor
+/// alone, an integrated adapter (its memory is system RAM and counts there) and a card whose dedicated memory the
+/// check could not read (nothing is assumed about it).
+fn discrete_card(p: &Profile, config: DeviceConfig) -> Option<&Gpu> {
+    config
+        .gpu_index()
+        .and_then(|i| gpu_of(p, i))
+        .filter(|g| g.kind == GpuKind::Discrete && g.dedicated_bytes > 0)
+}
+
+/// `need_bytes` of video memory plus the headroom fit the card's dedicated memory (owner, 26 Nov 2026).
+pub fn vram_fits(dedicated_bytes: u64, need_bytes: u64, o: &Options) -> bool {
+    need_bytes.saturating_add(o.vram_headroom_bytes) <= dedicated_bytes
+}
+
+/// Before a model is measured: its file size times 1.15 plus 0.5 GB.
+pub fn estimated_vram_bytes(model_bytes: u64, o: &Options) -> u64 {
+    ((model_bytes as f64 * o.vram_file_factor) as u64).saturating_add(o.vram_overhead_bytes)
+}
+
+/// Before measuring: could a model of `model_bytes` be loaded on the discrete card `config` decodes on, with the
+/// headroom left? True for every configuration without a discrete card.
+pub fn model_fits_card(p: &Profile, config: DeviceConfig, model_bytes: u64, o: &Options) -> bool {
+    discrete_card(p, config)
+        .is_none_or(|g| vram_fits(g.dedicated_bytes, estimated_vram_bytes(model_bytes, o), o))
+}
+
 /// Free RAM stays at or above the minimum after this measurement's peak (an integrated GPU's local
-/// memory counts as RAM: DXGI reports it as local, not shared).
+/// memory counts as RAM: DXGI reports it as local, not shared), and on a discrete card the measured video memory
+/// of the engine plus the headroom fits the card.
 pub fn memory_ok(p: &Profile, m: &Measurement, o: &Options) -> bool {
+    if let (Some(g), Some(local)) = (discrete_card(p, m.config), m.gpu_local_bytes)
+        && !vram_fits(g.dedicated_bytes, local, o)
+    {
+        return false;
+    }
     let igpu_local = match m.config.gpu_index().and_then(|i| gpu_of(p, i)) {
         Some(g) if g.kind == GpuKind::Integrated => m.gpu_local_bytes.unwrap_or(g.local_bytes),
         _ => 0,
@@ -189,7 +222,7 @@ fn rolling_picks(
     o: &Options,
     b: &Bars,
     config: DeviceConfig,
-) -> BTreeMap<Lang, RollingPick> {
+) -> (BTreeMap<Lang, RollingPick>, Option<String>) {
     let hybrid = hybrid_effective(p, o);
     let measured_on = match config {
         DeviceConfig::Hybrid { gpu } => DeviceConfig::Gpu { index: gpu },
@@ -229,7 +262,121 @@ fn rolling_picks(
             out.insert(lang, pick);
         }
     }
-    out
+    let note = fit_pair_on_card(p, r, o, b, measured_on, &mut out);
+    (out, note)
+}
+
+/// Two different models chosen for two languages are both loaded in the engine: on a discrete card they must fit it
+/// together (owner, 26 Nov 2026). When they do not, one model decodes every language, the best one that has a
+/// measurement for each of them that fits the card. Returns what the verdict says.
+fn fit_pair_on_card(
+    p: &Profile,
+    r: &Rankings,
+    o: &Options,
+    b: &Bars,
+    config: DeviceConfig,
+    out: &mut BTreeMap<Lang, RollingPick>,
+) -> Option<String> {
+    let card = discrete_card(p, config)?;
+    let mut distinct: Vec<(String, u64)> = Vec::new();
+    for (lang, pick) in out.iter() {
+        if distinct.iter().any(|(m, _)| m == &pick.model) {
+            continue;
+        }
+        let local = find(p, &pick.model, *lang, Mode::Rolling, config, false)
+            .and_then(|m| m.gpu_local_bytes)
+            .unwrap_or(0);
+        distinct.push((pick.model.clone(), local));
+    }
+    if distinct.len() < 2 {
+        return None;
+    }
+    let total: u64 = distinct.iter().map(|(_, bytes)| *bytes).sum();
+    if vram_fits(card.dedicated_bytes, total, o) {
+        return None;
+    }
+    let names = distinct
+        .iter()
+        .map(|(m, _)| m.as_str())
+        .collect::<Vec<_>>()
+        .join(" and ");
+    let mut best: Option<(String, BTreeMap<Lang, RollingPick>)> = None;
+    for (model, _) in &distinct {
+        let mut cand = BTreeMap::new();
+        for lang in out.keys() {
+            let ranked = r
+                .rolling
+                .get(lang)
+                .and_then(|l| l.iter().find(|rk| &rk.model == model));
+            match (ranked, find(p, model, *lang, Mode::Rolling, config, false)) {
+                (Some(rk), Some(m)) if memory_ok(p, m, o) => {
+                    cand.insert(*lang, rolling_pick(b.rolling_rtf, rk, m.rtf));
+                }
+                _ => break,
+            }
+        }
+        if cand.len() == out.len() && best.as_ref().is_none_or(|(_, bp)| score(&cand) > score(bp)) {
+            best = Some((model.clone(), cand));
+        }
+    }
+    let gb = |v: u64| v as f64 / GIB as f64;
+    Some(match best {
+        Some((model, picks)) => {
+            *out = picks;
+            format!(
+                "{names} together do not fit this card's memory ({:.1} GB needed with {:.1} GB kept free, the card has {:.1} GB): {model} decodes every language.",
+                gb(total),
+                gb(o.vram_headroom_bytes),
+                gb(card.dedicated_bytes)
+            )
+        }
+        None => format!(
+            "{names} together do not fit this card's memory ({:.1} GB needed with {:.1} GB kept free, the card has {:.1} GB) and no single model was measured for every language.",
+            gb(total),
+            gb(o.vram_headroom_bytes),
+            gb(card.dedicated_bytes)
+        ),
+    })
+}
+
+/// Models that were measured on the discrete card of `config` but need more video memory than the card has to
+/// spare, and models the check did not even try for the same reason (its skipped list), for the verdict.
+fn vram_notes(p: &Profile, config: DeviceConfig, o: &Options) -> Vec<String> {
+    let Some(card) = discrete_card(p, config) else {
+        return Vec::new();
+    };
+    let gb = |v: u64| v as f64 / GIB as f64;
+    let mut notes: Vec<String> = Vec::new();
+    let on_card = DeviceConfig::Gpu {
+        index: config.gpu_index().unwrap_or_default(),
+    };
+    for m in p
+        .measurements
+        .iter()
+        .filter(|m| m.config == on_card && !m.live_standin)
+    {
+        let Some(local) = m.gpu_local_bytes else {
+            continue;
+        };
+        if !vram_fits(card.dedicated_bytes, local, o) {
+            let text = format!(
+                "{} does not fit this card's memory ({:.1} GB needed with {:.1} GB kept free, the card has {:.1} GB).",
+                m.model,
+                gb(local),
+                gb(o.vram_headroom_bytes),
+                gb(card.dedicated_bytes)
+            );
+            if !notes.contains(&text) {
+                notes.push(text);
+            }
+        }
+    }
+    for s in &p.skipped {
+        if s.reason.contains("does not fit this card's memory") && !notes.contains(&s.reason) {
+            notes.push(s.reason.clone());
+        }
+    }
+    notes
 }
 
 /// Higher is better: (languages meeting the bar, then the slowest chosen model's speed).
@@ -517,7 +664,21 @@ fn hinglish(p: &Profile, o: &Options, b: &Bars, config: DeviceConfig) -> Hinglis
     };
     match m {
         Some(m) => {
-            let fits_memory = memory_ok(p, m, o);
+            // The live stand-in model runs on the same card beside the Hinglish batch engine: both must fit together.
+            let live_beside = p
+                .measurements
+                .iter()
+                .find(|x| x.live_standin && x.config == measured_on)
+                .and_then(|x| x.gpu_local_bytes);
+            let fits_card = match (
+                discrete_card(p, measured_on),
+                m.gpu_local_bytes,
+                live_beside,
+            ) {
+                (Some(g), Some(h), Some(l)) => vram_fits(g.dedicated_bytes, h.saturating_add(l), o),
+                _ => true,
+            };
+            let fits_memory = memory_ok(p, m, o) && fits_card;
             let hours = m.rtf * o.day_audio_hours;
             Hinglish {
                 ok: m.rtf <= b.rolling_rtf && fits_memory,
@@ -583,18 +744,18 @@ pub fn decide(p: &Profile, r: &Rankings, o: &Options) -> Decision {
     let mut record_only = record_only_reason(p);
 
     // Best configuration.
-    let mut best: Option<(DeviceConfig, BTreeMap<Lang, RollingPick>)> = None;
+    let mut best: Option<(DeviceConfig, BTreeMap<Lang, RollingPick>, Option<String>)> = None;
     if record_only.is_none() {
         for config in candidate_configs(p, o) {
-            let picks = rolling_picks(p, r, o, &b, config);
+            let (picks, pair_note) = rolling_picks(p, r, o, &b, config);
             if picks.is_empty() {
                 continue;
             }
             let better = best
                 .as_ref()
-                .is_none_or(|(_, bp)| score(&picks) > score(bp));
+                .is_none_or(|(_, bp, _)| score(&picks) > score(bp));
             if better {
-                best = Some((config, picks));
+                best = Some((config, picks, pair_note));
             }
         }
         if best.is_none() {
@@ -605,7 +766,7 @@ pub fn decide(p: &Profile, r: &Rankings, o: &Options) -> Decision {
         }
     }
 
-    let Some((config, picks)) = best.filter(|_| record_only.is_none()) else {
+    let Some((config, picks, pair_note)) = best.filter(|_| record_only.is_none()) else {
         for lang in Lang::ALL {
             languages.insert(lang, empty_lang());
         }
@@ -755,6 +916,9 @@ pub fn decide(p: &Profile, r: &Rankings, o: &Options) -> Decision {
         || Lang::ALL.iter().take(2).any(|l| !picks.contains_key(l))
         || safety.is_none();
     let mut verdict = verdict_lines(&tier, &cfg, &languages, &hing, partial, provisional, &b);
+    // A model that does not fit the discrete card's memory (and a pair that does not fit it together) is said so.
+    verdict.extend(vram_notes(p, config, o));
+    verdict.extend(pair_note);
     if !safety_passed {
         verdict.push(if safety.is_none() {
             "The recorder safety test has not run for this setup, so transcription waits until the recording stops.".to_string()
@@ -783,7 +947,7 @@ pub fn decide(p: &Profile, r: &Rankings, o: &Options) -> Decision {
 /// What the verdict says about the Hinglish model: the one that every English + Hindi chunk is decoded with when it
 /// was measured on this computer and meets the rolling bar; otherwise what the sessions keep, and why.
 fn hinglish_line(languages: &BTreeMap<Lang, LangDecision>, h: &Hinglish, b: &Bars) -> String {
-    const FASTER: &str = "A session that cannot be finished with it here is marked \"best finished on a faster machine\".";
+    const FASTER: &str = "A session that cannot be finished with it here is marked \"best finished on a faster machine\"; if the night runs slower than planned, the sessions not yet started go back to today's models and are marked the same way.";
     let mut kept: Vec<String> = Vec::new();
     for lang in [Lang::En, Lang::Hi] {
         if let Some(r) = languages.get(&lang).and_then(|d| d.rolling.as_ref())

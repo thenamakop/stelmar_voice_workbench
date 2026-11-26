@@ -15,7 +15,8 @@ use std::time::{Duration, Instant};
 
 use wb_capability::{
     CheckInfo, CheckKind, DeviceConfig, GpuKind, HybridMeasurement, Lang, Measurement, Mode,
-    Options, Profile, Rankings, RecorderSafety, SCHEMA_VERSION, Skipped, decide, model_fits,
+    Options, Profile, Rankings, RecorderSafety, SCHEMA_VERSION, Skipped, decide,
+    estimated_vram_bytes, model_fits, model_fits_card,
 };
 use wb_machine::Machine;
 use wb_models::{Cache, Manifest};
@@ -552,6 +553,23 @@ impl Run<'_> {
                 model = model_id,
                 "system check: model does not fit memory, skipped"
             );
+            return Ok(None);
+        }
+        // On a discrete card the model is tried only if it can fit the card's memory with the headroom left (file size
+        // x 1.15 + 0.5 GB before it is measured); the verdict then says it does not fit this card's memory.
+        if !model_fits_card(&self.profile, config, bytes, &self.env.options) {
+            let card = config
+                .gpu_index()
+                .and_then(|i| self.profile.hardware.gpus.iter().find(|g| g.index == i));
+            let gb = |v: u64| v as f64 / (1u64 << 30) as f64;
+            let reason = format!(
+                "{model_id} does not fit this card's memory (about {:.1} GB needed with {:.1} GB kept free, the card has {:.1} GB).",
+                gb(estimated_vram_bytes(bytes, &self.env.options)),
+                gb(self.env.options.vram_headroom_bytes),
+                gb(card.map_or(0, |g| g.dedicated_bytes))
+            );
+            tracing::info!(model = model_id, "system check: {reason}");
+            self.skip(&format!("{model_id} on {}", config_name(config)), reason);
             return Ok(None);
         }
         self.tick(
