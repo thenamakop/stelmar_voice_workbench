@@ -491,6 +491,32 @@ langs = ["en", "hi"]
 limit = "eval/clips/phase5-coshe-heldout.txt"
 needs = "phase-2"
 
+# The held-out runs of the two final pairs (owner, 26 Nov 2026, step 4b): the small q5_0 model detects every chunk and decodes the
+# English ones, the Hinglish file decodes the rest. The f16 pair is run only because it beat f16 alone on the tuning set
+# (WER 15.9 against 17.1, English in Devanagari 6.3% against 11.8%, 0 translated). One held-out run each, reported with the others.
+# Production cuda engine, gpu:0, run through scripts/gates/eval-under-gate.ps1.
+[[run]]
+name = "heldout-small-detect-q8_0"
+setup = "en=small-q5_0,hi=hinglish-q8_0"
+dataset = "coshe-eval"
+role = "rolling"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["en", "hi"]
+limit = "eval/clips/phase5-coshe-heldout.txt"
+needs = "phase-2"
+
+[[run]]
+name = "heldout-small-detect-f16"
+setup = "en=small-q5_0,hi=hinglish-f16"
+dataset = "coshe-eval"
+role = "rolling"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["en", "hi"]
+limit = "eval/clips/phase5-coshe-heldout.txt"
+needs = "phase-2"
+
 # Items 4 and 5: the language-detection rules on the 70 tuning clips (eval/clips/phase5-tune-coshe.txt), production models, Legion GPU
 # (WB_ENGINE = the cuda build, WB_ENGINE_DEVICE = gpu:0), rolling settings. Scored by eval/score_tune.py against the chunk labels
 # of eval/label_chunks.py. (a) is the current rule; (d) is the Hinglish model for every chunk: forced to Hindi, which the

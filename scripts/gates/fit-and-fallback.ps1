@@ -227,7 +227,8 @@ function Invoke-All {
     @{ id = 'q8'; label = 'hinglish-q8_0 alone'; models = 'en=hinglish-q8_0,hi=hinglish-q8_0' },
     @{ id = 'f16+turbo'; label = "hinglish-f16 + $turbo loaded together"; models = "en=$turbo,hi=hinglish-f16" },
     @{ id = 'q8+turbo'; label = "hinglish-q8_0 + $turbo loaded together"; models = "en=$turbo,hi=hinglish-q8_0" },
-    @{ id = 'q8+small'; label = 'hinglish-q8_0 + small-q5_0 loaded together (26 Nov 2026, step 4: the small detector)'; models = 'en=small-q5_0,hi=hinglish-q8_0' }
+    @{ id = 'q8+small'; label = 'hinglish-q8_0 + small-q5_0 loaded together (26 Nov 2026, step 4: the small detector)'; models = 'en=small-q5_0,hi=hinglish-q8_0' },
+    @{ id = 'f16+small'; label = 'hinglish-f16 + small-q5_0 loaded together (26 Nov 2026, step 4a: the small detector for 6 and 8 GB cards)'; models = 'en=small-q5_0,hi=hinglish-f16' }
   )
   foreach ($c in $combos) { Invoke-Batch "V|$($c.id)" 'V' 'native' 'cuda' "gpu:$cudaIdx" 'd2' $c.label $c.models 8 'bilingual-120.wav' -Vram }
 
