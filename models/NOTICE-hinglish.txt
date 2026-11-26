@@ -1,0 +1,25 @@
+NOTICE: whisper-hinglish-preview (Hindi + English code-switching speech model)
+
+Model:     whisper-hinglish-preview, published by Trelis
+Source:    https://huggingface.co/Trelis/whisper-hinglish-preview
+Revision:  eab1188fd2d0e91f2584229b32b3bfe1901c896c
+Licence:   Apache License, Version 2.0 (https://www.apache.org/licenses/LICENSE-2.0). The model card metadata of that
+           revision says "license: apache-2.0". The card names ARTPARK-IISc/whisper-large-v3-vaani-hindi (the starting
+           checkpoint, also Apache-2.0) and openai/whisper-large-v3 as its base models.
+Files:     ggml-hinglish-f16.bin, ggml-hinglish-q8_0.bin and ggml-hinglish-q5_0.bin are this model's weights converted to
+           the ggml format (f16) and quantised (q8_0, q5_0). The weights were not retrained or otherwise changed. The
+           SHA-256 of each file is in models/manifest.json.
+Use:       transcription of conference recordings on the STELMAR Voice Workbench laptops. The model card is kept next to the
+           model files (MODEL-CARD-whisper-hinglish-preview.md, an unchanged copy of the card at the revision above).
+
+Accepted for use on the conference laptops by the project owner on 26 November 2026, with the open questions below.
+
+Open questions (not resolved; nothing here has been guessed):
+1. The model repository has no LICENSE or NOTICE file. The Apache-2.0 statement is in the model card metadata only.
+2. The Trelis card does not say which data the model was trained on. Its starting checkpoint says it was fine-tuned on
+   Vaani, Gramvaani, IndicVoices, FLEURS, IndicTTS and Common Voice 17; the terms of those datasets (Gramvaani, IndicTTS
+   and IndicVoices in particular) were not confirmed.
+3. The base-model metadata disagrees: the starting checkpoint's Hub metadata names openai/whisper-small as its base model
+   while its text says Whisper-Large-V3, and the Trelis card names the starting checkpoint and whisper-large-v3.
+
+Apache-2.0 requires that a copy of the licence and this notice go with any copy of the model files.
