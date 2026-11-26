@@ -53,9 +53,18 @@ const VAD_ID: &str = "silero-v6.2.0";
 /// The Hinglish model the check measures for rule (d2) (Phase 5, 25 Nov 2026: f16 is the candidate, and a file that was
 /// not measured is never chosen).
 const HINGLISH_CANDIDATE: &str = "hinglish-f16";
-/// The smaller Hinglish file, measured in place of f16 only on a discrete card whose memory cannot hold f16 (owner,
-/// 26 Nov 2026: the 4 GB cards).
+/// The smaller Hinglish file, the one measured on a discrete card (owner, 26 Nov 2026): q8_0 with the small detector in front
+/// of it is the one accepted pair, for every card of 4 GB and up.
 const HINGLISH_SMALL_CANDIDATE: &str = "hinglish-q8_0";
+
+/// The Hinglish files the check measures on a configuration: q8_0 (and then its pair) on a discrete card, f16 elsewhere.
+fn hinglish_candidates(discrete: bool) -> &'static [&'static str] {
+    if discrete {
+        &[HINGLISH_SMALL_CANDIDATE]
+    } else {
+        &[HINGLISH_CANDIDATE]
+    }
+}
 /// The quick check measures the pair (a Hinglish model with a small detector in front of it) only when this many seconds
 /// of its target are left.
 const PAIR_QUICK_MIN_S: f64 = 90.0;
@@ -1512,16 +1521,11 @@ impl Run<'_> {
         }
     }
 
-    /// The Hinglish model on the alternating English/Hindi clip, so rule (d) rests on a measurement. f16 first; on a
-    /// discrete card that cannot hold it (the measure step skips it, saying so) the q8_0 file. On a discrete card the
-    /// pair with the small detector follows.
+    /// The Hinglish model on the alternating English/Hindi clip, so rule (d) rests on a measurement: f16, or on a discrete
+    /// card the q8_0 file followed by the pair with the small detector.
     fn hinglish(&mut self, config: DeviceConfig) -> Result<(), CheckError> {
         let discrete = wb_capability::discrete_card(&self.profile, config).is_some();
-        let candidates: &[&str] = if discrete {
-            &[HINGLISH_CANDIDATE, HINGLISH_SMALL_CANDIDATE]
-        } else {
-            &[HINGLISH_CANDIDATE]
-        };
+        let candidates = hinglish_candidates(discrete);
         let mut measured = None;
         for id in candidates {
             if self.env.manifest.find(id).is_err() {
@@ -1716,7 +1720,21 @@ fn config_name(config: DeviceConfig) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{extra_too_small, hybrid_bound, safety_counts};
+    use super::{extra_too_small, hinglish_candidates, hybrid_bound, safety_counts};
+
+    /// Owner, 26 Nov 2026: a discrete card is measured with the one accepted pair's file (q8_0), never with f16 and its own
+    /// f16 pair; configurations without a discrete card keep f16 (their night model is left as it is until step 3c).
+    #[test]
+    fn a_discrete_card_measures_hinglish_q8_0_and_other_configurations_f16() {
+        assert_eq!(hinglish_candidates(true), ["hinglish-q8_0"]);
+        assert_eq!(hinglish_candidates(false), ["hinglish-f16"]);
+        assert!(
+            wb_capability::HINGLISH_PAIRS
+                .iter()
+                .all(|(m, _)| hinglish_candidates(true).contains(m)),
+            "the check must measure the file of every accepted pair"
+        );
+    }
 
     #[test]
     fn the_hybrid_gain_is_a_ratio_not_a_fraction() {

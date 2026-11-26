@@ -674,10 +674,11 @@ fn live_decision(
 /// evaluation (owner, 26 Nov 2026: 0 translated chunks on the tuning set and on the held-out set, held-out WER at most
 /// 23.5), best first. The system check measures a pair only if it is listed here, and the rules choose a pair only if its
 /// own cell was measured on this computer: a pair is never assumed (AGENTS.md non-negotiable 3).
-pub const HINGLISH_PAIRS: &[(&str, &str)] = &[
-    ("hinglish-f16", "small-q5_0"),
-    ("hinglish-q8_0", "small-q5_0"),
-];
+///
+/// One pair for every discrete card of 4 GB and up (owner, 26 Nov 2026): the q8_0 file with the small detector. The f16 pair
+/// scored the same (tuning WER 15.9 against 16.0, held-out 21.7 against 21.3) and needs 4.5 GiB of card memory against
+/// 3.2 GiB, so it was removed.
+pub const HINGLISH_PAIRS: &[(&str, &str)] = &[("hinglish-q8_0", "small-q5_0")];
 
 /// Whether a Hinglish cell may be used: a single model, or a pair that `HINGLISH_PAIRS` lists.
 fn hinglish_cell_allowed(m: &Measurement) -> bool {

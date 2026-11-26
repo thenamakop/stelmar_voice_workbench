@@ -1137,37 +1137,55 @@ fn pair_cell(model: &str, rtf: f64, local_gib: f64) -> Measurement {
 
 #[test]
 fn a_pair_that_meets_the_bar_and_fits_the_card_is_chosen_over_the_model_alone() {
-    // 8 GB card: f16 alone (0.19) and f16 with the small detector (0.25, 4.5 GiB for both) were measured.
-    let mut p = legion_with_card(8.0, Some(("hinglish-f16", 4.01)));
-    p.measurements.push(pair_cell("hinglish-f16", 0.25, 4.5));
+    // 8 GB card: q8_0 alone (0.19) and q8_0 with the small detector (0.25, 3.18 GiB for both) were measured.
+    let mut p = legion_with_card(8.0, Some(("hinglish-q8_0", 2.67)));
+    p.measurements.push(pair_cell("hinglish-q8_0", 0.25, 3.18));
     let d = decide_with(&p, false);
     assert!(d.hinglish.ok, "{:?}", d.hinglish);
-    assert_eq!(d.hinglish.chosen_model(), Some("hinglish-f16"));
+    assert_eq!(d.hinglish.chosen_model(), Some("hinglish-q8_0"));
     assert_eq!(d.hinglish.chosen_detector(), Some("small-q5_0"));
     assert_eq!(d.hinglish.rtf, Some(0.25));
     assert!(
         d.verdict.iter().any(|l| l.contains(
-            "hinglish-f16 for the Hindi chunks, with the small model small-q5_0 in front of it"
+            "hinglish-q8_0 for the Hindi chunks, with the small model small-q5_0 in front of it"
         )),
         "{:#?}",
         d.verdict
     );
     // The pair is slower than the bar: the model alone, which meets it, is chosen.
-    let mut p = legion_with_card(8.0, Some(("hinglish-f16", 4.01)));
-    p.measurements.push(pair_cell("hinglish-f16", 5.0, 4.5));
+    let mut p = legion_with_card(8.0, Some(("hinglish-q8_0", 2.67)));
+    p.measurements.push(pair_cell("hinglish-q8_0", 5.0, 3.18));
     let d = decide_with(&p, false);
-    assert_eq!(d.hinglish.chosen_model(), Some("hinglish-f16"));
+    assert_eq!(d.hinglish.chosen_model(), Some("hinglish-q8_0"));
     assert_eq!(d.hinglish.chosen_detector(), None);
 }
 
 #[test]
-fn a_pair_that_does_not_fit_the_card_is_not_chosen_and_the_model_alone_may_be() {
-    // f16 with the detector peaks at 4.5 GiB: with the headroom it needs 5.0 GiB, so a 4 GB card cannot take it.
-    let mut p = legion_with_card(4.0, None);
-    p.measurements.push(pair_cell("hinglish-f16", 0.25, 4.5));
+fn a_pair_that_does_not_fit_the_card_is_not_chosen() {
+    // q8_0 with the detector peaks at 3.18 GiB: with the headroom it needs 3.68 GiB, so a 3 GB card cannot take it.
+    let mut p = legion_with_card(3.0, None);
+    p.measurements.push(pair_cell("hinglish-q8_0", 0.25, 3.18));
     let d = decide_with(&p, false);
     assert_eq!(d.hinglish.chosen_model(), None, "{:?}", d.hinglish);
     assert!(!d.hinglish.ok);
+}
+
+#[test]
+fn the_f16_pair_is_gone_it_is_never_chosen_even_if_its_cell_is_in_the_file() {
+    // A capability file from the earlier build can hold an f16 + small cell; it is not an accepted pair any more.
+    assert_eq!(HINGLISH_PAIRS, &[("hinglish-q8_0", "small-q5_0")]);
+    let mut p = legion_with_card(8.0, Some(("hinglish-f16", 4.01)));
+    p.measurements.push(pair_cell("hinglish-f16", 0.25, 4.5));
+    let d = decide_with(&p, false);
+    assert_eq!(d.hinglish.chosen_model(), Some("hinglish-f16"));
+    assert_eq!(d.hinglish.chosen_detector(), None, "{:?}", d.hinglish);
+    let mut p = legion_with_card(8.0, None);
+    p.measurements.push(pair_cell("hinglish-f16", 0.25, 4.5));
+    assert_eq!(
+        decide_with(&p, false).hinglish.chosen_model(),
+        None,
+        "an f16 pair alone gives nothing"
+    );
 }
 
 #[test]
@@ -1205,7 +1223,7 @@ fn only_a_pair_the_evaluation_accepted_is_ever_chosen() {
             .all(|(h, d)| h.starts_with("hinglish") && *d == "small-q5_0")
     );
     let mut p = legion_with_card(8.0, None);
-    let mut m = pair_cell("hinglish-f16", 0.25, 4.5);
+    let mut m = pair_cell("hinglish-q8_0", 0.25, 3.18);
     m.detector = Some("tiny".to_string());
     p.measurements.push(m);
     let d = decide_with(&p, false);
