@@ -7,6 +7,11 @@ heldout-hinglish-f16-d2 | audio_350 | 126 | 120 | 0 | 0 | 2 | 20 | 22 | 0
 heldout-hinglish-f16-d2 | audio_147 | 176 | 168 | 0 | 0 | 10 | 29 | 39 | 0
 heldout-hinglish-f16-d2 | all | 525 | 483 | 0 | 0 | 24 | 89 | 113 | 0
 
+heldout-hinglish-q8_0-d2 | audio_1343 | 223 | 195 | 0 | 0 | 12 | 40 | 52 | 0
+heldout-hinglish-q8_0-d2 | audio_350 | 126 | 119 | 0 | 0 | 16 | 18 | 34 | 0
+heldout-hinglish-q8_0-d2 | audio_147 | 176 | 163 | 0 | 0 | 10 | 27 | 37 | 0
+heldout-hinglish-q8_0-d2 | all | 525 | 477 | 0 | 0 | 38 | 85 | 123 | 0
+
 heldout-hinglish-q5_0-d2 | audio_1343 | 223 | 185 | 0 | 0 | 54 | 51 | 105 | 0
 heldout-hinglish-q5_0-d2 | audio_350 | 126 | 124 | 0 | 0 | 2 | 15 | 17 | 0
 heldout-hinglish-q5_0-d2 | audio_147 | 176 | 144 | 0 | 0 | 17 | 51 | 68 | 0

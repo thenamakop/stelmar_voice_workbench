@@ -478,6 +478,19 @@ langs = ["en", "hi"]
 limit = "eval/clips/phase5-coshe-heldout.txt"
 needs = "phase-2"
 
+# The one held-out run of the q8_0 file, approved by the owner on 26 Nov 2026 (step 3d of the Hinglish rollout brief): f16 needs 4.1 GB of video
+# memory and does not fit a 4 GB card, q8_0 needs 2.7 GB and does. Reported with the others as one held-out run. Production cuda engine, gpu:0.
+[[run]]
+name = "heldout-hinglish-q8_0-d2"
+setup = "hinglish-q8_0"
+dataset = "coshe-eval"
+role = "rolling"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["en", "hi"]
+limit = "eval/clips/phase5-coshe-heldout.txt"
+needs = "phase-2"
+
 # Items 4 and 5: the language-detection rules on the 70 tuning clips (eval/clips/phase5-tune-coshe.txt), production models, Legion GPU
 # (WB_ENGINE = the cuda build, WB_ENGINE_DEVICE = gpu:0), rolling settings. Scored by eval/score_tune.py against the chunk labels
 # of eval/label_chunks.py. (a) is the current rule; (d) is the Hinglish model for every chunk: forced to Hindi, which the
