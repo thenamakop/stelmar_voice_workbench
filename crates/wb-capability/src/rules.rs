@@ -211,7 +211,42 @@ fn rolling_pick(bar: f64, rk: &Ranked, rtf: f64) -> RollingPick {
         },
         ready_after_stop_min: ready_after_stop_min(rtf),
         lags: rtf > 1.0,
+        rtf_with_detection: None,
     }
+}
+
+/// Sessions with several languages run slower than the bench measured (every chunk's language is detected): the measured
+/// figure times the allowance goes on each pick, and a pick that meets the bar without it but not with it is said so.
+/// The model is still chosen on the bench figure (the plan's decision); the warning tells the operator that the day's
+/// processing will run behind and the night pass catches up (item 6 of Phase 5; PROVISIONAL, the allowance is the emu-low ratio).
+fn detection_notes(
+    languages: &mut BTreeMap<Lang, LangDecision>,
+    o: &Options,
+    b: &Bars,
+) -> Vec<String> {
+    let a = o.rolling_detection_allowance;
+    let mut notes = Vec::new();
+    if a <= 1.0 {
+        return notes;
+    }
+    for (lang, d) in languages.iter_mut() {
+        let Some(r) = d.rolling.as_mut() else {
+            continue;
+        };
+        let with = r.rtf * a;
+        r.rtf_with_detection = Some(with);
+        if r.meets_bar && with > b.rolling_rtf {
+            notes.push(format!(
+                "{}: in a session with several languages the engine detects the language of every chunk and runs about {:.0}% slower ({:.2}× instead of {:.2}×, above the {:.2} bar), so the day's processing will fall behind the recording and the night pass catches up. The factor is an emulated figure until the laptops are measured.",
+                lang.name(),
+                (a - 1.0) * 100.0,
+                with,
+                r.rtf,
+                b.rolling_rtf
+            ));
+        }
+    }
+    notes
 }
 
 /// The rolling model of each language under one configuration: the first ranked model that meets the
@@ -1008,7 +1043,9 @@ pub fn decide(p: &Profile, r: &Rankings, o: &Options) -> Decision {
     let partial = p.check.partial
         || Lang::ALL.iter().take(2).any(|l| !picks.contains_key(l))
         || safety.is_none();
+    let detection = detection_notes(&mut languages, o, &b);
     let mut verdict = verdict_lines(&tier, &cfg, &languages, &hing, partial, provisional, &b);
+    verdict.extend(detection);
     // A model that does not fit the discrete card's memory (and a pair that does not fit it together) is said so.
     verdict.extend(vram_notes(p, config, o));
     verdict.extend(pair_note);

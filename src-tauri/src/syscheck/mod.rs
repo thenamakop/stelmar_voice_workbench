@@ -32,6 +32,17 @@ use crate::engines::{self, EngineState, Registry};
 use crate::recording;
 use crate::state::{AppState, lock};
 
+/// The rules' options for a check on this computer: the defaults, plus the rolling detection allowance, so that the verdict
+/// warns when a session with several languages (every chunk's language is detected, which the bench does not do) would
+/// run slower than the bar. The figure is the queue's emu-low ratio, provisional until the laptops are measured; it
+/// never changes which model is chosen (Phase 5, item 6).
+pub fn check_options() -> Options {
+    Options {
+        rolling_detection_allowance: wb_queue::speed::ROLLING_DETECTION_ALLOWANCE,
+        ..Options::default()
+    }
+}
+
 /// Which check is running, and the flag that cancels it.
 #[derive(Default)]
 pub struct CheckState {
@@ -493,7 +504,7 @@ pub fn start_check(app: &AppHandle, kind: CheckKind) -> Result<(), String> {
         rankings: rankings::from_manifest(&manifest),
         manifest,
         manifest_hash,
-        options: Options::default(),
+        options: check_options(),
         started_at: now_iso(),
     };
     let handle = app.clone();
@@ -684,6 +695,18 @@ pub fn live_allowed(
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
+
+    /// Phase 5, item 6: the check hands the rules the queue's detection allowance (the same constant), so that the
+    /// verdict can warn about a bilingual session; with the defaults alone the rules know no allowance.
+    #[test]
+    fn the_check_gives_the_rules_the_queues_detection_allowance() {
+        assert_eq!(
+            check_options().rolling_detection_allowance,
+            wb_queue::speed::ROLLING_DETECTION_ALLOWANCE
+        );
+        assert!(check_options().rolling_detection_allowance > 1.3);
+        assert_eq!(Options::default().rolling_detection_allowance, 1.0);
+    }
 
     /// Owner, 17 Nov 2026: the queue may keep the hardware reading for at most 30 seconds; it expires, and a new
     /// check clears it so the next read is a new one.

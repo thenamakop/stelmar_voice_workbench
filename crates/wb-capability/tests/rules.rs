@@ -1306,3 +1306,52 @@ fn a_card_whose_memory_could_not_be_read_is_not_judged() {
     ));
     assert!(decide_with(&p, false).hinglish.ok);
 }
+
+/// Phase 5, item 6: the bench decodes one language with no detection, a session with several languages detects every
+/// chunk and runs slower. With an allowance the pick carries the slower figure and the verdict warns where the pick
+/// meets the bar without it and not with it; the pick itself (the model) is never changed by it.
+#[test]
+fn a_detection_allowance_warns_but_never_changes_the_pick() {
+    let p = avx512_crash();
+    let none = decide(&p, &rankings(false), &Options::default());
+    let o = Options {
+        rolling_detection_allowance: 1.5,
+        ..Options::default()
+    };
+    let with = decide(&p, &rankings(false), &o);
+    for lang in [Lang::En, Lang::Hi, Lang::Ur] {
+        let (a, b) = (rolling_of(&none, lang), rolling_of(&with, lang));
+        assert_eq!(
+            (&a.model, a.rtf, a.meets_bar),
+            (&b.model, b.rtf, b.meets_bar),
+            "{lang:?}"
+        );
+        assert_eq!(a.rtf_with_detection, None, "{lang:?}");
+        assert!(
+            (b.rtf_with_detection.unwrap() - a.rtf * 1.5).abs() < 1e-9,
+            "{lang:?}"
+        );
+    }
+    assert_eq!(none.tier, with.tier);
+    let warned = |d: &Decision, l: &str| {
+        d.verdict
+            .iter()
+            .any(|v| v.starts_with(l) && v.contains("detects the language of every chunk"))
+    };
+    assert!(
+        !none
+            .verdict
+            .iter()
+            .any(|v| v.contains("detects the language of every chunk"))
+    );
+    assert!(
+        !warned(&with, "English"),
+        "0.60 x 1.5 = 0.90 still meets the bar: {:?}",
+        with.verdict
+    );
+    assert!(
+        warned(&with, "Hindi"),
+        "0.70 x 1.5 = 1.05 is over the bar: {:?}",
+        with.verdict
+    );
+}
