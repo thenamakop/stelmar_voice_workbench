@@ -257,6 +257,12 @@ impl Events for AppEvents {
             text.to_owned(),
         ));
     }
+
+    fn without_hinglish(&self, session: &str, _job: i64, _unit: u32) {
+        if let Some(q) = self.app.try_state::<QueueState>() {
+            q.0.note_without_hinglish(session);
+        }
+    }
 }
 
 // ------------------------------------------------------------------------------------------------- state
@@ -278,6 +284,10 @@ struct OpenSession {
     /// The night pass planned for this session was cancelled because another session started (its job is held,
     /// with the units it committed); it goes on when the pass is planned again after the last session.
     night_cancelled: bool,
+    /// Units of this session were decoded on the processor without the Hinglish model after a graphics failure (the
+    /// session's `fallback-units.json`): the night pass redoes it with the Hinglish model, or it is marked for a faster
+    /// machine (owner, 27 Nov 2026).
+    fell_back: bool,
 }
 
 pub struct Queue {
@@ -438,6 +448,7 @@ impl Queue {
         laps.lap("rolling job");
         // A night job held for a later session before the app was closed is still held: the hold is the job's own state.
         let night_held = queue.night_job_is_held().unwrap_or(false);
+        let fell_back = !queue.fallback_units().is_empty();
         let work_dir = dir.join("work");
         let handle = Arc::new(SessionHandle {
             name: name.clone(),
@@ -458,6 +469,7 @@ impl Queue {
             ended_ms: None,
             night_handled: false,
             night_cancelled: night_held,
+            fell_back,
         });
         laps.lap("open-sessions list");
         self.ensure_slots(profile);
@@ -467,6 +479,74 @@ impl Queue {
             laps.text()
         ));
         Ok(())
+    }
+
+    /// A unit of `session` was decoded on the processor without the Hinglish model after a graphics failure (it is flagged
+    /// in the session folder already). The first one says what becomes of the session, from the night routing on the
+    /// audio known now: redone with the Hinglish model at night, or marked "best finished on a faster machine" (the
+    /// marker file is written now; the night pass decides again with the audio really recorded).
+    fn note_without_hinglish(&self, session: &str) {
+        let Some(profile) = self.profile() else {
+            return;
+        };
+        let abandoned = self.manager.gpu_abandoned();
+        let now = clock_ms();
+        let mut open = plock(&self.open);
+        let Some(s) = open.iter_mut().find(|s| s.name == session) else {
+            return;
+        };
+        if s.fell_back {
+            return;
+        }
+        s.fell_back = true;
+        s.night_handled = false;
+        let (total, mix) = {
+            let q = plock(&s.handle.queue);
+            let jobs = q.jobs().unwrap_or_default();
+            let total = jobs
+                .iter()
+                .find(|j| j.kind == JobKind::Rolling)
+                .and_then(|j| q.units(j.id).ok())
+                .map_or(0, |u| u.iter().map(|u| u.end_ms).max().unwrap_or(0));
+            (total, language_mix(&q, "post-1"))
+        };
+        let night_session = night_route::NightSession {
+            name: s.name.clone(),
+            languages: s.languages.clone(),
+            audio: wb_queue::night::SessionAudio {
+                id: s.name.clone(),
+                audio_ms_by_lang: wb_queue::estimate::split_by_mix(total, &s.languages, &mix)
+                    .into_iter()
+                    .collect(),
+            },
+        };
+        let redo_view = profile.for_redo(abandoned);
+        let factor = wb_queue::speed::planning_factor(
+            self.manager.speed_factor(true),
+            wb_queue::speed::Pass::Night(redo_view.night_class()),
+            2,
+        );
+        let start =
+            wb_queue::night::day_end_reference_ms(PROGRAMME_JSON, now, night_wait_shift_ms() == 0)
+                .saturating_add(wb_queue::night::START_AFTER_LAST_SESSION_MS)
+                .max(now);
+        let redo = night_route::project_redo(&profile, abandoned, start, &night_session, factor);
+        if let Some(why) = &redo.why_not {
+            let text =
+                wb_queue::night::faster_machine_json(why, profile.hinglish_night_model(), now);
+            if let Err(e) = std::fs::write(s.dir.join(wb_queue::night::FASTER_MACHINE_FILE), text) {
+                self.core.push_log(format!(
+                    "{session}: the faster-machine note could not be written: {e}"
+                ));
+            }
+        }
+        drop(open);
+        self.core.push_log(redo.text.clone());
+        let _ = self.app.state::<AppState>().events.send(Notice::event(
+            NoticeLevel::Warning,
+            "queue",
+            redo.text,
+        ));
     }
 
     /// A session started. A night pass planned before it is cancelled and planned again after the last session
@@ -863,7 +943,11 @@ impl Queue {
                         Some(_) => false,
                     };
                     // A session decoded with the Hinglish model in the rolling pass has no more accurate night model.
-                    if !s.night_handled && wants_night && !profile.uses_hinglish(&s.languages) {
+                    // (a session that fell back without the Hinglish model during the recording is redone with it)
+                    if !s.night_handled
+                        && wants_night
+                        && (!profile.uses_hinglish(&s.languages) || s.fell_back)
+                    {
                         candidates.push(i);
                     }
                 }
@@ -888,6 +972,13 @@ impl Queue {
         {
             return;
         }
+        // A session that fell back is planned with the redo profile (the Hinglish model is its night model, on the card
+        // or, after a failure in this run, on the processor where it was measured).
+        let profile = if candidates.iter().any(|&i| open[i].fell_back) {
+            profile.for_redo(self.manager.gpu_abandoned())
+        } else {
+            profile
+        };
         let mut audio: Vec<night_route::NightSession> = Vec::new();
         for &i in &candidates {
             let s = &open[i];

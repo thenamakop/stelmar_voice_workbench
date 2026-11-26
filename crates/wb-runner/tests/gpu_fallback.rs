@@ -210,7 +210,10 @@ fn a_failing_graphics_engine_moves_the_rest_of_the_run_to_the_measured_processor
  {
     let r = rig(
         "falls-back",
-        CpuFallback::Models(serde_json::json!({"hi": "cpu-model", "*": "cpu-model"})),
+        CpuFallback::Models {
+            models: serde_json::json!({"hi": "cpu-model", "*": "cpu-model"}),
+            without_hinglish: false,
+        },
     );
     let units = r.handle.queue.lock().unwrap().units(r.job).unwrap().len();
     assert!(units >= 2, "the test needs more than one unit: {units}");

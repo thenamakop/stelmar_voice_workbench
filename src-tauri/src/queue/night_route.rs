@@ -125,6 +125,60 @@ pub fn decide(
     }
 }
 
+/// What becomes of a session whose units were decoded on the processor without the Hinglish model after a graphics
+/// failure (owner, 27 Nov 2026): the night pass redoes it with the Hinglish model when the night routing says that
+/// finishes before 08:00, else it is marked "best finished on a faster machine".
+#[derive(Debug, Clone, PartialEq)]
+pub struct Redo {
+    /// The night routing runs the session with the Hinglish model.
+    pub redone: bool,
+    /// Why not, when it does not (the text of the faster-machine marker).
+    pub why_not: Option<String>,
+    /// The line for the Queue log and the notice.
+    pub text: String,
+}
+
+/// Projects the night for one session that fell back: the same routing the night pass uses, with the audio known now,
+/// started at `night_start_ms`, on the profile of a redo (`ProfileView::for_redo`). The night pass decides again with the
+/// audio really recorded.
+pub fn project_redo(
+    profile: &ProfileView,
+    graphics_abandoned: bool,
+    night_start_ms: u64,
+    session: &NightSession,
+    factor: f64,
+) -> Redo {
+    let redo_profile = profile.for_redo(graphics_abandoned);
+    let d = decide(
+        &redo_profile,
+        night_start_ms,
+        std::slice::from_ref(session),
+        factor,
+    );
+    let head = format!(
+        "{}: decoded without the Hinglish model after a graphics failure",
+        session.name
+    );
+    if d.hinglish.contains(&session.name) {
+        return Redo {
+            redone: true,
+            why_not: None,
+            text: format!("{head}; will be redone at night"),
+        };
+    }
+    let why = d
+        .marks
+        .iter()
+        .find(|(n, _)| n == &session.name)
+        .map(|(_, w)| w.clone())
+        .unwrap_or_else(|| "the Hinglish night pass was not planned".to_owned());
+    Redo {
+        redone: false,
+        text: format!("{head}; needs a faster machine ({why})"),
+        why_not: Some(why),
+    }
+}
+
 /// A night job decoding an English + Hindi session with the Hinglish model, as the re-check sees it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct HinglishNightJob {
@@ -244,6 +298,80 @@ mod tests {
         v.set_cell_for_test("hinglish-f16", "hi", rtf_hi);
         v.set_cell_for_test("hinglish-f16", "en", rtf_hi / 2.5);
         v
+    }
+
+    /// A profile whose check chose the Hinglish model on the card (graphics-only configuration), with the card's
+    /// cells and, when `processor_cells` is set, the same model measured on the processor too.
+    fn card_profile(processor_cells: Option<(f64, f64)>) -> ProfileView {
+        let mut p = profile(false, 0.3, true);
+        p.config = Some(wb_capability::DeviceConfig::Gpu { index: 0 });
+        p.set_cell_on_for_test("hinglish-f16", "hi", 0.3, true);
+        p.set_cell_on_for_test("hinglish-f16", "en", 0.12, true);
+        if let Some((hi, en)) = processor_cells {
+            p.set_cell_on_for_test("hinglish-f16", "hi", hi, false);
+            p.set_cell_on_for_test("hinglish-f16", "en", en, false);
+        }
+        p
+    }
+
+    /// Owner, 27 Nov 2026: after a graphics failure the units decoded without the Hinglish model are redone at night
+    /// where the night routing runs the Hinglish model before 08:00 (the processor's measured cell for it), and the
+    /// session is marked for a faster machine where it does not (no processor cell, or a night that does not fit).
+    #[test]
+    fn a_session_that_fell_back_is_redone_with_the_hinglish_model_at_night_when_the_night_fits() {
+        let p = card_profile(Some((1.2, 0.5)));
+        let r = project_redo(&p, true, six_pm(), &session("hall-a", 60, 60), 1.25);
+        assert!(r.redone, "{r:?}");
+        assert_eq!(r.why_not, None);
+        assert_eq!(
+            r.text,
+            "hall-a: decoded without the Hinglish model after a graphics failure; will be redone at night"
+        );
+        // After a restart the card may work again: the setup the check chose (on the card) is planned.
+        let on_card = card_profile(None);
+        let r = project_redo(&on_card, false, six_pm(), &session("hall-a", 60, 60), 1.25);
+        assert!(r.redone, "{r:?}");
+    }
+
+    #[test]
+    fn a_session_that_fell_back_is_marked_for_a_faster_machine_when_the_night_does_not_fit() {
+        // No processor cell for the Hinglish model: nothing says it can run there, so no redo is planned.
+        let p = card_profile(None);
+        let r = project_redo(&p, true, six_pm(), &session("hall-a", 60, 60), 1.25);
+        assert!(!r.redone, "{r:?}");
+        assert!(r.why_not.is_some());
+        assert!(
+            r.text.starts_with(
+                "hall-a: decoded without the Hinglish model after a graphics failure; needs a faster machine ("
+            ),
+            "{}",
+            r.text
+        );
+        // A processor cell that is too slow for the audio: Hindi at 9.0 needs about 20 h, 14 h are left.
+        let slow = card_profile(Some((9.0, 3.6)));
+        let r = project_redo(&slow, true, six_pm(), &session("hall-a", 90, 90), 1.25);
+        assert!(!r.redone, "{r:?}");
+        assert!(r.text.contains("needs a faster machine"), "{}", r.text);
+    }
+
+    /// The job's models decide whether the processor loses the Hinglish model, and a job whose models were all measured
+    /// on the processor (a redo planned for it) runs as it is.
+    #[test]
+    fn the_job_models_tell_whether_the_processor_loses_the_hinglish_model() {
+        let p = card_profile(None);
+        let pair =
+            serde_json::json!({"en": "small-q5_0", "hi": "hinglish-f16", "*": "hinglish-f16"});
+        assert!(p.job_decodes_with_hinglish(pair.as_object().unwrap()));
+        let other = serde_json::json!({"en": "small-q5_0", "hi": "large-v3-turbo-q5_0"});
+        assert!(!p.job_decodes_with_hinglish(other.as_object().unwrap()));
+        assert!(!p.models_measured_on_processor(pair.as_object().unwrap(), false));
+        let both = card_profile(Some((1.2, 0.5)));
+        let alone = serde_json::json!({"en": "hinglish-f16", "hi": "hinglish-f16"});
+        assert!(both.models_measured_on_processor(alone.as_object().unwrap(), false));
+        assert!(
+            !both.models_measured_on_processor(alone.as_object().unwrap(), true),
+            "a day job must also keep up (Hindi at 1.2)"
+        );
     }
 
     fn session(name: &str, en_min: u64, hi_min: u64) -> NightSession {

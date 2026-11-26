@@ -2,7 +2,7 @@
 //! after a fingerprint change that function hands back safe defaults, which refuse processing while recording
 //! and live text, and the queue honours them).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use wb_capability::{Capability, DeviceConfig, OverrideKind, Tier};
 
@@ -128,6 +128,12 @@ impl ProfileView {
     #[cfg(test)]
     pub fn set_cell_for_test(&mut self, model: &str, lang: &str, rtf: f64) {
         let gpu = self.uses_gpu();
+        self.set_cell_on_for_test(model, lang, rtf, gpu);
+    }
+
+    /// A measured cell for the tests on a named kind of device (`gpu` false: the processor).
+    #[cfg(test)]
+    pub fn set_cell_on_for_test(&mut self, model: &str, lang: &str, rtf: f64, gpu: bool) {
         self.peaks.push(Peak {
             model: model.to_owned(),
             lang: lang.to_owned(),
@@ -307,6 +313,82 @@ impl ProfileView {
                 Some((l.clone(), if rtf > 0.0 { rtf } else { 1.0 }))
             })
             .collect()
+    }
+
+    /// Whether a job's models include the Hinglish model of this profile (the chosen one for the recording, or the night
+    /// one): a job that loses it when it moves to the processor (owner, 27 Nov 2026).
+    pub fn job_decodes_with_hinglish(
+        &self,
+        models: &serde_json::Map<String, serde_json::Value>,
+    ) -> bool {
+        let uses =
+            |m: Option<&str>| m.is_some_and(|m| models.values().any(|v| v.as_str() == Some(m)));
+        uses(self.hinglish.as_deref()) || uses(self.hinglish_night.as_deref())
+    }
+
+    /// Whether every model of a job has its own measured processor cell (one that keeps up with real time when
+    /// `keeps_up`): the job can run on the processor as it is (a night redo planned for the processor, or a model
+    /// measured on both devices), so a graphics failure changes nothing.
+    pub fn models_measured_on_processor(
+        &self,
+        models: &serde_json::Map<String, serde_json::Value>,
+        keeps_up: bool,
+    ) -> bool {
+        let ids: BTreeSet<&str> = models.values().filter_map(|v| v.as_str()).collect();
+        !ids.is_empty()
+            && ids.iter().all(|m| {
+                // Every processor cell of the model (a language each): the slowest decides.
+                let cells: Vec<f64> = self
+                    .peaks
+                    .iter()
+                    .filter(|p| !p.gpu && p.rolling && p.detector.is_none() && p.model == *m)
+                    .map(|p| p.rtf)
+                    .collect();
+                !cells.is_empty() && cells.iter().all(|r| *r > 0.0 && (!keeps_up || *r <= 1.0))
+            })
+    }
+
+    /// The profile a night redo of a session that fell back without the Hinglish model is planned with: the Hinglish model
+    /// the session should have had is the night model, and the recording-time Hinglish setting is off (the session was
+    /// not decoded with it). After the graphics engine was given up on in this run (`graphics_abandoned`) the redo runs on
+    /// the processor: it needs a measured processor cell of the Hinglish model (a pair only with its own processor
+    /// cell), else there is no redo and the session is marked for a faster machine. Without a failure in this run (a
+    /// restart: the card may work again) the setup the check chose is used as it is.
+    pub fn for_redo(&self, graphics_abandoned: bool) -> ProfileView {
+        let mut v = self.clone();
+        let Some(model) = self
+            .hinglish
+            .clone()
+            .or_else(|| self.hinglish_night.clone())
+        else {
+            return v;
+        };
+        let detector = self
+            .hinglish_detector
+            .clone()
+            .or_else(|| self.hinglish_night_detector.clone());
+        v.hinglish = None;
+        v.hinglish_detector = None;
+        if graphics_abandoned {
+            v.config = Some(DeviceConfig::Cpu);
+            v.gpu_index = None;
+            let measured = self
+                .peaks
+                .iter()
+                .any(|p| !p.gpu && p.rolling && p.detector.is_none() && p.model == model);
+            if !measured {
+                v.hinglish_night = None;
+                v.hinglish_night_detector = None;
+                return v;
+            }
+            v.hinglish_night = Some(model.clone());
+            v.hinglish_night_detector =
+                detector.filter(|d| self.pair_rtf(&model, d, false).is_some());
+        } else {
+            v.hinglish_night = Some(model);
+            v.hinglish_night_detector = detector;
+        }
+        v
     }
 
     /// The models a job decodes with on the processor when its graphics engine was given up on (auditor item 6 of

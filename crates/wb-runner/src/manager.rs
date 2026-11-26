@@ -39,6 +39,10 @@ pub trait Events: Send + Sync {
     fn log(&self, level: LogLevel, text: &str);
     /// A job is parked or a failure needs the operator's eyes: a Toast.
     fn problem(&self, text: &str);
+    /// A unit of an English + Hindi session was decoded on the processor without the Hinglish model after the graphics
+    /// engine failed (the unit is already flagged in the session folder): the app decides between the night redo and
+    /// "best finished on a faster machine", and says so. Called once per unit, with no queue lock held.
+    fn without_hinglish(&self, _session: &str, _job: i64, _unit: u32) {}
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -110,6 +114,9 @@ pub struct Manager {
     gpu_abandoned: AtomicBool,
     /// Jobs whose waiting for a processor setup has been said already (once each).
     fallback_noted: Mutex<BTreeSet<String>>,
+    /// `(session, job)` whose units lose the Hinglish model on the processor (decided from the models the job had on the
+    /// card, before they were changed).
+    hinglish_lost: Mutex<BTreeSet<(String, i64)>>,
     /// What each running engine may still grow by (its measured peak minus what it has reached): the engine that
     /// starts next must leave room for it (AGENTS.md memory rules for two engines at once).
     headroom: Mutex<BTreeMap<String, u64>>,
@@ -140,6 +147,7 @@ impl Manager {
             other_device: Mutex::new(false),
             gpu_abandoned: AtomicBool::new(false),
             fallback_noted: Mutex::new(BTreeSet::new()),
+            hinglish_lost: Mutex::new(BTreeSet::new()),
             headroom: Mutex::new(BTreeMap::new()),
             speed: Mutex::new(SpeedLog::default()),
         })
@@ -605,7 +613,14 @@ impl Manager {
     fn adapt_to_cpu(&self, session: &Arc<SessionHandle>, claim: &mut Claim) -> bool {
         match self.executor.cpu_fallback(&claim.job) {
             CpuFallback::NotApplicable => true,
-            CpuFallback::Models(models) => {
+            CpuFallback::Models {
+                models,
+                without_hinglish,
+            } => {
+                let key = (session.name.clone(), claim.job.id);
+                if without_hinglish {
+                    lock(&self.hinglish_lost).insert(key.clone());
+                }
                 if claim.job.models_by_lang != models {
                     if let Err(e) = lock(&session.queue).change_models(claim.job.id, &models) {
                         self.events.problem(&format!(
@@ -615,7 +630,25 @@ impl Manager {
                         let _ = lock(&session.queue).release(claim);
                         return false;
                     }
-                    claim.job.models_by_lang = models;
+                    claim.job.models_by_lang = models.clone();
+                }
+                if lock(&self.hinglish_lost).contains(&key) {
+                    let now = (self.cfg.clock_ms)();
+                    let flagged = lock(&session.queue).flag_fallback_unit(
+                        claim.job.id,
+                        claim.unit.idx,
+                        &models,
+                        now,
+                    );
+                    match flagged {
+                        Ok(()) => self
+                            .events
+                            .without_hinglish(&session.name, claim.job.id, claim.unit.idx),
+                        Err(e) => self.events.problem(&format!(
+                            "{}: unit {} will be decoded without the Hinglish model and could not be flagged in the session: {e}",
+                            session.name, claim.unit.idx
+                        )),
+                    }
                 }
                 true
             }
@@ -641,7 +674,13 @@ impl Manager {
     fn graphics_gave_up(&self, session: &Arc<SessionHandle>, claim: &Claim, error: &str, now: u64) {
         let job = claim.job.id;
         match self.executor.cpu_fallback(&claim.job) {
-            CpuFallback::Models(models) => {
+            CpuFallback::Models {
+                models,
+                without_hinglish,
+            } => {
+                if without_hinglish {
+                    lock(&self.hinglish_lost).insert((session.name.clone(), job));
+                }
                 let moved = {
                     let mut q = lock(&session.queue);
                     q.change_models(job, &models)

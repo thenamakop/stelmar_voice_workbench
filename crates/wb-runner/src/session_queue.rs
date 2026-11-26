@@ -123,6 +123,10 @@ pub fn staged_path(dir: &Path, revision: &str, idx: u32) -> PathBuf {
     staged_dir(dir, revision).join(format!("unit-{idx:04}.jsonl"))
 }
 
+/// The file in a session folder that lists the units decoded by the processor after the graphics engine failed, without
+/// the Hinglish model (written by the app; the session is then redone at night or marked for a faster machine).
+pub const FALLBACK_UNITS_FILE: &str = "fallback-units.json";
+
 fn plan_path(dir: &Path) -> PathBuf {
     dir.join("work").join("plan.json")
 }
@@ -398,6 +402,67 @@ impl SessionQueue {
         self.orders.insert(id, OrderBuffer::new(0, 0));
         self.plan.finished = true;
         Ok(id)
+    }
+
+    /// Flags a unit as decoded without the Hinglish model after a graphics failure (owner, 27 Nov 2026): one entry per
+    /// (job, unit), kept in [`FALLBACK_UNITS_FILE`] of the session folder, written whole and renamed into place.
+    pub fn flag_fallback_unit(
+        &self,
+        job: i64,
+        unit: u32,
+        models: &serde_json::Value,
+        now_ms: u64,
+    ) -> Result<()> {
+        let path = self.dir.join(FALLBACK_UNITS_FILE);
+        let mut doc = self.fallback_doc();
+        let units = doc["units"]
+            .as_array_mut()
+            .ok_or_else(|| Error::Invalid(format!("{} has no unit list", path.display())))?;
+        if units
+            .iter()
+            .any(|u| u["job"].as_i64() == Some(job) && u["unit"].as_u64() == Some(u64::from(unit)))
+        {
+            return Ok(());
+        }
+        units.push(serde_json::json!({
+            "job": job, "unit": unit, "models": models, "flagged_at_ms": now_ms,
+        }));
+        let tmp = path.with_extension("json.tmp");
+        let bytes = serde_json::to_vec_pretty(&doc).map_err(wb_queue::Error::from)?;
+        let mut file = std::fs::File::create(&tmp).map_err(io(&tmp))?;
+        std::io::Write::write_all(&mut file, &bytes).map_err(io(&tmp))?;
+        file.sync_all().map_err(io(&tmp))?;
+        drop(file);
+        std::fs::rename(&tmp, &path).map_err(io(&path))?;
+        Ok(())
+    }
+
+    fn fallback_doc(&self) -> serde_json::Value {
+        std::fs::read(self.dir.join(FALLBACK_UNITS_FILE))
+            .ok()
+            .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+            .filter(|v| v["units"].is_array())
+            .unwrap_or_else(|| {
+                serde_json::json!({
+                    "version": 1,
+                    "note": "decoded without the Hinglish model after a graphics failure",
+                    "units": [],
+                })
+            })
+    }
+
+    /// The units flagged by [`Self::flag_fallback_unit`], as `(job, unit)`.
+    pub fn fallback_units(&self) -> Vec<(i64, u32)> {
+        self.fallback_doc()["units"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|u| {
+                        Some((u["job"].as_i64()?, u32::try_from(u["unit"].as_u64()?).ok()?))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     /// The note a held night job carries in its error column. A hold is the job's own persisted state (Paused with this
@@ -1647,6 +1712,23 @@ mod tests {
             .unwrap();
         assert_eq!(night_job.state, JobState::Queued);
         assert!(night_job.error.is_none(), "the hold's note is gone");
+    }
+
+    /// Owner, 27 Nov 2026: a unit decoded without the Hinglish model after a graphics failure is flagged in the session
+    /// folder, once per (job, unit), and the flag is still there after a restart.
+    #[test]
+    fn a_flagged_fallback_unit_is_written_once_and_survives_a_restart() {
+        let (q, job, dir) = queue_with_units("fallback-flag", 2);
+        assert!(q.fallback_units().is_empty());
+        let models = serde_json::json!({"hi": "cpu-model"});
+        q.flag_fallback_unit(job, 0, &models, 5).unwrap();
+        q.flag_fallback_unit(job, 0, &models, 6).unwrap();
+        q.flag_fallback_unit(job, 1, &models, 7).unwrap();
+        assert_eq!(q.fallback_units(), vec![(job, 0), (job, 1)]);
+        drop(q);
+        let q = SessionQueue::open(&dir).unwrap();
+        assert_eq!(q.fallback_units(), vec![(job, 0), (job, 1)]);
+        assert!(dir.join(FALLBACK_UNITS_FILE).exists());
     }
 
     #[test]

@@ -32,8 +32,14 @@ pub enum UnitEnd {
 pub enum CpuFallback {
     /// Not a case for a fallback (the profile has no graphics-only setup, or the executor knows nothing of one).
     NotApplicable,
-    /// The best measured processor setup for the job: its `models_by_lang`.
-    Models(serde_json::Value),
+    /// The best measured processor setup for the job: its `models_by_lang`. `without_hinglish` is true when the job
+    /// decodes an English + Hindi session with the Hinglish model on the card and the processor setup does not: its
+    /// units are then flagged in the session (owner, 27 Nov 2026: the processor's per-language models translate Hindi
+    /// into English text, so the final transcript must never keep them silently).
+    Models {
+        models: serde_json::Value,
+        without_hinglish: bool,
+    },
     /// The profile has no measured processor cell for the job's languages; the text says which. The units wait.
     NoCell(String),
 }
