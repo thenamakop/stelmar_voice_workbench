@@ -13,6 +13,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use wb_protocol::SegmentEvent;
@@ -101,7 +102,12 @@ pub struct Completed {
 /// What a decoded unit waits with until every earlier unit is committed: its segments and the VAD gaps.
 type UnitOutput = (Vec<Segment>, Vec<Gap>);
 
+/// The time stamp (IST text) a segment reloaded from its staged file gets as `created_at`: the staged file keeps the engine's
+/// segments, not when they were decoded, so the moment of the reload stands in and the field is never empty.
+pub type Clock = Arc<dyn Fn() -> String + Send + Sync>;
+
 pub struct SessionQueue {
+    clock: Clock,
     dir: PathBuf,
     transcript: Transcript,
     orders: HashMap<i64, OrderBuffer<UnitOutput>>,
@@ -188,8 +194,14 @@ pub fn vad_gaps(revision: &str, unit_start: u64, unit_end: u64, segments: &[Segm
 }
 
 impl SessionQueue {
-    /// Opens the session's queue, recovering from a crash.
+    /// Opens the session's queue, recovering from a crash. Segments reloaded from staged files get an empty `created_at`;
+    /// the app uses [`SessionQueue::open_with_clock`].
     pub fn open(dir: &Path) -> Result<Self> {
+        Self::open_with_clock(dir, Arc::new(String::new))
+    }
+
+    /// As [`SessionQueue::open`], with the clock that stamps the segments reloaded from staged files (N6, auditor of 20 Nov 2026).
+    pub fn open_with_clock(dir: &Path, clock: Clock) -> Result<Self> {
         let transcript = Transcript::open(dir)?;
         let plan = match std::fs::read(plan_path(dir)) {
             Ok(bytes) => serde_json::from_slice(&bytes)
@@ -198,6 +210,7 @@ impl SessionQueue {
             Err(e) => return Err(io(&plan_path(dir))(e)),
         };
         let mut q = Self {
+            clock,
             dir: dir.to_owned(),
             transcript,
             orders: HashMap::new(),
@@ -226,6 +239,7 @@ impl SessionQueue {
     /// may still be decoding; a buffer started at the unit that finishes then would commit it before an earlier unit
     /// that is not committed, move the cursor past that unit and lose its text (ASR audit of 21 Nov 2026).
     fn rebuild_order(&mut self, job: &Job, reset_running: bool) -> Result<OrderBuffer<UnitOutput>> {
+        let stamp = (self.clock)();
         let units = self.transcript.store().units(job.id)?;
         // Units the cursor already covers were committed: the crash came between the cursor and the state.
         for u in &units {
@@ -263,7 +277,7 @@ impl SessionQueue {
                         Ok(events) if !events.is_empty() || path.exists() => {
                             let segs: Vec<Segment> = events
                                 .iter()
-                                .map(|e| to_segment(e, &job.revision, device, ""))
+                                .map(|e| to_segment(e, &job.revision, device, &stamp))
                                 .collect();
                             let gaps = vad_gaps(&job.revision, u.start_ms, u.end_ms, &segs);
                             // `idx` is at or after `next`: units before it are committed.
@@ -1267,6 +1281,66 @@ mod tests {
         let texts: Vec<_> = all.iter().map(|s| s.text.as_str()).collect();
         assert_eq!(texts, vec!["a", "b", "c", "d"]);
         assert_eq!(done.refused, 0);
+    }
+
+    /// N6 (auditor of 20 Nov 2026): a segment reloaded from its staged file after a restart was committed with an empty
+    /// `created_at`. The queue opened with a clock stamps it with the moment of the reload; segments completed in this run
+    /// keep the stamp their completion was given.
+    #[test]
+    fn a_segment_reloaded_from_its_staged_file_gets_the_clocks_stamp_not_an_empty_created_at() {
+        let dir = temp("crash-stamp");
+        {
+            let mut q = SessionQueue::open(&dir).unwrap();
+            let job = q
+                .ensure_rolling_job("s", serde_json::json!({}), vec!["hi".into()], 1)
+                .unwrap();
+            for i in 0..2u32 {
+                q.transcript
+                    .store_mut()
+                    .add_unit(
+                        job,
+                        i,
+                        u64::from(i) * 10_000,
+                        u64::from(i + 1) * 10_000,
+                        None,
+                    )
+                    .unwrap();
+            }
+            let c0 = q.claim(Device::Cpu, 1).unwrap().unwrap();
+            let c1 = q.claim(Device::Cpu, 1).unwrap().unwrap();
+            stage(&c0, &[ev(0, 0, 0, 5_000, "a")]);
+            q.complete(&c0, "run-1", 2).unwrap();
+            stage(&c1, &[ev(1, 0, 10_000, 15_000, "b")]);
+            q.transcript
+                .store_mut()
+                .set_unit_state(job, 1, UnitState::Decoded, Some(Device::Cpu))
+                .unwrap();
+        }
+        let mut q = SessionQueue::open_with_clock(&dir, Arc::new(|| "reload".to_owned())).unwrap();
+        let c1 = q.claim(Device::Cpu, 5).unwrap();
+        assert!(c1.is_none(), "unit 1 is decoded and waits to be committed");
+        // A third unit finishing commits the reloaded unit 1 behind it.
+        let job = q.jobs().unwrap()[0].id;
+        q.transcript
+            .store_mut()
+            .add_unit(job, 2, 20_000, 30_000, None)
+            .unwrap();
+        let c2 = q.claim(Device::Cpu, 6).unwrap().unwrap();
+        stage(&c2, &[ev(2, 0, 20_000, 22_000, "c")]);
+        q.complete(&c2, "run-2", 7).unwrap();
+        let all = q
+            .transcript()
+            .store()
+            .segments("post-1", 0, u64::MAX)
+            .unwrap();
+        let stamps: Vec<_> = all
+            .iter()
+            .map(|s| (s.text.as_str(), s.created_at.as_str()))
+            .collect();
+        assert_eq!(
+            stamps,
+            vec![("a", "run-1"), ("b", "reload"), ("c", "run-2")]
+        );
     }
 
     #[test]

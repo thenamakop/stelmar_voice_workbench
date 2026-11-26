@@ -172,9 +172,11 @@ impl Readings for AppReadings {
     }
 
     fn free_ram_bytes(&self) -> u64 {
-        // One probe a second is plenty and keeps the gate's polling cheap. The machine view reports the host's
-        // free memory, or the job's remaining limit under emulation, less the engines' graphics memory held in
-        // system RAM.
+        // One probe a second is plenty and keeps the gate's polling cheap. This is the probe's available RAM, nothing
+        // subtracted: the host's free memory, or the job's remaining limit under emulation. The engines' graphics memory is
+        // NOT taken off here. The start gate takes the measured graphics memory of the engine it is about to start from
+        // `memory_for_models` (its second value) beside the engine's peak; memory an engine already holds is already out of the
+        // available RAM the probe reports (N4 of the auditor of 20 Nov 2026: the comment used to say otherwise).
         let mut cached = plock(&self.free);
         if let Some((at, v)) = *cached
             && at.elapsed() < Duration::from_secs(1)
@@ -427,7 +429,8 @@ impl Queue {
             ));
         }
         laps.lap("models");
-        let mut queue = SessionQueue::open(&dir).map_err(|e| e.to_string())?;
+        let mut queue =
+            SessionQueue::open_with_clock(&dir, Arc::new(ist_text)).map_err(|e| e.to_string())?;
         laps.lap("session database");
         let job = queue
             .ensure_rolling_job(&name, models_json(&models), languages.to_vec(), clock_ms())
@@ -755,7 +758,7 @@ impl Queue {
             let Some(profile) = self.profile() else {
                 return;
             };
-            let Ok(q) = SessionQueue::open(&dir) else {
+            let Ok(q) = SessionQueue::open_with_clock(&dir, Arc::new(ist_text)) else {
                 continue;
             };
             let unfinished = q.jobs().is_ok_and(|jobs| {
