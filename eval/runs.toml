@@ -680,3 +680,31 @@ a = "verify-wb-medium-fleurs-ur"
 b = "ctl-wb-medium-fleurs-ur-chunk30"
 max_wer_points = 3.0
 informational = true   # control 2
+
+# Step 4 of the Hinglish rollout brief (owner, 26 Nov 2026), 4 GB cards: Turbo q5_0 detects the language of every chunk and
+# decodes the English ones, Hinglish q8_0 decodes the Hindi ones (the engine's own routing, no experiment: the detector is the
+# model for English). Run on the Legion GPU for the text; the same models on a processor detector and a card that holds only
+# q8_0 (2.7 GB) would give the same text. Held-out chunks are not in the tuning list.
+[[run]]
+name = "tune-turbo-detect-q8_0"
+setup = "en=large-v3-turbo-q5_0,hi=hinglish-q8_0"
+dataset = "coshe-eval"
+role = "rolling"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["en", "hi"]
+limit = "eval/clips/phase5-tune-coshe.txt"
+needs = "phase-2"
+
+# The same with the smaller detector (small q5_0, 0.2 to 0.5 times real time on the processor, where turbo q5_0 is 1.3 to 2.7):
+# the only detector a processor could run beside a card that holds only the Hinglish model.
+[[run]]
+name = "tune-small-detect-q8_0"
+setup = "en=small-q5_0,hi=hinglish-q8_0"
+dataset = "coshe-eval"
+role = "rolling"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["en", "hi"]
+limit = "eval/clips/phase5-tune-coshe.txt"
+needs = "phase-2"

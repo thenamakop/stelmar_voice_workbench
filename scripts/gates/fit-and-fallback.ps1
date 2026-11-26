@@ -65,6 +65,18 @@ function Write-Evidence {
     $L += "$($r.profile) | $($r.device) | $($r.rule) | $($r.label) | $($r.threads) | $($r.audio_s.ToString('F0', $inv)) | $($r.rtf.ToString('F3', $inv)) | $($bar.ToString('F2', $inv)) | $(if ($r.rtf -le $bar) { 'yes' } else { 'no' }) | $(($r.rtf * 3).ToString('F1', $inv)) | $($r.chunks) | $($r.detections) | $($r.both_ways) | $(($r.peak_ws / 1GB).ToString('F2', $inv)) | $($r.engine_sha)"
   }
   $L += ''
+  $L += '== Part D: the cost of a language detector on the processor (emu-mid, CPU avx2, 12 threads, same 129 s clip: detection on = English + Hindi, off = Hindi alone)'
+  $L += 'rule | models | RTF | detections | peak working set GiB | engine sha256 (first 16)'
+  foreach ($r in @($rows | Where-Object { $_.part -eq 'D' })) {
+    $L += "$($r.rule) | $($r.label) | $(if ($r.status -eq 'ok') { $r.rtf.ToString('F3', $inv) } else { $r.status }) | $($r.detections) | $(($r.peak_ws / 1GB).ToString('F2', $inv)) | $($r.engine_sha)"
+  }
+  $L += ''
+  $L += '== Part E: the language detector alone (wb-engine detect, no decoding; 129 s clip; CPU avx2; seconds include the model load)'
+  $L += 'profile | models | threads | RTF | elapsed s | chunks detected | peak working set GiB'
+  foreach ($r in @($rows | Where-Object { $_.part -eq 'E' })) {
+    $L += "$($r.profile) | $($r.label) | $($r.threads) | $(if ($r.status -eq 'ok') { $r.rtf.ToString('F3', $inv) } else { $r.status }) | $(if ($r.status -eq 'ok') { $r.elapsed_s.ToString('F1', $inv) } else { '-' }) | $($r.detections) | $(($r.peak_ws / 1GB).ToString('F2', $inv))"
+  }
+  $L += ''
   $L += 'the experiment engines (rule (c)) are development builds from commit f1d9251; the rule (a) rows on the same engines use no experiment switch and equal the release engine; the Hinglish rows use the release engines in src-tauri\binaries.'
   New-Item -ItemType Directory -Force -Path (Join-Path $repo 'docs\evidence\phase-5') | Out-Null
   $out = Join-Path $repo 'docs\evidence\phase-5\fit-and-fallback.txt'
@@ -101,8 +113,12 @@ $eng = @{
   cuda       = Copy-Engine (Join-Path $bin "wb-engine-cuda-$triple.exe") 'wb-engine-fit-cuda' -Cuda
   avx2       = Copy-Engine (Join-Path $bin "wb-engine-avx2-$triple.exe") 'wb-engine-fit-avx2'
   vulkan     = Copy-Engine (Join-Path $bin "wb-engine-vulkan-$triple.exe") 'wb-engine-fit-vulkan'
-  'avx2-exp' = Copy-Engine (Join-Path $ExpDir "wb-engine-avx2-lang-experiments-$triple.exe") 'wb-engine-fit-avx2-exp'
-  'vulkan-exp' = Copy-Engine (Join-Path $ExpDir "wb-engine-vulkan-lang-experiments-$triple.exe") 'wb-engine-fit-vulkan-exp'
+}
+# The rule (c) rows need development engines built from commit f1d9251 (`scripts/build-engines.ps1 -LangExperiments` in a
+# worktree of that commit); the experiment was dropped on 26 Nov 2026 and those engines were removed. The saved rows stay.
+foreach ($x in @(@('avx2-exp', 'avx2'), @('vulkan-exp', 'vulkan'))) {
+  $src = Join-Path $ExpDir "wb-engine-$($x[1])-lang-experiments-$triple.exe"
+  if (Test-Path $src) { $eng[$x[0]] = Copy-Engine $src "wb-engine-fit-$($x[1])-exp" }
 }
 $driver = (& nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>$null | Select-Object -First 1)
 
@@ -144,13 +160,13 @@ function Test-Done([string]$Key) {
 
 function Save-Row($Rec) { ($Rec | ConvertTo-Json -Compress -Depth 5) | Add-Content -Path $results -Encoding ascii }
 
-function Invoke-Batch([string]$Key, [string]$Part, [string]$Profile, [string]$Engine, [string]$Device, [string]$Rule, [string]$Label, [string]$Models, [int]$Threads, [string]$Clip, [hashtable]$Env = @{}, [switch]$Vram) {
+function Invoke-Batch([string]$Key, [string]$Part, [string]$Profile, [string]$Engine, [string]$Device, [string]$Rule, [string]$Label, [string]$Models, [int]$Threads, [string]$Clip, [hashtable]$Env = @{}, [switch]$Vram, [string]$Langs = 'en,hi') {
   if ($Only -and $Key -notlike "*$Only*") { return }
   if (Test-Done $Key) { Write-Host "skip (done): $Key"; return }
   $E = $eng[$Engine]
   $wav = Join-Path $Work $Clip
   $audioS = ((Get-Item $wav).Length - 44) / 2 / 16000
-  $a = @('batch', '--file', ('"' + $wav + '"'), '--models', $Models, '--langs', 'en,hi', '--device', $Device, '--threads', "$Threads", '--models-dir', ('"' + (Join-Path $repo 'models') + '"'))
+  $a = @('batch', '--file', ('"' + $wav + '"'), '--models', $Models, '--langs', $Langs, '--device', $Device, '--threads', "$Threads", '--models-dir', ('"' + (Join-Path $repo 'models') + '"'))
   Write-Host "$(Get-Date -Format 'HH:mm:ss') $Key"
   $idle = $(if ($Vram) { Get-VramMiB } else { 0 })
   $r = Invoke-Run $Profile $E $a $Env -Vram:$Vram
@@ -167,6 +183,27 @@ function Invoke-Batch([string]$Key, [string]$Part, [string]$Profile, [string]$En
   } else {
     $rec.status = $(if ($r.TimedOut) { 'timeout' } elseif ($err) { "error: $($err.code)" } else { "exit $($r.Exit): " + (($r.Err | Select-Object -Last 2) -join ' ') })
   }
+  Save-Row $rec
+}
+
+function Invoke-Detect([string]$Key, [string]$Profile, [string]$Label, [string]$Model, [int]$Threads, [string]$Clip) {
+  # `wb-engine detect`: the language of every chunk of a clip and no decoding; its done event holds the seconds from model load to the end.
+  if ($Only -and $Key -notlike "*$Only*") { return }
+  if (Test-Done $Key) { Write-Host "skip (done): $Key"; return }
+  $E = $eng['avx2']
+  $wav = Join-Path $Work $Clip
+  $audioS = ((Get-Item $wav).Length - 44) / 2 / 16000
+  $outFile = Join-Path $Work 'detect.jsonl'
+  $a = @('detect', '--file', ('"' + $wav + '"'), '--models', "en=$Model,hi=$Model", '--langs', 'en,hi', '--device', 'cpu', '--threads', "$Threads", '--models-dir', ('"' + (Join-Path $repo 'models') + '"'), '--out', ('"' + $outFile + '"'))
+  Write-Host "$(Get-Date -Format 'HH:mm:ss') $Key"
+  $r = Invoke-Run $Profile $E $a
+  $done = Get-Events $r.Out | Where-Object { $_.event -eq 'done' } | Select-Object -First 1
+  $rec = [ordered]@{ key = $Key; part = 'E'; profile = $Profile; device = 'CPU avx2'; rule = 'detect only'; label = $Label; threads = $Threads; engine = 'avx2'; engine_sha = $E.Sha
+    when = (Get-Date).ToString('yyyy-MM-dd HH:mm', $inv); exit = $r.Exit; peak_ws = $r.PeakWs }
+  if ($done -and $r.Exit -eq 0) {
+    $rec.status = 'ok'; $rec.audio_s = $audioS; $rec.elapsed_s = $done.elapsed_s; $rec.chunks = $done.chunks; $rec.rtf = $done.elapsed_s / $audioS
+    $rec.detections = $done.chunks; $rec.both_ways = 0
+  } else { $rec.status = "exit $($r.Exit): " + (($r.Err | Select-Object -Last 2) -join ' ') }
   Save-Row $rec
 }
 
@@ -189,7 +226,8 @@ function Invoke-All {
     @{ id = 'f16'; label = 'hinglish-f16 alone'; models = 'en=hinglish-f16,hi=hinglish-f16' },
     @{ id = 'q8'; label = 'hinglish-q8_0 alone'; models = 'en=hinglish-q8_0,hi=hinglish-q8_0' },
     @{ id = 'f16+turbo'; label = "hinglish-f16 + $turbo loaded together"; models = "en=$turbo,hi=hinglish-f16" },
-    @{ id = 'q8+turbo'; label = "hinglish-q8_0 + $turbo loaded together"; models = "en=$turbo,hi=hinglish-q8_0" }
+    @{ id = 'q8+turbo'; label = "hinglish-q8_0 + $turbo loaded together"; models = "en=$turbo,hi=hinglish-q8_0" },
+    @{ id = 'q8+small'; label = 'hinglish-q8_0 + small-q5_0 loaded together (26 Nov 2026, step 4: the small detector)'; models = 'en=small-q5_0,hi=hinglish-q8_0' }
   )
   foreach ($c in $combos) { Invoke-Batch "V|$($c.id)" 'V' 'native' 'cuda' "gpu:$cudaIdx" 'd2' $c.label $c.models 8 'bilingual-120.wav' -Vram }
 
@@ -206,6 +244,22 @@ function Invoke-All {
       Invoke-Batch "R|$($pr.p)|$($d.dname)|a" 'R' $pr.p $d.exp $d.dev 'a' 'medium (en) + turbo-q5_0 (hi)' $m $d.th 'bilingual-120.wav'
       Invoke-Batch "R|$($pr.p)|$($d.dname)|c" 'R' $pr.p $d.exp $d.dev 'c' 'medium (en) + turbo-q5_0 (hi)' $m $d.th 'bilingual-120.wav' @{ WB_LANG_EXPERIMENT = 'c' }
       Invoke-Batch "R|$($pr.p)|$($d.dname)|d2-f16" 'R' $pr.p $d.engine $d.dev 'd2' 'hinglish-f16 for every chunk' 'en=hinglish-f16,hi=hinglish-f16' $d.th 'bilingual-60.wav'
+    }
+  }
+
+  # ---- Part D (26 Nov 2026, step 4): what a language detector costs on the processor. The engine detects the language of
+  # every chunk with the model of the first language (a full encoder pass on a 30 s window) when the session has two
+  # languages and not at all when it has one: the same clip decoded as English + Hindi (detection on) and as Hindi alone
+  # (detection off) with the same model differs by the detection and the English decode.
+  $mid = @{ p = 'emu-mid'; th = 12 }
+  foreach ($det in @(@{ id = 'large-v3-turbo-q5_0'; name = 'turbo q5_0' }, @{ id = 'small-q5_0'; name = 'small q5_0' })) {
+    Invoke-Batch "D|emu-mid|$($det.id)|detect-on" 'D' $mid.p 'avx2' 'cpu' 'detect on' "$($det.name) en + hi, detection on" "en=$($det.id),hi=$($det.id)" $mid.th 'bilingual-120.wav'
+    Invoke-Batch "D|emu-mid|$($det.id)|detect-off" 'D' $mid.p 'avx2' 'cpu' 'detect off' "$($det.name) hi alone, no detection" "hi=$($det.id)" $mid.th 'bilingual-120.wav' -Langs 'hi'
+  }
+  # ---- Part E: the detector alone (no decoding), same clip, emu-mid CPU 12 threads, and the same on emu-low CPU 4 threads.
+  foreach ($pr in @(@{ p = 'emu-mid'; th = 12 }, @{ p = 'emu-low'; th = 4 })) {
+    foreach ($det in @(@{ id = 'large-v3-turbo-q5_0'; name = 'turbo q5_0' }, @{ id = 'small-q5_0'; name = 'small q5_0' })) {
+      Invoke-Detect "E|$($pr.p)|$($det.id)" $pr.p "$($det.name) detector, no decoding" $det.id $pr.th 'bilingual-120.wav'
     }
   }
 }
