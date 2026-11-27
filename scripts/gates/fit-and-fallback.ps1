@@ -263,6 +263,21 @@ function Invoke-All {
       Invoke-Detect "E|$($pr.p)|$($det.id)" $pr.p "$($det.name) detector, no decoding" $det.id $pr.th 'bilingual-120.wav'
     }
   }
+
+  # ---- Part N (27 Nov 2026, step 3c of the owner's night plan): the Hinglish night model for a computer without a discrete card,
+  # q8_0 against f16 in one run, same clip (60 s, English + Hindi alternating), same engines, same threads, detection on
+  # (the model detects the language of every chunk itself, as the night job does). emu-low and emu-mid, the processor (avx2) and
+  # the Intel UHD (Vulkan). Night hours and the 08:00 verdict are worked out by night_q8_report.py from these rows.
+  foreach ($pr in $profiles) {
+    $uhd = Get-GpuIndex $pr.p 'vulkan' 'Intel|UHD'
+    $rows = @(@{ dev = 'cpu'; engine = 'avx2'; th = $pr.th; dname = 'cpu' })
+    if ($null -ne $uhd) { $rows += @{ dev = "gpu:$uhd"; engine = 'vulkan'; th = $pr.gth; dname = 'uhd' } }
+    foreach ($d in $rows) {
+      foreach ($mm in @(@{ id = 'q8_0' }, @{ id = 'f16' })) {
+        Invoke-Batch "N|$($pr.p)|$($d.dname)|$($mm.id)" 'N' $pr.p $d.engine $d.dev 'd2' "hinglish-$($mm.id) for every chunk" "en=hinglish-$($mm.id),hi=hinglish-$($mm.id)" $d.th 'bilingual-60.wav'
+      }
+    }
+  }
 }
 
 $requestFlag = 'D:\Projects\stelmar-gate-request.flag'

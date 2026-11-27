@@ -1,0 +1,60 @@
+Hinglish night model on a computer without a discrete card: q8_0 against f16 (Phase 5, step 3c); numbers only; written by scripts/gates/night_q8_report.py from the Part N rows of scripts/gates/fit-and-fallback.ps1.
+machine: Legion (RTX 4070 Laptop 8 GB; the emulated profiles use the processor mask and the Intel UHD only); rows run 2026-11-27 06:06 to 2026-11-27 06:39 (IST); gate lock held; whisper.cpp as printed by the engines in docs/evidence/phase-5/engine-builds.txt.
+method: wb-engine batch over a 60 s English + Hindi clip (FLEURS utterances alternating, 0.8 s of silence between), the model for every chunk with detection on, default rolling settings; one run per cell, q8_0 and f16 back to back in the same run of the script. Emulation is optimistic for the processor and pessimistic for the integrated card (the UHD rows are a floor).
+
+== Speed (RTF = decode seconds / audio seconds)
+profile | device | threads | model | RTF | peak working set GiB | status | engine sha256 (first 16)
+emu-low | CPU avx2 | 4 | hinglish-q8_0 | 6.472 | 2.60 | ok | 3f13ee3a69f63c30
+emu-low | CPU avx2 | 4 | hinglish-f16 | 12.730 | 3.94 | ok | 3f13ee3a69f63c30
+emu-low | Intel UHD (Vulkan) | 2 | hinglish-q8_0 | 1.989 | 2.84 | ok | cd037a6a4e0b5713
+emu-low | Intel UHD (Vulkan) | 2 | hinglish-f16 | 1.812 | 4.12 | ok | cd037a6a4e0b5713
+emu-mid | CPU avx2 | 12 | hinglish-q8_0 | 2.379 | 2.60 | ok | 3f13ee3a69f63c30
+emu-mid | CPU avx2 | 12 | hinglish-f16 | 4.102 | 3.94 | ok | 3f13ee3a69f63c30
+emu-mid | Intel UHD (Vulkan) | 6 | hinglish-q8_0 | 1.886 | 2.80 | ok | cd037a6a4e0b5713
+emu-mid | Intel UHD (Vulkan) | 6 | hinglish-f16 | 1.758 | 4.12 | ok | cd037a6a4e0b5713
+
+== q8_0 against f16 (same cell: ratio < 1 means q8_0 is faster)
+profile | device | q8_0 RTF | f16 RTF | q8_0 / f16
+emu-low | CPU avx2 | 6.472 | 12.730 | 0.51
+emu-low | Intel UHD (Vulkan) | 1.989 | 1.812 | 1.10
+emu-mid | CPU avx2 | 2.379 | 4.102 | 0.58
+emu-mid | Intel UHD (Vulkan) | 1.886 | 1.758 | 1.07
+
+== The programme's English + Hindi minutes per room and the night window (sessions marked for transcription with both languages, one per time slot; window = last end + 30 min to 08:00 IST)
+day | date | slots | minutes | last session ends | window hours
+Day 1 | 2027-02-08 | 4 | 360 | 17:30 | 14.0
+Day 2 | 2027-02-09 | 4 | 300 | 16:30 | 15.0
+
+== Night hours and the 08:00 verdict at the night allowance x1.5 (hours = minutes / 60 x RTF x 1.5; 'plain' = without the allowance)
+profile | device | model | day | minutes | hours plain | hours with allowance | window | finishes by 08:00 with allowance | without
+emu-low | CPU avx2 | hinglish-f16 | Day 1 | 360 | 76.4 | 114.6 | 14.0 | no | no
+emu-low | CPU avx2 | hinglish-f16 | Day 2 | 300 | 63.7 | 95.5 | 15.0 | no | no
+emu-low | CPU avx2 | hinglish-q8_0 | Day 1 | 360 | 38.8 | 58.2 | 14.0 | no | no
+emu-low | CPU avx2 | hinglish-q8_0 | Day 2 | 300 | 32.4 | 48.5 | 15.0 | no | no
+emu-low | Intel UHD (Vulkan) | hinglish-f16 | Day 1 | 360 | 10.9 | 16.3 | 14.0 | no | yes
+emu-low | Intel UHD (Vulkan) | hinglish-f16 | Day 2 | 300 | 9.1 | 13.6 | 15.0 | yes | yes
+emu-low | Intel UHD (Vulkan) | hinglish-q8_0 | Day 1 | 360 | 11.9 | 17.9 | 14.0 | no | yes
+emu-low | Intel UHD (Vulkan) | hinglish-q8_0 | Day 2 | 300 | 9.9 | 14.9 | 15.0 | yes | yes
+emu-mid | CPU avx2 | hinglish-f16 | Day 1 | 360 | 24.6 | 36.9 | 14.0 | no | no
+emu-mid | CPU avx2 | hinglish-f16 | Day 2 | 300 | 20.5 | 30.8 | 15.0 | no | no
+emu-mid | CPU avx2 | hinglish-q8_0 | Day 1 | 360 | 14.3 | 21.4 | 14.0 | no | no
+emu-mid | CPU avx2 | hinglish-q8_0 | Day 2 | 300 | 11.9 | 17.8 | 15.0 | no | yes
+emu-mid | Intel UHD (Vulkan) | hinglish-f16 | Day 1 | 360 | 10.5 | 15.8 | 14.0 | no | yes
+emu-mid | Intel UHD (Vulkan) | hinglish-f16 | Day 2 | 300 | 8.8 | 13.2 | 15.0 | yes | yes
+emu-mid | Intel UHD (Vulkan) | hinglish-q8_0 | Day 1 | 360 | 11.3 | 17.0 | 14.0 | no | yes
+emu-mid | Intel UHD (Vulkan) | hinglish-q8_0 | Day 2 | 300 | 9.4 | 14.1 | 15.0 | yes | yes
+
+== Room minutes of English + Hindi that finish by 08:00 at the allowance x1.5 (window hours x 60 / (RTF x 1.5)); the typical day of the system check is 180 min (3 h)
+profile | device | model | after a 17:30 end (window 14.0 h) | after a 16:30 end (window 15.0 h) | 180 min finishes
+emu-low | CPU avx2 | hinglish-f16 | 44 min | 47 min | no
+emu-low | CPU avx2 | hinglish-q8_0 | 87 min | 93 min | no
+emu-low | Intel UHD (Vulkan) | hinglish-f16 | 309 min | 331 min | yes
+emu-low | Intel UHD (Vulkan) | hinglish-q8_0 | 282 min | 302 min | yes
+emu-mid | CPU avx2 | hinglish-f16 | 137 min | 146 min | no
+emu-mid | CPU avx2 | hinglish-q8_0 | 235 min | 252 min | yes
+emu-mid | Intel UHD (Vulkan) | hinglish-f16 | 319 min | 341 min | yes
+emu-mid | Intel UHD (Vulkan) | hinglish-q8_0 | 297 min | 318 min | yes
+
+== Does q8_0 finish wherever f16 does?
+yes: every cell in which f16 finishes by 08:00 with the allowance, q8_0 finishes too.
+cells where q8_0 finishes and f16 does not: none
