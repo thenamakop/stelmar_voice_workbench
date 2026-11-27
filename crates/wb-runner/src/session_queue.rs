@@ -555,6 +555,37 @@ impl SessionQueue {
         Ok(true)
     }
 
+    /// The night safety switch drops this session's night job (owner, 27 Nov 2026): the night runs slower than planned and
+    /// the job, which has not started (no unit running, decoded or committed), would not finish before 08:00 IST. The job is
+    /// parked with the reason, the rolling transcript stays the default revision, and a running unit is never stopped. The
+    /// check and the change happen under one hold of the session's queue, so a unit cannot be claimed in between. True when
+    /// a job was parked; false when there is none, or it has started, or it is not queued or running (Paused, Parked, Done).
+    pub fn drop_unstarted_night_job(&mut self, reason: &str, now_ms: u64) -> Result<bool> {
+        let Some(night) = self
+            .transcript
+            .store()
+            .jobs()?
+            .into_iter()
+            .find(|j| j.kind == JobKind::Night)
+        else {
+            return Ok(false);
+        };
+        if !matches!(night.state, JobState::Queued | JobState::Running) {
+            return Ok(false);
+        }
+        let started = self
+            .transcript
+            .store()
+            .units(night.id)?
+            .iter()
+            .any(|u| u.state != UnitState::Pending);
+        if started {
+            return Ok(false);
+        }
+        self.park_job(night.id, reason, now_ms)?;
+        Ok(true)
+    }
+
     /// The night job held by [`Self::hold_night_job`] goes on when the pass is planned again: its committed units
     /// are not decoded twice. True when a held night job was resumed.
     pub fn resume_night_job(&mut self, now_ms: u64) -> Result<bool> {
@@ -1808,6 +1839,67 @@ mod tests {
                 .unwrap()
                 .as_deref(),
             Some("post-1")
+        );
+    }
+
+    /// Owner, 27 Nov 2026: the night safety switch drops a night job that has not started and never one that has.
+    #[test]
+    fn the_night_safety_switch_drops_a_night_job_that_has_not_started_and_never_one_that_has() {
+        let (mut q, job, _dir) = queue_with_units("night-dropped", 2);
+        for _ in 0..2 {
+            let c = q.claim(Device::Cpu, 1).unwrap().unwrap();
+            stage(
+                &c,
+                &[ev(
+                    c.unit.idx,
+                    0,
+                    c.unit.start_ms + 10,
+                    c.unit.end_ms - 10,
+                    "r",
+                )],
+            );
+            q.complete(&c, "t", 2).unwrap();
+        }
+        q.add_part(1, 0, 20_000, 48_000, &no_pauses()).unwrap();
+        q.plan_units(job, true).unwrap();
+        assert!(
+            !q.drop_unstarted_night_job("x", 3).unwrap(),
+            "no night job yet: nothing to drop"
+        );
+        q.create_night_job("s", serde_json::json!({"hi": "big"}), vec!["hi".into()], 3)
+            .unwrap();
+        // A unit of the night job is claimed (running): the job has started and stays.
+        let running = q.claim(Device::Cpu, 4).unwrap().unwrap();
+        assert!(
+            !q.drop_unstarted_night_job("x", 5).unwrap(),
+            "a job with a running unit is never stopped"
+        );
+        q.release(&running).unwrap();
+        // Nothing has started now: the job is dropped with the reason and gives no unit.
+        assert!(
+            q.drop_unstarted_night_job("the night ran slower than planned", 6)
+                .unwrap()
+        );
+        let night = q
+            .jobs()
+            .unwrap()
+            .into_iter()
+            .find(|j| j.kind == JobKind::Night)
+            .unwrap();
+        assert_eq!(night.state, JobState::Parked);
+        assert_eq!(
+            night.error.as_deref(),
+            Some("the night ran slower than planned")
+        );
+        assert!(q.claim(Device::Cpu, 7).unwrap().is_none());
+        assert_eq!(
+            q.transcript()
+                .store()
+                .default_revision()
+                .unwrap()
+                .as_deref(),
+            Some("post-1"),
+            "the rolling transcript stands"
         );
     }
 

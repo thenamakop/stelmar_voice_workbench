@@ -409,7 +409,7 @@ pub fn legion_native() -> Profile {
         rolling("large-v3-q5_0", Lang::En, g, 0.061, 1.08, Some(2.05)),
         rolling("large-v3-q5_0", Lang::Hi, g, 0.245, 1.08, Some(2.10)),
         rolling("large-v3-q5_0", Lang::Ur, g, 0.245, 1.08, Some(2.10)),
-        rolling("hinglish-q5_0", Lang::Hi, g, 0.250, 1.08, Some(2.10)),
+        rolling("hinglish-q8_0", Lang::Hi, g, 0.250, 1.08, Some(2.10)),
         rolling("large-v3-turbo-q5_0", Lang::Hi, c, 1.363, 0.91, None),
         near_live("small", Lang::En, 0.248, 0),
         near_live("small", Lang::Hi, 0.497, 2),

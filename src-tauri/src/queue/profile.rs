@@ -154,21 +154,25 @@ impl ProfileView {
     }
 
     /// Whether the night pass may decode a session with these languages with the Hinglish model: English and Hindi
-    /// together, a measured model that fits the night, and the recording was not already decoded with it.
+    /// together, or Hindi alone (owner, 27 Nov 2026: Hinglish q8_0 beats large-v3 q5_0 on Hindi, WER 11.4 against 27.9 on
+    /// Kathbath), a measured model that fits the night, and the recording was not already decoded with it.
     pub fn may_use_hinglish_at_night(&self, languages: &[String]) -> bool {
         self.hinglish_night.is_some()
             && !self.uses_hinglish(languages)
-            && languages.iter().any(|l| l == "en")
-            && languages.iter().any(|l| l == "hi")
+            && Self::hinglish_session(languages)
+    }
+
+    /// The sessions the Hinglish model decodes: English and Hindi together, and Hindi alone.
+    fn hinglish_session(languages: &[String]) -> bool {
+        let has = |code: &str| languages.iter().any(|l| l == code);
+        (has("en") && has("hi")) || (!languages.is_empty() && languages.iter().all(|l| l == "hi"))
     }
 
     /// Whether a session in English and Hindi is left with today's models, because the Hinglish model was not
     /// measured here, is too slow, or does not fit (the session is "best finished on a faster machine" unless the
     /// night pass turns out to run the Hinglish model).
     pub fn lacks_hinglish(&self, languages: &[String]) -> bool {
-        !self.uses_hinglish(languages)
-            && languages.iter().any(|l| l == "en")
-            && languages.iter().any(|l| l == "hi")
+        !self.uses_hinglish(languages) && Self::hinglish_session(languages)
     }
 
     /// The name of the Hinglish model the night pass may use (for the log and the marker).
@@ -225,12 +229,12 @@ impl ProfileView {
             .collect()
     }
 
-    /// Whether a session with these languages decodes every chunk with the Hinglish model: English and Hindi
-    /// together, and the system check chose the model. Urdu sessions and single-language sessions keep their picks.
+    /// Whether a session with these languages decodes every chunk with the Hinglish model: English and Hindi together,
+    /// or Hindi alone (owner, 27 Nov 2026), and the system check chose the model (it met the rolling bar here). English-only
+    /// and Urdu sessions keep their own picks. Before, Hindi alone kept the ranked rolling pick (turbo q5_0, WER 31.0 on
+    /// FLEURS hi against Hinglish q8_0's 14.0) even where the Hinglish model met the bar.
     pub fn uses_hinglish(&self, languages: &[String]) -> bool {
-        self.hinglish.is_some()
-            && languages.iter().any(|l| l == "en")
-            && languages.iter().any(|l| l == "hi")
+        self.hinglish.is_some() && Self::hinglish_session(languages)
     }
 
     /// `models_by_lang` ids of the rolling pass for the session's languages: each language's own pick, and `*`
@@ -764,6 +768,10 @@ mod tests {
         pair.rtf = 0.30;
         pair.peak_commit_bytes = 4 << 30;
         pair.gpu_local_bytes = Some(3 << 30);
+        // The fixture carries a Hinglish q8_0 cell of its own (the rules accept only manifest ids): this test sets its own.
+        cap.profile
+            .measurements
+            .retain(|m| !m.model.starts_with("hinglish"));
         cap.profile.measurements.extend([single, pair]);
         cap.decision.config = Some(wb_capability::ConfigChoice {
             config: wb_capability::DeviceConfig::Gpu { index: 1 },
@@ -867,10 +875,10 @@ mod tests {
             "{rolling:?}"
         );
         assert_eq!(v.night_models(&langs), rolling, "no night model beats it");
-        // English only, Hindi only and English + Urdu keep their own picks.
+        // English only and English + Urdu keep their own picks (Hindi alone uses the Hinglish model since 27 Nov 2026: see
+        // `a_hindi_only_session_uses_the_hinglish_model_where_it_met_the_rolling_bar_and_at_night_where_it_fits`).
         for other in [
             vec!["en".to_string()],
-            vec!["hi".to_string()],
             vec!["en".to_string(), "ur".to_string()],
         ] {
             assert!(!v.uses_hinglish(&other), "{other:?}");
@@ -880,6 +888,71 @@ mod tests {
                     .any(|m| m == "hinglish-q8_0"),
                 "{other:?}"
             );
+        }
+    }
+
+    /// Owner, 27 Nov 2026: a Hindi-only session decodes with the Hinglish model, in the rolling pass where the check chose it
+    /// (it met the rolling bar) and at night where it only fits the night; large-v3 q5_0 is no night model for Hindi. On the
+    /// earlier wiring `uses_hinglish` needed English as well, so a Hindi-only session kept turbo q5_0 whatever the check chose.
+    #[test]
+    fn a_hindi_only_session_uses_the_hinglish_model_where_it_met_the_rolling_bar_and_at_night_where_it_fits()
+     {
+        use wb_capability::Hinglish;
+        let hindi = vec!["hi".to_string()];
+        let mut cap = tier_g();
+        cap.decision.hinglish = Hinglish {
+            ok: true,
+            rtf: Some(0.4),
+            source: "measured".into(),
+            model: Some("hinglish-q8_0".into()),
+            // A pair on a discrete card: a Hindi-only session needs no detector, so the model decodes alone.
+            detector: Some("small-q5_0".into()),
+            night_ok: false,
+            night_hours: None,
+        };
+        let v = ProfileView::from_capability(&cap, vec![]);
+        assert!(v.uses_hinglish(&hindi));
+        let rolling = v.rolling_models(&hindi);
+        assert_eq!(
+            rolling.get("hi").map(String::as_str),
+            Some("hinglish-q8_0"),
+            "{rolling:?}"
+        );
+        assert!(!rolling.values().any(|m| m == "small-q5_0"), "{rolling:?}");
+        assert_eq!(v.night_models(&hindi), rolling, "no night model beats it");
+        // Too slow while recording but it fits the night: the rolling pass keeps the ranked pick and the night may redo it.
+        cap.decision.hinglish = Hinglish {
+            ok: false,
+            rtf: Some(1.4),
+            source: "measured".into(),
+            model: Some("hinglish-q8_0".into()),
+            detector: None,
+            night_ok: true,
+            night_hours: Some(3.0),
+        };
+        let v = ProfileView::from_capability(&cap, vec![]);
+        assert!(!v.uses_hinglish(&hindi));
+        assert!(v.may_use_hinglish_at_night(&hindi));
+        assert!(v.lacks_hinglish(&hindi));
+        assert!(
+            !v.rolling_models(&hindi)
+                .values()
+                .any(|m| m == "hinglish-q8_0")
+        );
+        assert_eq!(
+            v.hinglish_night_models(&hindi)
+                .get("hi")
+                .map(String::as_str),
+            Some("hinglish-q8_0")
+        );
+        // Urdu, English and Hindi + Urdu sessions are not Hinglish sessions.
+        for other in [
+            vec!["ur".to_string()],
+            vec!["en".to_string()],
+            vec!["hi".to_string(), "ur".to_string()],
+        ] {
+            assert!(!v.may_use_hinglish_at_night(&other), "{other:?}");
+            assert!(!v.lacks_hinglish(&other), "{other:?}");
         }
     }
 

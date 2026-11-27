@@ -636,7 +636,7 @@ fn hinglish_uses_its_own_cell_or_the_same_size_proxy() {
     assert_eq!(d.hinglish.source, "proxy: large-v3-q5_0 (same size)");
     assert!(!d.hinglish.ok);
     p.measurements.push(rolling(
-        "hinglish-q5_0",
+        "hinglish-q8_0",
         Lang::Hi,
         DeviceConfig::Gpu { index: 0 },
         0.6,
@@ -665,7 +665,7 @@ fn the_hinglish_model_is_chosen_only_when_its_own_cell_meets_the_bar_and_the_ver
     );
     // Its own cell, too slow even for the night: not chosen; today's models stay and the verdict names the cost.
     p.measurements.push(rolling(
-        "hinglish-f16",
+        "hinglish-q8_0",
         Lang::Hi,
         DeviceConfig::Gpu { index: 0 },
         5.0,
@@ -674,7 +674,7 @@ fn the_hinglish_model_is_chosen_only_when_its_own_cell_meets_the_bar_and_the_ver
     ));
     let d = decide_with(&p, false);
     assert!(!d.hinglish.ok);
-    assert_eq!(d.hinglish.model.as_deref(), Some("hinglish-f16"));
+    assert_eq!(d.hinglish.model.as_deref(), Some("hinglish-q8_0"));
     assert_eq!(d.hinglish.chosen_model(), None);
     assert!(
         d.verdict
@@ -684,9 +684,9 @@ fn the_hinglish_model_is_chosen_only_when_its_own_cell_meets_the_bar_and_the_ver
         d.verdict
     );
     // Its own cell, fast enough: chosen.
-    p.measurements.retain(|m| m.model != "hinglish-f16");
+    p.measurements.retain(|m| m.model != "hinglish-q8_0");
     p.measurements.push(rolling(
-        "hinglish-f16",
+        "hinglish-q8_0",
         Lang::Hi,
         DeviceConfig::Gpu { index: 0 },
         0.6,
@@ -695,11 +695,11 @@ fn the_hinglish_model_is_chosen_only_when_its_own_cell_meets_the_bar_and_the_ver
     ));
     let d = decide_with(&p, false);
     assert!(d.hinglish.ok, "{:?}", d.hinglish);
-    assert_eq!(d.hinglish.chosen_model(), Some("hinglish-f16"));
+    assert_eq!(d.hinglish.chosen_model(), Some("hinglish-q8_0"));
     assert!(
         d.verdict
             .iter()
-            .any(|l| l.contains("use the code-switching (Hinglish) model hinglish-f16")),
+            .any(|l| l.contains("use the code-switching (Hinglish) model hinglish-q8_0")),
         "{:#?}",
         d.verdict
     );
@@ -710,7 +710,7 @@ fn a_hinglish_model_too_slow_for_the_recording_may_still_run_at_night_and_the_ve
     let mut p = emu_low();
     // 1.4x real time: over the rolling bar, but 3 h of audio take 4.2 h of the 12-hour night window.
     p.measurements.push(rolling(
-        "hinglish-f16",
+        "hinglish-q8_0",
         Lang::Hi,
         DeviceConfig::Gpu { index: 0 },
         1.4,
@@ -720,7 +720,7 @@ fn a_hinglish_model_too_slow_for_the_recording_may_still_run_at_night_and_the_ve
     let d = decide_with(&p, false);
     assert!(!d.hinglish.ok);
     assert!(d.hinglish.night_ok, "{:?}", d.hinglish);
-    assert_eq!(d.hinglish.night_model(), Some("hinglish-f16"));
+    assert_eq!(d.hinglish.night_model(), Some("hinglish-q8_0"));
     assert_eq!(
         d.hinglish.chosen_model(),
         None,
@@ -730,15 +730,15 @@ fn a_hinglish_model_too_slow_for_the_recording_may_still_run_at_night_and_the_ve
         d.verdict
             .iter()
             .any(|l| l.contains("night pass decodes them again")
-                && l.contains("hinglish-f16")
+                && l.contains("hinglish-q8_0")
                 && l.contains("best finished on a faster machine")),
         "{:#?}",
         d.verdict
     );
     // 5x real time: 15 h for 3 h of audio, over the window: no night model either, and the verdict marks it.
-    p.measurements.retain(|m| m.model != "hinglish-f16");
+    p.measurements.retain(|m| m.model != "hinglish-q8_0");
     p.measurements.push(rolling(
-        "hinglish-f16",
+        "hinglish-q8_0",
         Lang::Hi,
         DeviceConfig::Gpu { index: 0 },
         5.0,
@@ -757,9 +757,9 @@ fn a_hinglish_model_too_slow_for_the_recording_may_still_run_at_night_and_the_ve
         d.verdict
     );
     // A model that runs during the recording needs no night pass of its own.
-    p.measurements.retain(|m| m.model != "hinglish-f16");
+    p.measurements.retain(|m| m.model != "hinglish-q8_0");
     p.measurements.push(rolling(
-        "hinglish-f16",
+        "hinglish-q8_0",
         Lang::Hi,
         DeviceConfig::Gpu { index: 0 },
         0.6,
@@ -1085,19 +1085,23 @@ fn legion_with_card(card_gib: f64, hinglish: Option<(&str, f64)>) -> Profile {
 
 #[test]
 fn a_model_is_used_on_a_discrete_card_only_if_its_peak_plus_half_a_gigabyte_fits_the_card() {
-    // f16 peaks at 4.01 GiB: with 0.5 GiB kept free it needs 4.51 GiB, so a 4 GB card cannot take it.
+    // A Hinglish cell that peaks at 4.01 GiB (the f16 file's peak; the file is no longer shipped, the memory rule is the
+    // same for any model): with 0.5 GiB kept free it needs 4.51 GiB, so a 4 GB card cannot take it.
     for (card, f16_fits) in [(4.0, false), (6.0, true), (8.0, true)] {
-        let d = decide_with(&legion_with_card(card, Some(("hinglish-f16", 4.01))), false);
+        let d = decide_with(
+            &legion_with_card(card, Some(("hinglish-q8_0", 4.01))),
+            false,
+        );
         assert_eq!(d.hinglish.ok, f16_fits, "{card} GB card: {:?}", d.hinglish);
         assert_eq!(
             d.hinglish.chosen_model(),
-            f16_fits.then_some("hinglish-f16"),
+            f16_fits.then_some("hinglish-q8_0"),
             "{card} GB card"
         );
         let says_no_fit = d
             .verdict
             .iter()
-            .any(|l| l.contains("hinglish-f16 does not fit this card's memory"));
+            .any(|l| l.contains("hinglish-q8_0 does not fit this card's memory"));
         assert_eq!(says_no_fit, !f16_fits, "{card} GB card: {:#?}", d.verdict);
     }
     // q8_0 peaks at 2.67 GiB: it fits all three (with no live model beside it).
@@ -1171,14 +1175,18 @@ fn a_pair_that_does_not_fit_the_card_is_not_chosen() {
 }
 
 #[test]
-fn the_f16_pair_is_gone_it_is_never_chosen_even_if_its_cell_is_in_the_file() {
-    // A capability file from the earlier build can hold an f16 + small cell; it is not an accepted pair any more.
+fn the_f16_model_is_gone_it_is_never_chosen_even_if_its_cell_is_in_the_file() {
+    // The STALE case (owner, 27 Nov 2026): a capability file from the earlier build can hold f16 cells, alone or with the
+    // small detector. The file is not in the manifest any more, so no cell of it is used: only ids that the system check
+    // measures and the manifest lists (`HINGLISH_MODELS`) are, and the pairs `HINGLISH_PAIRS` lists. The earlier code took
+    // any id that started with "hinglish".
     assert_eq!(HINGLISH_PAIRS, &[("hinglish-q8_0", "small-q5_0")]);
+    assert_eq!(HINGLISH_MODELS, &["hinglish-q5_0", "hinglish-q8_0"]);
     let mut p = legion_with_card(8.0, Some(("hinglish-f16", 4.01)));
     p.measurements.push(pair_cell("hinglish-f16", 0.25, 4.5));
     let d = decide_with(&p, false);
-    assert_eq!(d.hinglish.chosen_model(), Some("hinglish-f16"));
-    assert_eq!(d.hinglish.chosen_detector(), None, "{:?}", d.hinglish);
+    assert_eq!(d.hinglish.chosen_model(), None, "{:?}", d.hinglish);
+    assert_eq!(d.hinglish.night_model(), None, "{:?}", d.hinglish);
     let mut p = legion_with_card(8.0, None);
     p.measurements.push(pair_cell("hinglish-f16", 0.25, 4.5));
     assert_eq!(
@@ -1186,6 +1194,9 @@ fn the_f16_pair_is_gone_it_is_never_chosen_even_if_its_cell_is_in_the_file() {
         None,
         "an f16 pair alone gives nothing"
     );
+    // An id that merely starts with "hinglish" is not a model of the manifest either.
+    let p = legion_with_card(8.0, Some(("hinglish-new", 2.0)));
+    assert_eq!(decide_with(&p, false).hinglish.chosen_model(), None);
 }
 
 #[test]
@@ -1312,7 +1323,7 @@ fn before_measuring_a_model_is_tried_on_a_card_only_if_its_file_times_1_15_plus_
 
 #[test]
 fn a_card_whose_memory_could_not_be_read_is_not_judged() {
-    let mut p = legion_with_card(8.0, Some(("hinglish-f16", 4.01)));
+    let mut p = legion_with_card(8.0, Some(("hinglish-q8_0", 4.01)));
     for g in p.hardware.gpus.iter_mut().filter(|g| g.index == 1) {
         g.dedicated_bytes = 0;
     }

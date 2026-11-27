@@ -1732,6 +1732,35 @@ mod tests {
         );
     }
 
+    /// Owner, 27 Nov 2026: the rules accept only the Hinglish ids the manifest lists. The list in the rules, the manifest
+    /// (the file the app ships and whose hash is in the fingerprint, so a change of it makes an old `capability.json`
+    /// fall back to safe defaults: `crates/wb-capability/src/fingerprint.rs`, `inuse.rs::choose_in_use`) and the ids the
+    /// check measures must be one set. An id that is in the manifest and not in the rules (or the other way round) fails here.
+    #[test]
+    fn every_hinglish_id_of_the_manifest_is_accepted_by_the_rules_and_only_those() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("models")
+            .join("manifest.json");
+        let manifest = wb_models::Manifest::load(&path).expect("models/manifest.json loads");
+        let mut in_manifest: Vec<&str> = manifest
+            .models
+            .iter()
+            .map(|m| m.id.as_str())
+            .filter(|id| id.starts_with("hinglish"))
+            .collect();
+        in_manifest.sort_unstable();
+        let mut accepted: Vec<&str> = wb_capability::HINGLISH_MODELS.to_vec();
+        accepted.sort_unstable();
+        assert_eq!(in_manifest, accepted, "the manifest and the rules disagree");
+        assert!(
+            hinglish_candidates(true)
+                .iter()
+                .all(|c| accepted.contains(c)),
+            "the check measures only ids the rules accept"
+        );
+    }
+
     #[test]
     fn the_hybrid_gain_is_a_ratio_not_a_fraction() {
         // 1.15 means fifteen percent faster than the best single device.

@@ -1143,31 +1143,35 @@ impl Queue {
         }
     }
 
-    /// The night safety switch (owner, 26 Nov 2026). The night pass chose the Hinglish model from a plan made before any
-    /// night unit had run. Once night units have finished, this compares what the Hinglish night jobs still have to
-    /// decode, at the speed those units really ran, with 08:00 IST. If it will not finish, the night jobs that have not
-    /// started (no unit running, decoded or committed) go back to today's night models for their remaining units and the
-    /// session is marked "best finished on a faster machine". A running unit is never stopped and a session that has
-    /// started stays with the Hinglish model (it is not decoded with two models); the Queue log says what was done.
+    /// The night safety switch (owner, 26 Nov 2026; every night job since 27 Nov 2026). The night pass was planned before any
+    /// night unit had run. Once night units have finished, this compares what every night job still has to decode, at the
+    /// speed those units really ran, with 08:00 IST. If it will not finish, the jobs that have not started (no unit
+    /// running, decoded or committed) are dropped from the lowest priority upwards (English, then Urdu): no night pass, the
+    /// rolling transcript stands, and each drop is logged with its reason. If that is not enough, the Hinglish jobs that
+    /// have not started go back to today's night models and the session is marked "best finished on a faster machine". A
+    /// running unit is never stopped and a session that has started keeps its model.
     fn night_recheck(&self) {
         use wb_queue::night;
         let Some(profile) = self.profile() else {
             return;
         };
-        let Some(hinglish_model) = profile.hinglish_night_model().map(str::to_owned) else {
-            return;
-        };
         if profile.record_only {
             return;
         }
-        // Until a night unit of an English + Hindi session has finished there is nothing to learn from: the plan made
-        // with the allowance stands.
-        let Some(factor) = self.manager.night_speed_factor(true) else {
+        // Until a night unit has finished there is nothing to learn from: the plan made with the allowance stands. The
+        // slower of the two measured kinds (several languages, one language) counts: a plan that is too short is the
+        // dangerous error.
+        let Some(factor) = [true, false]
+            .into_iter()
+            .filter_map(|multi| self.manager.night_speed_factor(multi))
+            .reduce(f64::max)
+        else {
             return;
         };
+        let hinglish_model = profile.hinglish_night_model().map(str::to_owned);
         let now = clock_ms();
         let open = plock(&self.open);
-        let mut jobs: Vec<night_route::HinglishNightJob> = Vec::new();
+        let mut jobs: Vec<night_route::NightJob> = Vec::new();
         for s in open.iter() {
             let q = plock(&s.handle.queue);
             let Some(job) = q.jobs().unwrap_or_default().into_iter().find(|j| {
@@ -1175,13 +1179,11 @@ impl Queue {
             }) else {
                 continue;
             };
-            let uses_hinglish = job.models_by_lang.as_object().is_some_and(|m| {
-                m.values()
-                    .any(|v| v.as_str() == Some(hinglish_model.as_str()))
+            let hinglish = hinglish_model.as_deref().is_some_and(|model| {
+                job.models_by_lang
+                    .as_object()
+                    .is_some_and(|m| m.values().any(|v| v.as_str() == Some(model)))
             });
-            if !uses_hinglish {
-                continue;
-            }
             let started = q
                 .units(job.id)
                 .unwrap_or_default()
@@ -1189,7 +1191,7 @@ impl Queue {
                 .any(|u| u.state != UnitState::Pending);
             let remaining = q.remaining_audio_ms(job.id).unwrap_or(0);
             let mix = language_mix(&q, "post-1");
-            jobs.push(night_route::HinglishNightJob {
+            jobs.push(night_route::NightJob {
                 name: s.name.clone(),
                 languages: s.languages.clone(),
                 remaining_ms_by_lang: wb_queue::estimate::split_by_mix(
@@ -1200,16 +1202,40 @@ impl Queue {
                 .into_iter()
                 .collect(),
                 started,
+                hinglish,
+                rank: usize::try_from(
+                    job.position
+                        .saturating_sub(wb_runner::session_queue::NIGHT_RANK_BASE),
+                )
+                .unwrap_or(0),
             });
         }
         let Some(check) = night_route::recheck(&profile, now, &jobs, factor) else {
             return;
         };
         let reason = check.reason();
-        if check.switch.is_empty() {
+        for name in &check.drop {
+            let Some(s) = open.iter().find(|s| &s.name == name) else {
+                continue;
+            };
+            let why = format!(
+                "no night pass: {reason}; this session had not started and has the lowest priority left, so the rolling transcript stands"
+            );
+            let dropped = plock(&s.handle.queue).drop_unstarted_night_job(&why, now);
+            match dropped {
+                Ok(true) => self.core.push_log(format!(
+                    "night safety switch: {name} is dropped from the night ({why})"
+                )),
+                Ok(false) => {}
+                Err(e) => self.core.push_log(format!(
+                    "night safety switch: the night job of {name} could not be dropped: {e}"
+                )),
+            }
+        }
+        if check.switch.is_empty() && check.drop.is_empty() {
             if !self.night_switch_said.swap(true, Ordering::SeqCst) {
                 self.core.push_log(format!(
-                    "night safety switch: {reason}; every session has started, so none goes back to today's models"
+                    "night safety switch: {reason}; every session has started, so none is dropped or goes back to today's models"
                 ));
             }
             return;
@@ -1241,8 +1267,7 @@ impl Queue {
                     self.core.push_log(format!(
                         "night safety switch: {name} goes back to today's night models (the Hinglish night pass: {reason}); best finished on a faster machine"
                     ));
-                    let text =
-                        night::faster_machine_json(&reason, Some(hinglish_model.as_str()), now);
+                    let text = night::faster_machine_json(&reason, hinglish_model.as_deref(), now);
                     if let Err(e) = std::fs::write(s.dir.join(night::FASTER_MACHINE_FILE), text) {
                         self.core.push_log(format!(
                             "{name}: the faster-machine note could not be written: {e}"
@@ -1255,7 +1280,9 @@ impl Queue {
             }
         }
         self.core.push_log(format!(
-            "night safety switch: with today's models for the sessions not yet started the rest needs about {:.1} h (the Hinglish night pass needed {:.1} h)",
+            "night safety switch: with {} night job(s) dropped and {} session(s) back on today's models the rest needs about {:.1} h (the night needed {:.1} h)",
+            check.drop.len(),
+            check.switch.len(),
             check.needed_after_s / 3600.0,
             check.needed_s / 3600.0
         ));

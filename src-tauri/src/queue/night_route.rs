@@ -96,9 +96,10 @@ pub fn decide(
         },
         all_or_nothing: true,
     };
-    // Priority 2: Urdu (and Hindi) sessions with the large model; priority 3: English sessions with it. A session that
-    // took the Hinglish night is not planned again; one that did not keeps today's models and competes here.
-    let class_of = |s: &NightSession| usize::from(!has_urdu_or_hindi(&s.languages));
+    // Priority 2: Urdu sessions with the large model; priority 3: English sessions with it (the large model is no night
+    // model for Hindi). A session that took the Hinglish night is not planned again; one that did not keeps today's models
+    // and competes here.
+    let class_of = |s: &NightSession| usize::from(!has_urdu(&s.languages));
     let by_class = |class: usize| Tier {
         sessions: sessions
             .iter()
@@ -141,7 +142,7 @@ pub fn decide(
         .filter(|s| profile.lacks_hinglish(&s.languages) && !hinglish.contains(&s.name))
         .map(|s| (s.name.clone(), why_not.clone()))
         .collect();
-    // What the priorities left out (the large model's night for Urdu, Hindi or English sessions): no night job, the
+    // What the priorities left out (the large model's night for Urdu or English sessions): no night job, the
     // rolling transcript stands, and the reason is written down.
     let dropped = tiered
         .dropped
@@ -164,7 +165,7 @@ pub fn decide(
             Some((
                 s.name.clone(),
                 format!(
-                    "no night pass with {}: it would need about {:.1} h and only {:.1} h are left before 08:00 IST after the work with higher priority (Hinglish redos first, then Urdu and Hindi sessions, then English); the rolling transcript made with {} stands",
+                    "no night pass with {}: it would need about {:.1} h and only {:.1} h are left before 08:00 IST after the work with higher priority (Hinglish redos of English + Hindi and Hindi sessions first, then Urdu sessions, then English); the rolling transcript made with {} stands",
                     night.into_iter().collect::<Vec<_>>().join(" and "),
                     d.needed_s / 3600.0,
                     d.left_s / 3600.0,
@@ -181,10 +182,10 @@ pub fn decide(
     }
 }
 
-/// Urdu and Hindi sessions have the second priority (the large model's night for them gains 1 to 1.6 WER points for Urdu
-/// and is the only night model Hindi has); English-only sessions the third (0.5 to 0.6 points, at about twice the time).
-fn has_urdu_or_hindi(languages: &[String]) -> bool {
-    languages.iter().any(|l| l == "ur" || l == "hi")
+/// Sessions with Urdu have the second priority (the large model's night gains 1.0 to 1.6 WER points for Urdu); the rest
+/// the third (English: 0.5 to 0.6 points, at 1.6 to 1.9 times the time). Hindi is not here: the Hinglish redo is its night.
+fn has_urdu(languages: &[String]) -> bool {
+    languages.iter().any(|l| l == "ur")
 }
 
 /// What becomes of a session whose units were decoded on the processor without the Hinglish model after a graphics
@@ -241,9 +242,9 @@ pub fn project_redo(
     }
 }
 
-/// A night job decoding an English + Hindi session with the Hinglish model, as the re-check sees it.
+/// A night job as the re-check sees it: any night job, with the Hinglish model or with the large model.
 #[derive(Debug, Clone, PartialEq)]
-pub struct HinglishNightJob {
+pub struct NightJob {
     pub name: String,
     pub languages: Vec<String>,
     /// The audio the job has left to decode, per language.
@@ -251,19 +252,28 @@ pub struct HinglishNightJob {
     /// A unit of the job has started or committed: the job stays as it is (a running unit is never stopped, and a
     /// session is not decoded with two models).
     pub started: bool,
+    /// The job decodes with the Hinglish model (priority 1); the others use the large model of their language.
+    pub hinglish: bool,
+    /// The job's place in the plan's priority order (0 first): the night runs in this order and the re-check drops from
+    /// the end.
+    pub rank: usize,
 }
 
 /// What the night safety switch found.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Recheck {
-    /// Seconds the Hinglish night jobs still need at the speed the night's own units showed.
+    /// Seconds the night jobs still need at the speed the night's own units showed.
     pub needed_s: f64,
     pub finish_ms: u64,
     pub deadline_ms: u64,
-    /// The sessions whose night job has not started: they go back to today's models and are marked.
+    /// The sessions whose night job has not started and is dropped, lowest priority first: no night pass, the rolling
+    /// transcript stands.
+    pub drop: Vec<String>,
+    /// The Hinglish sessions whose night job has not started and goes back to today's models (only when dropping the other
+    /// jobs was not enough): they are marked.
     pub switch: Vec<String>,
-    /// Seconds the work still needs once those sessions use today's models (the sessions that keep Hinglish at
-    /// the Hinglish speed, the others at today's night speed, all at the measured factor).
+    /// Seconds the work still needs once the dropped jobs are gone and the switched ones use today's models (the sessions
+    /// that keep their model at its own speed, all at the measured factor).
     pub needed_after_s: f64,
 }
 
@@ -271,27 +281,31 @@ impl Recheck {
     /// The reason written in the Queue log and in `faster-machine.json`.
     pub fn reason(&self) -> String {
         format!(
-            "the night ran slower than planned: the Hinglish night pass needs about {:.1} h more at the speed the first night units showed and would end at {} IST, after 08:00 IST",
+            "the night ran slower than planned: the night pass needs about {:.1} h more at the speed the first night units showed and would end at {} IST, after 08:00 IST",
             self.needed_s / 3600.0,
             wb_queue::estimate::format_ist_hhmm(self.finish_ms)
         )
     }
 }
 
-/// The night safety switch. After the first night units of the night have finished, `night_factor` is how much slower
-/// (above 1) or faster than the profile this computer really ran them. If the Hinglish night jobs that are left will
-/// not finish before 08:00 IST at that speed, the sessions that have not started go back to today's models.
-/// None when the Hinglish night still finishes in time, or when no Hinglish job is left.
+/// The night safety switch (owner, 26 Nov 2026, extended to every night job on 27 Nov 2026). After the first night units of
+/// the night have finished, `night_factor` is how much slower (above 1) or faster than the profile this computer really ran
+/// them. If the night jobs that are left will not finish before 08:00 IST at that speed:
+/// 1. the jobs that have not started are dropped from the lowest priority upwards (English, then Urdu; within a priority the
+///    later in the plan first) until the rest finishes, and the rolling transcripts stand;
+/// 2. if that is not enough, the Hinglish jobs that have not started go back to today's models.
+///
+/// A job that has started is never touched. None when the night still finishes in time, or when no job is left.
 pub fn recheck(
     profile: &ProfileView,
     now_ms: u64,
-    jobs: &[HinglishNightJob],
+    jobs: &[NightJob],
     night_factor: f64,
 ) -> Option<Recheck> {
     if jobs.is_empty() {
         return None;
     }
-    let seconds = |rtf: &BTreeMap<String, f64>, j: &HinglishNightJob| -> f64 {
+    let seconds = |rtf: &BTreeMap<String, f64>, j: &NightJob| -> f64 {
         let slowest = rtf.values().copied().fold(1.0, f64::max);
         j.remaining_ms_by_lang
             .iter()
@@ -301,29 +315,49 @@ pub fn recheck(
             })
             .sum()
     };
-    let hinglish_s = |j: &HinglishNightJob| seconds(&profile.hinglish_night_rtf(&j.languages), j);
-    let today_s = |j: &HinglishNightJob| seconds(&profile.night_decode_rtf(&j.languages), j);
-    let needed_s: f64 = jobs.iter().map(hinglish_s).sum();
+    let hinglish_s = |j: &NightJob| seconds(&profile.hinglish_night_rtf(&j.languages), j);
+    let today_s = |j: &NightJob| seconds(&profile.night_decode_rtf(&j.languages), j);
+    let own_s = |j: &NightJob| {
+        if j.hinglish {
+            hinglish_s(j)
+        } else {
+            today_s(j)
+        }
+    };
+    let needed_s: f64 = jobs.iter().map(own_s).sum();
     let deadline = night::deadline_ms(now_ms);
-    let finish_ms = now_ms.saturating_add((needed_s * 1000.0).round() as u64);
+    let finish_of = |s: f64| now_ms.saturating_add((s * 1000.0).round() as u64);
+    let finish_ms = finish_of(needed_s);
     if finish_ms <= deadline {
         return None;
     }
-    let switch: Vec<String> = jobs
-        .iter()
-        .filter(|j| !j.started)
-        .map(|j| j.name.clone())
-        .collect();
-    let needed_after_s: f64 = jobs
-        .iter()
-        .map(|j| if j.started { hinglish_s(j) } else { today_s(j) })
-        .sum();
+    let mut left = needed_s;
+    // Step 1: drop the jobs that have not started and are not Hinglish jobs, the lowest priority first.
+    let mut droppable: Vec<&NightJob> = jobs.iter().filter(|j| !j.started && !j.hinglish).collect();
+    droppable.sort_by_key(|j| std::cmp::Reverse(j.rank));
+    let mut drop = Vec::new();
+    for j in droppable {
+        if finish_of(left) <= deadline {
+            break;
+        }
+        left -= own_s(j);
+        drop.push(j.name.clone());
+    }
+    // Step 2: the Hinglish jobs that have not started go back to today's models when that is still not enough.
+    let mut switch = Vec::new();
+    if finish_of(left) > deadline {
+        for j in jobs.iter().filter(|j| !j.started && j.hinglish) {
+            left += today_s(j) - hinglish_s(j);
+            switch.push(j.name.clone());
+        }
+    }
     Some(Recheck {
         needed_s,
         finish_ms,
         deadline_ms: deadline,
+        drop,
         switch,
-        needed_after_s,
+        needed_after_s: left,
     })
 }
 
@@ -510,8 +544,8 @@ mod tests {
         );
     }
 
-    fn hinglish_job(name: &str, started: bool, en_min: u64, hi_min: u64) -> HinglishNightJob {
-        HinglishNightJob {
+    fn hinglish_job(name: &str, started: bool, en_min: u64, hi_min: u64) -> NightJob {
+        NightJob {
             name: name.into(),
             languages: vec!["en".into(), "hi".into()],
             remaining_ms_by_lang: BTreeMap::from([
@@ -519,6 +553,8 @@ mod tests {
                 ("hi".to_owned(), hi_min * 60_000),
             ]),
             started,
+            hinglish: true,
+            rank: 0,
         }
     }
 
@@ -555,6 +591,76 @@ mod tests {
         let r = recheck(&p, six_pm(), &jobs, 4.0).expect("slower than the night allows");
         assert!(r.switch.is_empty(), "{:?}", r.switch);
         assert_eq!(recheck(&p, six_pm(), &[], 4.0), None);
+    }
+
+    fn large_job(name: &str, lang: &str, started: bool, minutes: u64, rank: usize) -> NightJob {
+        NightJob {
+            name: name.into(),
+            languages: vec![lang.into()],
+            remaining_ms_by_lang: BTreeMap::from([(lang.to_owned(), minutes * 60_000)]),
+            started,
+            hinglish: false,
+            rank,
+        }
+    }
+
+    /// Owner, 27 Nov 2026: the safety switch covers every night job. A night that runs slower than planned drops the jobs that
+    /// have not started from the lowest priority upwards (English before Urdu) and only as many as the 08:00 deadline needs;
+    /// the Hinglish jobs and every job that has started stay. On the earlier code only the Hinglish jobs were looked at, so a
+    /// night of large-model jobs was never checked.
+    #[test]
+    fn a_slow_night_drops_the_lowest_priority_jobs_that_have_not_started_and_only_as_many_as_it_needs()
+     {
+        let p = with_large_night(profile(true, 1.69, false));
+        // At the measured factor 1.5 the large model runs 0.9 times real time: Urdu 4 h (3.6 h), English 4 h (3.6 h), second
+        // English 4 h (3.6 h) and a Hinglish job (1.5 h of each language: about 3.9 h at that factor), 14.7 h > 14 h.
+        let jobs = [
+            hinglish_job("hall-a", false, 90, 90),
+            large_job("urdu-hall", "ur", false, 240, 1),
+            large_job("english-one", "en", false, 240, 2),
+            large_job("english-two", "en", false, 240, 3),
+        ];
+        let r = recheck(&p, six_pm(), &jobs, 1.5).expect("the night does not finish by 08:00");
+        assert_eq!(r.drop, vec!["english-two".to_string()], "{r:?}");
+        assert!(r.switch.is_empty(), "{r:?}");
+        assert!(r.needed_after_s < r.needed_s);
+        assert!(r.reason().contains("after 08:00 IST"), "{}", r.reason());
+        // Slower still: English goes, then Urdu, in that order, and the Hinglish redo stays while that is enough.
+        let r = recheck(&p, six_pm(), &jobs, 3.0).expect("slower still");
+        assert_eq!(
+            r.drop,
+            vec![
+                "english-two".to_string(),
+                "english-one".to_string(),
+                "urdu-hall".to_string()
+            ],
+            "{r:?}"
+        );
+        assert!(r.switch.is_empty(), "{r:?}");
+        // On time: nothing is dropped.
+        assert_eq!(recheck(&p, six_pm(), &jobs, 1.0), None);
+    }
+
+    #[test]
+    fn a_job_that_has_started_is_never_dropped_and_the_hinglish_jobs_go_back_only_when_dropping_is_not_enough()
+     {
+        let p = with_large_night(profile(true, 1.69, false));
+        let jobs = [
+            hinglish_job("hall-a", false, 120, 120),
+            large_job("english-started", "en", true, 240, 1),
+            large_job("english-two", "en", false, 240, 2),
+        ];
+        let r = recheck(&p, six_pm(), &jobs, 2.4).expect("far too slow");
+        assert_eq!(r.drop, vec!["english-two".to_string()], "{r:?}");
+        assert!(!r.drop.contains(&"english-started".to_string()));
+        assert_eq!(r.switch, vec!["hall-a".to_string()], "{r:?}");
+        // Every job has started: nothing to drop or switch.
+        let started = [
+            hinglish_job("hall-a", true, 120, 120),
+            large_job("english-started", "en", true, 240, 1),
+        ];
+        let r = recheck(&p, six_pm(), &started, 4.0).expect("far too slow");
+        assert!(r.drop.is_empty() && r.switch.is_empty(), "{r:?}");
     }
 
     /// The night allowance reaches the Hinglish decision: three sessions that the earlier graphics-adapter allowance (1.25:
@@ -671,6 +777,42 @@ mod tests {
         assert_eq!(sessions, &["hall-a", "urdu-hall"]);
         assert_eq!(d.dropped.len(), 1);
         assert_eq!(d.dropped[0].0, "english-hall");
+    }
+
+    /// A session in Hindi alone takes the Hinglish night with the English + Hindi ones (owner, 27 Nov 2026): priority 1, the
+    /// Hinglish model's speed, and never the large model. On the earlier wiring it competed in the Urdu and Hindi tier with
+    /// large-v3 q5_0 and was not a Hinglish session at all.
+    #[test]
+    fn a_hindi_only_session_takes_the_hinglish_night_in_the_first_priority() {
+        let p = with_large_night(profile(true, 1.69, false));
+        let sessions = [
+            one_language("urdu-hall", "ur", 90),
+            one_language("hindi-hall", "hi", 90),
+        ];
+        let d = decide(&p, six_pm(), &sessions, 1.25);
+        assert_eq!(d.routed.route, Route::Hinglish, "{d:?}");
+        assert!(d.hinglish.contains("hindi-hall"), "{:?}", d.hinglish);
+        let Plan::Run {
+            sessions: order, ..
+        } = &d.routed.plan
+        else {
+            panic!("{d:?}")
+        };
+        assert_eq!(
+            order,
+            &["hindi-hall", "urdu-hall"],
+            "Hindi first, then Urdu"
+        );
+        assert!(d.marks.is_empty(), "{:?}", d.marks);
+        // Too slow for the night: the session is marked for a faster machine instead of being given the large model.
+        let slow = with_large_night(profile(true, 30.0, false));
+        let d = decide(&slow, six_pm(), &sessions, 1.25);
+        assert!(d.hinglish.is_empty());
+        assert!(
+            d.marks.iter().any(|(n, _)| n == "hindi-hall"),
+            "{:?}",
+            d.marks
+        );
     }
 
     /// A Hinglish class that cannot finish is dropped whole (as before) and the large-model sessions then use the night.

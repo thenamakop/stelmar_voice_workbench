@@ -108,7 +108,7 @@ the non-quantised small model scored 5.4 on 20 FLEURS clips in Phase 3 with roll
 | Near-live (Phase 7) | small | Hinglish q8_0 only where it measures at most 0.35 RTF there, short clips included; turbo, medium, small rejected for Hindi | turbo q5_0 (medium has truncated chunks) |
 
 Night priority order (night time is the scarcest resource; `wb_queue::night::plan_tiered`): 1 Hinglish redos of English + Hindi
-sessions, 2 Urdu and Hindi sessions with large-v3, 3 English sessions with large-v3, each only if everything above still finishes by 08:00
+and Hindi-only sessions, 2 Urdu sessions with large-v3, 3 English sessions with large-v3, each only if everything above still finishes by 08:00
 IST with the 1.5 allowance; what does not fit keeps its rolling transcript and the Queue log says why. The night speed of large-v3 q5_0
 on the laptops is still to be measured (the system check measures it; the gate pack records it).
 
@@ -119,7 +119,7 @@ on the laptops is still to be measured (the system check measures it; the gate p
 * Hinglish on Urdu speech: not run (the model writes Devanagari and is not an Urdu candidate).
 * First-word latency and revised-segment share for live: Phase 7.
 * Medium and small at full precision (the f16 files `medium` and `small` that the manifest ranks) for English and Urdu: not run; this report measured the q5_0 files (`medium-q5_0`, `small-q5_0`), and the PLAN rule "q5_0 only if within 1 WER point of q8_0" was not checked for large-v3 or turbo (no q8_0 file exists for either).
-* Hindi-only sessions: their night model is large-v3 q5_0 (WER 27.9 on Kathbath, 33.2 on FLEURS-hi, Phase 3), far behind Hinglish q8_0 (11.4 on Kathbath); the Hinglish night redo applies only to English + Hindi sessions. Whether Hindi-only sessions should use the Hinglish model at night is the owner's decision.
+* Hindi-only sessions (owner, 27 Nov 2026): Hinglish q8_0 is their rolling model where it meets the rolling bar on the machine and their night model (priority 1, with the English + Hindi redos) where it only fits the night, because large-v3 q5_0 is far behind it on Hindi (WER 27.9 on Kathbath, 33.2 on FLEURS-hi, Phase 3, against 11.4 on Kathbath). Large-v3 q5_0 stays Hindi's night rank in the manifest only as the fallback of a machine without a measured Hinglish model.
 * The committed `models/manifest.json` is generated from the git-ignored `models/manifest.local.json` (including its night and live ranks); it still ranks turbo first for Hindi live, which section 3 does not support (harmless while `validated_roles` is empty).
 
 ## 8. Sources and licences

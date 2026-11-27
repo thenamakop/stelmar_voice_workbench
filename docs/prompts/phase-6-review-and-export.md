@@ -14,6 +14,13 @@ A Sessions screen seeded from the STELMAR programme, a Review editor synced with
 5. Export dialog (DS `Dialog` with a `Checkbox` per format and a destination picker); exports also land in the session's `exports/` folder.
 6. Archive: zip a session or a whole day (audio parts, `parts.json`, JSONL revisions, `transcript.db`, exports, `session.json`, `manifest.sha256`), then verify every hash after writing. The Phase 4 import accepts an unpacked archive.
 7. Backup check: compare primary and mirror trees by SHA-256 and show differences on the Settings screen.
+8. Carried over from the Phase 5 design review (owner, 27 Nov 2026), done with the Sessions screen:
+   - **Wire `initialLanguages` of `StartSessionDialog`.** The prop exists (Phase 5, groundwork) and nothing passes it: the Record screen has no programme entry, so an Urdu session would still open on English + Hindi in Devanagari. The Sessions screen opens the dialog from a programme row and passes that row's languages and script. Test: a row listed in Urdu opens the dialog with Urdu selected.
+   - A second like-for-like 1536x864 screenshot of the Start Session dialog, opened from a Sessions row, beside its mockup.
+   - The Speed row in the Transcription card wraps: keep it on one line at 1536x864.
+   - Counts on the Transcript and Bookmarks tabs, as in the mockup.
+   - Font sizes 17 and 19 px are not in `design/tokens/typography.css`: use the token sizes (the token files are frozen; ask before adding one).
+   - Copy: write "needs 1.00×" as the mockup does, and say the "FASTER" sentence once.
 
 ## Verification
 - End to end (Rust integration tests plus Playwright with `mockIPC`): record, rolling pass, night pass, edit, restart; edits and revisions are intact.
