@@ -21,16 +21,16 @@ Local code-switched set: CoSHE-Eval (CC BY-NC 4.0, evaluation only, never commit
 (`eval/clips/phase5-coshe-heldout.txt`). Rule d2 = the Hinglish model for every chunk; the "pair" rows use a smaller model as the language detector in front of the Hinglish model. Sources: `docs/evidence/phase-5/tune-comparison.txt`,
 `tune-*.txt`, `heldout-error-kinds.txt`, `eval/results/TABLES.md`.
 
-| Setup (rolling settings, language detected) | Tuning WER | CER | English words written in Devanagari | Chunk language correct (of 339) | Translated chunks |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| turbo q5_0 alone (rule a) | 33.0 | 23.6 | 2.9 | 284 | 48 |
-| turbo q5_0 alone (rule c, decode both ways) | 31.0 | 22.8 | 11.0 | 298 | 8 |
-| Hinglish f16 (rule d2: the model for every chunk) | 17.1 | 12.6 | 11.8 | 263 | 0 |
-| Hinglish q8_0 (d2) | 17.7 | 13.2 | 12.5 | 262 | 0 |
-| Hinglish q5_0 (d2) | 17.0 | 12.5 | 11.8 | 260 | 0 |
-| turbo q5_0 detector + Hinglish q8_0 | 28.0 | 20.7 | 1.0 | 286 | 46 |
-| small q5_0 detector + Hinglish f16 (the 6 and 8 GB card pair) | 15.9 | 11.6 | 6.3 | 282 | 0 |
-| small q5_0 detector + Hinglish q8_0 (the 4 GB card pair) | 16.0 | 11.6 | 6.3 | 282 | 0 |
+| Setup (rolling settings, language detected)                   | Tuning WER |  CER | English words written in Devanagari | Chunk language correct (of 339) | Translated chunks |
+| ------------------------------------------------------------- | ---------: | ---: | ----------------------------------: | ------------------------------: | ----------------: |
+| turbo q5_0 alone (rule a)                                     |       33.0 | 23.6 |                                 2.9 |                             284 |                48 |
+| turbo q5_0 alone (rule c, decode both ways)                   |       31.0 | 22.8 |                                11.0 |                             298 |                 8 |
+| Hinglish f16 (rule d2: the model for every chunk)             |       17.1 | 12.6 |                                11.8 |                             263 |                 0 |
+| Hinglish q8_0 (d2)                                            |       17.7 | 13.2 |                                12.5 |                             262 |                 0 |
+| Hinglish q5_0 (d2)                                            |       17.0 | 12.5 |                                11.8 |                             260 |                 0 |
+| turbo q5_0 detector + Hinglish q8_0                           |       28.0 | 20.7 |                                 1.0 |                             286 |                46 |
+| small q5_0 detector + Hinglish f16 (the 6 and 8 GB card pair) |       15.9 | 11.6 |                                 6.3 |                             282 |                 0 |
+| small q5_0 detector + Hinglish q8_0 (the 4 GB card pair)      |       16.0 | 11.6 |                                 6.3 |                             282 |                 0 |
 
 Chunk language is information only (owner, 27 Nov 2026): what the gate counts is translated chunks and WER. Rule d1 (Hinglish f16 with the
 default first-chunk rule) scored WER 38.3 and is out.
@@ -50,13 +50,13 @@ Night speed of the Hinglish files on a computer without a discrete card (`night-
 
 FLEURS hi test (418 clips) and Kathbath hi (100 clips), rolling settings, language given (`item8-live-accuracy.txt`):
 
-| Model | FLEURS hi WER | Kathbath hi WER | near-live WER (FLEURS / Kathbath) | near-live RTF (Legion card) |
-| --- | ---: | ---: | --- | ---: |
-| Hinglish q8_0 | 14.0 (not independent: the starting checkpoint may have seen FLEURS) | 11.4 | 14.1 / 10.5 | 0.30 / 0.45 |
-| large-v3 q5_0 (the Hindi night model, Phase 3, rolling, 20 FLEURS and 100 Kathbath clips) | 33.2 | 27.9 | not run | not run |
-| turbo q5_0 | 31.0 | 31.8 | 31.4 / 32.6 | 0.11 / 0.19 |
-| medium q5_0 | 39.2 | 41.7 | 42.8 / 43.6 | 0.20 / 0.26 |
-| small q5_0 | 56.6 | 59.9 | 65.9 / 65.0 | 0.18 / 0.22 |
+| Model                                                                                     |                                                        FLEURS hi WER | Kathbath hi WER | near-live WER (FLEURS / Kathbath) | near-live RTF (Legion card) |
+| ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------: | --------------: | --------------------------------- | --------------------------: |
+| Hinglish q8_0                                                                             | 14.0 (not independent: the starting checkpoint may have seen FLEURS) |            11.4 | 14.1 / 10.5                       |                 0.30 / 0.45 |
+| large-v3 q5_0 (the Hindi night model, Phase 3, rolling, 20 FLEURS and 100 Kathbath clips) |                                                                 33.2 |            27.9 | not run                           |                     not run |
+| turbo q5_0                                                                                |                                                                 31.0 |            31.8 | 31.4 / 32.6                       |                 0.11 / 0.19 |
+| medium q5_0                                                                               |                                                                 39.2 |            41.7 | 42.8 / 43.6                       |                 0.20 / 0.26 |
+| small q5_0                                                                                |                                                                 56.6 |            59.9 | 65.9 / 65.0                       |                 0.18 / 0.22 |
 
 Near-live bar (at most 1.5 times the best rolling WER on the same clips, RTF at most 0.35, no truncated near-live utterance): met by the
 Hinglish model on accuracy (ratio 1.00 and 0.92; only the Kathbath figures are independent) and on speed for FLEURS (0.30) but not on the
@@ -70,12 +70,12 @@ not supported by the local measurement. Not measured: first-word latency and the
 FLEURS ur (299 clips) and Kathbath ur (100 clips), rolling settings, language given (`item10-english-urdu.txt`, `item8-live-accuracy.txt`).
 The output script is Urdu Nastaliq (wrong-script rate 0.0 to 0.1% for every model).
 
-| Model | FLEURS ur WER / CER | Kathbath ur WER / CER | RTF (Legion card, FLEURS) |
-| --- | --- | --- | ---: |
-| large-v3 q5_0 | 20.7 / 7.3 | 19.6 / 5.6 | 0.268 |
-| turbo q5_0 | 22.3 / 7.7 | 20.6 / 6.0 | 0.138 |
-| medium q5_0 | 27.9 / 9.7 | 26.5 / 8.3 | 0.201 |
-| small q5_0 | 38.5 / 14.5 | 34.3 / 11.2 | 0.128 |
+| Model         | FLEURS ur WER / CER | Kathbath ur WER / CER | RTF (Legion card, FLEURS) |
+| ------------- | ------------------- | --------------------- | ------------------------: |
+| large-v3 q5_0 | 20.7 / 7.3          | 19.6 / 5.6            |                     0.268 |
+| turbo q5_0    | 22.3 / 7.7          | 20.6 / 6.0            |                     0.138 |
+| medium q5_0   | 27.9 / 9.7          | 26.5 / 8.3            |                     0.201 |
+| small q5_0    | 38.5 / 14.5         | 34.3 / 11.2           |                     0.128 |
 
 Night: large-v3 q5_0 has the lowest WER (1.6 and 1.0 points under turbo). Rolling: turbo q5_0 is the next best and about twice as fast
 on the card; whether large-v3 q5_0 keeps up on the low-baseline laptop is a speed question for the laptops. Near-live: turbo
@@ -88,12 +88,12 @@ A Hindi and Urdu "one spoken language" session writes Devanagari by default (doc
 
 FLEURS en (200-clip spread) and Svarah accented English (150-clip spread), rolling settings, language given (`item10-english-urdu.txt`):
 
-| Model | FLEURS en WER | Svarah WER | RTF (Legion card, FLEURS) |
-| --- | ---: | ---: | ---: |
-| large-v3 q5_0 | 4.7 | 7.1 | 0.186 |
-| medium q5_0 | 4.9 | 7.3 | 0.132 |
-| turbo q5_0 | 5.2 | 7.7 | 0.114 |
-| small q5_0 | 6.5 | 9.5 | 0.088 |
+| Model         | FLEURS en WER | Svarah WER | RTF (Legion card, FLEURS) |
+| ------------- | ------------: | ---------: | ------------------------: |
+| large-v3 q5_0 |           4.7 |        7.1 |                     0.186 |
+| medium q5_0   |           4.9 |        7.3 |                     0.132 |
+| turbo q5_0    |           5.2 |        7.7 |                     0.114 |
+| small q5_0    |           6.5 |        9.5 |                     0.088 |
 
 The first three are within 0.5 FLEURS and 0.6 Svarah WER points of each other. Small is 1.3 to 1.8 points behind turbo, which is under
 the 3-point limit the owner set for choosing it on speed in a pure English session. The English near-live model is small (FLEURS
@@ -101,11 +101,11 @@ the non-quantised small model scored 5.4 on 20 FLEURS clips in Phase 3 with roll
 
 ## 6. Choices (owner's decisions of 27 Nov 2026 where marked; the rest provisional)
 
-| Role | English only | English + Hindi | Urdu (with or without English) |
-| --- | --- | --- | --- |
-| Rolling | turbo q5_0 (rank 1; large-v3 q5_0 is 0.5 points better and 1.6 to 1.9 times as slow on the Legion card) | Hinglish pair chosen by the system check (small q5_0 detector + Hinglish q8_0, measured on the machine) | turbo q5_0 |
-| Night | large-v3 q5_0, third priority (manifest night rank 1, approved) | Hinglish q8_0 redo, first priority (option A: q8_0 everywhere, f16 dropped) | large-v3 q5_0, second priority (approved) |
-| Near-live (Phase 7) | small | Hinglish q8_0 only where it measures at most 0.35 RTF there, short clips included; turbo, medium, small rejected for Hindi | turbo q5_0 (medium has truncated chunks) |
+| Role                | English only                                                                                            | English + Hindi                                                                                                            | Urdu (with or without English)            |
+| ------------------- | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| Rolling             | turbo q5_0 (rank 1; large-v3 q5_0 is 0.5 points better and 1.6 to 1.9 times as slow on the Legion card) | Hinglish pair chosen by the system check (small q5_0 detector + Hinglish q8_0, measured on the machine)                    | turbo q5_0                                |
+| Night               | large-v3 q5_0, third priority (manifest night rank 1, approved)                                         | Hinglish q8_0 redo, first priority (option A: q8_0 everywhere, f16 dropped)                                                | large-v3 q5_0, second priority (approved) |
+| Near-live (Phase 7) | small                                                                                                   | Hinglish q8_0 only where it measures at most 0.35 RTF there, short clips included; turbo, medium, small rejected for Hindi | turbo q5_0 (medium has truncated chunks)  |
 
 Night priority order (night time is the scarcest resource; `wb_queue::night::plan_tiered`): 1 Hinglish redos of English + Hindi
 and Hindi-only sessions, 2 Urdu sessions with large-v3, 3 English sessions with large-v3, each only if everything above still finishes by 08:00
@@ -114,13 +114,13 @@ on the laptops is still to be measured (the system check measures it; the gate p
 
 ## 7. Not measured, and why
 
-* Speed on the room laptops and the final speed gates: the laptops are not here yet (docs/GATES.md, gate pack).
-* The local STELMAR sets (L0 to L6): recorded by the owner; no ear-check marks or local WER yet.
-* Hinglish on Urdu speech: not run (the model writes Devanagari and is not an Urdu candidate).
-* First-word latency and revised-segment share for live: Phase 7.
-* Medium and small at full precision (the f16 files `medium` and `small` that the manifest ranks) for English and Urdu: not run; this report measured the q5_0 files (`medium-q5_0`, `small-q5_0`), and the PLAN rule "q5_0 only if within 1 WER point of q8_0" was not checked for large-v3 or turbo (no q8_0 file exists for either).
-* Hindi-only sessions (owner, 27 Nov 2026): Hinglish q8_0 is their rolling model where it meets the rolling bar on the machine and their night model (priority 1, with the English + Hindi redos) where it only fits the night, because large-v3 q5_0 is far behind it on Hindi (WER 27.9 on Kathbath, 33.2 on FLEURS-hi, Phase 3, against 11.4 on Kathbath). Large-v3 q5_0 stays Hindi's night rank in the manifest only as the fallback of a machine without a measured Hinglish model.
-* The committed `models/manifest.json` is generated from the git-ignored `models/manifest.local.json` (including its night and live ranks); it still ranks turbo first for Hindi live, which section 3 does not support (harmless while `validated_roles` is empty).
+- Speed on the room laptops and the final speed gates: the laptops are not here yet (docs/GATES.md, gate pack).
+- The local STELMAR sets (L0 to L6): recorded by the owner; no ear-check marks or local WER yet.
+- Hinglish on Urdu speech: not run (the model writes Devanagari and is not an Urdu candidate).
+- First-word latency and revised-segment share for live: Phase 7.
+- Medium and small at full precision (the f16 files `medium` and `small` that the manifest ranks) for English and Urdu: not run; this report measured the q5_0 files (`medium-q5_0`, `small-q5_0`), and the PLAN rule "q5_0 only if within 1 WER point of q8_0" was not checked for large-v3 or turbo (no q8_0 file exists for either).
+- Hindi-only sessions (owner, 27 Nov 2026): Hinglish q8_0 is their rolling model where it meets the rolling bar on the machine and their night model (priority 1, with the English + Hindi redos) where it only fits the night, because large-v3 q5_0 is far behind it on Hindi (WER 27.9 on Kathbath, 33.2 on FLEURS-hi, Phase 3, against 11.4 on Kathbath). Large-v3 q5_0 stays Hindi's night rank in the manifest only as the fallback of a machine without a measured Hinglish model.
+- The committed `models/manifest.json` is generated from the git-ignored `models/manifest.local.json` (including its night and live ranks); it still ranks turbo first for Hindi live, which section 3 does not support (harmless while `validated_roles` is empty).
 
 ## 8. Sources and licences
 

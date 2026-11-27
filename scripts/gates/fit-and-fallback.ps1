@@ -120,9 +120,10 @@ foreach ($x in @(@('avx2-exp', 'avx2'), @('vulkan-exp', 'vulkan'))) {
   $src = Join-Path $ExpDir "wb-engine-$($x[1])-lang-experiments-$triple.exe"
   if (Test-Path $src) { $eng[$x[0]] = Copy-Engine $src "wb-engine-fit-$($x[1])-exp" }
 }
-$driver = (& nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>$null | Select-Object -First 1)
+# The native command goes through Invoke-WbNative: a gate script never redirects a native command's stderr itself (GateRun.Tests.ps1).
+$driver = (@((Invoke-WbNative -FilePath 'nvidia-smi' -ArgumentList @('--query-gpu=driver_version', '--format=csv,noheader')).Output) | Select-Object -First 1)
 
-function Get-VramMiB { [int]((& nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits 2>$null | Select-Object -First 1).Trim()) }
+function Get-VramMiB { [int](@((Invoke-WbNative -FilePath 'nvidia-smi' -ArgumentList @('--query-gpu=memory.used', '--format=csv,noheader,nounits')).Output) | Select-Object -First 1).Trim() }
 
 # Runs one engine process (optionally under wb-emulate) and samples memory; returns the parsed run.
 function Invoke-Run([string]$Profile, [hashtable]$E, [string[]]$EngineArgs, [hashtable]$Env = @{}, [switch]$Vram) {
