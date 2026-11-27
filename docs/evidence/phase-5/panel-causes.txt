@@ -1,0 +1,32 @@
+Error causes of 'Panel' in day-emu-low-20261121-052323 (Phase 5, item 3). Numbers only; written by eval/panel_causes.py.
+revision file: post-1; utterances 532; session tags: Hindi speech expected as 'ur'
+
+BLOCKS  utterance windows, current normaliser (eval/normalize.py); S D I are word errors
+  fleurs-hi: 224 utterances, reference words 5670, S5460 D195 I468 = 6123 errors, WER 108.0%
+  kathbath-ur: 81 utterances, reference words 897, S194 D123 I71 = 388 errors, WER 43.3%
+  svarah: 227 utterances, reference words 3096, S117 D505 I163 = 785 errors, WER 25.4%
+  all blocks: 7296 errors over 9663 reference words = 75.5% (utterance windows count insertions between utterances too, so this differs from the whole-text WER)
+
+SCRIPT  what the hypothesis is written in, against the script of the reference
+  fleurs-hi: reference script devanagari; hypothesis words in the reference's script 0 of 5943 (0%); by script {'arabic': 5511, 'latin': 412, 'digit': 20}  -> SCRIPT MISMATCH: no word can match
+  kathbath-ur: reference script arabic; hypothesis words in the reference's script 828 of 845 (98%); by script {'arabic': 828, 'latin': 17}
+  svarah: reference script latin; hypothesis words in the reference's script 2705 of 2754 (98%); by script {'latin': 2705, 'digit': 40, 'arabic': 9}
+
+DETECTION  utterances whose segments are mostly tagged with another language than the session's
+  fleurs-hi (session tag ur): 19 of 224 utterances
+  kathbath-ur (session tag ur): 2 of 81 utterances
+  svarah (session tag en): 2 of 227 utterances
+
+INDICATIVE SCRIPT-INDEPENDENT SCORE  consonant skeleton on both sides
+  fleurs-hi: skeleton WER 33.4% over 5670 reference words (current-normaliser WER 108.0%)
+  kathbath-ur: skeleton WER 32.9% over 897 reference words (current-normaliser WER 43.3%)
+  (a block whose reference is in the script the session writes shows how much the skeleton forgives: its two numbers are the calibration)
+
+NORMALISATION AND SPELLING  kathbath-ur (reference and output both Perso-Arabic)
+  current normaliser: WER 43.26%
+  + ے ۓ -> ی: WER 43.03%
+  + ھ removed: WER 42.81%
+  + ؤ -> و, ئ -> ی, أ إ آ -> ا: WER 42.59%
+  all folds together: WER 41.81%
+  substitutions 194: spelling variants (same consonant skeleton) 82, other 112; deletions 123; insertions 71
+

@@ -12,6 +12,8 @@ CONTRIBUTING.md
 scripts/*.ps1
 # The gate pack registry is copied into the pack byte for byte (its SHA-256 is in PACK-MANIFEST.json); reformatting it would change the pack.
 scripts/gate-pack/gates.manifest.json
+# Evaluation labels are data written and read by scripts (the ear-check marks are the owner's): never reformatted.
+eval/labels/
 # Generated or third-party
 # Written by `cargo test -p wb-capability` (WB_UPDATE_FIXTURES=1) and compared as text.
 crates/wb-capability/fixtures/

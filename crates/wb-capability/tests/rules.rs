@@ -636,7 +636,7 @@ fn hinglish_uses_its_own_cell_or_the_same_size_proxy() {
     assert_eq!(d.hinglish.source, "proxy: large-v3-q5_0 (same size)");
     assert!(!d.hinglish.ok);
     p.measurements.push(rolling(
-        "hinglish-q5_0",
+        "hinglish-q8_0",
         Lang::Hi,
         DeviceConfig::Gpu { index: 0 },
         0.6,
@@ -646,6 +646,136 @@ fn hinglish_uses_its_own_cell_or_the_same_size_proxy() {
     let d = decide_with(&p, false);
     assert_eq!(d.hinglish.source, "measured");
     assert!(d.hinglish.ok);
+}
+
+#[test]
+fn the_hinglish_model_is_chosen_only_when_its_own_cell_meets_the_bar_and_the_verdict_says_what_is_kept()
+ {
+    let mut p = emu_low();
+    // Only the same-size proxy: never chosen, and the verdict says it was not measured.
+    let d = decide_with(&p, false);
+    assert_eq!(d.hinglish.chosen_model(), None);
+    assert_eq!(d.hinglish.model, None);
+    assert!(
+        d.verdict
+            .iter()
+            .any(|l| l.contains("not measured on this computer") && l.contains("keep")),
+        "{:#?}",
+        d.verdict
+    );
+    // Its own cell, too slow even for the night: not chosen; today's models stay and the verdict names the cost.
+    p.measurements.push(rolling(
+        "hinglish-q8_0",
+        Lang::Hi,
+        DeviceConfig::Gpu { index: 0 },
+        5.0,
+        4.0,
+        Some(3.0),
+    ));
+    let d = decide_with(&p, false);
+    assert!(!d.hinglish.ok);
+    assert_eq!(d.hinglish.model.as_deref(), Some("hinglish-q8_0"));
+    assert_eq!(d.hinglish.chosen_model(), None);
+    assert!(
+        d.verdict
+            .iter()
+            .any(|l| l.contains("too slow to run on every chunk") && l.contains("keep")),
+        "{:#?}",
+        d.verdict
+    );
+    // Its own cell, fast enough: chosen.
+    p.measurements.retain(|m| m.model != "hinglish-q8_0");
+    p.measurements.push(rolling(
+        "hinglish-q8_0",
+        Lang::Hi,
+        DeviceConfig::Gpu { index: 0 },
+        0.6,
+        2.7,
+        Some(2.0),
+    ));
+    let d = decide_with(&p, false);
+    assert!(d.hinglish.ok, "{:?}", d.hinglish);
+    assert_eq!(d.hinglish.chosen_model(), Some("hinglish-q8_0"));
+    assert!(
+        d.verdict
+            .iter()
+            .any(|l| l.contains("use the code-switching (Hinglish) model hinglish-q8_0")),
+        "{:#?}",
+        d.verdict
+    );
+}
+
+#[test]
+fn a_hinglish_model_too_slow_for_the_recording_may_still_run_at_night_and_the_verdict_says_so() {
+    let mut p = emu_low();
+    // 1.4x real time: over the rolling bar, but 3 h of audio take 4.2 h of the 12-hour night window.
+    p.measurements.push(rolling(
+        "hinglish-q8_0",
+        Lang::Hi,
+        DeviceConfig::Gpu { index: 0 },
+        1.4,
+        4.0,
+        Some(3.0),
+    ));
+    let d = decide_with(&p, false);
+    assert!(!d.hinglish.ok);
+    assert!(d.hinglish.night_ok, "{:?}", d.hinglish);
+    assert_eq!(d.hinglish.night_model(), Some("hinglish-q8_0"));
+    assert_eq!(
+        d.hinglish.chosen_model(),
+        None,
+        "the recording keeps today's models"
+    );
+    assert!(
+        d.verdict
+            .iter()
+            .any(|l| l.contains("night pass decodes them again")
+                && l.contains("hinglish-q8_0")
+                && l.contains("best finished on a faster machine")),
+        "{:#?}",
+        d.verdict
+    );
+    // 5x real time: 15 h for 3 h of audio, over the window: no night model either, and the verdict marks it.
+    p.measurements.retain(|m| m.model != "hinglish-q8_0");
+    p.measurements.push(rolling(
+        "hinglish-q8_0",
+        Lang::Hi,
+        DeviceConfig::Gpu { index: 0 },
+        5.0,
+        4.0,
+        Some(3.0),
+    ));
+    let d = decide_with(&p, false);
+    assert!(!d.hinglish.ok && !d.hinglish.night_ok, "{:?}", d.hinglish);
+    assert_eq!(d.hinglish.night_model(), None);
+    assert!(
+        d.verdict
+            .iter()
+            .any(|l| l.contains("too slow to run on every chunk")
+                && l.contains("best finished on a faster machine")),
+        "{:#?}",
+        d.verdict
+    );
+    // A model that runs during the recording needs no night pass of its own.
+    p.measurements.retain(|m| m.model != "hinglish-q8_0");
+    p.measurements.push(rolling(
+        "hinglish-q8_0",
+        Lang::Hi,
+        DeviceConfig::Gpu { index: 0 },
+        0.6,
+        2.7,
+        Some(2.0),
+    ));
+    let d = decide_with(&p, false);
+    assert!(d.hinglish.ok);
+    assert_eq!(d.hinglish.night_model(), None);
+    assert!(
+        d.verdict
+            .iter()
+            .all(|l| !l.contains("best finished on a faster machine")),
+        "{:#?}",
+        d.verdict
+    );
 }
 
 #[test]
@@ -926,5 +1056,344 @@ fn hybrid_is_refused_when_two_engines_do_not_fit_in_memory() {
         ),
         "{:?}",
         d.config
+    );
+}
+
+// ---- video memory of a discrete card (owner, 26 Nov 2026) ----
+
+/// The Legion with its RTX card made `card_gib` large and the Hinglish f16 (4.01 GiB peak) or q8_0 (2.67 GiB peak) cell
+/// measured on it, as in docs/evidence/phase-5/fit-and-fallback.txt.
+fn legion_with_card(card_gib: f64, hinglish: Option<(&str, f64)>) -> Profile {
+    let mut p = legion_native();
+    for g in p.hardware.gpus.iter_mut().filter(|g| g.index == 1) {
+        g.dedicated_bytes = gib(card_gib);
+        g.local_bytes = gib(card_gib);
+    }
+    p.measurements.retain(|m| !m.model.starts_with("hinglish"));
+    if let Some((model, peak_gib)) = hinglish {
+        p.measurements.push(rolling(
+            model,
+            Lang::Hi,
+            DeviceConfig::Gpu { index: 1 },
+            0.19,
+            5.0,
+            Some(peak_gib),
+        ));
+    }
+    p
+}
+
+#[test]
+fn a_model_is_used_on_a_discrete_card_only_if_its_peak_plus_half_a_gigabyte_fits_the_card() {
+    // A Hinglish cell that peaks at 4.01 GiB (the f16 file's peak; the file is no longer shipped, the memory rule is the
+    // same for any model): with 0.5 GiB kept free it needs 4.51 GiB, so a 4 GB card cannot take it.
+    for (card, f16_fits) in [(4.0, false), (6.0, true), (8.0, true)] {
+        let d = decide_with(
+            &legion_with_card(card, Some(("hinglish-q8_0", 4.01))),
+            false,
+        );
+        assert_eq!(d.hinglish.ok, f16_fits, "{card} GB card: {:?}", d.hinglish);
+        assert_eq!(
+            d.hinglish.chosen_model(),
+            f16_fits.then_some("hinglish-q8_0"),
+            "{card} GB card"
+        );
+        let says_no_fit = d
+            .verdict
+            .iter()
+            .any(|l| l.contains("hinglish-q8_0 does not fit this card's memory"));
+        assert_eq!(says_no_fit, !f16_fits, "{card} GB card: {:#?}", d.verdict);
+    }
+    // q8_0 peaks at 2.67 GiB: it fits all three (with no live model beside it).
+    for card in [4.0, 6.0, 8.0] {
+        let mut p = legion_with_card(card, Some(("hinglish-q8_0", 2.67)));
+        p.measurements.retain(|m| !m.live_standin);
+        let d = decide_with(&p, false);
+        assert_eq!(
+            d.hinglish.chosen_model(),
+            Some("hinglish-q8_0"),
+            "{card} GB card"
+        );
+        assert!(
+            !d.verdict
+                .iter()
+                .any(|l| l.contains("does not fit this card's memory")),
+            "{card} GB card: {:#?}",
+            d.verdict
+        );
+    }
+}
+
+/// A pair cell on the Legion's card (index 1): the Hinglish model with `small-q5_0` in front of it, as the system check
+/// measures it (a batch decode with detection on; memory is the two models' cells added up).
+fn pair_cell(model: &str, rtf: f64, local_gib: f64) -> Measurement {
+    let mut m = rolling(
+        model,
+        Lang::Hi,
+        DeviceConfig::Gpu { index: 1 },
+        rtf,
+        6.0,
+        Some(local_gib),
+    );
+    m.detector = Some("small-q5_0".to_string());
+    m
+}
+
+#[test]
+fn a_pair_that_meets_the_bar_and_fits_the_card_is_chosen_over_the_model_alone() {
+    // 8 GB card: q8_0 alone (0.19) and q8_0 with the small detector (0.25, 3.18 GiB for both) were measured.
+    let mut p = legion_with_card(8.0, Some(("hinglish-q8_0", 2.67)));
+    p.measurements.push(pair_cell("hinglish-q8_0", 0.25, 3.18));
+    let d = decide_with(&p, false);
+    assert!(d.hinglish.ok, "{:?}", d.hinglish);
+    assert_eq!(d.hinglish.chosen_model(), Some("hinglish-q8_0"));
+    assert_eq!(d.hinglish.chosen_detector(), Some("small-q5_0"));
+    assert_eq!(d.hinglish.rtf, Some(0.25));
+    assert!(
+        d.verdict.iter().any(|l| l.contains(
+            "hinglish-q8_0 for the Hindi chunks, with the small model small-q5_0 in front of it"
+        )),
+        "{:#?}",
+        d.verdict
+    );
+    // The pair is slower than the bar: the model alone, which meets it, is chosen.
+    let mut p = legion_with_card(8.0, Some(("hinglish-q8_0", 2.67)));
+    p.measurements.push(pair_cell("hinglish-q8_0", 5.0, 3.18));
+    let d = decide_with(&p, false);
+    assert_eq!(d.hinglish.chosen_model(), Some("hinglish-q8_0"));
+    assert_eq!(d.hinglish.chosen_detector(), None);
+}
+
+#[test]
+fn a_pair_that_does_not_fit_the_card_is_not_chosen() {
+    // q8_0 with the detector peaks at 3.18 GiB: with the headroom it needs 3.68 GiB, so a 3 GB card cannot take it.
+    let mut p = legion_with_card(3.0, None);
+    p.measurements.push(pair_cell("hinglish-q8_0", 0.25, 3.18));
+    let d = decide_with(&p, false);
+    assert_eq!(d.hinglish.chosen_model(), None, "{:?}", d.hinglish);
+    assert!(!d.hinglish.ok);
+}
+
+#[test]
+fn the_f16_model_is_gone_it_is_never_chosen_even_if_its_cell_is_in_the_file() {
+    // The STALE case (owner, 27 Nov 2026): a capability file from the earlier build can hold f16 cells, alone or with the
+    // small detector. The file is not in the manifest any more, so no cell of it is used: only ids that the system check
+    // measures and the manifest lists (`HINGLISH_MODELS`) are, and the pairs `HINGLISH_PAIRS` lists. The earlier code took
+    // any id that started with "hinglish".
+    assert_eq!(HINGLISH_PAIRS, &[("hinglish-q8_0", "small-q5_0")]);
+    assert_eq!(HINGLISH_MODELS, &["hinglish-q8_0"]);
+    let mut p = legion_with_card(8.0, Some(("hinglish-f16", 4.01)));
+    p.measurements.push(pair_cell("hinglish-f16", 0.25, 4.5));
+    let d = decide_with(&p, false);
+    assert_eq!(d.hinglish.chosen_model(), None, "{:?}", d.hinglish);
+    assert_eq!(d.hinglish.night_model(), None, "{:?}", d.hinglish);
+    let mut p = legion_with_card(8.0, None);
+    p.measurements.push(pair_cell("hinglish-f16", 0.25, 4.5));
+    assert_eq!(
+        decide_with(&p, false).hinglish.chosen_model(),
+        None,
+        "an f16 pair alone gives nothing"
+    );
+    // An id that merely starts with "hinglish" is not a model of the manifest either, and neither is the q5_0 file that left
+    // the shipped manifest on 27 Nov 2026.
+    for id in ["hinglish-new", "hinglish-q5_0"] {
+        let p = legion_with_card(8.0, Some((id, 2.0)));
+        assert_eq!(decide_with(&p, false).hinglish.chosen_model(), None, "{id}");
+    }
+}
+
+#[test]
+fn a_four_gigabyte_card_gets_the_q8_0_pair_and_live_text_gives_way() {
+    // q8_0 with the small detector peaked at 3.18 GiB (3255 MiB, RTX 4070): 3.68 GiB with the headroom fits 4 GB.
+    for (card, live_offered) in [(4.0, false), (6.0, true), (8.0, true)] {
+        let mut p = legion_with_card(card, None);
+        p.measurements.push(pair_cell("hinglish-q8_0", 0.25, 3.18));
+        let d = decide_with(&p, false);
+        assert!(d.hinglish.ok, "{card} GB: {:?}", d.hinglish);
+        assert_eq!(
+            d.hinglish.chosen_model(),
+            Some("hinglish-q8_0"),
+            "{card} GB"
+        );
+        assert_eq!(
+            d.hinglish.chosen_detector(),
+            Some("small-q5_0"),
+            "{card} GB"
+        );
+        let live = &d.languages[&Lang::En].live;
+        assert_eq!(live.offered, live_offered, "{card} GB: {live:?}");
+        let says_beside = live.hard_reasons.iter().any(|r| {
+            r.contains("does not fit this card's memory beside hinglish-q8_0 with small-q5_0")
+        });
+        assert_eq!(says_beside, !live_offered, "{card} GB: {live:?}");
+    }
+}
+
+#[test]
+fn only_a_pair_the_evaluation_accepted_is_ever_chosen() {
+    assert!(
+        HINGLISH_PAIRS
+            .iter()
+            .all(|(h, d)| h.starts_with("hinglish") && *d == "small-q5_0")
+    );
+    let mut p = legion_with_card(8.0, None);
+    let mut m = pair_cell("hinglish-q8_0", 0.25, 3.18);
+    m.detector = Some("tiny".to_string());
+    p.measurements.push(m);
+    let d = decide_with(&p, false);
+    assert_eq!(d.hinglish.chosen_model(), None, "{:?}", d.hinglish);
+}
+
+#[test]
+fn a_measured_model_that_does_not_fit_the_card_is_not_used_for_the_rolling_pass_either() {
+    // Medium peaks at 2.26 GiB in the fixture; on a 2.5 GiB card it leaves less than 0.5 GiB: it must not be chosen.
+    let d = decide_with(&legion_with_card(2.5, None), false);
+    for lang in [Lang::En, Lang::Hi] {
+        if let Some(r) = d.languages[&lang].rolling.as_ref() {
+            assert_ne!(r.model, "medium", "{lang:?}");
+        }
+    }
+    assert!(
+        d.verdict
+            .iter()
+            .any(|l| l.contains("medium does not fit this card's memory")),
+        "{:#?}",
+        d.verdict
+    );
+}
+
+#[test]
+fn two_models_that_do_not_fit_the_card_together_become_one_model_for_every_language() {
+    // Medium (2.26 GiB) beside turbo (0.9 GiB) is 3.16 GiB; with 0.5 GiB free a 3.5 GiB card cannot hold both.
+    let p = legion_with_card(3.5, None);
+    let d = decide_with(&p, false);
+    let models: std::collections::BTreeSet<&str> = Lang::ALL
+        .iter()
+        .filter_map(|l| d.languages[l].rolling.as_ref().map(|r| r.model.as_str()))
+        .collect();
+    assert_eq!(models.len(), 1, "{models:?}");
+    assert!(
+        d.verdict
+            .iter()
+            .any(|l| l.contains("together do not fit this card's memory")
+                && l.contains("decodes every language")),
+        "{:#?}",
+        d.verdict
+    );
+    // On the 8 GB card both stay: medium for English, turbo for Hindi.
+    let d8 = decide_with(&legion_with_card(8.0, None), false);
+    assert_eq!(rolling_of(&d8, Lang::En).model, "medium");
+    assert_eq!(rolling_of(&d8, Lang::Hi).model, "large-v3-turbo-q5_0");
+    assert!(!d8.verdict.iter().any(|l| l.contains("this card's memory")));
+}
+
+#[test]
+fn before_measuring_a_model_is_tried_on_a_card_only_if_its_file_times_1_15_plus_half_a_gigabyte_fits()
+ {
+    let o = Options::default();
+    let f16_file = 3_095_033_483u64; // the Hinglish f16 file
+    let q8_file = 1_656_538_283u64;
+    for (card, f16_fits) in [(4.0, false), (6.0, true), (8.0, true)] {
+        let p = legion_with_card(card, None);
+        let gpu = DeviceConfig::Gpu { index: 1 };
+        assert_eq!(
+            model_fits_card(&p, gpu, f16_file, &o),
+            f16_fits,
+            "{card} GB card"
+        );
+        assert_eq!(
+            model_fits_card(&p, DeviceConfig::Hybrid { gpu: 1 }, f16_file, &o),
+            f16_fits,
+            "{card} GB card, hybrid"
+        );
+        assert!(model_fits_card(&p, gpu, q8_file, &o), "{card} GB card");
+        // The processor and an integrated adapter have no card to fill.
+        assert!(model_fits_card(&p, DeviceConfig::Cpu, f16_file, &o));
+        assert!(model_fits_card(
+            &p,
+            DeviceConfig::Gpu { index: 0 },
+            f16_file,
+            &o
+        ));
+    }
+    assert_eq!(
+        estimated_vram_bytes(1_000_000_000, &o),
+        1_150_000_000 + (1u64 << 29)
+    );
+    assert!(vram_fits(gib(4.0), gib(3.5), &o));
+    assert!(!vram_fits(gib(4.0), gib(3.6), &o));
+}
+
+#[test]
+fn a_card_whose_memory_could_not_be_read_is_not_judged() {
+    let mut p = legion_with_card(8.0, Some(("hinglish-q8_0", 4.01)));
+    for g in p.hardware.gpus.iter_mut().filter(|g| g.index == 1) {
+        g.dedicated_bytes = 0;
+    }
+    assert!(model_fits_card(
+        &p,
+        DeviceConfig::Gpu { index: 1 },
+        10_000_000_000,
+        &Options::default()
+    ));
+    assert!(decide_with(&p, false).hinglish.ok);
+}
+
+/// Phase 5, item 6 (owner, 27 Nov 2026): the bench decodes one language with no detection, a session with several languages
+/// detects every chunk and runs slower. A pick must meet the bar WITH the allowance: a model that passes on the bench figure
+/// and fails with the allowance is not a pick that meets the bar, and the verdict says why. The measured figure stays.
+#[test]
+fn a_pick_must_meet_the_bar_with_the_detection_allowance_not_only_on_the_bench_figure() {
+    let p = avx512_crash(); // English medium 0.60, Hindi turbo 0.70, Urdu medium 0.80; bar 1.0 (not emulated)
+    let none = decide(&p, &rankings(false), &Options::default());
+    let o = Options {
+        rolling_detection_allowance: 1.5,
+        ..Options::default()
+    };
+    let with = decide(&p, &rankings(false), &o);
+    for lang in [Lang::En, Lang::Hi, Lang::Ur] {
+        let (a, b) = (rolling_of(&none, lang), rolling_of(&with, lang));
+        assert!(a.meets_bar, "{lang:?} meets the bench bar");
+        assert_eq!(
+            (&a.model, a.rtf),
+            (&b.model, b.rtf),
+            "{lang:?}: the measured figure stays"
+        );
+        assert_eq!(a.rtf_with_detection, None, "{lang:?}");
+        assert!(
+            (b.rtf_with_detection.unwrap() - a.rtf * 1.5).abs() < 1e-9,
+            "{lang:?}"
+        );
+    }
+    // 0.60 x 1.5 = 0.90 still meets the bar; 0.70 x 1.5 = 1.05 and 0.80 x 1.5 = 1.2 do not.
+    assert!(rolling_of(&with, Lang::En).meets_bar);
+    assert!(!rolling_of(&with, Lang::Hi).meets_bar);
+    assert!(!rolling_of(&with, Lang::Ur).meets_bar);
+    assert!(rolling_of(&with, Lang::Hi).lags && !rolling_of(&none, Lang::Hi).lags);
+    assert_eq!(
+        (
+            rolling_of(&none, Lang::Hi).k_max,
+            rolling_of(&with, Lang::Hi).k_max
+        ),
+        (1, 0)
+    );
+    let says = |d: &Decision, lang: &str| {
+        d.verdict.iter().any(|v| {
+            v.starts_with(lang)
+                && v.contains("meets the bar on one language")
+                && v.contains("detects the language of every chunk")
+        })
+    };
+    assert!(
+        says(&with, "Hindi") && says(&with, "Urdu"),
+        "{:?}",
+        with.verdict
+    );
+    assert!(!says(&with, "English"));
+    assert!(
+        !none
+            .verdict
+            .iter()
+            .any(|v| v.contains("detects the language of every chunk"))
     );
 }

@@ -1,0 +1,32 @@
+WER per chunk class of finished decodes (Phase 5, item 4, step 3a); numbers only; written by eval/class_wer.py.
+Method: see the docstring of eval/class_wer.py. Figures compare runs on the same chunks; they are not a corpus WER.
+
+Tuning set (339 chunks; labels derived from the reference text, owner's ear check applied)
+run | pure English: chunks, words, WER % | pure Hindi: chunks, words, WER % | English-led mixed: chunks, words, WER % | Hindi-led mixed: chunks, words, WER % | all words, WER %
+tune-turbo-q5_0-a | 133, 4065, 13.8 | 71, 2377, 26.1 | 46, 1519, 48.1 | 89, 3180, 55.3 | 11141, 32.9
+tune-small-detect-q8_0 | 130, 4035, 15.6 | 68, 2446, 9.1 | 45, 1584, 22.6 | 81, 3076, 18.5 | 11141, 16.0
+tune-small-detect-f16 | 130, 4035, 15.6 | 68, 2446, 9.0 | 45, 1584, 22.3 | 81, 3076, 18.3 | 11141, 15.9
+tune-hinglish-f16-d2 | 131, 4021, 19.0 | 68, 2440, 8.8 | 45, 1599, 22.0 | 82, 3081, 18.6 | 11141, 17.1
+tune-hinglish-q8_0-d2 | 131, 4012, 20.3 | 68, 2440, 8.8 | 45, 1608, 22.6 | 82, 3081, 18.8 | 11141, 17.7
+
+Pure English chunks that tune-small-detect-q8_0 detected as English (117): WER of each run on exactly those chunks
+  tune-turbo-q5_0-a | chunks 117 | words 3669 | WER 11.6%
+  tune-small-detect-q8_0 | chunks 117 | words 3687 | WER 12.5%
+  tune-small-detect-f16 | chunks 117 | words 3687 | WER 12.5%
+  tune-hinglish-f16-d2 | chunks 117 | words 3657 | WER 16.2%
+  tune-hinglish-q8_0-d2 | chunks 117 | words 3647 | WER 17.5%
+
+Pure English chunks that tune-small-detect-f16 detected as English (117): WER of each run on exactly those chunks
+  tune-turbo-q5_0-a | chunks 117 | words 3669 | WER 11.6%
+  tune-small-detect-q8_0 | chunks 117 | words 3687 | WER 12.5%
+  tune-small-detect-f16 | chunks 117 | words 3687 | WER 12.5%
+  tune-hinglish-f16-d2 | chunks 117 | words 3657 | WER 16.2%
+  tune-hinglish-q8_0-d2 | chunks 117 | words 3647 | WER 17.5%
+
+Held-out set (10 chunks; hand labels)
+run | pure English: chunks, words, WER % | pure Hindi: chunks, words, WER % | English-led mixed: chunks, words, WER % | Hindi-led mixed: chunks, words, WER % | all words, WER %
+prod-turbo-q5_0-coshe-heldout | 1, 41, 58.5 | 0, 0, - | 3, 88, 35.2 | 4, 202, 68.3 | 331, 58.3
+heldout-small-detect-q8_0 | 1, 41, 22.0 | 0, 0, - | 2, 76, 35.5 | 3, 146, 21.9 | 263, 25.9
+heldout-small-detect-f16 | 1, 41, 22.0 | 0, 0, - | 2, 76, 35.5 | 3, 146, 22.6 | 263, 26.2
+heldout-hinglish-f16-d2 | 1, 41, 22.0 | 0, 0, - | 3, 105, 29.5 | 4, 178, 20.2 | 324, 23.5
+heldout-hinglish-q8_0-d2 | 1, 41, 22.0 | 0, 0, - | 2, 76, 32.9 | 3, 146, 22.6 | 263, 25.5

@@ -15,11 +15,12 @@ use std::time::{Duration, Instant};
 
 use wb_capability::{
     CheckInfo, CheckKind, DeviceConfig, GpuKind, HybridMeasurement, Lang, Measurement, Mode,
-    Options, Profile, Rankings, RecorderSafety, SCHEMA_VERSION, Skipped, decide, model_fits,
+    Options, Profile, Rankings, RecorderSafety, SCHEMA_VERSION, Skipped, decide,
+    estimated_vram_bytes, model_fits, model_fits_card,
 };
 use wb_machine::Machine;
 use wb_models::{Cache, Manifest};
-use wb_protocol::{BenchMode, BenchRequest, Device, ModelRef, Settings};
+use wb_protocol::{BatchRequest, BenchMode, BenchRequest, Device, ModelRef, Settings, Source};
 
 use super::bench::{self, BenchError, Cell};
 use super::excerpt::{self, ExcerptError};
@@ -49,6 +50,25 @@ const HYBRID_CPU_LIMIT_FULL_S: u64 = 300;
 /// A cell whose warm-up runs slower than this gets one timed run only ("impractical: single run").
 const SINGLE_RUN_ABOVE_RTF: f64 = 2.0;
 const VAD_ID: &str = "silero-v6.2.0";
+/// The one Hinglish file the check measures, on every configuration (owner, 27 Nov 2026, option A after step 3c): q8_0, with
+/// the small detector in front of it as the accepted pair on a discrete card. It finishes the night wherever f16 does and
+/// is about twice as fast on a processor; f16 is not measured, not chosen and not in the pack. A file that was not measured
+/// is never chosen.
+const HINGLISH_CANDIDATE: &str = "hinglish-q8_0";
+
+/// The Hinglish files the check measures on a configuration: q8_0 everywhere (and then its pair on a discrete card).
+fn hinglish_candidates(_discrete: bool) -> &'static [&'static str] {
+    &[HINGLISH_CANDIDATE]
+}
+/// The quick check measures the pair (a Hinglish model with a small detector in front of it) only when this many seconds
+/// of its target are left.
+const PAIR_QUICK_MIN_S: f64 = 90.0;
+/// The quick check measures the Hinglish model only when this many seconds of its target are left.
+const HINGLISH_QUICK_MIN_S: f64 = 120.0;
+/// How many times slower than the rolling model the Hinglish model is at the least, from the Hindi cells of the Phase 2
+/// speed tables (a large-v3-sized model against turbo q5_0 on the same device: 1.78 to 2.09). The quick check skips the
+/// measurement when even this ratio puts the model over the bar; it never skips one that would have fitted.
+const HINGLISH_MIN_SLOWDOWN: f64 = 1.5;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CheckError {
@@ -545,6 +565,23 @@ impl Run<'_> {
             );
             return Ok(None);
         }
+        // On a discrete card the model is tried only if it can fit the card's memory with the headroom left (file size
+        // x 1.15 + 0.5 GB before it is measured); the verdict then says it does not fit this card's memory.
+        if !model_fits_card(&self.profile, config, bytes, &self.env.options) {
+            let card = config
+                .gpu_index()
+                .and_then(|i| self.profile.hardware.gpus.iter().find(|g| g.index == i));
+            let gb = |v: u64| v as f64 / (1u64 << 30) as f64;
+            let reason = format!(
+                "{model_id} does not fit this card's memory (about {:.1} GB needed with {:.1} GB kept free, the card has {:.1} GB).",
+                gb(estimated_vram_bytes(bytes, &self.env.options)),
+                gb(self.env.options.vram_headroom_bytes),
+                gb(card.map_or(0, |g| g.dedicated_bytes))
+            );
+            tracing::info!(model = model_id, "system check: {reason}");
+            self.skip(&format!("{model_id} on {}", config_name(config)), reason);
+            return Ok(None);
+        }
         self.tick(
             "Measuring speed",
             &format!("{model_id}, {}, {}", lang.name(), config_name(config)),
@@ -614,6 +651,7 @@ impl Run<'_> {
             gpu_local_bytes: report.gpu_local_bytes,
             truncated_chunks: report.truncated_chunks,
             live_standin,
+            detector: None,
         };
         self.profile.measurements.push(m.clone());
         Ok(Some(m))
@@ -823,6 +861,12 @@ impl Run<'_> {
         // The night model on the configuration the rules choose now.
         if !self.over_budget() {
             self.night()?;
+        }
+        // Rule (d2): the Hinglish model itself, on the configuration the rules choose now.
+        if !self.over_budget()
+            && let Some(config) = self.best_config()
+        {
+            self.hinglish_step(config)?;
         }
         Ok(())
     }
@@ -1437,26 +1481,200 @@ impl Run<'_> {
                 }
             }
         }
+        Ok(())
+    }
+
+    /// Rule (d2) rests on a measurement of the Hinglish model itself: always in the full check; in the quick check when
+    /// the time target allows and the Hindi speed of the rolling model does not already rule the model out.
+    fn hinglish_step(&mut self, config: DeviceConfig) -> Result<(), CheckError> {
         if self.full() {
-            self.hinglish(config)?;
+            return self.hinglish(config);
+        }
+        let bar = wb_capability::bars(&self.profile).rolling_rtf;
+        let hi_rtf = self
+            .decided()
+            .languages
+            .get(&Lang::Hi)
+            .and_then(|l| l.rolling.as_ref().map(|r| r.rtf));
+        match hi_rtf {
+            Some(r) if r * HINGLISH_MIN_SLOWDOWN > bar => {
+                self.skip(
+                    "Hinglish model speed",
+                    format!(
+                        "not measured: Hindi already runs at {r:.2}x real time with the rolling model, and the Hinglish model is at least {HINGLISH_MIN_SLOWDOWN} times slower, over the {bar:.2} bar"
+                    ),
+                );
+                Ok(())
+            }
+            _ => {
+                if self.fits_target(HINGLISH_QUICK_MIN_S, "Hinglish model speed") {
+                    self.hinglish(config)
+                } else {
+                    Ok(())
+                }
+            }
+        }
+    }
+
+    /// The Hinglish model on the alternating English/Hindi clip, so rule (d) rests on a measurement: the q8_0 file, and on a
+    /// discrete card then the pair with the small detector.
+    fn hinglish(&mut self, config: DeviceConfig) -> Result<(), CheckError> {
+        let discrete = wb_capability::discrete_card(&self.profile, config).is_some();
+        let candidates = hinglish_candidates(discrete);
+        let mut measured = None;
+        for id in candidates {
+            if self.env.manifest.find(id).is_err() {
+                continue;
+            }
+            measured = self.measure(Spec {
+                model: id,
+                lang: Lang::Hi,
+                mode: Mode::Rolling,
+                config,
+                clip: "bench-codeswitch.wav",
+                excerpt_s: excerpt_seconds(self.kind),
+                standin: false,
+            })?;
+            if measured.is_some() {
+                break;
+            }
+        }
+        if let Some(h) = measured
+            && discrete
+        {
+            self.hinglish_pair(config, &h)?;
         }
         Ok(())
     }
 
-    /// The Hinglish model on the alternating English/Hindi clip, so rule (d) rests on a measurement.
-    fn hinglish(&mut self, config: DeviceConfig) -> Result<(), CheckError> {
-        if self.env.manifest.find("hinglish-q5_0").is_err() {
+    /// The Hinglish model with a small detector in front of it (`wb_capability::HINGLISH_PAIRS`), measured the way the
+    /// post-processing runs it: one batch decode of the code-switched clip with the language detected for every chunk
+    /// (the engine's `bench` has neither detection nor a second model). Its memory is the two models' own cells added up
+    /// (a little above the true peak, never below it). The cell is stored with `detector` set; the rules choose it only
+    /// if it meets the bar and fits the card beside the live model.
+    fn hinglish_pair(&mut self, config: DeviceConfig, h: &Measurement) -> Result<(), CheckError> {
+        let Some((_, detector)) = wb_capability::HINGLISH_PAIRS
+            .iter()
+            .find(|(m, _)| *m == h.model)
+        else {
+            return Ok(());
+        };
+        if self.over_budget()
+            || !self.fits_target(PAIR_QUICK_MIN_S, "Hinglish model with a language detector")
+        {
             return Ok(());
         }
-        self.measure(Spec {
-            model: "hinglish-q5_0",
+        if self.env.manifest.find(detector).is_err() {
+            return Ok(());
+        }
+        // The detector's own cell (memory and load time); it is not stored: the speed table of the rankings is not changed.
+        let Some(d) = self.measure(Spec {
+            model: detector,
+            lang: Lang::En,
+            mode: Mode::Rolling,
+            config,
+            clip: &clip_file("en"),
+            excerpt_s: excerpt_seconds(self.kind),
+            standin: false,
+        })?
+        else {
+            return Ok(());
+        };
+        self.profile.measurements.pop();
+        let (Some((hinglish_ref, _)), Some((detector_ref, _)), Some(vad)) = (
+            self.model_ref(&h.model),
+            self.model_ref(detector),
+            self.vad_ref(),
+        ) else {
+            return Ok(());
+        };
+        let Some((_, exe)) = self.exe_for(config).cloned() else {
+            return Ok(());
+        };
+        let excerpt_s = excerpt_seconds(self.kind);
+        let clip = self.clip("bench-codeswitch.wav", 0.0, excerpt_s)?;
+        self.tick(
+            "Measuring speed",
+            &format!(
+                "{} with {detector} in front, {}",
+                h.model,
+                config_name(config)
+            ),
+        )?;
+        let mut limit_s = excerpt_s * 12.0 + 120.0;
+        if let Some(left) = self.remaining_s() {
+            if left < 15.0 {
+                self.partial = true;
+                return Ok(());
+            }
+            limit_s = limit_s.min(left);
+        }
+        let request = BatchRequest {
+            source: Source::File {
+                path: clip.to_string_lossy().into_owned(),
+            },
+            units: Vec::new(),
+            models_by_lang: std::collections::BTreeMap::from([
+                ("en".to_string(), detector_ref),
+                ("hi".to_string(), hinglish_ref),
+            ]),
+            vad_model: vad,
+            languages: vec!["en".to_string(), "hi".to_string()],
+            lang_log: Vec::new(),
+            settings: Settings::default(),
+            device: match config.gpu_index() {
+                Some(index) if !matches!(config, DeviceConfig::Cpu) => Device::Gpu { index },
+                _ => Device::Cpu,
+            },
+            threads: self.threads_for(config, Mode::Rolling),
+            resume_from_ms: 0,
+            detect_language: true,
+        };
+        let timing = match bench::run_batch(
+            &exe,
+            &h.engine_build,
+            &request,
+            &self.env.work_dir,
+            Duration::from_secs(limit_s as u64),
+            self.cancel,
+        ) {
+            Ok(t) => t,
+            Err(BenchError::Cancelled) => return Err(CheckError::Cancelled),
+            Err(e) => {
+                tracing::warn!(model = %h.model, "system check: pair with {detector}: {e}");
+                return Ok(());
+            }
+        };
+        self.cells += 1;
+        self.profile.measurements.push(Measurement {
+            model: h.model.clone(),
             lang: Lang::Hi,
             mode: Mode::Rolling,
             config,
-            clip: "bench-codeswitch.wav",
-            excerpt_s: excerpt_seconds(self.kind),
-            standin: false,
-        })?;
+            engine_build: h.engine_build.clone(),
+            device_name: h.device_name.clone(),
+            threads: h.threads,
+            method: format!(
+                "batch of bench-codeswitch.wav, first {excerpt_s:.0} s, en={detector} and hi={}, language detected for every chunk ({} detections), rolling settings, one run, {} threads; memory: the two models' own bench cells added up",
+                h.model, timing.detections, h.threads
+            ),
+            clip_seconds: timing.audio_s,
+            rtf: timing.rtf(),
+            warmup_rtf: None,
+            load_s: h.load_s + d.load_s,
+            peak_working_set_bytes: h
+                .peak_working_set_bytes
+                .saturating_add(d.peak_working_set_bytes)
+                .max(timing.peak_working_set_bytes),
+            peak_commit_bytes: h.peak_commit_bytes.saturating_add(d.peak_commit_bytes),
+            gpu_local_bytes: match (h.gpu_local_bytes, d.gpu_local_bytes) {
+                (Some(a), Some(b)) => Some(a.saturating_add(b)),
+                _ => None,
+            },
+            truncated_chunks: timing.truncated_chunks,
+            live_standin: false,
+            detector: Some((*detector).to_string()),
+        });
         Ok(())
     }
 }
@@ -1497,7 +1715,58 @@ fn config_name(config: DeviceConfig) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{extra_too_small, hybrid_bound, safety_counts};
+    use super::{extra_too_small, hinglish_candidates, hybrid_bound, safety_counts};
+
+    /// Owner, 26 and 27 Nov 2026: every configuration is measured with the one accepted file (q8_0), never with f16: a
+    /// discrete card measures q8_0 and its pair, a computer without one measures q8_0 alone and it is the night model there
+    /// (step 3c: it finishes wherever f16 does and is about twice as fast on a processor).
+    #[test]
+    fn every_configuration_measures_hinglish_q8_0_and_never_f16() {
+        assert_eq!(hinglish_candidates(true), ["hinglish-q8_0"]);
+        assert_eq!(hinglish_candidates(false), ["hinglish-q8_0"]);
+        assert!(
+            wb_capability::HINGLISH_PAIRS
+                .iter()
+                .all(|(m, _)| hinglish_candidates(true).contains(m)),
+            "the check must measure the file of every accepted pair"
+        );
+    }
+
+    /// Owner, 27 Nov 2026: the rules accept only the Hinglish ids the manifest lists. The list in the rules, the manifest
+    /// (the file the app ships and whose hash is in the fingerprint, so a change of it makes an old `capability.json`
+    /// fall back to safe defaults: `crates/wb-capability/src/fingerprint.rs`, `inuse.rs::choose_in_use`) and the ids the
+    /// check measures must be one set. An id that is in the manifest and not in the rules (or the other way round) fails here.
+    #[test]
+    fn every_hinglish_id_of_the_manifest_is_accepted_by_the_rules_and_only_those() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("models")
+            .join("manifest.json");
+        let manifest = wb_models::Manifest::load(&path).expect("models/manifest.json loads");
+        let mut in_manifest: Vec<&str> = manifest
+            .models
+            .iter()
+            .map(|m| m.id.as_str())
+            .filter(|id| id.starts_with("hinglish"))
+            .collect();
+        in_manifest.sort_unstable();
+        let mut accepted: Vec<&str> = wb_capability::HINGLISH_MODELS.to_vec();
+        accepted.sort_unstable();
+        assert_eq!(in_manifest, accepted, "the manifest and the rules disagree");
+        // Owner, 27 Nov 2026: f16 and q5_0 are not shipped; this fails if either comes back into the manifest.
+        for gone in ["hinglish-f16", "hinglish-q5_0"] {
+            assert!(
+                !in_manifest.contains(&gone),
+                "{gone} must not be in the shipped manifest"
+            );
+        }
+        assert!(
+            hinglish_candidates(true)
+                .iter()
+                .all(|c| accepted.contains(c)),
+            "the check measures only ids the rules accept"
+        );
+    }
 
     #[test]
     fn the_hybrid_gain_is_a_ratio_not_a_fraction() {

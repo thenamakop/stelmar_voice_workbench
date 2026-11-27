@@ -1,0 +1,17 @@
+{
+  "dataset": "coshe-eval",
+  "about": "Hand labels of the 10 chunks of the Phase 2 code-switching gate (docs/evidence/phase-2/codeswitch-labels.txt, labelled by the owner by ear, 11 Nov 2026). Time ranges and language labels only: no audio and no transcript text (CoSHE-Eval is CC BY-NC 4.0, evaluation only). 'main' is the language that leads the chunk; 'kind' is 'pure' for one language and 'mixed' for both. These ten chunks are the HELD-OUT final test of Phase 5: tune detection rules on other data (CoSHE chunks outside this list, the local code-switched set), never on these.",
+  "heldout": true,
+  "chunks": [
+    {"id": "audio_1343", "start_ms": 0, "end_ms": 12975, "kind": "mixed", "main": "hi"},
+    {"id": "audio_350", "start_ms": 23770, "end_ms": 28415, "kind": "pure", "main": "hi"},
+    {"id": "audio_147", "start_ms": 16830, "end_ms": 25250, "kind": "mixed", "main": "en"},
+    {"id": "audio_1343", "start_ms": 32145, "end_ms": 46790, "kind": "mixed", "main": "hi"},
+    {"id": "audio_350", "start_ms": 46780, "end_ms": 53160, "kind": "mixed", "main": "en"},
+    {"id": "audio_147", "start_ms": 49840, "end_ms": 54600, "kind": "pure", "main": "en"},
+    {"id": "audio_1343", "start_ms": 19890, "end_ms": 24910, "kind": "mixed", "main": "en"},
+    {"id": "audio_350", "start_ms": 33080, "end_ms": 40610, "kind": "mixed", "main": "hi"},
+    {"id": "audio_147", "start_ms": 34450, "end_ms": 43910, "kind": "mixed", "main": "hi"},
+    {"id": "audio_147", "start_ms": 0, "end_ms": 3550, "kind": "mixed", "main": "en"}
+  ]
+}

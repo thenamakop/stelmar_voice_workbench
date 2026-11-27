@@ -1,0 +1,14 @@
+Tuning-clip score of tune-turbo-q5_0-c (Phase 5, items 4 and 5). Numbers only; written by eval/score_tune.py.
+engine: wb-engine 0.1.0 (cuda, whisper.cpp v1.9.5 commit d1be6fde11ac tree e736b4c9a5be); device gpu:0; setup large-v3-turbo-q5_0 models {'*': 'large-v3-turbo-q5_0'}; threads 8; machine legion-native; languages ['en', 'hi']; clips 70; experiment rule c
+labels: 339 chunks from tune-turbo-q5_0-a (derived from the reference script; not hand labels)
+
+class | chunks | language matches | translated | nothing decoded
+mixed, English-led | 46 | 19 | 0 | 0
+mixed, Hindi-led | 89 | 81 | 8 | 0
+pure English | 133 | 127 | 0 | 0
+pure Hindi | 71 | 71 | 0 | 0
+
+all labelled chunks: 339; language matches 298; translated 8; nothing decoded 0
+WER 31.0%; CER 22.8%; truncated utterances 7
+English (Latin) reference words 5950: kept in Latin 4523, written in Devanagari 656 (11.0%), deleted 771
+decode time 733.06 s for 3690.8 s of audio: RTF 0.1986

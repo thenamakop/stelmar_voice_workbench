@@ -9,12 +9,14 @@
 //! * [`estimate`]: "all transcripts ready by 19:40";
 //! * [`speed`]: the speed this computer reaches, from the units it has finished, against the profile's;
 //! * [`night`]: the night pass plan (decision D6);
-//! * [`import`]: registering a session folder copied from another machine.
+//! * [`import`]: registering a session folder copied from another machine;
+//! * [`languages`]: a session's languages, English plus at most one of Hindi or Urdu.
 //!
 //! * [`units`]: cutting a job into work units of about 5 minutes at VAD pauses given as plain data.
 
 pub mod estimate;
 pub mod import;
+pub mod languages;
 pub mod night;
 pub mod order;
 pub mod revision;

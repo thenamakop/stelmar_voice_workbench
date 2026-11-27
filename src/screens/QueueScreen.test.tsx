@@ -104,7 +104,7 @@ describe("Record screen in record mode", () => {
     await openRecord({ queue: "busy" });
     const urdu = await screen.findByText(/اس مطالعے/);
     expect(urdu.getAttribute("dir")).toBe("rtl");
-    const mixed = screen.getAllByText(/main finding/)[0] as HTMLElement;
+    const mixed = screen.getAllByText(/main finding/)[0]?.closest(".seg-text") as HTMLElement;
     expect(mixed.getAttribute("dir")).toBe("auto");
     expect(mixed.getAttribute("lang")).toBe("hi");
   });

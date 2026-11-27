@@ -76,6 +76,42 @@ pub fn deadline_ms(now_ms: u64) -> u64 {
     deadline - IST_OFFSET_MS
 }
 
+/// A language the job decodes but neither map knows counts at the slowest speed known, not for free.
+fn slowest_speed(night_rtf: &BTreeMap<String, f64>, decode_rtf: &BTreeMap<String, f64>) -> f64 {
+    decode_rtf
+        .values()
+        .chain(night_rtf.values())
+        .copied()
+        .fold(1.0, f64::max)
+}
+
+/// A session gets a night job when it has audio in a language that has a night model.
+fn has_night_audio(s: &SessionAudio, night_rtf: &BTreeMap<String, f64>) -> bool {
+    s.audio_ms_by_lang
+        .iter()
+        .any(|(lang, ms)| *ms > 0 && night_rtf.contains_key(lang))
+}
+
+/// The seconds the night job of a session needs: the whole audio at the speed of the model it decodes each language with.
+fn session_seconds(
+    s: &SessionAudio,
+    night_rtf: &BTreeMap<String, f64>,
+    decode_rtf: &BTreeMap<String, f64>,
+    slowest: f64,
+) -> f64 {
+    s.audio_ms_by_lang
+        .iter()
+        .map(|(lang, ms)| {
+            let rtf = decode_rtf
+                .get(lang)
+                .or_else(|| night_rtf.get(lang))
+                .copied()
+                .unwrap_or(slowest);
+            *ms as f64 / 1000.0 * rtf
+        })
+        .sum()
+}
+
 /// Plans the night pass. `night_rtf` holds, per language that has a night model, its RTF in the chosen
 /// configuration: a session gets a night job when it has audio in one of those languages. `decode_rtf` holds, per
 /// language, the RTF of the model the night job uses for it (the night model, or the rolling model for a language
@@ -92,36 +128,15 @@ pub fn plan(
     if night_rtf.is_empty() {
         return Plan::Skip(SkipReason::NoNightModel);
     }
-    // A language the job decodes but neither map knows counts at the slowest speed known, not for free.
-    let slowest = decode_rtf
-        .values()
-        .chain(night_rtf.values())
-        .copied()
-        .fold(1.0, f64::max);
+    let slowest = slowest_speed(night_rtf, decode_rtf);
     let mut planned = Vec::new();
     let mut needed_s = 0.0;
     for s in sessions {
-        let has_night_audio = s
-            .audio_ms_by_lang
-            .iter()
-            .any(|(lang, ms)| *ms > 0 && night_rtf.contains_key(lang));
-        if !has_night_audio {
+        if !has_night_audio(s, night_rtf) {
             continue;
         }
-        let secs: f64 = s
-            .audio_ms_by_lang
-            .iter()
-            .map(|(lang, ms)| {
-                let rtf = decode_rtf
-                    .get(lang)
-                    .or_else(|| night_rtf.get(lang))
-                    .copied()
-                    .unwrap_or(slowest);
-                *ms as f64 / 1000.0 * rtf
-            })
-            .sum();
         planned.push(s.id.clone());
-        needed_s += secs;
+        needed_s += session_seconds(s, night_rtf, decode_rtf, slowest);
     }
     if planned.is_empty() {
         return Plan::Skip(SkipReason::NothingToDo);
@@ -138,6 +153,192 @@ pub fn plan(
         sessions: planned,
         estimate_s: needed_s,
         finish_ms: start_ms + (needed_s * 1000.0).round() as u64,
+    }
+}
+
+/// The speeds a night plan is made with: the RTF of each language's night model, and of what the job decodes.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Speeds {
+    pub night_rtf: BTreeMap<String, f64>,
+    pub decode_rtf: BTreeMap<String, f64>,
+}
+
+/// Which models the night job uses (Phase 5, 26 Nov 2026).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Route {
+    /// The Hinglish model decodes the night pass of the English + Hindi sessions: its plan finishes before 08:00.
+    Hinglish,
+    /// Today's night models (or none): the Hinglish plan does not finish before 08:00, or there is no measured model.
+    Today,
+}
+
+/// A night plan and the models it uses.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Routed {
+    pub route: Route,
+    pub plan: Plan,
+    /// Why the Hinglish plan was not used, when one was tried (shown in the log and on the session).
+    pub hinglish_skip: Option<SkipReason>,
+}
+
+/// The file in a session folder that marks it "best finished on a faster machine" (written by the app, never by the
+/// recorder): why the Hinglish model could not finish it here, so the export screen can offer it (Phase 6).
+pub const FASTER_MACHINE_FILE: &str = "faster-machine.json";
+
+/// The text of [`FASTER_MACHINE_FILE`].
+pub fn faster_machine_json(reason: &str, hinglish_model: Option<&str>, now_ms: u64) -> String {
+    serde_json::json!({
+        "version": 1,
+        "best_finished_on": "a faster machine",
+        "reason": reason,
+        "model": hinglish_model,
+        "marked_at_ms": now_ms,
+    })
+    .to_string()
+}
+
+/// Plans the night with the Hinglish model when that finishes before 08:00 and with today's models otherwise.
+/// `hinglish` is the sessions that would use it (English + Hindi) with their speeds, `None` where the system check
+/// did not measure the model or it does not fit the night here; the sessions of `today` are the same ones, with the
+/// languages that Hinglish sessions use under their own names when a day mixes both kinds. The Hinglish plan is
+/// tried first and used only when it is a `Run`: a night that cannot finish must not be started, and a session left
+/// with today's models (or none) is marked "best finished on a faster machine" by the caller.
+pub fn route(
+    start_ms: u64,
+    today_sessions: &[SessionAudio],
+    hinglish: Option<(&[SessionAudio], &Speeds)>,
+    today: &Speeds,
+) -> Routed {
+    let mut hinglish_skip = None;
+    if let Some((sessions, h)) = hinglish {
+        match plan(start_ms, sessions, &h.night_rtf, &h.decode_rtf) {
+            run @ Plan::Run { .. } => {
+                return Routed {
+                    route: Route::Hinglish,
+                    plan: run,
+                    hinglish_skip: None,
+                };
+            }
+            Plan::Skip(reason) => hinglish_skip = Some(reason),
+        }
+    }
+    Routed {
+        route: Route::Today,
+        plan: plan(
+            start_ms,
+            today_sessions,
+            &today.night_rtf,
+            &today.decode_rtf,
+        ),
+        hinglish_skip,
+    }
+}
+
+/// One priority class of the night's work: its sessions and the speeds they decode at.
+#[derive(Debug, Clone)]
+pub struct Tier {
+    pub sessions: Vec<SessionAudio>,
+    pub speeds: Speeds,
+    /// The whole class goes or none of it (the Hinglish redos: a night that cannot finish them must not start them).
+    /// Otherwise each session is taken in order if it still fits.
+    pub all_or_nothing: bool,
+}
+
+/// A session that did not get a night job in a tiered plan.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Dropped {
+    pub session: String,
+    /// The index of its tier.
+    pub tier: usize,
+    pub needed_s: f64,
+    /// The seconds that were left when it was tried (after the sessions of higher priority).
+    pub left_s: f64,
+}
+
+/// A night plan made tier by tier.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Tiered {
+    pub plan: Plan,
+    /// The sessions planned from each tier.
+    pub planned: Vec<Vec<String>>,
+    pub dropped: Vec<Dropped>,
+}
+
+/// Plans the night by priority (owner, 27 Nov 2026: night time is the scarcest resource): the sessions of the first tier
+/// are planned first, then those of the second with the time that is left, and so on. A session that does not fit keeps
+/// its rolling transcript (it gets no night job) and is listed in `dropped`; a session planned in an earlier tier is not
+/// planned again. The order of `Plan::Run::sessions` is the priority order, so the night job queue works through it in that
+/// order.
+pub fn plan_tiered(start_ms: u64, tiers: &[Tier]) -> Tiered {
+    let deadline = deadline_ms(start_ms);
+    let available_s = deadline.saturating_sub(start_ms) as f64 / 1000.0;
+    let mut used_s = 0.0;
+    let mut planned: Vec<Vec<String>> = vec![Vec::new(); tiers.len()];
+    let mut dropped = Vec::new();
+    let mut taken: Vec<String> = Vec::new();
+    let mut any_model = false;
+    let mut any_candidate = false;
+    for (t, tier) in tiers.iter().enumerate() {
+        let night_rtf = &tier.speeds.night_rtf;
+        let decode_rtf = &tier.speeds.decode_rtf;
+        any_model |= !night_rtf.is_empty();
+        let slowest = slowest_speed(night_rtf, decode_rtf);
+        let candidates: Vec<(&SessionAudio, f64)> = tier
+            .sessions
+            .iter()
+            .filter(|s| !taken.contains(&s.id) && has_night_audio(s, night_rtf))
+            .map(|s| (s, session_seconds(s, night_rtf, decode_rtf, slowest)))
+            .collect();
+        any_candidate |= !candidates.is_empty();
+        let total: f64 = candidates.iter().map(|(_, secs)| secs).sum();
+        let whole_fits = used_s + total <= available_s;
+        for (s, secs) in &candidates {
+            let fits = if tier.all_or_nothing {
+                whole_fits
+            } else {
+                used_s + secs <= available_s
+            };
+            if fits {
+                // An all-or-nothing tier adds its total once, below; a per-session tier adds as it goes.
+                if !tier.all_or_nothing {
+                    used_s += secs;
+                }
+                planned[t].push(s.id.clone());
+                taken.push(s.id.clone());
+            } else {
+                dropped.push(Dropped {
+                    session: s.id.clone(),
+                    tier: t,
+                    needed_s: *secs,
+                    left_s: (available_s - used_s).max(0.0),
+                });
+            }
+        }
+        if tier.all_or_nothing && whole_fits {
+            used_s += total;
+        }
+    }
+    let sessions: Vec<String> = planned.iter().flatten().cloned().collect();
+    let plan = if !sessions.is_empty() {
+        Plan::Run {
+            sessions,
+            estimate_s: used_s,
+            finish_ms: start_ms + (used_s * 1000.0).round() as u64,
+        }
+    } else if !any_model {
+        Plan::Skip(SkipReason::NoNightModel)
+    } else if !any_candidate {
+        Plan::Skip(SkipReason::NothingToDo)
+    } else {
+        Plan::Skip(SkipReason::DoesNotFit {
+            needed_s: dropped.iter().map(|d| d.needed_s).sum(),
+            available_s,
+        })
+    };
+    Tiered {
+        plan,
+        planned,
+        dropped,
     }
 }
 
@@ -182,9 +383,10 @@ struct ProgrammeSession {
     transcribe: bool,
 }
 
-/// The end of the programme's last session of the IST day that contains `reference_ms`, counting only the
-/// sessions the programme marks for transcription (docs/programme.json). `reference_ms` is the end of a
-/// session that was recorded, so a night pass after midnight still belongs to the day that just ended.
+/// The end of the programme's last session of the event day that contains `reference_ms` (an event day runs from
+/// 08:00 to 08:00 IST, like [`evening_ms`]), counting only the sessions the programme marks for transcription
+/// (docs/programme.json). `reference_ms` is the end of a session that was recorded, so a night pass after midnight
+/// still belongs to the day that just ended: a last session ending at 00:30 must not pick up the next day's entry.
 /// None when the programme does not parse or has no such session that day (a rehearsal, another date):
 /// the caller then goes by the recorded sessions alone.
 pub fn programme_day_end_ms(programme_json: &str, reference_ms: u64) -> Option<u64> {
@@ -200,13 +402,17 @@ pub struct ProgrammeDay {
     pub last_end_ms: u64,
 }
 
-/// The programme's entry for the IST day that contains `reference_ms` (the sessions marked for transcription), or
+/// The programme's entry for the event day (08:00 to 08:00 IST) that contains `reference_ms` (the sessions marked for transcription), or
 /// None when the programme does not parse or lists none that day. Gate script: the pre-flight check of the day
 /// simulation reads this through the app (`WB_GATE_CHECK=programme`), so the script cannot disagree with the app.
 pub fn programme_day(programme_json: &str, reference_ms: u64) -> Option<ProgrammeDay> {
     let programme: Programme = serde_json::from_str(programme_json).ok()?;
-    let local = reference_ms.checked_add(IST_OFFSET_MS)?;
-    let day_start = local - local % DAY_MS - IST_OFFSET_MS;
+    // Shift the reference back by the day's 08:00 start so that the event day, not the calendar day, is found.
+    let day_hour_ms = DEADLINE_HOUR_IST * 3_600_000;
+    let shifted = reference_ms
+        .checked_add(IST_OFFSET_MS)?
+        .checked_sub(day_hour_ms)?;
+    let day_start = shifted - shifted % DAY_MS + day_hour_ms - IST_OFFSET_MS;
     let mut titles = Vec::new();
     let mut last_end_ms = 0u64;
     for s in programme.sessions.iter().filter(|s| s.transcribe) {
@@ -326,9 +532,24 @@ mod tests {
 
     #[test]
     fn the_reference_is_the_end_of_the_last_recorded_session_so_its_own_day_counts() {
-        // A reference at 09:00 the next day is that next IST day: its own programme is used.
+        // A reference at 09:00 the next day is that next event day: its own programme is used.
         assert_eq!(
             programme_day_end_ms(PROGRAMME, at(24 + 9, 0)),
+            Some(at(24 + 13, 0))
+        );
+        // The event day runs 08:00 to 08:00 (auditor item 10): a last recorded session that ends at 00:20, or at
+        // 07:59, still belongs to the day before, so the night pass waits for that day's last session (18:15), not
+        // for the next day's (13:00 on the 10th). The day changes at 08:00.
+        assert_eq!(
+            programme_day_end_ms(PROGRAMME, at(24, 20)),
+            Some(at(18, 15))
+        );
+        assert_eq!(
+            programme_day_end_ms(PROGRAMME, at(24 + 7, 59)),
+            Some(at(18, 15))
+        );
+        assert_eq!(
+            programme_day_end_ms(PROGRAMME, at(24 + 8, 0)),
             Some(at(24 + 13, 0))
         );
         // The reference is the end of the last recorded session, so a night pass at 01:00 still uses its day.
@@ -552,5 +773,243 @@ mod tests {
         assert!(may_start(at(18, 0), false, false, end));
         assert!(!may_start(at(18, 0), true, false, end));
         assert!(!may_start(at(18, 0), false, true, end));
+    }
+
+    fn speeds(en: f64, hi: f64) -> Speeds {
+        let m = BTreeMap::from([("en".to_owned(), en), ("hi".to_owned(), hi)]);
+        Speeds {
+            night_rtf: m.clone(),
+            decode_rtf: m,
+        }
+    }
+
+    /// Day 1's seminar hall: 3 h of English + Hindi audio, the night starts at 18:00 and has 14 h.
+    fn three_hours() -> Vec<SessionAudio> {
+        vec![session("a", 90, 90)]
+    }
+
+    #[test]
+    fn the_night_uses_the_hinglish_model_when_its_plan_finishes_before_08_00() {
+        // The UHD floor: Hinglish f16 at 0.67 (en) and 1.69 (hi) takes about 3.5 h for 3 h of audio.
+        let hinglish = speeds(0.67, 1.69);
+        let today = speeds(0.5, 1.0);
+        let r = route(
+            at(18, 0),
+            &three_hours(),
+            Some((&three_hours(), &hinglish)),
+            &today,
+        );
+        assert_eq!(r.route, Route::Hinglish);
+        assert!(matches!(r.plan, Plan::Run { .. }), "{r:?}");
+        assert_eq!(r.hinglish_skip, None);
+    }
+
+    #[test]
+    fn a_hinglish_night_that_would_run_past_08_00_is_not_started_and_today_s_models_run_instead() {
+        // Hinglish on a slow processor: 9 h per hour of audio, 27 h for 3 h; today's model needs 2.5 h.
+        let hinglish = speeds(5.0, 9.0);
+        let today = speeds(0.5, 1.0);
+        let r = route(
+            at(18, 0),
+            &three_hours(),
+            Some((&three_hours(), &hinglish)),
+            &today,
+        );
+        assert_eq!(r.route, Route::Today);
+        assert!(matches!(r.plan, Plan::Run { .. }), "{r:?}");
+        assert!(matches!(
+            r.hinglish_skip,
+            Some(SkipReason::DoesNotFit { needed_s, .. }) if needed_s > 14.0 * 3600.0
+        ));
+    }
+
+    #[test]
+    fn neither_model_fitting_skips_the_night_and_keeps_the_reason_for_the_marker() {
+        let r = route(
+            at(18, 0),
+            &three_hours(),
+            Some((&three_hours(), &speeds(5.0, 9.0))),
+            &speeds(5.0, 9.0),
+        );
+        assert_eq!(r.route, Route::Today);
+        assert!(
+            matches!(r.plan, Plan::Skip(SkipReason::DoesNotFit { .. })),
+            "{r:?}"
+        );
+        assert!(r.hinglish_skip.is_some());
+    }
+
+    #[test]
+    fn without_a_measured_hinglish_model_the_plan_is_today_s_alone() {
+        let today = speeds(0.5, 1.0);
+        let r = route(at(18, 0), &three_hours(), None, &today);
+        assert_eq!(r.route, Route::Today);
+        assert_eq!(
+            r.plan,
+            plan(
+                at(18, 0),
+                &three_hours(),
+                &today.night_rtf,
+                &today.decode_rtf
+            )
+        );
+        assert_eq!(r.hinglish_skip, None);
+    }
+
+    #[test]
+    fn the_hinglish_plan_counts_the_hours_left_from_the_real_start_time() {
+        // 6 h of audio at 1.69 (all Hindi) is 10.1 h: fits the 14 h of an 18:00 start, not the 6.5 h left at 01:30.
+        let all_hindi = vec![session("a", 0, 360)];
+        let hinglish = speeds(0.67, 1.69);
+        let today = speeds(0.5, 1.0);
+        assert_eq!(
+            route(at(18, 0), &all_hindi, Some((&all_hindi, &hinglish)), &today).route,
+            Route::Hinglish
+        );
+        let late = route(
+            at(24 + 1, 30),
+            &all_hindi,
+            Some((&all_hindi, &hinglish)),
+            &today,
+        );
+        assert_eq!(late.route, Route::Today);
+        assert!(late.hinglish_skip.is_some());
+    }
+
+    #[test]
+    fn the_marker_file_says_why_and_which_model_was_tried() {
+        let text = faster_machine_json(
+            "it would need about 27.0 h and only 14.0 h are left",
+            Some("hinglish-q8_0"),
+            42,
+        );
+        let v: serde_json::Value = serde_json::from_str(&text).expect("json");
+        assert_eq!(v["version"], 1);
+        assert_eq!(v["model"], "hinglish-q8_0");
+        assert!(v["reason"].as_str().is_some_and(|r| r.contains("27.0 h")));
+        assert_eq!(FASTER_MACHINE_FILE, "faster-machine.json");
+    }
+    fn speeds_of(rtf: &[(&str, f64)]) -> Speeds {
+        let m: BTreeMap<String, f64> = rtf.iter().map(|(l, r)| ((*l).to_owned(), *r)).collect();
+        Speeds {
+            night_rtf: m.clone(),
+            decode_rtf: m,
+        }
+    }
+
+    fn one_lang(id: &str, lang: &str, minutes: u64) -> SessionAudio {
+        SessionAudio {
+            id: id.into(),
+            audio_ms_by_lang: BTreeMap::from([(lang.to_owned(), minutes * 60_000)]),
+        }
+    }
+
+    #[test]
+    fn the_night_is_planned_by_priority_and_what_does_not_fit_is_dropped_not_started() {
+        // 14 h are left at 18:00. Hinglish redos: 2 h of audio at 4.0 = 8 h. Urdu: 1 h at 3.0 = 3 h. English: 1 h at 3.0
+        // = 3 h (14 h in all), and a second English hour would make 17 h: dropped.
+        let tiers = [
+            Tier {
+                sessions: vec![one_lang("hall-a", "hi", 120)],
+                speeds: speeds_of(&[("hi", 4.0)]),
+                all_or_nothing: true,
+            },
+            Tier {
+                sessions: vec![one_lang("urdu", "ur", 60)],
+                speeds: speeds_of(&[("ur", 3.0)]),
+                all_or_nothing: false,
+            },
+            Tier {
+                sessions: vec![one_lang("en-1", "en", 60), one_lang("en-2", "en", 60)],
+                speeds: speeds_of(&[("en", 3.0)]),
+                all_or_nothing: false,
+            },
+        ];
+        let t = plan_tiered(at(18, 0), &tiers);
+        let Plan::Run {
+            sessions,
+            estimate_s,
+            ..
+        } = &t.plan
+        else {
+            panic!("{t:?}")
+        };
+        assert_eq!(sessions, &["hall-a", "urdu", "en-1"], "priority order");
+        assert!((estimate_s / 3600.0 - 14.0).abs() < 1e-9, "{estimate_s}");
+        assert_eq!(t.dropped.len(), 1);
+        assert_eq!(t.dropped[0].session, "en-2");
+        assert_eq!(t.dropped[0].tier, 2);
+        assert!(t.dropped[0].left_s < t.dropped[0].needed_s);
+    }
+
+    #[test]
+    fn a_hinglish_class_that_does_not_fit_is_dropped_whole_and_the_lower_priorities_use_the_time() {
+        // Two Hinglish sessions of 8 h each do not fit in 14 h together: neither starts; the English one runs.
+        let tiers = [
+            Tier {
+                sessions: vec![one_lang("a", "hi", 120), one_lang("b", "hi", 120)],
+                speeds: speeds_of(&[("hi", 4.0)]),
+                all_or_nothing: true,
+            },
+            Tier {
+                sessions: vec![one_lang("en-1", "en", 60)],
+                speeds: speeds_of(&[("en", 3.0)]),
+                all_or_nothing: false,
+            },
+        ];
+        let t = plan_tiered(at(18, 0), &tiers);
+        assert_eq!(t.planned[0], Vec::<String>::new());
+        assert_eq!(t.planned[1], ["en-1"]);
+        assert_eq!(t.dropped.len(), 2);
+        assert!(t.dropped.iter().all(|d| d.tier == 0));
+    }
+
+    #[test]
+    fn a_session_planned_in_an_earlier_tier_is_not_planned_again_and_an_empty_night_says_why() {
+        let x = one_lang("x", "hi", 30);
+        let tiers = [
+            Tier {
+                sessions: vec![x.clone()],
+                speeds: speeds_of(&[("hi", 1.0)]),
+                all_or_nothing: true,
+            },
+            Tier {
+                sessions: vec![x],
+                speeds: speeds_of(&[("hi", 1.0)]),
+                all_or_nothing: false,
+            },
+        ];
+        let t = plan_tiered(at(18, 0), &tiers);
+        assert_eq!(t.planned, vec![vec!["x".to_string()], Vec::<String>::new()]);
+        assert!(t.dropped.is_empty());
+        let tier = |sessions: Vec<SessionAudio>, speeds: Speeds| Tier {
+            sessions,
+            speeds,
+            all_or_nothing: false,
+        };
+        let none = plan_tiered(
+            at(18, 0),
+            &[tier(vec![one_lang("x", "en", 30)], Speeds::default())],
+        );
+        assert_eq!(none.plan, Plan::Skip(SkipReason::NoNightModel));
+        let nothing = plan_tiered(
+            at(18, 0),
+            &[tier(
+                vec![one_lang("x", "en", 30)],
+                speeds_of(&[("hi", 1.0)]),
+            )],
+        );
+        assert_eq!(nothing.plan, Plan::Skip(SkipReason::NothingToDo));
+        let late = plan_tiered(
+            at(18, 0),
+            &[tier(
+                vec![one_lang("x", "en", 600)],
+                speeds_of(&[("en", 3.0)]),
+            )],
+        );
+        assert!(matches!(
+            late.plan,
+            Plan::Skip(SkipReason::DoesNotFit { .. })
+        ));
     }
 }

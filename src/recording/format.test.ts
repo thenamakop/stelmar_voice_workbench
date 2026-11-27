@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { clock, format, gigabytes, istDateTime, languages, meterPercent, minutes, partFile } from "./format";
+import {
+  clock,
+  format,
+  gigabytes,
+  initialChoice,
+  istDateTime,
+  languages,
+  meterPercent,
+  minutes,
+  partFile,
+  sessionLanguages,
+} from "./format";
 
 describe("recording formats", () => {
   it("formats the audio clock", () => {
@@ -30,5 +41,30 @@ describe("recording formats", () => {
     expect(format(44100, 1)).toBe("44.1 kHz · 1 ch");
     expect(languages(["en", "hi"])).toBe("EN · HI");
     expect(partFile(5)).toBe("part-0005.wav");
+  });
+});
+
+describe("a session's languages: English plus at most one of Hindi or Urdu", () => {
+  it("keeps one Hindi or Urdu as listed", () => {
+    expect(sessionLanguages(["en", "hi"])).toEqual(["en", "hi"]);
+    expect(sessionLanguages(["en", "ur"])).toEqual(["en", "ur"]);
+    expect(sessionLanguages(["en"])).toEqual(["en"]);
+  });
+
+  it("shows Hindi, never three languages, for an old session that listed both", () => {
+    expect(sessionLanguages(["en", "hi", "ur"])).toEqual(["en", "hi"]);
+    expect(sessionLanguages(["ur", "en", "hi"])).toEqual(["hi", "en"]);
+    expect(languages(sessionLanguages(["en", "hi", "ur"]))).toBe("EN · HI");
+  });
+
+  it("starts the dialog from the programme: Urdu is Nastaliq, both listed is Hindi, none is English and Hindi", () => {
+    expect(initialChoice(["en", "ur"])).toEqual({ english: true, hindiUrdu: true, script: "nastaliq" });
+    expect(initialChoice(["en", "hi", "ur"])).toEqual({
+      english: true,
+      hindiUrdu: true,
+      script: "devanagari",
+    });
+    expect(initialChoice(["en"])).toEqual({ english: true, hindiUrdu: false, script: "devanagari" });
+    expect(initialChoice(undefined)).toEqual({ english: true, hindiUrdu: true, script: "devanagari" });
   });
 });

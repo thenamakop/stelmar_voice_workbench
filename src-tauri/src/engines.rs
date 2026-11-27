@@ -636,7 +636,7 @@ mod tests {
         let with_dir = format!(r"{dir}\ggml-small.bin");
         for file in [
             "ggml-medium.bin",
-            "converted/ggml-hinglish-q5_0.bin",
+            "converted/ggml-hinglish-q8_0.bin",
             with_dir.as_str(),
         ] {
             let line = model_hash_line(file, 1_500_000_000, 1_000, took, &Status::Ok, bg);

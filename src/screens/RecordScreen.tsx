@@ -4,7 +4,15 @@ import { Badge, Button, Icon, IconButton, ProgressBar, Select, Switch, Tabs, Tag
 import type { BadgeTone } from "../ds";
 import { px } from "../ds/units";
 import type { MirrorStatus, QueueJob, QueueSegment, RecorderStatus, Snapshot } from "../ipc";
-import { clock, istDateTime, languages, meterPercent, minutes, partFile } from "../recording/format";
+import {
+  clock,
+  istDateTime,
+  languages,
+  meterPercent,
+  minutes,
+  partFile,
+  sessionLanguages,
+} from "../recording/format";
 import type { Level, Recorder } from "../recording/useRecorder";
 import type { QueueState } from "../queue/useQueue";
 import {
@@ -14,13 +22,13 @@ import {
   partProgress,
   percent,
   rollingJob,
-  rowKind,
   sessionName,
 } from "../queue/view";
 import { KeyValue, MainWithSide, Note, PageHead, SideCard } from "../shell/layout";
 import type { CapabilityState } from "../system/useCapability";
 import { liveUnavailableReason } from "./liveReason";
 import { transcriptionRows } from "../system/view";
+import { SegmentText } from "./SegmentText";
 import { StartSessionDialog } from "./StartSessionDialog";
 import { NoEngineBanner, useRegistry } from "./RegistrySections";
 
@@ -57,47 +65,6 @@ const SAMPLE_ROWS: { time: string; badge: string; lang: Lang; text: string }[] =
     text: "اس مطالعے میں ہم نے تین عمارتوں کی چھتوں پر لگے سولر پینلوں کا ڈیٹا دیکھا۔",
   },
 ];
-
-function rowText(lang: Lang, text: string): ReactNode {
-  const base = { fontSize: 17, lineHeight: px(28), color: "var(--text-body)" } as const;
-  switch (lang) {
-    case "hi":
-    case "mixed":
-      return (
-        <div
-          lang="hi"
-          dir={lang === "mixed" ? "auto" : undefined}
-          style={{
-            ...base,
-            fontFamily: "var(--font-devanagari)",
-            fontSize: 18,
-            lineHeight: "var(--lh-devanagari)",
-          }}
-        >
-          {text}
-        </div>
-      );
-    case "ur":
-    case "mixed-ur":
-      return (
-        <div
-          lang="ur"
-          dir={lang === "mixed-ur" ? "auto" : "rtl"}
-          style={{
-            ...base,
-            fontFamily: "var(--font-urdu)",
-            fontSize: 19,
-            lineHeight: "var(--lh-urdu)",
-            textAlign: lang === "mixed-ur" ? "start" : "right",
-          }}
-        >
-          {text}
-        </div>
-      );
-    default:
-      return <div style={base}>{text}</div>;
-  }
-}
 
 function Row({ time, badge, children }: { time: string; badge: ReactNode; children: ReactNode }) {
   return (
@@ -368,7 +335,7 @@ function SegmentRows({ segments }: { segments: QueueSegment[] }) {
     <>
       {segments.slice(-300).map((s) => (
         <Row key={s.start_ms} time={clock(s.start_ms)} badge={<Badge>{languageBadge(s)}</Badge>}>
-          {rowText(rowKind(s), s.text)}
+          <SegmentText text={s.text} mixed={s.mixed} />
         </Row>
       ))}
     </>
@@ -454,7 +421,7 @@ export function RecordScreen({ hasProfile, recorder, capability, queue }: Record
               </span>
               <Badge>Session</Badge>
               <Badge tone="info">Record + post-process</Badge>
-              <Badge>{languages(session.expected_languages)}</Badge>
+              <Badge>{languages(sessionLanguages(session.expected_languages))}</Badge>
             </>
           ) : (
             <>
@@ -551,7 +518,9 @@ export function RecordScreen({ hasProfile, recorder, capability, queue }: Record
             <SideCard title="Language">
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 {LOCK_LANGUAGES.map(([code, name]) => {
-                  const expected = (session?.expected_languages ?? ["en", "hi"]).includes(code);
+                  const expected = sessionLanguages(session?.expected_languages ?? ["en", "hi"]).includes(
+                    code,
+                  );
                   const operable = recording && expected;
                   return (
                     <Tag
@@ -729,7 +698,7 @@ export function RecordScreen({ hasProfile, recorder, capability, queue }: Record
             <>
               {SAMPLE_ROWS.map((r) => (
                 <Row key={r.badge} time={r.time} badge={<Badge>{r.badge}</Badge>}>
-                  {rowText(r.lang, r.text)}
+                  <SegmentText text={r.text} mixed={r.lang === "mixed" || r.lang === "mixed-ur"} />
                 </Row>
               ))}
               <Row time="00:00:00" badge={<Icon name="loader" size={16} color="var(--ink-500)" />}>

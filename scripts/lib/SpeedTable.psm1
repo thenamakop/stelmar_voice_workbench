@@ -31,7 +31,7 @@ function Get-SpeedModels {
     [pscustomobject]@{ Id = 'medium'; File = 'ggml-medium.bin'; Name = 'medium' },
     [pscustomobject]@{ Id = 'large-v3-turbo-q5_0'; File = 'ggml-large-v3-turbo-q5_0.bin'; Name = 'large-v3-turbo q5_0' },
     [pscustomobject]@{ Id = 'large-v3-q5_0'; File = 'ggml-large-v3-q5_0.bin'; Name = 'large-v3 q5_0' },
-    [pscustomobject]@{ Id = 'hinglish-q5_0'; File = 'converted\ggml-hinglish-q5_0.bin'; Name = 'hinglish q5_0 (code-switched, large-v3 sized)' }
+    [pscustomobject]@{ Id = 'hinglish-q8_0'; File = 'converted\ggml-hinglish-q8_0.bin'; Name = 'hinglish q8_0 (code-switched, large-v3 sized)' }
   )
 }
 
@@ -70,7 +70,7 @@ function Get-SpeedPlan {
       $row = ('vulkan on {0} (device {1}, driver {2}), 2 CPU threads' -f $g.Description, $g.Index, $(if ($g.Driver) { $g.Driver } else { 'unknown' }))
       foreach ($m in $models) {
         foreach ($l in $langs) { & $add $row 'vulkan' @{ kind = 'gpu'; index = [int]$g.Index } 2 'rolling' $m $l ('bench-{0}.wav' -f $l) }
-        if ($m.Id -eq 'hinglish-q5_0' -and -not $Quick) { & $add $row 'vulkan' @{ kind = 'gpu'; index = [int]$g.Index } 2 'rolling' $m 'hi' 'bench-codeswitch.wav' }
+        if ($m.Id -eq 'hinglish-q8_0' -and -not $Quick) { & $add $row 'vulkan' @{ kind = 'gpu'; index = [int]$g.Index } 2 'rolling' $m 'hi' 'bench-codeswitch.wav' }
       }
     }
   } else {
@@ -86,7 +86,7 @@ function Get-SpeedPlan {
         $row = ('CPU {0}, {1} threads' -f $v, $th)
         foreach ($m in $models) {
           foreach ($l in $langs) { & $add $row $v @{ kind = 'cpu' } $th 'rolling' $m $l ('bench-{0}.wav' -f $l) }
-          if ($m.Id -eq 'hinglish-q5_0' -and -not $Quick) { & $add $row $v @{ kind = 'cpu' } $th 'rolling' $m 'hi' 'bench-codeswitch.wav' }
+          if ($m.Id -eq 'hinglish-q8_0' -and -not $Quick) { & $add $row $v @{ kind = 'cpu' } $th 'rolling' $m 'hi' 'bench-codeswitch.wav' }
         }
       }
     }

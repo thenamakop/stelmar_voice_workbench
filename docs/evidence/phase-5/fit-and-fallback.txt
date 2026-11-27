@@ -1,0 +1,45 @@
+Hinglish model: graphics memory fit and the day fallbacks (Phase 5, Hinglish rollout, steps 3 and 4)
+date: 2026-11-26 05:27 to 2026-11-26 22:44 (IST); machine: Legion (RTX 4070 Laptop 8 GB, driver 621.14); written by scripts/gates/fit-and-fallback.ps1
+method: wb-engine batch over a 120 s English + Hindi clip (FLEURS test utterances alternating with 0.8 s of silence; 60 s for the Hinglish rows under emulation), default rolling settings (beam 5, temperature fallback, 15 s chunks, sentence split). RTF = decode seconds / audio seconds from the engine done event; load time is not in it.
+bars (system check): rolling RTF <= 1.00, times 0.75 under emulation = 0.75; the night pass fits when RTF x 3 h <= 12 h (RTF <= 4.00). Emulation is optimistic for CPU and pessimistic for the integrated GPU (the UHD rows are a floor).
+
+== Part V: video memory on the RTX 4070 (CUDA engine, 8 CPU threads, native; nvidia-smi memory.used peak minus idle, sampled every 200 ms)
+models loaded | peak video memory MiB (above idle) | idle MiB | RTF | engine sha256 (first 16)
+large-v3-turbo-q5_0 alone (reference) | 999 | 405 | 0.058 | 4d624519760842ee
+hinglish-f16 alone | 4115 | 405 | 0.158 | 4d624519760842ee
+hinglish-q8_0 alone | 2731 | 405 | 0.150 | 4d624519760842ee
+hinglish-f16 + large-v3-turbo-q5_0 loaded together | 4983 | 405 | 0.152 | 4d624519760842ee
+hinglish-q8_0 + large-v3-turbo-q5_0 loaded together | 3601 | 405 | 0.148 | 4d624519760842ee
+hinglish-q8_0 + small-q5_0 loaded together (26 Nov 2026, step 4: the small detector) | 3255 | 455 | 0.139 | 4d624519760842ee
+hinglish-f16 + small-q5_0 loaded together (26 Nov 2026, step 4a: the small detector for 6 and 8 GB cards) | 4637 | 0 | 0.151 | 4d624519760842ee
+
+== Part R: rolling RTF under emulation (rule (a) = today, rule (c) = both ways, Hinglish = rule (d2))
+profile | device | rule | models | threads | audio s | RTF | bar | meets bar | night hours for 3 h of audio | chunks | detections | both ways | peak working set GiB | engine sha256 (first 16)
+emu-low | CPU avx2 | a | medium (en) + turbo-q5_0 (hi) | 4 | 129 | 5.891 | 0.75 | no | 17.7 | 10 | 10 | 2 | 2.96 | 3d759e7dbabe8842
+emu-low | CPU avx2 | c | medium (en) + turbo-q5_0 (hi) | 4 | 129 | 8.299 | 0.75 | no | 24.9 | 10 | 10 | 10 | 2.96 | 3d759e7dbabe8842
+emu-low | CPU avx2 | d2 | hinglish-f16 for every chunk | 4 | 74 | 12.821 | 0.75 | no | 38.5 | 6 | 6 | 0 | 3.95 | 3f13ee3a69f63c30
+emu-low | Intel UHD (Vulkan) | a | medium (en) + turbo-q5_0 (hi) | 2 | 129 | 0.979 | 0.75 | no | 2.9 | 10 | 10 | 2 | 3.28 | b35315867217c6d3
+emu-low | Intel UHD (Vulkan) | c | medium (en) + turbo-q5_0 (hi) | 2 | 129 | 1.347 | 0.75 | no | 4.0 | 10 | 10 | 10 | 3.26 | b35315867217c6d3
+emu-low | Intel UHD (Vulkan) | d2 | hinglish-f16 for every chunk | 2 | 74 | 1.972 | 0.75 | no | 5.9 | 6 | 6 | 0 | 4.16 | cd037a6a4e0b5713
+emu-mid | CPU avx2 | a | medium (en) + turbo-q5_0 (hi) | 12 | 129 | 2.263 | 0.75 | no | 6.8 | 10 | 10 | 2 | 2.96 | 3d759e7dbabe8842
+emu-mid | CPU avx2 | c | medium (en) + turbo-q5_0 (hi) | 12 | 129 | 3.211 | 0.75 | no | 9.6 | 10 | 10 | 10 | 2.96 | 3d759e7dbabe8842
+emu-mid | CPU avx2 | d2 | hinglish-f16 for every chunk | 12 | 74 | 4.485 | 0.75 | no | 13.5 | 6 | 6 | 0 | 3.95 | 3f13ee3a69f63c30
+emu-mid | Intel UHD (Vulkan) | a | medium (en) + turbo-q5_0 (hi) | 6 | 129 | 0.864 | 0.75 | no | 2.6 | 10 | 10 | 2 | 3.25 | b35315867217c6d3
+emu-mid | Intel UHD (Vulkan) | c | medium (en) + turbo-q5_0 (hi) | 6 | 129 | 1.281 | 0.75 | no | 3.8 | 10 | 10 | 10 | 3.25 | b35315867217c6d3
+emu-mid | Intel UHD (Vulkan) | d2 | hinglish-f16 for every chunk | 6 | 74 | 1.832 | 0.75 | no | 5.5 | 6 | 6 | 0 | 4.12 | cd037a6a4e0b5713
+
+== Part D: the cost of a language detector on the processor (emu-mid, CPU avx2, 12 threads, same 129 s clip: detection on = English + Hindi, off = Hindi alone)
+rule | models | RTF | detections | peak working set GiB | engine sha256 (first 16)
+detect on | turbo q5_0 en + hi, detection on | 2.737 | 10 | 0.92 | 3f13ee3a69f63c30
+detect off | turbo q5_0 hi alone, no detection | 2.103 | 0 | 0.92 | 3f13ee3a69f63c30
+detect on | small q5_0 en + hi, detection on | 0.690 | 10 | 0.58 | 3f13ee3a69f63c30
+detect off | small q5_0 hi alone, no detection | 1.245 | 0 | 0.59 | 3f13ee3a69f63c30
+
+== Part E: the language detector alone (wb-engine detect, no decoding; 129 s clip; CPU avx2; seconds include the model load)
+profile | models | threads | RTF | elapsed s | chunks detected | peak working set GiB
+emu-mid | turbo q5_0 detector, no decoding | 12 | 1.265 | 162.8 | 10 | 0.75
+emu-mid | small q5_0 detector, no decoding | 12 | 0.226 | 29.0 | 10 | 0.37
+emu-low | turbo q5_0 detector, no decoding | 4 | 2.675 | 344.3 | 10 | 0.75
+emu-low | small q5_0 detector, no decoding | 4 | 0.456 | 58.7 | 10 | 0.37
+
+the experiment engines (rule (c)) are development builds from commit f1d9251; the rule (a) rows on the same engines use no experiment switch and equal the release engine; the Hinglish rows use the release engines in src-tauri\binaries.

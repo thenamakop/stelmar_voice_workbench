@@ -422,3 +422,628 @@ dataset = "kathbath-ur"
 role = "rolling"
 engine = "wb-engine"
 limit = "eval/clips/phase3-kathbath-ur.txt"
+
+# ------------------------------------------------------- Phase 5 controls and the code-switching baseline
+# Everything below goes through `wb-engine batch --file` (set WB_ENGINE), the engine the app ships. They exist before
+# any engine change: item 4 and item 5 of the Phase 5 plan record their "before" scores from these runs.
+
+# Baseline of the code-switching gate: stock medium, en+hi, language detected per chunk, the three clips that hold
+# the ten held-out labelled chunks. The summary's chunk_labels block is the gate's score (6 of 10 in Phase 2).
+[[run]]
+name = "ctl-wb-medium-coshe-heldout"
+setup = "medium"
+dataset = "coshe-eval"
+role = "rolling"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["en", "hi"]
+limit = "eval/clips/phase5-coshe-heldout.txt"
+needs = "phase-2"
+
+# The same ten held-out chunks on the production models (owner, 24 Nov 2026, condition a): detection and decoding by
+# large-v3-turbo-q5_0 on the Legion GPU, rule (a) as it is. Run with WB_ENGINE = the cuda build and WB_ENGINE_DEVICE = gpu:0.
+# This is the "before" of every language-detection change of items 4 and 5; it is a held-out run and is reported as one.
+[[run]]
+name = "prod-turbo-q5_0-coshe-heldout"
+setup = "large-v3-turbo-q5_0"
+dataset = "coshe-eval"
+role = "rolling"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["en", "hi"]
+limit = "eval/clips/phase5-coshe-heldout.txt"
+needs = "phase-2"
+
+# The two final candidates of rule (d2) on the ten held-out chunks (owner, 25 Nov 2026): the Hinglish model decodes and detects
+# every chunk, as the f16 file and as q5_0. Held-out runs; each is reported as one. Production cuda engine, gpu:0.
+[[run]]
+name = "heldout-hinglish-f16-d2"
+setup = "hinglish-f16"
+dataset = "coshe-eval"
+role = "rolling"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["en", "hi"]
+limit = "eval/clips/phase5-coshe-heldout.txt"
+needs = "phase-2"
+
+[[run]]
+name = "heldout-hinglish-q5_0-d2"
+setup = "hinglish-q5_0"
+dataset = "coshe-eval"
+role = "rolling"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["en", "hi"]
+limit = "eval/clips/phase5-coshe-heldout.txt"
+needs = "phase-2"
+
+# The one held-out run of the q8_0 file, approved by the owner on 26 Nov 2026 (step 3d of the Hinglish rollout brief): f16 needs 4.1 GB of video
+# memory and does not fit a 4 GB card, q8_0 needs 2.7 GB and does. Reported with the others as one held-out run. Production cuda engine, gpu:0.
+[[run]]
+name = "heldout-hinglish-q8_0-d2"
+setup = "hinglish-q8_0"
+dataset = "coshe-eval"
+role = "rolling"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["en", "hi"]
+limit = "eval/clips/phase5-coshe-heldout.txt"
+needs = "phase-2"
+
+# The held-out runs of the two final pairs (owner, 26 Nov 2026, step 4b): the small q5_0 model detects every chunk and decodes the
+# English ones, the Hinglish file decodes the rest. The f16 pair is run only because it beat f16 alone on the tuning set
+# (WER 15.9 against 17.1, English in Devanagari 6.3% against 11.8%, 0 translated). One held-out run each, reported with the others.
+# Production cuda engine, gpu:0, run through scripts/gates/eval-under-gate.ps1.
+[[run]]
+name = "heldout-small-detect-q8_0"
+setup = "en=small-q5_0,hi=hinglish-q8_0"
+dataset = "coshe-eval"
+role = "rolling"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["en", "hi"]
+limit = "eval/clips/phase5-coshe-heldout.txt"
+needs = "phase-2"
+
+[[run]]
+name = "heldout-small-detect-f16"
+setup = "en=small-q5_0,hi=hinglish-f16"
+dataset = "coshe-eval"
+role = "rolling"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["en", "hi"]
+limit = "eval/clips/phase5-coshe-heldout.txt"
+needs = "phase-2"
+
+# Items 4 and 5: the language-detection rules on the 70 tuning clips (eval/clips/phase5-tune-coshe.txt), production models, Legion GPU
+# (WB_ENGINE = the cuda build, WB_ENGINE_DEVICE = gpu:0), rolling settings. Scored by eval/score_tune.py against the chunk labels
+# of eval/label_chunks.py. (a) is the current rule; (d) is the Hinglish model for every chunk: forced to Hindi, which the
+# Hinglish model writes in Devanagari with English words in Latin (d1: the language is forced; d2: the Hinglish model also detects).
+[[run]]
+name = "tune-turbo-q5_0-a"
+setup = "large-v3-turbo-q5_0"
+dataset = "coshe-eval"
+role = "rolling"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["en", "hi"]
+limit = "eval/clips/phase5-tune-coshe.txt"
+needs = "phase-2"
+
+[[run]]
+name = "tune-hinglish-f16-d1"
+setup = "hinglish-f16"
+dataset = "coshe-eval"
+role = "rolling"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["hi"]
+limit = "eval/clips/phase5-tune-coshe.txt"
+needs = "phase-2"
+
+[[run]]
+name = "tune-hinglish-f16-d2"
+setup = "hinglish-f16"
+dataset = "coshe-eval"
+role = "rolling"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["en", "hi"]
+limit = "eval/clips/phase5-tune-coshe.txt"
+needs = "phase-2"
+
+# Rule (c): every chunk of the en+hi session is decoded in both languages (detected language first, the other second) and
+# the better candidate is kept. A record of the Phase 5 comparison: it needed an experiment engine (cargo feature
+# lang-experiments) with WB_LANG_EXPERIMENT=c, which was removed from the engine on 25 Nov 2026 once rule (d2) was chosen;
+# to repeat it, check out commit f1d9251, where the feature still exists. The fingerprint records the variable.
+[[run]]
+name = "tune-turbo-q5_0-c"
+setup = "large-v3-turbo-q5_0"
+dataset = "coshe-eval"
+role = "rolling"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["en", "hi"]
+limit = "eval/clips/phase5-tune-coshe.txt"
+needs = "phase-2"
+
+# Rule (d2) with a quantised Hinglish model (converted locally from the f16 file with scripts/models/quantize_models.py;
+# never committed): does the translated count stay 0, and what do WER and the real-time factor become?
+[[run]]
+name = "tune-hinglish-q8_0-d2"
+setup = "hinglish-q8_0"
+dataset = "coshe-eval"
+role = "rolling"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["en", "hi"]
+limit = "eval/clips/phase5-tune-coshe.txt"
+needs = "phase-2"
+
+[[run]]
+name = "tune-hinglish-q5_0-d2"
+setup = "hinglish-q5_0"
+dataset = "coshe-eval"
+role = "rolling"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["en", "hi"]
+limit = "eval/clips/phase5-tune-coshe.txt"
+needs = "phase-2"
+
+# Rule (e), the hybrid: the Hinglish model detects the language of every chunk and decodes the chunks it calls Hindi;
+# turbo q5_0 decodes the chunks it calls English. A record only: it needed the experiment engine with WB_LANG_EXPERIMENT=e
+# (removed on 25 Nov 2026; see the note above). Run with the f16, q8_0 and q5_0 Hinglish files.
+[[run]]
+name = "tune-hybrid-f16-e"
+setup = "en=large-v3-turbo-q5_0,hi=hinglish-f16"
+dataset = "coshe-eval"
+role = "rolling"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["en", "hi"]
+limit = "eval/clips/phase5-tune-coshe.txt"
+needs = "phase-2"
+
+[[run]]
+name = "tune-hybrid-q8_0-e"
+setup = "en=large-v3-turbo-q5_0,hi=hinglish-q8_0"
+dataset = "coshe-eval"
+role = "rolling"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["en", "hi"]
+limit = "eval/clips/phase5-tune-coshe.txt"
+needs = "phase-2"
+
+[[run]]
+name = "tune-hybrid-q5_0-e"
+setup = "en=large-v3-turbo-q5_0,hi=hinglish-q5_0"
+dataset = "coshe-eval"
+role = "rolling"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["en", "hi"]
+limit = "eval/clips/phase5-tune-coshe.txt"
+needs = "phase-2"
+
+# Control 1 (GATES.md, Open items of 9 Nov): previous-text context on against off, through the engine. The engine
+# resets its context after a flagged chunk (PLAN section 6), so this is the app's own behaviour, not a harness
+# approximation. Same 20 CoSHE-Eval clips, detection en+hi, stock medium. Report the gap both ways.
+[[run]]
+name = "ctl-wb-medium-coshe-ctx-on"
+setup = "medium"
+dataset = "coshe-eval"
+role = "rolling"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["en", "hi"]
+limit = 20
+needs = "phase-2"
+
+[[run]]
+name = "ctl-wb-medium-coshe-ctx-off"
+setup = "medium"
+dataset = "coshe-eval"
+role = "parity"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["en", "hi"]
+limit = 20
+needs = "phase-2"
+
+[[compare]]
+a = "ctl-wb-medium-coshe-ctx-on"
+b = "ctl-wb-medium-coshe-ctx-off"
+max_wer_points = 3.0
+informational = true   # control 1: context on against off; a gap is a finding, not a gate
+
+# Control 2: the 15 s chunk cap against 30 s for single-language sets. The 15 s side is the existing verify-wb-medium-*
+# run (role rolling); these are the 30 s side (role rolling-30). Label both when quoting either.
+[[run]]
+name = "ctl-wb-medium-fleurs-en-chunk30"
+setup = "medium"
+dataset = "fleurs-en"
+role = "rolling-30"
+engine = "wb-engine"
+limit = "eval/clips/phase2-verify-fleurs.txt"
+needs = "phase-2"
+
+[[run]]
+name = "ctl-wb-medium-fleurs-hi-chunk30"
+setup = "medium"
+dataset = "fleurs-hi"
+role = "rolling-30"
+engine = "wb-engine"
+limit = "eval/clips/phase2-verify-fleurs.txt"
+needs = "phase-2"
+
+[[run]]
+name = "ctl-wb-medium-fleurs-ur-chunk30"
+setup = "medium"
+dataset = "fleurs-ur"
+role = "rolling-30"
+engine = "wb-engine"
+limit = "eval/clips/phase2-verify-fleurs.txt"
+needs = "phase-2"
+
+[[compare]]
+a = "verify-wb-medium-fleurs-en"
+b = "ctl-wb-medium-fleurs-en-chunk30"
+max_wer_points = 3.0
+informational = true   # control 2: 15 s cap (a) against 30 s (b)
+
+[[compare]]
+a = "verify-wb-medium-fleurs-hi"
+b = "ctl-wb-medium-fleurs-hi-chunk30"
+max_wer_points = 3.0
+informational = true   # control 2
+
+[[compare]]
+a = "verify-wb-medium-fleurs-ur"
+b = "ctl-wb-medium-fleurs-ur-chunk30"
+max_wer_points = 3.0
+informational = true   # control 2
+
+# Step 4 of the Hinglish rollout brief (owner, 26 Nov 2026), 4 GB cards: Turbo q5_0 detects the language of every chunk and
+# decodes the English ones, Hinglish q8_0 decodes the Hindi ones (the engine's own routing, no experiment: the detector is the
+# model for English). Run on the Legion GPU for the text; the same models on a processor detector and a card that holds only
+# q8_0 (2.7 GB) would give the same text. Held-out chunks are not in the tuning list.
+[[run]]
+name = "tune-turbo-detect-q8_0"
+setup = "en=large-v3-turbo-q5_0,hi=hinglish-q8_0"
+dataset = "coshe-eval"
+role = "rolling"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["en", "hi"]
+limit = "eval/clips/phase5-tune-coshe.txt"
+needs = "phase-2"
+
+# The same with the smaller detector (small q5_0, 0.2 to 0.5 times real time on the processor, where turbo q5_0 is 1.3 to 2.7):
+# the only detector a processor could run beside a card that holds only the Hinglish model.
+[[run]]
+name = "tune-small-detect-q8_0"
+setup = "en=small-q5_0,hi=hinglish-q8_0"
+dataset = "coshe-eval"
+role = "rolling"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["en", "hi"]
+limit = "eval/clips/phase5-tune-coshe.txt"
+needs = "phase-2"
+
+# For 6 and 8 GB cards (owner, 26 Nov 2026): the small detector in front of the Hinglish f16 file. Run with
+# scripts/gates/eval-under-gate.ps1 (quiet-machine check, then the gate lock).
+[[run]]
+name = "tune-small-detect-f16"
+setup = "en=small-q5_0,hi=hinglish-f16"
+dataset = "coshe-eval"
+role = "rolling"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["en", "hi"]
+limit = "eval/clips/phase5-tune-coshe.txt"
+needs = "phase-2"
+
+# ------------------------------------------------------------------ item 8 (27 Nov 2026, night run 2): accuracy of the Hindi and Urdu live models
+# Near-live settings (greedy, no previous-text context, 15 s chunks) against the rolling settings of the same model on the
+# same clips: the near-live bar is a WER no more than 1.5 times the rolling WER and an RTF at or under 0.35. Language given
+# (fixed). FLEURS hi and ur test (all clips) and the Kathbath test lists of Phase 3. Run with scripts/gates/eval-under-gate.ps1.
+# Hinglish q8_0 for Hindi only (it writes Devanagari: no Urdu run).
+
+[[run]]
+name = "item8-turbo-q5_0-fleurs-hi-near-live"
+setup = "large-v3-turbo-q5_0"
+dataset = "fleurs-hi"
+role = "near-live"
+engine = "wb-engine"
+
+[[run]]
+name = "item8-turbo-q5_0-fleurs-hi-rolling"
+setup = "large-v3-turbo-q5_0"
+dataset = "fleurs-hi"
+role = "rolling"
+engine = "wb-engine"
+
+[[run]]
+name = "item8-turbo-q5_0-kathbath-hi-near-live"
+setup = "large-v3-turbo-q5_0"
+dataset = "kathbath-hi"
+role = "near-live"
+engine = "wb-engine"
+limit = "eval/clips/phase3-kathbath-hi.txt"
+
+[[run]]
+name = "item8-turbo-q5_0-kathbath-hi-rolling"
+setup = "large-v3-turbo-q5_0"
+dataset = "kathbath-hi"
+role = "rolling"
+engine = "wb-engine"
+limit = "eval/clips/phase3-kathbath-hi.txt"
+
+[[run]]
+name = "item8-turbo-q5_0-fleurs-ur-near-live"
+setup = "large-v3-turbo-q5_0"
+dataset = "fleurs-ur"
+role = "near-live"
+engine = "wb-engine"
+
+[[run]]
+name = "item8-turbo-q5_0-fleurs-ur-rolling"
+setup = "large-v3-turbo-q5_0"
+dataset = "fleurs-ur"
+role = "rolling"
+engine = "wb-engine"
+
+[[run]]
+name = "item8-turbo-q5_0-kathbath-ur-near-live"
+setup = "large-v3-turbo-q5_0"
+dataset = "kathbath-ur"
+role = "near-live"
+engine = "wb-engine"
+limit = "eval/clips/phase3-kathbath-ur.txt"
+
+[[run]]
+name = "item8-turbo-q5_0-kathbath-ur-rolling"
+setup = "large-v3-turbo-q5_0"
+dataset = "kathbath-ur"
+role = "rolling"
+engine = "wb-engine"
+limit = "eval/clips/phase3-kathbath-ur.txt"
+
+[[run]]
+name = "item8-medium-q5_0-fleurs-hi-near-live"
+setup = "medium-q5_0"
+dataset = "fleurs-hi"
+role = "near-live"
+engine = "wb-engine"
+
+[[run]]
+name = "item8-medium-q5_0-fleurs-hi-rolling"
+setup = "medium-q5_0"
+dataset = "fleurs-hi"
+role = "rolling"
+engine = "wb-engine"
+
+[[run]]
+name = "item8-medium-q5_0-kathbath-hi-near-live"
+setup = "medium-q5_0"
+dataset = "kathbath-hi"
+role = "near-live"
+engine = "wb-engine"
+limit = "eval/clips/phase3-kathbath-hi.txt"
+
+[[run]]
+name = "item8-medium-q5_0-kathbath-hi-rolling"
+setup = "medium-q5_0"
+dataset = "kathbath-hi"
+role = "rolling"
+engine = "wb-engine"
+limit = "eval/clips/phase3-kathbath-hi.txt"
+
+[[run]]
+name = "item8-medium-q5_0-fleurs-ur-near-live"
+setup = "medium-q5_0"
+dataset = "fleurs-ur"
+role = "near-live"
+engine = "wb-engine"
+
+[[run]]
+name = "item8-medium-q5_0-fleurs-ur-rolling"
+setup = "medium-q5_0"
+dataset = "fleurs-ur"
+role = "rolling"
+engine = "wb-engine"
+
+[[run]]
+name = "item8-medium-q5_0-kathbath-ur-near-live"
+setup = "medium-q5_0"
+dataset = "kathbath-ur"
+role = "near-live"
+engine = "wb-engine"
+limit = "eval/clips/phase3-kathbath-ur.txt"
+
+[[run]]
+name = "item8-medium-q5_0-kathbath-ur-rolling"
+setup = "medium-q5_0"
+dataset = "kathbath-ur"
+role = "rolling"
+engine = "wb-engine"
+limit = "eval/clips/phase3-kathbath-ur.txt"
+
+[[run]]
+name = "item8-small-q5_0-fleurs-hi-near-live"
+setup = "small-q5_0"
+dataset = "fleurs-hi"
+role = "near-live"
+engine = "wb-engine"
+
+[[run]]
+name = "item8-small-q5_0-fleurs-hi-rolling"
+setup = "small-q5_0"
+dataset = "fleurs-hi"
+role = "rolling"
+engine = "wb-engine"
+
+[[run]]
+name = "item8-small-q5_0-kathbath-hi-near-live"
+setup = "small-q5_0"
+dataset = "kathbath-hi"
+role = "near-live"
+engine = "wb-engine"
+limit = "eval/clips/phase3-kathbath-hi.txt"
+
+[[run]]
+name = "item8-small-q5_0-kathbath-hi-rolling"
+setup = "small-q5_0"
+dataset = "kathbath-hi"
+role = "rolling"
+engine = "wb-engine"
+limit = "eval/clips/phase3-kathbath-hi.txt"
+
+[[run]]
+name = "item8-small-q5_0-fleurs-ur-near-live"
+setup = "small-q5_0"
+dataset = "fleurs-ur"
+role = "near-live"
+engine = "wb-engine"
+
+[[run]]
+name = "item8-small-q5_0-fleurs-ur-rolling"
+setup = "small-q5_0"
+dataset = "fleurs-ur"
+role = "rolling"
+engine = "wb-engine"
+
+[[run]]
+name = "item8-small-q5_0-kathbath-ur-near-live"
+setup = "small-q5_0"
+dataset = "kathbath-ur"
+role = "near-live"
+engine = "wb-engine"
+limit = "eval/clips/phase3-kathbath-ur.txt"
+
+[[run]]
+name = "item8-small-q5_0-kathbath-ur-rolling"
+setup = "small-q5_0"
+dataset = "kathbath-ur"
+role = "rolling"
+engine = "wb-engine"
+limit = "eval/clips/phase3-kathbath-ur.txt"
+
+[[run]]
+name = "item8-hinglish-q8_0-fleurs-hi-near-live"
+setup = "hinglish-q8_0"
+dataset = "fleurs-hi"
+role = "near-live"
+engine = "wb-engine"
+
+[[run]]
+name = "item8-hinglish-q8_0-fleurs-hi-rolling"
+setup = "hinglish-q8_0"
+dataset = "fleurs-hi"
+role = "rolling"
+engine = "wb-engine"
+
+[[run]]
+name = "item8-hinglish-q8_0-kathbath-hi-near-live"
+setup = "hinglish-q8_0"
+dataset = "kathbath-hi"
+role = "near-live"
+engine = "wb-engine"
+limit = "eval/clips/phase3-kathbath-hi.txt"
+
+[[run]]
+name = "item8-hinglish-q8_0-kathbath-hi-rolling"
+setup = "hinglish-q8_0"
+dataset = "kathbath-hi"
+role = "rolling"
+engine = "wb-engine"
+limit = "eval/clips/phase3-kathbath-hi.txt"
+
+# ------------------------------------------------------------------ item 10, scoped (27 Nov 2026, night run 3): English-only and Urdu sessions
+# English-only: rolling settings (identical to the night settings in roles.toml, so the same WER is the night WER) on FLEURS-en (200 clips,
+# a spread over the set) and Svarah accented English (150 clips, a spread), four candidates. Urdu: large-v3 q5_0 on all of FLEURS-ur and the
+# Phase 3 Kathbath-ur list (the other candidates ran in item 8). Language given. Run with scripts/gates/eval-under-gate.ps1.
+
+[[run]]
+name = "item10-small-q5_0-fleurs-en"
+setup = "small-q5_0"
+dataset = "fleurs-en"
+role = "rolling"
+engine = "wb-engine"
+limit = 200
+
+[[run]]
+name = "item10-small-q5_0-svarah"
+setup = "small-q5_0"
+dataset = "svarah"
+role = "rolling"
+engine = "wb-engine"
+limit = 150
+
+[[run]]
+name = "item10-medium-q5_0-fleurs-en"
+setup = "medium-q5_0"
+dataset = "fleurs-en"
+role = "rolling"
+engine = "wb-engine"
+limit = 200
+
+[[run]]
+name = "item10-medium-q5_0-svarah"
+setup = "medium-q5_0"
+dataset = "svarah"
+role = "rolling"
+engine = "wb-engine"
+limit = 150
+
+[[run]]
+name = "item10-turbo-q5_0-fleurs-en"
+setup = "large-v3-turbo-q5_0"
+dataset = "fleurs-en"
+role = "rolling"
+engine = "wb-engine"
+limit = 200
+
+[[run]]
+name = "item10-turbo-q5_0-svarah"
+setup = "large-v3-turbo-q5_0"
+dataset = "svarah"
+role = "rolling"
+engine = "wb-engine"
+limit = 150
+
+[[run]]
+name = "item10-large-v3-q5_0-fleurs-en"
+setup = "large-v3-q5_0"
+dataset = "fleurs-en"
+role = "rolling"
+engine = "wb-engine"
+limit = 200
+
+[[run]]
+name = "item10-large-v3-q5_0-svarah"
+setup = "large-v3-q5_0"
+dataset = "svarah"
+role = "rolling"
+engine = "wb-engine"
+limit = 150
+
+[[run]]
+name = "item10-large-v3-q5_0-fleurs-ur"
+setup = "large-v3-q5_0"
+dataset = "fleurs-ur"
+role = "rolling"
+engine = "wb-engine"
+
+[[run]]
+name = "item10-large-v3-q5_0-kathbath-ur"
+setup = "large-v3-q5_0"
+dataset = "kathbath-ur"
+role = "rolling"
+engine = "wb-engine"
+limit = "eval/clips/phase3-kathbath-ur.txt"

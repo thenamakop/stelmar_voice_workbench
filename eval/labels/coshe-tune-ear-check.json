@@ -1,0 +1,128 @@
+{
+ "about": "The owner's ear check of 10 random tuning chunks (seed 24112026), marks as reported by the owner on 26 Nov 2026 (9 agree, 1 disagree). 09: the owner hears the chunk as mixed and did not change its main language, so it is recorded as English, mixed. A person's marks: this file is data entered from the owner's report, not written by the labeller. No text, no audio.",
+ "by": "the owner",
+ "date": "2026-11-26",
+ "seed": 24112026,
+ "marks": [
+  {
+   "n": 1,
+   "id": "audio_1203",
+   "start_ms": 17590,
+   "end_ms": 23088,
+   "proposed_main": "hi",
+   "proposed_kind": "pure",
+   "latin_share": 0.1,
+   "mark": "agree",
+   "heard_main": "hi",
+   "heard_kind": "pure"
+  },
+  {
+   "n": 2,
+   "id": "audio_1469",
+   "start_ms": 9530,
+   "end_ms": 22465,
+   "proposed_main": "en",
+   "proposed_kind": "mixed",
+   "latin_share": 0.6,
+   "mark": "agree",
+   "heard_main": "en",
+   "heard_kind": "mixed"
+  },
+  {
+   "n": 3,
+   "id": "audio_1521",
+   "start_ms": 49715,
+   "end_ms": 57300,
+   "proposed_main": "hi",
+   "proposed_kind": "mixed",
+   "latin_share": 0.269,
+   "mark": "agree",
+   "heard_main": "hi",
+   "heard_kind": "mixed"
+  },
+  {
+   "n": 4,
+   "id": "audio_1668",
+   "start_ms": 37340,
+   "end_ms": 48200,
+   "proposed_main": "hi",
+   "proposed_kind": "pure",
+   "latin_share": 0.0,
+   "mark": "agree",
+   "heard_main": "hi",
+   "heard_kind": "pure"
+  },
+  {
+   "n": 5,
+   "id": "audio_187",
+   "start_ms": 37820,
+   "end_ms": 51370,
+   "proposed_main": "hi",
+   "proposed_kind": "mixed",
+   "latin_share": 0.378,
+   "mark": "agree",
+   "heard_main": "hi",
+   "heard_kind": "mixed"
+  },
+  {
+   "n": 6,
+   "id": "audio_1892",
+   "start_ms": 37280,
+   "end_ms": 49905,
+   "proposed_main": "en",
+   "proposed_kind": "pure",
+   "latin_share": 1.0,
+   "mark": "agree",
+   "heard_main": "en",
+   "heard_kind": "pure"
+  },
+  {
+   "n": 7,
+   "id": "audio_1918",
+   "start_ms": 22750,
+   "end_ms": 35105,
+   "proposed_main": "en",
+   "proposed_kind": "pure",
+   "latin_share": 1.0,
+   "mark": "agree",
+   "heard_main": "en",
+   "heard_kind": "pure"
+  },
+  {
+   "n": 8,
+   "id": "audio_1971",
+   "start_ms": 26195,
+   "end_ms": 40330,
+   "proposed_main": "hi",
+   "proposed_kind": "pure",
+   "latin_share": 0.0,
+   "mark": "agree",
+   "heard_main": "hi",
+   "heard_kind": "pure"
+  },
+  {
+   "n": 9,
+   "id": "audio_355",
+   "start_ms": 54880,
+   "end_ms": 58500,
+   "proposed_main": "en",
+   "proposed_kind": "pure",
+   "latin_share": 0.875,
+   "mark": "disagree",
+   "heard_main": "en",
+   "heard_kind": "mixed"
+  },
+  {
+   "n": 10,
+   "id": "audio_834",
+   "start_ms": 24655,
+   "end_ms": 38340,
+   "proposed_main": "en",
+   "proposed_kind": "mixed",
+   "latin_share": 0.75,
+   "mark": "agree",
+   "heard_main": "en",
+   "heard_kind": "mixed"
+  }
+ ]
+}

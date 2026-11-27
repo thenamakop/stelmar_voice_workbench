@@ -185,6 +185,34 @@ def pct(a: float, b: float) -> str:
     return f"{100.0 * a / b:.1f}%" if b else "n/a"
 
 
+def reference_script(text: str) -> str | None:
+    """The script most of the letters of `text` are written in: 'devanagari', 'arabic' (Urdu) or 'latin'; None without letters."""
+    counts = {"devanagari": 0, "arabic": 0, "latin": 0}
+    for ch in text:
+        c = ord(ch)
+        if 0x0900 <= c <= 0x097F:
+            counts["devanagari"] += 1
+        elif 0x0600 <= c <= 0x06FF or 0x0750 <= c <= 0x077F or 0xFB50 <= c <= 0xFDFF or 0xFE70 <= c <= 0xFEFF:
+            counts["arabic"] += 1
+        elif ch.isascii() and ch.isalpha():
+            counts["latin"] += 1
+    best = max(counts, key=lambda k: counts[k])
+    return best if counts[best] else None
+
+
+def scoreable(ref_text: str, session_script: str | None) -> bool:
+    """Whether a reference can be scored against what the session writes (owner, 24 Nov 2026: Hindi and Urdu are one
+    language written in the session's own script). A Devanagari reference cannot be scored against a Nastaliq session, nor
+    an Urdu reference against a Devanagari one: no hypothesis word could equal a reference word, so the number would measure
+    the script and not the recognition (the Panel's 67.3% of 21 Nov 2026). English references are always scored."""
+    ref = reference_script(ref_text)
+    if ref is None or ref == "latin":
+        return True
+    if ref == "devanagari":
+        return session_script != "nastaliq"
+    return session_script == "nastaliq"
+
+
 def wer_numbers(mode_sessions: list[dict], run: Path, audio_dir: Path | None, P) -> None:
     """Word and character error rates against the references, for information only (never a gate)."""
     if audio_dir is None or not (audio_dir / "day-audio.json").exists():
@@ -200,6 +228,7 @@ def wer_numbers(mode_sessions: list[dict], run: Path, audio_dir: Path | None, P)
     refs_by_title = {s["title"]: s for s in manifest["sessions"]}
     P("  per session, whole text: reference words, WER, CER (the final revision: post-2 where complete, else post-1)")
     per_set: dict[str, list] = defaultdict(list)
+    not_scored: dict[str, int] = defaultdict(int)
     for s in mode_sessions:
         ref_s = refs_by_title.get(s["title"])
         if not ref_s:
@@ -211,9 +240,18 @@ def wer_numbers(mode_sessions: list[dict], run: Path, audio_dir: Path | None, P)
             continue
         ref_text = " ".join(u["text"] for u in ref_s["utterances"])
         hyp_text = " ".join(x["text"] for x in segs)
-        sc = [metrics.prepare(s["title"], ref_text, hyp_text, "mix", True)]
-        w, c = metrics.wer(sc), metrics.cer(sc)
-        P(f"  {s['title']} ({rev}): reference words {len(sc[0].ref.split())}, hypothesis words {len(sc[0].hyp.split())}, WER {'n/a' if w is None else f'{100 * w:.1f}%'}, CER {'n/a' if c is None else f'{100 * c:.1f}%'}")
+        session_script = ref_s.get("script")
+        off = [u for u in ref_s["utterances"] if not scoreable(u["text"], session_script)]
+        if off:
+            words = sum(len(u["text"].split()) for u in off)
+            P(f"  {s['title']} ({rev}): NOT SCORED as a whole: {len(off)} of {len(ref_s['utterances'])} reference utterances "
+              f"({words} words) are in a script the session does not write (session script: {session_script or 'devanagari'}); "
+              "the datasets that can be scored follow below")
+            ref_text = ""
+        if ref_text:
+            sc = [metrics.prepare(s["title"], ref_text, hyp_text, "mix", True)]
+            w, c = metrics.wer(sc), metrics.cer(sc)
+            P(f"  {s['title']} ({rev}): reference words {len(sc[0].ref.split())}, hypothesis words {len(sc[0].hyp.split())}, WER {'n/a' if w is None else f'{100 * w:.1f}%'}, CER {'n/a' if c is None else f'{100 * c:.1f}%'}")
         # Per dataset: each utterance's window, shifted by where the source content starts in the app's recording.
         # Where the source starts in the app's recording: where it starts in the reference capture (speech_analyse.py) plus
         # the one fixed offset between the app and the reference (compare.json: an app frame is a reference frame plus it).
@@ -226,6 +264,9 @@ def wer_numbers(mode_sessions: list[dict], run: Path, audio_dir: Path | None, P)
         for u in ref_s["utterances"]:
             lo, hi = u["start_s"] * 1000.0 + shift, u["end_s"] * 1000.0 + shift
             hyp = " ".join(x["text"] for x in segs if lo <= (x["start_ms"] + x["end_ms"]) / 2.0 <= hi)
+            if not scoreable(u["text"], session_script):
+                not_scored[u["dataset"]] += 1
+                continue
             per_set[u["dataset"]].append(metrics.prepare(u["id"], u["text"], hyp, u["lang"], bool(u.get("mixed"))))
     if per_set:
         P("  per dataset, utterance by utterance, each utterance's window from where the source starts in the app's recording (reference capture start plus the fixed offset), information:")
@@ -234,6 +275,8 @@ def wer_numbers(mode_sessions: list[dict], run: Path, audio_dir: Path | None, P)
             w, c = metrics.wer(items), metrics.cer(items)
             tag = " (CC BY-NC 4.0, local evaluation data: numbers only)" if name == "coshe-eval" else ""
             P(f"    {name}{tag}: {len(items)} utterances, WER {'n/a' if w is None else f'{100 * w:.1f}%'}, CER {'n/a' if c is None else f'{100 * c:.1f}%'}")
+    for name in sorted(not_scored):
+        P(f"    {name}: {not_scored[name]} utterances NOT SCORED (reference in a script the session does not write)")
 
 
 def timeline_svg(path: Path, rows: list[dict], marks: list[tuple[float, str]], t0: float, t1: float) -> None:

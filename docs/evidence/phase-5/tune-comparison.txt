@@ -1,0 +1,16 @@
+Tuning-set comparison (Phase 5, items 4 and 5): 70 clips; machine legion-native; threads 8; device gpu:0; whisper.cpp wb-engine 0.1.0 (cuda, whisper.cpp v1.9.5 commit d1be6fde11ac tree e736b4c9a5be).
+Chunk-language labels: from the reference text, validated on the 10 held-out hand labels (main 9/10, pure against mixed 8/10) and by the owner's ear check of 26 Nov 2026 (10/10 and 9/10, one chunk corrected to English mixed); no longer provisional.
+* RTF indicative only: the run was decoded without the gate lock and its idle check (quality numbers are unaffected).
+
+run | models | rule | translated | lang: pure en | lang: pure hi | lang: mixed en-led | lang: mixed hi-led | lang: all | WER % | CER % | English in Devanagari % | RTF | truncated
+tune-turbo-q5_0-a | *=large-v3-turbo-q5_0 | - | 48 | 133/133 | 60/71 | 45/46 | 46/89 | 284/339 | 33.0 | 23.6 | 2.9 | 0.0842 | 10
+tune-turbo-q5_0-c | *=large-v3-turbo-q5_0 | c | 8 | 127/133 | 71/71 | 19/46 | 81/89 | 298/339 | 31.0 | 22.8 | 11.0 | 0.1986 | 7
+tune-hinglish-f16-d2 | *=hinglish-f16 | - | 0 | 103/133 | 71/71 | 0/46 | 89/89 | 263/339 | 17.1 | 12.6 | 11.8 | 0.3185 | 1
+tune-hinglish-q8_0-d2 | *=hinglish-q8_0 | - | 0 | 102/133 | 71/71 | 0/46 | 89/89 | 262/339 | 17.7 | 13.2 | 12.5 | 0.2919 | 1
+tune-hinglish-q5_0-d2 | *=hinglish-q5_0 | - | 0 | 100/133 | 71/71 | 0/46 | 89/89 | 260/339 | 17.0 | 12.5 | 11.8 | 0.2602 | 2
+tune-hybrid-f16-e | en=large-v3-turbo-q5_0+hi=hinglish-f16 | e | 0 | 103/133 | 71/71 | 0/46 | 89/89 | 263/339 | 18.4 | 13.7 | 12.0 | 0.3104 | 1
+tune-hybrid-q8_0-e | en=large-v3-turbo-q5_0+hi=hinglish-q8_0 | e | 0 | 102/133 | 71/71 | 0/46 | 89/89 | 262/339 | 18.8 | 14.1 | 12.5 | 0.2914 | 1
+tune-hybrid-q5_0-e | en=large-v3-turbo-q5_0+hi=hinglish-q5_0 | e | 0 | 100/133 | 71/71 | 0/46 | 89/89 | 260/339 | 17.9 | 13.3 | 11.6 | 0.2626 | 2
+tune-turbo-detect-q8_0 | en=large-v3-turbo-q5_0+hi=hinglish-q8_0 | - | 46 | 133/133 | 60/71 | 45/46 | 48/89 | 286/339 | 28.0 | 20.7 | 1.0 | 0.1939* | 9
+tune-small-detect-q8_0 | en=small-q5_0+hi=hinglish-q8_0 | - | 0 | 118/133 | 71/71 | 4/46 | 89/89 | 282/339 | 16.0 | 11.6 | 6.3 | 0.2518* | 1
+tune-small-detect-f16 | en=small-q5_0+hi=hinglish-f16 | - | 0 | 118/133 | 71/71 | 4/46 | 89/89 | 282/339 | 15.9 | 11.6 | 6.3 | 0.2637 | 1

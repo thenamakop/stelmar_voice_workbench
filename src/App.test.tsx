@@ -86,7 +86,7 @@ describe("navigation", () => {
     expect(urdu.getAttribute("dir")).toBe("rtl");
     const hindi = screen.getByText(/इस अध्ययन/);
     expect(hindi.getAttribute("lang")).toBe("hi");
-    const mixed = screen.getByText(/main finding/);
+    const mixed = screen.getAllByText(/main finding/)[0]?.closest(".seg-text") as HTMLElement;
     expect(mixed.getAttribute("dir")).toBe("auto");
   });
 });

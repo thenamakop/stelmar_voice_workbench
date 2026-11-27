@@ -166,6 +166,11 @@ pub struct Measurement {
     /// The measurement is the tier G live stand-in (near-live settings on the GPU), not a streaming run.
     #[serde(default)]
     pub live_standin: bool,
+    /// A pair cell (Phase 5, 26 Nov 2026): `model` is a Hinglish model and this is the small model in front of it that
+    /// detects the language of every chunk (the engine's model for English); the speed is a batch decode of the
+    /// code-switched clip with language detection on, and the memory figures are the two models' own cells added up.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detector: Option<String>,
 }
 
 /// A CPU engine and a GPU engine decoding at the same time, on different clips of the same model.
@@ -292,6 +297,22 @@ pub struct Options {
     /// A hybrid configuration is chosen only if it measured at least this much faster (a ratio: 1.15 is 15%;
     /// owner's decision of 14 Nov 2026, after the gain on emu-mid measured +11.7% in one run and +3.4% in the next).
     pub hybrid_min_gain: f64,
+    /// Video memory a discrete card must keep free after a model (or the pair of models loaded together) is loaded
+    /// (owner, 26 Nov 2026: the card also draws the screen).
+    pub vram_headroom_bytes: u64,
+    /// Before a model is measured its video memory is estimated as its file size times this factor plus
+    /// `vram_overhead_bytes` (the Hinglish f16 file is 3.1 GB and peaked at 4.1 GB, q8_0 1.66 GB and 2.7 GB).
+    pub vram_file_factor: f64,
+    pub vram_overhead_bytes: u64,
+    /// How much slower than the bench a rolling pass runs in a session with several languages (the engine detects the
+    /// language of every chunk, and the bench decodes one language with no detection). A rolling pick must meet the bar
+    /// with it. 1.0 means no figure; the app sets the emulated emu-low ratio until the laptops are measured.
+    #[serde(default = "one")]
+    pub rolling_detection_allowance: f64,
+}
+
+fn one() -> f64 {
+    1.0
 }
 
 impl Default for Options {
@@ -301,6 +322,10 @@ impl Default for Options {
             day_audio_hours: 3.0,
             min_free_ram_bytes: 3 * GIB,
             hybrid_min_gain: 1.15,
+            vram_headroom_bytes: GIB / 2,
+            vram_file_factor: 1.15,
+            vram_overhead_bytes: GIB / 2,
+            rolling_detection_allowance: 1.0,
         }
     }
 }
@@ -361,6 +386,11 @@ pub struct RollingPick {
     pub ready_after_stop_min: f64,
     /// RTF over 1: processing will lag behind recording.
     pub lags: bool,
+    /// The speed in a session with several languages, whose engine detects the language of every chunk: the measured
+    /// RTF times `Options::rolling_detection_allowance` (a provisional emulated figure). `None` when the allowance is 1.
+    /// `meets_bar`, `k_max`, `lags` and `ready_after_stop_min` are taken from this figure (item 6, Phase 5, 27 Nov 2026).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rtf_with_detection: Option<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -398,6 +428,50 @@ pub struct Hinglish {
     pub rtf: Option<f64>,
     /// "measured" (a hinglish cell), "proxy: large-v3-q5_0" (same size) or "unmeasured".
     pub source: String,
+    /// The Hinglish model whose own cell was measured (`source` is "measured"): the model an English + Hindi
+    /// session decodes every chunk with when `ok`. None for a proxy or no measurement: a model that was not
+    /// measured here is never chosen (Phase 5, 25 Nov 2026).
+    #[serde(default)]
+    pub model: Option<String>,
+    /// The small model that detects the language of every chunk in front of `model` (a pair measured here, accepted by
+    /// `HINGLISH_PAIRS`): English chunks decode with it and Hindi chunks with `model` (Phase 5, 26 Nov 2026). None when
+    /// `model` detects and decodes every chunk alone.
+    #[serde(default)]
+    pub detector: Option<String>,
+    /// The measured Hinglish model also fits the night pass here (`rtf` times the typical day's audio fits the night
+    /// window, and the model fits in memory), whether or not it keeps up while recording. The queue plans the real
+    /// night from the audio the sessions recorded; this says it may try (Phase 5, 26 Nov 2026).
+    #[serde(default)]
+    pub night_ok: bool,
+    /// Hours the Hinglish model needs for the typical day's audio (`Options::day_audio_hours`) at its measured speed.
+    #[serde(default)]
+    pub night_hours: Option<f64>,
+}
+
+impl Hinglish {
+    /// The model an English + Hindi session decodes at night when it did not decode the recording with it: measured
+    /// on this computer, fits the night window and the memory, and does not already run during the recording.
+    pub fn night_model(&self) -> Option<&str> {
+        self.model.as_deref().filter(|_| self.night_ok && !self.ok)
+    }
+
+    /// The model English + Hindi sessions use for every chunk: only a Hinglish model that was measured on this
+    /// computer and meets the rolling bar.
+    pub fn chosen_model(&self) -> Option<&str> {
+        self.model.as_deref().filter(|_| self.ok)
+    }
+
+    /// The detector in front of the chosen model, when the chosen setup is a pair.
+    pub fn chosen_detector(&self) -> Option<&str> {
+        self.chosen_model()?;
+        self.detector.as_deref()
+    }
+
+    /// The detector in front of the night model, when the night model is a pair.
+    pub fn night_detector(&self) -> Option<&str> {
+        self.night_model()?;
+        self.detector.as_deref()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

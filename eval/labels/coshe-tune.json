@@ -1,0 +1,427 @@
+{
+ "dataset": "coshe-eval",
+ "about": "Utterance classes derived from the reference text by script (no text, no audio). Tuning only: the three held-out clips and the first 20 manifest clips are excluded. See eval/make_tune_set.py.",
+ "seed": 20261124,
+ "clips": [
+  {
+   "id": "audio_1055",
+   "class": "mixed",
+   "devanagari_share": 0.008,
+   "duration_s": 49.2
+  },
+  {
+   "id": "audio_1077",
+   "class": "mixed",
+   "devanagari_share": 0.066,
+   "duration_s": 58.0
+  },
+  {
+   "id": "audio_1144",
+   "class": "pure-en",
+   "devanagari_share": 0.0,
+   "duration_s": 56.5
+  },
+  {
+   "id": "audio_1203",
+   "class": "mixed",
+   "devanagari_share": 0.411,
+   "duration_s": 54.0
+  },
+  {
+   "id": "audio_1210",
+   "class": "mixed",
+   "devanagari_share": 0.291,
+   "duration_s": 58.0
+  },
+  {
+   "id": "audio_1238",
+   "class": "mixed",
+   "devanagari_share": 0.326,
+   "duration_s": 59.3
+  },
+  {
+   "id": "audio_1239",
+   "class": "mixed",
+   "devanagari_share": 0.242,
+   "duration_s": 59.2
+  },
+  {
+   "id": "audio_1288",
+   "class": "pure-en",
+   "devanagari_share": 0.0,
+   "duration_s": 59.4
+  },
+  {
+   "id": "audio_1299",
+   "class": "pure-en",
+   "devanagari_share": 0.0,
+   "duration_s": 10.8
+  },
+  {
+   "id": "audio_13",
+   "class": "mixed",
+   "devanagari_share": 0.474,
+   "duration_s": 59.0
+  },
+  {
+   "id": "audio_130",
+   "class": "pure-en",
+   "devanagari_share": 0.0,
+   "duration_s": 56.5
+  },
+  {
+   "id": "audio_131",
+   "class": "pure-en",
+   "devanagari_share": 0.0,
+   "duration_s": 57.1
+  },
+  {
+   "id": "audio_1335",
+   "class": "mixed",
+   "devanagari_share": 0.429,
+   "duration_s": 58.3
+  },
+  {
+   "id": "audio_1341",
+   "class": "mixed",
+   "devanagari_share": 0.333,
+   "duration_s": 55.9
+  },
+  {
+   "id": "audio_1342",
+   "class": "mixed",
+   "devanagari_share": 0.531,
+   "duration_s": 52.0
+  },
+  {
+   "id": "audio_1406",
+   "class": "pure-en",
+   "devanagari_share": 0.0,
+   "duration_s": 59.4
+  },
+  {
+   "id": "audio_1454",
+   "class": "pure-hi",
+   "devanagari_share": 1.0,
+   "duration_s": 12.8
+  },
+  {
+   "id": "audio_1469",
+   "class": "mixed",
+   "devanagari_share": 0.422,
+   "duration_s": 57.8
+  },
+  {
+   "id": "audio_1473",
+   "class": "mixed",
+   "devanagari_share": 0.506,
+   "duration_s": 57.6
+  },
+  {
+   "id": "audio_1477",
+   "class": "mixed",
+   "devanagari_share": 0.399,
+   "duration_s": 57.6
+  },
+  {
+   "id": "audio_1496",
+   "class": "mixed",
+   "devanagari_share": 0.509,
+   "duration_s": 58.3
+  },
+  {
+   "id": "audio_152",
+   "class": "mixed",
+   "devanagari_share": 0.307,
+   "duration_s": 57.8
+  },
+  {
+   "id": "audio_1521",
+   "class": "mixed",
+   "devanagari_share": 0.542,
+   "duration_s": 57.3
+  },
+  {
+   "id": "audio_1588",
+   "class": "mixed",
+   "devanagari_share": 0.367,
+   "duration_s": 18.9
+  },
+  {
+   "id": "audio_1592",
+   "class": "pure-hi",
+   "devanagari_share": 1.0,
+   "duration_s": 9.9
+  },
+  {
+   "id": "audio_1649",
+   "class": "pure-hi",
+   "devanagari_share": 1.0,
+   "duration_s": 56.6
+  },
+  {
+   "id": "audio_1656",
+   "class": "pure-hi",
+   "devanagari_share": 1.0,
+   "duration_s": 58.4
+  },
+  {
+   "id": "audio_1668",
+   "class": "pure-hi",
+   "devanagari_share": 1.0,
+   "duration_s": 58.2
+  },
+  {
+   "id": "audio_1713",
+   "class": "pure-en",
+   "devanagari_share": 0.0,
+   "duration_s": 58.1
+  },
+  {
+   "id": "audio_18",
+   "class": "mixed",
+   "devanagari_share": 0.517,
+   "duration_s": 56.6
+  },
+  {
+   "id": "audio_1836",
+   "class": "mixed",
+   "devanagari_share": 0.106,
+   "duration_s": 58.8
+  },
+  {
+   "id": "audio_1844",
+   "class": "mixed",
+   "devanagari_share": 0.038,
+   "duration_s": 59.1
+  },
+  {
+   "id": "audio_1850",
+   "class": "mixed",
+   "devanagari_share": 0.03,
+   "duration_s": 57.2
+  },
+  {
+   "id": "audio_187",
+   "class": "mixed",
+   "devanagari_share": 0.242,
+   "duration_s": 57.5
+  },
+  {
+   "id": "audio_1887",
+   "class": "pure-en",
+   "devanagari_share": 0.0,
+   "duration_s": 57.4
+  },
+  {
+   "id": "audio_1892",
+   "class": "pure-en",
+   "devanagari_share": 0.0,
+   "duration_s": 59.0
+  },
+  {
+   "id": "audio_1893",
+   "class": "pure-en",
+   "devanagari_share": 0.0,
+   "duration_s": 57.6
+  },
+  {
+   "id": "audio_1918",
+   "class": "pure-en",
+   "devanagari_share": 0.0,
+   "duration_s": 59.3
+  },
+  {
+   "id": "audio_1955",
+   "class": "mixed",
+   "devanagari_share": 0.925,
+   "duration_s": 59.7
+  },
+  {
+   "id": "audio_1962",
+   "class": "pure-hi",
+   "devanagari_share": 1.0,
+   "duration_s": 56.9
+  },
+  {
+   "id": "audio_1964",
+   "class": "pure-hi",
+   "devanagari_share": 1.0,
+   "duration_s": 56.0
+  },
+  {
+   "id": "audio_1967",
+   "class": "pure-hi",
+   "devanagari_share": 1.0,
+   "duration_s": 58.9
+  },
+  {
+   "id": "audio_1971",
+   "class": "pure-hi",
+   "devanagari_share": 1.0,
+   "duration_s": 57.7
+  },
+  {
+   "id": "audio_1972",
+   "class": "mixed",
+   "devanagari_share": 0.946,
+   "duration_s": 57.3
+  },
+  {
+   "id": "audio_1980",
+   "class": "pure-hi",
+   "devanagari_share": 1.0,
+   "duration_s": 58.9
+  },
+  {
+   "id": "audio_218",
+   "class": "mixed",
+   "devanagari_share": 0.183,
+   "duration_s": 20.4
+  },
+  {
+   "id": "audio_231",
+   "class": "mixed",
+   "devanagari_share": 0.636,
+   "duration_s": 59.2
+  },
+  {
+   "id": "audio_256",
+   "class": "mixed",
+   "devanagari_share": 0.032,
+   "duration_s": 55.0
+  },
+  {
+   "id": "audio_290",
+   "class": "pure-en",
+   "devanagari_share": 0.0,
+   "duration_s": 58.2
+  },
+  {
+   "id": "audio_3",
+   "class": "mixed",
+   "devanagari_share": 0.272,
+   "duration_s": 58.9
+  },
+  {
+   "id": "audio_321",
+   "class": "mixed",
+   "devanagari_share": 0.362,
+   "duration_s": 55.4
+  },
+  {
+   "id": "audio_355",
+   "class": "mixed",
+   "devanagari_share": 0.005,
+   "duration_s": 58.8
+  },
+  {
+   "id": "audio_377",
+   "class": "mixed",
+   "devanagari_share": 0.505,
+   "duration_s": 55.3
+  },
+  {
+   "id": "audio_410",
+   "class": "pure-en",
+   "devanagari_share": 0.0,
+   "duration_s": 20.8
+  },
+  {
+   "id": "audio_434",
+   "class": "pure-en",
+   "devanagari_share": 0.0,
+   "duration_s": 56.6
+  },
+  {
+   "id": "audio_584",
+   "class": "mixed",
+   "devanagari_share": 0.64,
+   "duration_s": 59.0
+  },
+  {
+   "id": "audio_610",
+   "class": "mixed",
+   "devanagari_share": 0.539,
+   "duration_s": 35.1
+  },
+  {
+   "id": "audio_632",
+   "class": "mixed",
+   "devanagari_share": 0.501,
+   "duration_s": 49.2
+  },
+  {
+   "id": "audio_638",
+   "class": "mixed",
+   "devanagari_share": 0.526,
+   "duration_s": 56.1
+  },
+  {
+   "id": "audio_670",
+   "class": "pure-en",
+   "devanagari_share": 0.0,
+   "duration_s": 59.0
+  },
+  {
+   "id": "audio_701",
+   "class": "pure-en",
+   "devanagari_share": 0.0,
+   "duration_s": 46.8
+  },
+  {
+   "id": "audio_715",
+   "class": "pure-en",
+   "devanagari_share": 0.0,
+   "duration_s": 31.6
+  },
+  {
+   "id": "audio_792",
+   "class": "pure-en",
+   "devanagari_share": 0.0,
+   "duration_s": 52.9
+  },
+  {
+   "id": "audio_834",
+   "class": "mixed",
+   "devanagari_share": 0.124,
+   "duration_s": 54.3
+  },
+  {
+   "id": "audio_839",
+   "class": "mixed",
+   "devanagari_share": 0.045,
+   "duration_s": 55.8
+  },
+  {
+   "id": "audio_888",
+   "class": "pure-en",
+   "devanagari_share": 0.0,
+   "duration_s": 57.5
+  },
+  {
+   "id": "audio_894",
+   "class": "mixed",
+   "devanagari_share": 0.196,
+   "duration_s": 55.6
+  },
+  {
+   "id": "audio_924",
+   "class": "mixed",
+   "devanagari_share": 0.435,
+   "duration_s": 58.2
+  },
+  {
+   "id": "audio_954",
+   "class": "mixed",
+   "devanagari_share": 0.081,
+   "duration_s": 53.4
+  },
+  {
+   "id": "audio_96",
+   "class": "pure-en",
+   "devanagari_share": 0.0,
+   "duration_s": 57.9
+  }
+ ]
+}

@@ -47,6 +47,7 @@ from wbeval.data import Utterance, load_manifest, read_sources  # noqa: E402
 from wbeval.engines import (  # noqa: E402
     Engine, Settings, Setup, WbEngine, WhisperCli, WhisperCliOnEngineChunks, segments_to_events,
 )
+from wbeval.labels import load_labels, score_chunks  # noqa: E402
 from wbeval.tools import whisper_cpp_info  # noqa: E402
 
 log = logging.getLogger("run")
@@ -155,18 +156,42 @@ def run_name(engine: str, setup: Setup, dataset: str, role: str, limit: int | st
     return f"{dataset}__{setup.name}__{role}__{lang_mode}__{engine}" + tag
 
 
-def fingerprint(engine: dict, setup: Setup, settings: Settings, models: dict, dataset_sha: str | None,
-                lang_mode: str, langs: list[str] | None, limit: int | str | None, machine: str | None = None) -> str:
-    """Hash of everything that changes a run's output. A run on disk with another fingerprint is stale:
-    `all` re-runs it, and `run` refuses to resume it without --force."""
+def fingerprint_key(engine: dict, setup: Setup, settings: Settings, models: dict, dataset_sha: str | None,
+                    lang_mode: str, langs: list[str] | None, limit: int | str | None, machine: str | None = None) -> dict:
+    """Everything that goes into a fingerprint, as data. A summary saves it (`fingerprint_inputs`) so that a later
+    mismatch can be explained by comparing two summaries (23 Nov 2026: the clip list changed its line endings in a
+    checkout and the fingerprint changed with it; the summary did not say which input differed)."""
     wcpp = whisper_cpp_info()
-    key = {"engine": engine,
+    # An experiment engine (cargo feature lang-experiments, development only) reads WB_LANG_EXPERIMENT; the same binary
+    # decodes differently with it set, so a set variable is part of the key (left out when unset: existing hashes hold).
+    experiment = {"lang_experiment": os.environ["WB_LANG_EXPERIMENT"]} if os.environ.get("WB_LANG_EXPERIMENT") else {}
+    return {**experiment, "engine": engine,
            "whisper_cpp": wcpp.get("commit"), "setup": setup.models, "detector": setup.detector,
            "settings": asdict(settings), "models": {k: v.get("sha256") for k, v in models.items()},
            "dataset": dataset_sha, "lang_mode": lang_mode, "langs": langs, "limit": limit_key(limit),
            # Speed numbers belong to a machine and emulation profile: a summary from another one is stale.
            "machine": {k: v for k, v in machine_info(machine).items() if k in ("name", "emulation")}}
+
+
+def fingerprint(engine: dict, setup: Setup, settings: Settings, models: dict, dataset_sha: str | None,
+                lang_mode: str, langs: list[str] | None, limit: int | str | None, machine: str | None = None) -> str:
+    """Hash of everything that changes a run's output. A run on disk with another fingerprint is stale:
+    `all` re-runs it, and `run` refuses to resume it without --force."""
+    key = fingerprint_key(engine, setup, settings, models, dataset_sha, lang_mode, langs, limit, machine)
     return hashlib.sha256(json.dumps(key, sort_keys=True).encode("utf-8")).hexdigest()
+
+
+CRLF, LF = bytes([13, 10]), bytes([10])
+
+
+def limit_file_info(limit: int | str | None) -> dict | None:
+    """A clip-list limit's file as the fingerprint sees it: the hash of its bytes, the hash with line endings made LF,
+    and whether it has CRLF, so a fingerprint that moved only because of a checkout's line endings can be told apart."""
+    if not isinstance(limit, str):
+        return None
+    data = (REPO / limit).read_bytes()
+    return {"path": limit, "sha256": hashlib.sha256(data).hexdigest(),
+            "sha256_lf": hashlib.sha256(data.replace(CRLF, LF)).hexdigest(), "crlf": CRLF in data}
 
 
 def language_source(lang_mode: str, set_langs: set[str]) -> str:
@@ -220,6 +245,7 @@ def run(engine_name: str, setup: Setup, dataset: str, role: str, limit: int | st
     hashes = model_hashes(setup, settings)
     dataset_sha = dataset_hash(dataset, data_dir)
     fp = fingerprint(engine_desc, setup, settings, hashes, dataset_sha, lang_mode, langs, limit, machine)
+    fp_inputs = fingerprint_key(engine_desc, setup, settings, hashes, dataset_sha, lang_mode, langs, limit, machine)
     fp_path = out_dir / "fingerprint.txt"
     old_fp = fp_path.read_text(encoding="utf-8").strip() if fp_path.exists() else None
     if utt_path.exists() and old_fp != fp and not force:
@@ -266,9 +292,10 @@ def run(engine_name: str, setup: Setup, dataset: str, role: str, limit: int | st
             if i % 10 == 0:
                 log.info("%s: %d/%d", name, i, len(utts))
     records = [done[u.id] for u in utts if u.id in done]
-    summary = summarise(records, failures=len(utts) - len(records), lang_mode=lang_mode)
+    summary = summarise(records, failures=len(utts) - len(records), lang_mode=lang_mode, dataset=dataset,
+                         data_dir=data_dir)
     summary.update(
-        run=name, fingerprint=fp, engine=engine_desc, setup={"name": setup.name, "models": setup.models,
+        run=name, fingerprint=fp, fingerprint_inputs=fp_inputs, limit_file=limit_file_info(limit), engine=engine_desc, setup={"name": setup.name, "models": setup.models,
                                                              "detector": setup.detector},
         **independence_fields(hashes, dataset),
         language_source=language_source(lang_mode, {u.lang for u in utts}),
@@ -308,7 +335,8 @@ def dataset_hash(dataset: str, data_dir: Path) -> str | None:
     return None
 
 
-def summarise(records: list[dict], failures: int = 0, lang_mode: str = "detect") -> dict:
+def summarise(records: list[dict], failures: int = 0, lang_mode: str = "detect", dataset: str | None = None,
+              data_dir: Path | None = None) -> dict:
     scored = [metrics.prepare(r["id"], r["ref"], r["hyp"], r["lang"], r["mixed"]) for r in records]
     langs = {r["lang"] for r in records}
     detection = metrics.LangDetection()
@@ -347,6 +375,10 @@ def summarise(records: list[dict], failures: int = 0, lang_mode: str = "detect")
                          "until Phase 5 adds chunk labels",
         } if lang_mode == "detect" else {"chunks": detection.chunks, "accuracy": None, "accuracy_by_time": None,
                                          "confusion": {}, "reference": "not measured: language given (fixed mode)"},
+        # Per-chunk language against hand labels (eval/labels/<dataset>.json), where the dataset has them.
+        # Only the labels of utterances this run holds: a run of the tuning clips has none of the held-out chunks.
+        "chunk_labels": score_chunks(records, labels) if lang_mode == "detect" and (labels := [
+            lab for lab in load_labels(dataset or "", data_dir=data_dir) if lab.id in {r["id"] for r in records}]) else None,
         "audio_s": round(audio_s, 2), "elapsed_s": round(elapsed, 2),
         "rtf": round(elapsed / audio_s, 4) if audio_s else None,
     }
@@ -453,6 +485,55 @@ def write_tables(results_dir: Path = RESULTS_DIR, runs_file: Path = RUNS_FILE) -
     return path
 
 
+def write_report(results_dir: Path = RESULTS_DIR, runs_file: Path = RUNS_FILE, out: Path | None = None,
+                 data_dir: Path = DATA_DIR) -> Path:
+    """eval/REPORT.md: every run, the chunk-label detection scores, the controls and the data sources, from the
+    summaries on disk. Numbers only: no audio and no transcript text, so CoSHE-Eval and the local sets stay private.
+    One command regenerates it (`eval/run.py report`)."""
+    tables = write_tables(results_dir, runs_file).read_text(encoding="utf-8").splitlines()
+    summaries = [json.loads(p.read_text(encoding="utf-8")) for p in sorted(results_dir.glob("*/summary.json"))]
+    lines = [
+        "# Phase 5 evaluation report", "",
+        f"Generated by `eval/run.py report` on {dt.datetime.now(dt.timezone.utc):%Y-%m-%d %H:%M} UTC from "
+        f"{len(summaries)} run summaries. Numbers only: no audio and no transcript text (CoSHE-Eval is CC BY-NC 4.0, "
+        "evaluation only; the local STELMAR sets are private). Every run goes through `wb-engine batch --file`, the "
+        "engine the app ships, unless its engine column says whisper-cli (Phase 5a reference runs; their Hindi, Urdu "
+        "and CoSHE numbers carry the corrupted `--prompt` and are not compared with engine runs).", "",
+        "## Chunk-language detection against hand labels", "",
+        "Per labelled chunk, the language covering most of the chunk's time in the run's segments against the label of "
+        "the language that led it (`eval/labels/<dataset>.json`, or `labels.json` beside a local set). The Phase 2 "
+        "chunks are the **held-out final test**: tune detection on other data. Gate: at least 9 of 10 and no translated "
+        "chunk.", "",
+        "| Run | Dataset | Setup | Role | Chunks | Match | Accuracy | Pure | Mixed | Nothing decoded | Translated | Confusion (label->detected) |",
+        "| --- | --- | --- | --- | ---: | ---: | ---: | --- | --- | ---: | ---: | --- |",
+    ]
+    labelled = [s for s in summaries if s.get("chunk_labels")]
+    for s in labelled:
+        c = s["chunk_labels"]
+        lines.append(
+            f"| {s['run']} | {s['dataset']} | {s['setup']['name']} | {s['role']} | {c['chunks']} | {c['matches']} | "
+            f"{fmt_pct(c['accuracy'])} | {c['pure']['matches']}/{c['pure']['chunks']} | "
+            f"{c['mixed']['matches']}/{c['mixed']['chunks']} | {c['nothing_decoded']} | {c['translated']} | "
+            f"{', '.join(f'{k}: {v}' for k, v in c['confusion'].items()) or 'none'} |")
+    if not labelled:
+        lines.append("| (no run with labels yet) | | | | | | | | | | | |")
+    lines += ["", "## Controls", "",
+              "Control 1 (previous-text context on against off, through the engine) and control 2 (15 s chunk cap against "
+              "30 s for single-language sets) are the informational rows of the comparison table below; their run names "
+              "start with `ctl-` (the 15 s side of control 2 is the `verify-wb-medium-*` runs). Label both sides when "
+              "quoting either.", ""]
+    header = next((i for i, l in enumerate(tables) if l.startswith("| Run | Dataset |")), None)
+    body = tables[header:] if header is not None else tables
+    lines += ["## All runs", ""] + body + ["", "## Data sources and licences", ""]
+    sources = read_sources(data_dir)
+    lines += ["| Set | Utterances | Hours | Licence | Terms |", "| --- | ---: | ---: | --- | --- |"]
+    lines += [f"| {s.set} | {s.utterances} | {s.hours:.2f} | {s.licence} | {s.terms} |" for s in sources] or [
+        "| (no data prepared on this machine) | | | | |"]
+    path = out or (EVAL_DIR / "REPORT.md")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
 # ---------------------------------------------------------------------------------------------- commands
 
 def cmd_all(args) -> int:
@@ -508,7 +589,8 @@ def cmd_rescore(args) -> int:
             continue
         records = [r for line in utt_path.read_text(encoding="utf-8").splitlines() if line.strip()
                    and "error" not in (r := json.loads(line))]
-        summary.update(summarise(records, failures=summary.get("failures", 0), lang_mode=summary["lang_mode"]))
+        summary.update(summarise(records, failures=summary.get("failures", 0), lang_mode=summary["lang_mode"],
+                                 dataset=summary["dataset"]))
         summary.update(**independence_fields(summary.get("models", {}), summary["dataset"]),
                        language_source=language_source(summary["lang_mode"], {r["lang"] for r in records}),
                        rescored_at=dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"))
@@ -558,6 +640,7 @@ def main() -> int:
     p.add_argument("--force", action="store_true")
 
     sub.add_parser("tables", help="regenerate eval/results/TABLES.md")
+    sub.add_parser("report", help="regenerate eval/REPORT.md from the summaries on disk (numbers only)")
     sub.add_parser("rescore", help="recompute scores of finished runs from their utterances (no decoding)")
 
     p = sub.add_parser("record-fixture", help="record wb-engine replay fixtures with whisper-cli")
@@ -582,6 +665,9 @@ def main() -> int:
         return cmd_rescore(args)
     if args.cmd == "tables":
         log.info("tables: %s", rel(write_tables()))
+        return 0
+    if args.cmd == "report":
+        log.info("report: %s", rel(write_report()))
         return 0
     return cmd_record_fixture(args)
 

@@ -185,7 +185,24 @@ eval\.venv\Scripts\python eval\run.py rescore   # recompute scores from finished
   the manifest. In `fixed` mode the engine is told the language, so the tables print `n/a`. For
   CoSHE-Eval, `fixed` is an oracle: the language comes from the reference (`en` when the reference is
   entirely Latin script, otherwise `hi`, the matrix language). English chunks inside a Hindi utterance
-  count as misses until Phase 5's local code-switched set adds chunk-level labels.
+  count as misses of the utterance score. Chunk-level labels (below) score them properly.
+- **Chunk labels (Phase 5):** `eval/labels/<dataset>.json` (committed; ids, time ranges, `pure` or `mixed`, the
+  language that led; never text) or `eval/data/<dataset>/labels.json` (private, written by `get_local.py`). A
+  run in `detect` mode gets `chunk_labels` in its summary: per chunk, the language covering most of the chunk's
+  time in the run's segments against the label, plus chunks with nothing decoded and chunks translated to Latin.
+  The ten Phase 2 chunks (`eval/labels/coshe-eval.json`) are marked `heldout`: they are the final test, and
+  tuning code must call `load_labels(dataset, heldout=False)`, which refuses them.
+- **Controls (Phase 5):** roles `rolling-30` and `night-30` differ from `rolling` and `night` only in the
+  30 s chunk cap. `ctl-wb-medium-coshe-ctx-on` and `-off` (previous-text context, `rolling` against `parity`) and
+  `ctl-wb-medium-fleurs-{en,hi,ur}-chunk30` (against the `verify-wb-medium-*` runs) answer the two open controls in
+  `docs/GATES.md`; `ctl-wb-medium-coshe-heldout` is the baseline every engine change is compared with. All go
+  through `wb-engine batch --file` (set `WB_ENGINE`).
+- **Error causes of a day-simulation session:** `eval/panel_causes.py <run folder> <day-audio.json>` splits a session's
+  word errors by block and cause (script mismatch, detection, normalisation, spelling variants) from the transcript the run
+  already wrote; no decoding. `scripts/gates/night_speed.py <run folder>...` compares a run's night plan with its night units.
+  Both write numbers only (see `docs/evidence/phase-5/`).
+- **Report:** `eval/.venv/Scripts/python eval/run.py report` writes `eval/REPORT.md` (numbers only) from the
+  summaries on disk. CoSHE-Eval is CC BY-NC: the report is not committed until the phase ends.
 - **Independence:** `scripts/models/candidates.toml` lists, per candidate, the sets whose corpus it was
   trained on (`not_independent_on`) and the sets whose sources do not say (`independence_unknown_on`),
   with the evidence. A summary gets `independent: false` (the tables print **no**) or `independent: null`
@@ -238,12 +255,12 @@ The local sets are recorded after Phase 4 (docs/TEST-AUDIO.md) and live in `eval
 private): one `.wav` and one `.txt` with the same name per clip, Hindi in Devanagari and English in
 Latin script.
 
-1. Add a `prepare_local` function to `get_data.py` that reads `eval/local/<set>/*.wav` and the matching
-   `.txt`, resamples with `wbeval.audio.convert_bytes`, sets `lang` (`en`, `hi`, `ur`; `hi` for the mixed
-   set) and `mixed`, and calls `write_source` with licence "private, consented recordings; never
-   committed". Register `local-en`, `local-hi`, `local-ur` and `local-mixed` in `SETS`.
-2. For chunk-level language labels on the mixed set, add a `chunks` field to the manifest (start, end,
-   language) and score detection against it in `run.summarise`.
+1. `eval/get_local.py` (Phase 5) reads `eval/local/<set>/*.wav`, the matching `.txt` (clips without one are
+   skipped and reported), an optional `<clip>.lang.json` with chunk labels and an optional `set.json`, and writes
+   the dataset `local-<set>` under `eval/data/` (16 kHz mono WAV, manifest, `source.json` with the licence
+   "private recordings, consent on file", and `labels.json`). `eval/local/` is git-ignored.
+2. Run it: `eval/.venv/Scripts/python eval/get_local.py --set codeswitch`, then add `[[run]]` blocks for
+   `local-<set>` to `runs.toml`.
 3. Add the candidate grid (every candidate and routing setup × every set × its roles, q8_0 and q5_0)
    to `runs.toml`, and the Phase 2 wb-engine runs without `needs`.
-4. `run.py all` regenerates every table; Phase 5 writes `eval/REPORT.md` from them.
+4. `run.py all` regenerates every table; `run.py report` writes `eval/REPORT.md` from them.

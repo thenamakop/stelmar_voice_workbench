@@ -12,10 +12,12 @@ Never committed: the output goes under D:\\STELMAR-Gate\\day-sim and holds local
                Parallel I  Hindi: Kathbath Hindi
                Parallel II code-switched Hindi and English: CoSHE-Eval (CC BY-NC 4.0: local only, see below);
                            its clips are 45 to 60 s long, so this session's utterances are long
-               Panel       alternating blocks of English (Svarah) and Hindi (FLEURS Hindi) with 10 minutes of Kathbath
-                           Urdu in the middle; its Hindi and Urdu come out in the organiser's script, Nastaliq
+               Panel       English and Hindi, shaped like a real session (owner, 24 Nov 2026: real panels are English plus
+                           Hindi, mostly one speaker plus an emcee): an English introduction (Svarah, first 5% of the
+                           session), one speaker alternating English (Svarah) and Hindi (FLEURS Hindi) for the middle, and a
+                           short English question-and-answer at the end (last 12%, shorter pauses). A Devanagari session.
 
---rehearse   the same four sessions of 2 minutes each (the Urdu block 22 s) at compressed times, for the rehearsal that
+--rehearse   the same four sessions of 2 minutes each at compressed times, for the rehearsal that
              runs the whole schedule in under 30 minutes.
 --kill-test  two sessions of 30 minutes, one English and Hindi in alternating blocks and one code-switched, for the
              engine-kill test.
@@ -156,19 +158,19 @@ def build_day_session(out: Path, which: str, target_s: float, rehearse: bool) ->
         plan = [("coshe-eval", iter(usable("coshe-eval", 0, 400, max_s=61.0)), "hi")]
         block = {"coshe-eval": 1}
     else:
-        s = StreamSession(path, "Panel", ["en", "hi", "ur"], seed, long_pause, script="nastaliq")
-        en = iter(usable("svarah", 3000, 6000))
-        hi = iter(usable("fleurs-hi", 0, 400))
-        ur = iter(usable("kathbath-ur", 0, 400))
-        en_hi = [("svarah", en, "en"), ("fleurs-hi", hi, "hi")]
-        block = {"svarah": 4, "fleurs-hi": 4, "kathbath-ur": 1}
-        # The Urdu block: 10 minutes (22 s in the rehearsal) from about 61% of the session.
-        ur_start = target_s * (3300.0 / 5400.0)
-        ur_len = 22.0 if rehearse else 600.0
+        s = StreamSession(path, "Panel", ["en", "hi"], seed, long_pause)
+        intro = iter(usable("svarah", 3000, 3300))
+        talk_en = iter(usable("svarah", 3300, 4700))
+        talk_hi = iter(usable("fleurs-hi", 0, 400))
+        qa = iter(usable("svarah", 4700, 5130))
+        block = {"svarah": 4, "fleurs-hi": 4}
         s.silence(1.0)
-        fill(s, ur_start, en_hi, block, pending)
-        fill(s, ur_start + ur_len, [("kathbath-ur", ur, "ur")], block, pending)
-        fill(s, target_s, en_hi, block, pending)
+        # The emcee: English only, the first 5% of the session.
+        fill(s, target_s * 0.05, [("svarah", intro, "en")], block, pending)
+        # The speaker: English and Hindi in alternating blocks, until the last 12%.
+        fill(s, target_s * 0.88, [("svarah", talk_en, "en"), ("fleurs-hi", talk_hi, "hi")], block, pending)
+        # The questions and answers: English, short exchanges.
+        fill(s, target_s, [("svarah", qa, "en")], {"svarah": 1}, pending)
         s.silence(1.0)
         return s
     s.silence(1.0)

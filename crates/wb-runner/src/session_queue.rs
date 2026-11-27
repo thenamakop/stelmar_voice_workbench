@@ -13,6 +13,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use wb_protocol::SegmentEvent;
@@ -101,7 +102,12 @@ pub struct Completed {
 /// What a decoded unit waits with until every earlier unit is committed: its segments and the VAD gaps.
 type UnitOutput = (Vec<Segment>, Vec<Gap>);
 
+/// The time stamp (IST text) a segment reloaded from its staged file gets as `created_at`: the staged file keeps the engine's
+/// segments, not when they were decoded, so the moment of the reload stands in and the field is never empty.
+pub type Clock = Arc<dyn Fn() -> String + Send + Sync>;
+
 pub struct SessionQueue {
+    clock: Clock,
     dir: PathBuf,
     transcript: Transcript,
     orders: HashMap<i64, OrderBuffer<UnitOutput>>,
@@ -116,6 +122,14 @@ fn staged_dir(dir: &Path, revision: &str) -> PathBuf {
 pub fn staged_path(dir: &Path, revision: &str, idx: u32) -> PathBuf {
     staged_dir(dir, revision).join(format!("unit-{idx:04}.jsonl"))
 }
+
+/// The file in a session folder that lists the units decoded by the processor after the graphics engine failed, without
+/// the Hinglish model (written by the app; the session is then redone at night or marked for a faster machine).
+pub const FALLBACK_UNITS_FILE: &str = "fallback-units.json";
+
+/// The queue position of the first-ranked night job; the positions of the other jobs of a session stay below it
+/// (`Store::create_job` counts only positions under it).
+pub use wb_queue::store::NIGHT_RANK_BASE;
 
 fn plan_path(dir: &Path) -> PathBuf {
     dir.join("work").join("plan.json")
@@ -188,8 +202,14 @@ pub fn vad_gaps(revision: &str, unit_start: u64, unit_end: u64, segments: &[Segm
 }
 
 impl SessionQueue {
-    /// Opens the session's queue, recovering from a crash.
+    /// Opens the session's queue, recovering from a crash. Segments reloaded from staged files get an empty `created_at`;
+    /// the app uses [`SessionQueue::open_with_clock`].
     pub fn open(dir: &Path) -> Result<Self> {
+        Self::open_with_clock(dir, Arc::new(String::new))
+    }
+
+    /// As [`SessionQueue::open`], with the clock that stamps the segments reloaded from staged files (N6, auditor of 20 Nov 2026).
+    pub fn open_with_clock(dir: &Path, clock: Clock) -> Result<Self> {
         let transcript = Transcript::open(dir)?;
         let plan = match std::fs::read(plan_path(dir)) {
             Ok(bytes) => serde_json::from_slice(&bytes)
@@ -198,6 +218,7 @@ impl SessionQueue {
             Err(e) => return Err(io(&plan_path(dir))(e)),
         };
         let mut q = Self {
+            clock,
             dir: dir.to_owned(),
             transcript,
             orders: HashMap::new(),
@@ -226,6 +247,7 @@ impl SessionQueue {
     /// may still be decoding; a buffer started at the unit that finishes then would commit it before an earlier unit
     /// that is not committed, move the cursor past that unit and lose its text (ASR audit of 21 Nov 2026).
     fn rebuild_order(&mut self, job: &Job, reset_running: bool) -> Result<OrderBuffer<UnitOutput>> {
+        let stamp = (self.clock)();
         let units = self.transcript.store().units(job.id)?;
         // Units the cursor already covers were committed: the crash came between the cursor and the state.
         for u in &units {
@@ -263,7 +285,7 @@ impl SessionQueue {
                         Ok(events) if !events.is_empty() || path.exists() => {
                             let segs: Vec<Segment> = events
                                 .iter()
-                                .map(|e| to_segment(e, &job.revision, device, ""))
+                                .map(|e| to_segment(e, &job.revision, device, &stamp))
                                 .collect();
                             let gaps = vad_gaps(&job.revision, u.start_ms, u.end_ms, &segs);
                             // `idx` is at or after `next`: units before it are committed.
@@ -386,6 +408,72 @@ impl SessionQueue {
         Ok(id)
     }
 
+    /// Flags a unit as decoded without the Hinglish model after a graphics failure (owner, 27 Nov 2026): one entry per
+    /// (job, unit), kept in [`FALLBACK_UNITS_FILE`] of the session folder, written whole and renamed into place.
+    pub fn flag_fallback_unit(
+        &self,
+        job: i64,
+        unit: u32,
+        models: &serde_json::Value,
+        now_ms: u64,
+    ) -> Result<()> {
+        let path = self.dir.join(FALLBACK_UNITS_FILE);
+        let mut doc = self.fallback_doc();
+        let units = doc["units"]
+            .as_array_mut()
+            .ok_or_else(|| Error::Invalid(format!("{} has no unit list", path.display())))?;
+        if units
+            .iter()
+            .any(|u| u["job"].as_i64() == Some(job) && u["unit"].as_u64() == Some(u64::from(unit)))
+        {
+            return Ok(());
+        }
+        units.push(serde_json::json!({
+            "job": job, "unit": unit, "models": models, "flagged_at_ms": now_ms,
+        }));
+        let tmp = path.with_extension("json.tmp");
+        let bytes = serde_json::to_vec_pretty(&doc).map_err(wb_queue::Error::from)?;
+        let mut file = std::fs::File::create(&tmp).map_err(io(&tmp))?;
+        std::io::Write::write_all(&mut file, &bytes).map_err(io(&tmp))?;
+        file.sync_all().map_err(io(&tmp))?;
+        drop(file);
+        std::fs::rename(&tmp, &path).map_err(io(&path))?;
+        Ok(())
+    }
+
+    fn fallback_doc(&self) -> serde_json::Value {
+        std::fs::read(self.dir.join(FALLBACK_UNITS_FILE))
+            .ok()
+            .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+            .filter(|v| v["units"].is_array())
+            .unwrap_or_else(|| {
+                serde_json::json!({
+                    "version": 1,
+                    "note": "decoded without the Hinglish model after a graphics failure",
+                    "units": [],
+                })
+            })
+    }
+
+    /// The units flagged by [`Self::flag_fallback_unit`], as `(job, unit)`.
+    pub fn fallback_units(&self) -> Vec<(i64, u32)> {
+        self.fallback_doc()["units"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|u| {
+                        Some((u["job"].as_i64()?, u32::try_from(u["unit"].as_u64()?).ok()?))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// The note a held night job carries in its error column. A hold is the job's own persisted state (Paused with this
+    /// note), so it survives a restart of the app: an operator's Pause leaves the column empty and is not a hold
+    /// (item 3 of the auditor of 20 Nov 2026, owner's decision of 27 Nov 2026).
+    pub const NIGHT_HELD_NOTE: &'static str = "held: another session started after the night pass was planned; it is planned again after the last session";
+
     /// The night pass of this session is cancelled because another session started after it was planned (owner,
     /// 19 Nov 2026): the night job is held, with every unit it already committed, until the pass is planned again
     /// after the last session. True when a night job that had not finished was held.
@@ -403,6 +491,43 @@ impl SessionQueue {
             return Ok(false);
         }
         self.set_paused(night.id, true, now_ms)?;
+        self.transcript.store_mut().set_job_state(
+            night.id,
+            JobState::Paused,
+            Some(Self::NIGHT_HELD_NOTE),
+            now_ms,
+        )?;
+        Ok(true)
+    }
+
+    /// The night job of this session is held for a later session (as [`Self::hold_night_job`] left it, possibly before
+    /// the app was restarted): Paused with the hold's note.
+    pub fn night_job_is_held(&self) -> Result<bool> {
+        Ok(self.transcript.store().jobs()?.into_iter().any(|j| {
+            j.kind == JobKind::Night
+                && j.state == JobState::Paused
+                && j.error.as_deref() == Some(Self::NIGHT_HELD_NOTE)
+        }))
+    }
+
+    /// Ranks this session's night job among the sessions' night jobs (0 first): the manager takes the job with the
+    /// lowest `(priority, position)` across sessions, and every session's own queue numbers its jobs from 1, so without a
+    /// rank the night would run in recording order whatever the plan's priorities were (auditor, 27 Nov 2026). The
+    /// positions of the other kinds stay below [`NIGHT_RANK_BASE`]. True when the session has a night job.
+    pub fn rank_night_job(&mut self, rank: usize) -> Result<bool> {
+        let Some(night) = self
+            .transcript
+            .store()
+            .jobs()?
+            .into_iter()
+            .find(|j| j.kind == JobKind::Night)
+        else {
+            return Ok(false);
+        };
+        let position = NIGHT_RANK_BASE + i64::try_from(rank).unwrap_or(i64::MAX - NIGHT_RANK_BASE);
+        self.transcript
+            .store_mut()
+            .set_job_position(night.id, position)?;
         Ok(true)
     }
 
@@ -428,6 +553,37 @@ impl SessionQueue {
             Some(reason),
             now_ms,
         )?;
+        Ok(true)
+    }
+
+    /// The night safety switch drops this session's night job (owner, 27 Nov 2026): the night runs slower than planned and
+    /// the job, which has not started (no unit running, decoded or committed), would not finish before 08:00 IST. The job is
+    /// parked with the reason, the rolling transcript stays the default revision, and a running unit is never stopped. The
+    /// check and the change happen under one hold of the session's queue, so a unit cannot be claimed in between. True when
+    /// a job was parked; false when there is none, or it has started, or it is not queued or running (Paused, Parked, Done).
+    pub fn drop_unstarted_night_job(&mut self, reason: &str, now_ms: u64) -> Result<bool> {
+        let Some(night) = self
+            .transcript
+            .store()
+            .jobs()?
+            .into_iter()
+            .find(|j| j.kind == JobKind::Night)
+        else {
+            return Ok(false);
+        };
+        if !matches!(night.state, JobState::Queued | JobState::Running) {
+            return Ok(false);
+        }
+        let started = self
+            .transcript
+            .store()
+            .units(night.id)?
+            .iter()
+            .any(|u| u.state != UnitState::Pending);
+        if started {
+            return Ok(false);
+        }
+        self.park_job(night.id, reason, now_ms)?;
         Ok(true)
     }
 
@@ -495,6 +651,19 @@ impl SessionQueue {
 
     pub fn move_up(&mut self, job: i64) -> Result<bool> {
         Ok(self.transcript.store_mut().move_up(job)?)
+    }
+
+    /// Changes the models of a job only if no unit of it has started (one statement: a unit cannot be claimed in between).
+    /// True when the models were changed.
+    pub fn change_models_if_unstarted(
+        &mut self,
+        job: i64,
+        models_by_lang: &serde_json::Value,
+    ) -> Result<bool> {
+        Ok(self
+            .transcript
+            .store_mut()
+            .set_models_if_unstarted(job, models_by_lang)?)
     }
 
     /// Change Model: the remaining units use the new models; committed units keep what decoded them.
@@ -1269,6 +1438,66 @@ mod tests {
         assert_eq!(done.refused, 0);
     }
 
+    /// N6 (auditor of 20 Nov 2026): a segment reloaded from its staged file after a restart was committed with an empty
+    /// `created_at`. The queue opened with a clock stamps it with the moment of the reload; segments completed in this run
+    /// keep the stamp their completion was given.
+    #[test]
+    fn a_segment_reloaded_from_its_staged_file_gets_the_clocks_stamp_not_an_empty_created_at() {
+        let dir = temp("crash-stamp");
+        {
+            let mut q = SessionQueue::open(&dir).unwrap();
+            let job = q
+                .ensure_rolling_job("s", serde_json::json!({}), vec!["hi".into()], 1)
+                .unwrap();
+            for i in 0..2u32 {
+                q.transcript
+                    .store_mut()
+                    .add_unit(
+                        job,
+                        i,
+                        u64::from(i) * 10_000,
+                        u64::from(i + 1) * 10_000,
+                        None,
+                    )
+                    .unwrap();
+            }
+            let c0 = q.claim(Device::Cpu, 1).unwrap().unwrap();
+            let c1 = q.claim(Device::Cpu, 1).unwrap().unwrap();
+            stage(&c0, &[ev(0, 0, 0, 5_000, "a")]);
+            q.complete(&c0, "run-1", 2).unwrap();
+            stage(&c1, &[ev(1, 0, 10_000, 15_000, "b")]);
+            q.transcript
+                .store_mut()
+                .set_unit_state(job, 1, UnitState::Decoded, Some(Device::Cpu))
+                .unwrap();
+        }
+        let mut q = SessionQueue::open_with_clock(&dir, Arc::new(|| "reload".to_owned())).unwrap();
+        let c1 = q.claim(Device::Cpu, 5).unwrap();
+        assert!(c1.is_none(), "unit 1 is decoded and waits to be committed");
+        // A third unit finishing commits the reloaded unit 1 behind it.
+        let job = q.jobs().unwrap()[0].id;
+        q.transcript
+            .store_mut()
+            .add_unit(job, 2, 20_000, 30_000, None)
+            .unwrap();
+        let c2 = q.claim(Device::Cpu, 6).unwrap().unwrap();
+        stage(&c2, &[ev(2, 0, 20_000, 22_000, "c")]);
+        q.complete(&c2, "run-2", 7).unwrap();
+        let all = q
+            .transcript()
+            .store()
+            .segments("post-1", 0, u64::MAX)
+            .unwrap();
+        let stamps: Vec<_> = all
+            .iter()
+            .map(|s| (s.text.as_str(), s.created_at.as_str()))
+            .collect();
+        assert_eq!(
+            stamps,
+            vec![("a", "run-1"), ("b", "reload"), ("c", "run-2")]
+        );
+    }
+
     #[test]
     fn a_crash_after_the_jsonl_but_before_the_state_does_not_repeat_the_unit() {
         let dir = temp("crash2");
@@ -1503,6 +1732,74 @@ mod tests {
         assert_eq!(q.transcript().store().segment_count("post-2").unwrap(), 2);
     }
 
+    /// Item 3 of the auditor of 20 Nov 2026 (owner, 27 Nov 2026): the hold is the night job's own persisted state, so a
+    /// hold survives a restart of the app and the pass is planned again for it; an operator's Pause is not a hold.
+    #[test]
+    fn a_night_hold_survives_an_app_restart_and_an_operators_pause_is_not_a_hold() {
+        let (mut q, job, dir) = queue_with_units("night-hold-restart", 2);
+        for _ in 0..2 {
+            let c = q.claim(Device::Cpu, 1).unwrap().unwrap();
+            stage(
+                &c,
+                &[ev(
+                    c.unit.idx,
+                    0,
+                    c.unit.start_ms + 10,
+                    c.unit.end_ms - 10,
+                    "r",
+                )],
+            );
+            q.complete(&c, "t", 2).unwrap();
+        }
+        q.add_part(1, 0, 20_000, 48_000, &no_pauses()).unwrap();
+        q.plan_units(job, true).unwrap();
+        let night = q
+            .create_night_job("s", serde_json::json!({"hi": "big"}), vec!["hi".into()], 3)
+            .unwrap();
+        assert!(!q.night_job_is_held().unwrap(), "not held yet");
+        // The operator's own Pause is not a hold.
+        q.set_paused(night, true, 4).unwrap();
+        assert!(!q.night_job_is_held().unwrap(), "an operator's Pause");
+        q.set_paused(night, false, 5).unwrap();
+        // Another session starts: held. The app is closed and opened again.
+        assert!(q.hold_night_job(6).unwrap());
+        assert!(q.night_job_is_held().unwrap());
+        drop(q);
+        let mut q = SessionQueue::open(&dir).unwrap();
+        assert!(
+            q.night_job_is_held().unwrap(),
+            "the hold is still there after a restart"
+        );
+        // Planned again after the last session: the same job goes on, and it is no longer held.
+        assert!(q.resume_night_job(7).unwrap());
+        assert!(!q.night_job_is_held().unwrap());
+        let night_job = q
+            .jobs()
+            .unwrap()
+            .into_iter()
+            .find(|j| j.kind == JobKind::Night)
+            .unwrap();
+        assert_eq!(night_job.state, JobState::Queued);
+        assert!(night_job.error.is_none(), "the hold's note is gone");
+    }
+
+    /// Owner, 27 Nov 2026: a unit decoded without the Hinglish model after a graphics failure is flagged in the session
+    /// folder, once per (job, unit), and the flag is still there after a restart.
+    #[test]
+    fn a_flagged_fallback_unit_is_written_once_and_survives_a_restart() {
+        let (q, job, dir) = queue_with_units("fallback-flag", 2);
+        assert!(q.fallback_units().is_empty());
+        let models = serde_json::json!({"hi": "cpu-model"});
+        q.flag_fallback_unit(job, 0, &models, 5).unwrap();
+        q.flag_fallback_unit(job, 0, &models, 6).unwrap();
+        q.flag_fallback_unit(job, 1, &models, 7).unwrap();
+        assert_eq!(q.fallback_units(), vec![(job, 0), (job, 1)]);
+        drop(q);
+        let q = SessionQueue::open(&dir).unwrap();
+        assert_eq!(q.fallback_units(), vec![(job, 0), (job, 1)]);
+        assert!(dir.join(FALLBACK_UNITS_FILE).exists());
+    }
+
     #[test]
     fn a_held_night_job_that_the_new_plan_does_not_run_is_parked_with_the_reason() {
         let (mut q, job, _dir) = queue_with_units("night-parked", 2);
@@ -1557,6 +1854,120 @@ mod tests {
                 .as_deref(),
             Some("post-1")
         );
+    }
+
+    /// Owner, 27 Nov 2026: the night safety switch drops a night job that has not started and never one that has.
+    #[test]
+    fn the_night_safety_switch_drops_a_night_job_that_has_not_started_and_never_one_that_has() {
+        let (mut q, job, _dir) = queue_with_units("night-dropped", 2);
+        for _ in 0..2 {
+            let c = q.claim(Device::Cpu, 1).unwrap().unwrap();
+            stage(
+                &c,
+                &[ev(
+                    c.unit.idx,
+                    0,
+                    c.unit.start_ms + 10,
+                    c.unit.end_ms - 10,
+                    "r",
+                )],
+            );
+            q.complete(&c, "t", 2).unwrap();
+        }
+        q.add_part(1, 0, 20_000, 48_000, &no_pauses()).unwrap();
+        q.plan_units(job, true).unwrap();
+        assert!(
+            !q.drop_unstarted_night_job("x", 3).unwrap(),
+            "no night job yet: nothing to drop"
+        );
+        q.create_night_job("s", serde_json::json!({"hi": "big"}), vec!["hi".into()], 3)
+            .unwrap();
+        // A unit of the night job is claimed (running): the job has started and stays.
+        let running = q.claim(Device::Cpu, 4).unwrap().unwrap();
+        assert!(
+            !q.drop_unstarted_night_job("x", 5).unwrap(),
+            "a job with a running unit is never stopped"
+        );
+        q.release(&running).unwrap();
+        // Nothing has started now: the job is dropped with the reason and gives no unit.
+        assert!(
+            q.drop_unstarted_night_job("the night ran slower than planned", 6)
+                .unwrap()
+        );
+        let night = q
+            .jobs()
+            .unwrap()
+            .into_iter()
+            .find(|j| j.kind == JobKind::Night)
+            .unwrap();
+        assert_eq!(night.state, JobState::Parked);
+        assert_eq!(
+            night.error.as_deref(),
+            Some("the night ran slower than planned")
+        );
+        assert!(q.claim(Device::Cpu, 7).unwrap().is_none());
+        assert_eq!(
+            q.transcript()
+                .store()
+                .default_revision()
+                .unwrap()
+                .as_deref(),
+            Some("post-1"),
+            "the rolling transcript stands"
+        );
+    }
+
+    /// Auditor, second run: the models of a night job change only while no unit of it has started, in one statement.
+    #[test]
+    fn the_models_of_a_night_job_change_only_before_a_unit_has_started() {
+        let (mut q, job, _dir) = queue_with_units("night-models", 2);
+        for _ in 0..2 {
+            let c = q.claim(Device::Cpu, 1).unwrap().unwrap();
+            stage(
+                &c,
+                &[ev(
+                    c.unit.idx,
+                    0,
+                    c.unit.start_ms + 10,
+                    c.unit.end_ms - 10,
+                    "r",
+                )],
+            );
+            q.complete(&c, "t", 2).unwrap();
+        }
+        q.add_part(1, 0, 20_000, 48_000, &no_pauses()).unwrap();
+        q.plan_units(job, true).unwrap();
+        let night = q
+            .create_night_job("s", serde_json::json!({"hi": "big"}), vec!["hi".into()], 3)
+            .unwrap();
+        // A job created after the night job does not sort among the night ranks.
+        assert!(q.rank_night_job(2).unwrap());
+        let later = q
+            .transcript()
+            .store()
+            .jobs()
+            .unwrap()
+            .into_iter()
+            .map(|j| (j.kind, j.position))
+            .collect::<Vec<_>>();
+        assert!(
+            later
+                .iter()
+                .any(|(k, p)| *k == JobKind::Night && *p == NIGHT_RANK_BASE + 2),
+            "{later:?}"
+        );
+        assert!(
+            q.change_models_if_unstarted(night, &serde_json::json!({"hi": "other"}))
+                .unwrap()
+        );
+        let claim = q.claim(Device::Cpu, 4).unwrap().unwrap();
+        assert_eq!(claim.job.id, night);
+        assert!(
+            !q.change_models_if_unstarted(night, &serde_json::json!({"hi": "third"}))
+                .unwrap(),
+            "a job with a running unit keeps its models"
+        );
+        q.release(&claim).unwrap();
     }
 
     #[test]

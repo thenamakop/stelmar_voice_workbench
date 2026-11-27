@@ -9,7 +9,7 @@ Model files are large and never committed. Phase 2 writes the download and quant
 | hindi-medium-q8_0 | `vasista22/whisper-hindi-medium`, converted and quantised | medium | Apache 2.0 | Hindi rolling |
 | indicwhisper-hi-q8_0 | AI4Bharat Vistaar (github.com/AI4Bharat/vistaar) | medium | MIT (confirmed 8 Nov 2026, see below) | Hindi rolling |
 | vaani-hi-q8_0 | `ARTPARK-IISc/whisper-medium-vaani-hindi` | medium | Apache 2.0 | Hindi rolling |
-| hinglish-q5_0 | `Trelis/whisper-hinglish-preview`, converted and quantised | large-v3 | Apache 2.0 | Code-switched English–Hindi night pass; rolling where a GPU makes it fast enough; GPU live |
+| hinglish-q8_0 | `Trelis/whisper-hinglish-preview`, converted and quantised (q8_0) | large-v3 | Apache 2.0 | Code-switched English–Hindi night pass; rolling where a GPU makes it fast enough; GPU live |
 | indicwhisper-ur-q8_0 | AI4Bharat Vistaar | medium | MIT (confirmed 8 Nov 2026, see below) | Urdu rolling |
 | large-v3-turbo-q5_0 | Hugging Face `ggerganov/whisper.cpp` (547 MiB) | large-v3-turbo | MIT | English rolling on CPU; GPU live |
 | large-v3-q5_0 | same (1.1 GiB) | large-v3 | MIT | Night pass on CPU |

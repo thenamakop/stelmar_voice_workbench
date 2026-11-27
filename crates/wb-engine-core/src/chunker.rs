@@ -58,6 +58,10 @@ pub struct Params {
     pub pad_s: f64,
     /// Window before the limit in which a forced cut looks for the quietest moment, seconds.
     pub forced_cut_window_s: f64,
+    /// Longest pause a chunk is merged across, seconds: speech after a longer pause always starts a new chunk, so a
+    /// long silence inside a chunk cannot push its speech share under the low-speech bar (PLAN section 6: under 0.3 is
+    /// dropped) and lose the speech with it (Phase 5, item 5).
+    pub max_merge_gap_s: f64,
 }
 
 impl Default for Params {
@@ -69,6 +73,7 @@ impl Default for Params {
             sentence_split: true,
             pad_s: 0.2,
             forced_cut_window_s: 4.0,
+            max_merge_gap_s: 2.0,
         }
     }
 }
@@ -148,6 +153,9 @@ pub fn chunks(speech: &[Speech], samples: &[f32], rate: u32, p: &Params) -> Vec<
             let len_now = pieces[last].0.end_s - pieces[first].0.start_s;
             if pieces[last + 1].1 {
                 break; // a forced cut inside speech always starts a new chunk
+            }
+            if gap > p.max_merge_gap_s {
+                break; // never merge across a long pause, whatever the mode
             }
             if len_with_next > room {
                 if !p.sentence_split {
@@ -311,6 +319,43 @@ mod tests {
         assert_eq!(c.len(), 1, "{c:?}");
         assert!(c[0].duration_s() <= 15.0);
         assert!(c[0].speech_ratio() > 0.9);
+    }
+
+    #[test]
+    fn a_long_pause_is_never_merged_across_so_its_silence_cannot_drop_the_speech() {
+        let samples = audio(30.0, None);
+        // One second of speech, a 10 s pause, two seconds of speech: merged, the chunk would be 3 s of speech in 13 s
+        // (a share of 0.23, under the 0.3 bar); with the cap each stretch is its own chunk of mostly speech.
+        let speech = [s(0.5, 1.5), s(11.5, 13.5)];
+        let c = chunks(&speech, &samples, RATE, &Params::default());
+        assert_eq!(c.len(), 2, "{c:?}");
+        assert!(c.iter().all(|x| x.speech_ratio() >= 0.3), "{c:?}");
+        let uncapped = Params {
+            max_merge_gap_s: f64::INFINITY,
+            ..Params::default()
+        };
+        let old = chunks(&speech, &samples, RATE, &uncapped);
+        assert_eq!(old.len(), 1, "{old:?}");
+        assert!(old[0].speech_ratio() < 0.3, "{old:?}");
+        // The greedy mode of single-language sessions and of the evaluation caps the gap as well.
+        let greedy = Params {
+            sentence_split: false,
+            ..Params::default()
+        };
+        assert_eq!(chunks(&speech, &samples, RATE, &greedy).len(), 2);
+    }
+
+    #[test]
+    fn pauses_up_to_the_cap_are_still_merged_into_one_chunk() {
+        let samples = audio(30.0, None);
+        // A 1 s phrase, a 1.5 s pause (under the 2 s cap), a 1.5 s phrase: under the 3 s sentence minimum, so they merge.
+        let c = chunks(
+            &[s(0.5, 1.5), s(3.0, 4.5)],
+            &samples,
+            RATE,
+            &Params::default(),
+        );
+        assert_eq!(c.len(), 1, "{c:?}");
     }
 
     #[test]

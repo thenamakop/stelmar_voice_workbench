@@ -8,7 +8,9 @@ $fails = 0
 function Check([string]$Name, [bool]$Ok) {
   if ($Ok) { Write-Host "ok   $Name" } else { Write-Host "FAIL $Name"; $script:fails++ }
 }
-$all = @('small', 'medium', 'large-v3-turbo-q5_0', 'large-v3-q5_0', 'hinglish-q5_0')
+$all = @('small', 'medium', 'large-v3-turbo-q5_0', 'large-v3-q5_0', 'hinglish-q8_0')
+# Owner, 27 Nov 2026: hinglish-q5_0 and hinglish-f16 left the pack and the shipped manifest; this fails if either comes back into the speed table.
+Check 'the speed table lists no Hinglish file that left the pack' (@(Get-SpeedModels | Where-Object { $_.Id -in @('hinglish-q5_0', 'hinglish-f16') }).Count -eq 0)
 $igpu = [pscustomobject]@{ Index = 1; Backend = 'Vulkan'; Description = 'Intel(R) Iris(R) Xe Graphics'; Kind = 'integrated'; Driver = '31.0.101.4502' }
 $dgpu = [pscustomobject]@{ Index = 0; Backend = 'Vulkan'; Description = 'NVIDIA GeForce RTX 4070 Laptop GPU'; Kind = 'discrete'; Driver = '560.94' }
 $cpuDev = [pscustomobject]@{ Index = 2; Backend = 'Vulkan'; Description = 'llvmpipe'; Kind = 'cpu'; Driver = '' }
@@ -17,7 +19,7 @@ $p = @(Get-SpeedPlan -Part igpu -Devices @($igpu, $dgpu, $cpuDev) -Present $all)
 Check 'igpu: every real adapter is a row, a cpu device is not' (@($p | Select-Object -ExpandProperty Row -Unique).Count -eq 2)
 Check 'igpu: the driver version is in the row name' (@($p | Where-Object { $_.Row -match '31\.0\.101\.4502' }).Count -gt 0)
 Check 'igpu: 5 models x 2 languages + 1 code-switched row, per adapter' ($p.Count -eq 2 * (5 * 2 + 1))
-Check 'igpu: the code-switched clip is used only for the Hinglish model' (@($p | Where-Object { $_.Clip -eq 'bench-codeswitch.wav' } | Select-Object -ExpandProperty Model | Select-Object -ExpandProperty Id -Unique) -join ',' -eq 'hinglish-q5_0')
+Check 'igpu: the code-switched clip is used only for the Hinglish model' (@($p | Where-Object { $_.Clip -eq 'bench-codeswitch.wav' } | Select-Object -ExpandProperty Model | Select-Object -ExpandProperty Id -Unique) -join ',' -eq 'hinglish-q8_0')
 Check 'igpu: GPU rows run on the vulkan engine with 2 CPU threads' (@($p | Where-Object { $_.Variant -ne 'vulkan' -or $_.Threads -ne 2 }).Count -eq 0)
 
 $pq = @(Get-SpeedPlan -Part igpu -Devices @($dgpu, $igpu) -Present $all -Quick $true)

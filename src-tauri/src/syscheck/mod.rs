@@ -32,6 +32,17 @@ use crate::engines::{self, EngineState, Registry};
 use crate::recording;
 use crate::state::{AppState, lock};
 
+/// The rules' options for a check on this computer: the defaults, plus the rolling detection allowance, so that the verdict
+/// warns when a session with several languages (every chunk's language is detected, which the bench does not do) would
+/// run slower than the bar. The figure is the queue's emu-low ratio, provisional until the laptops are measured; it
+/// never changes which model is chosen (Phase 5, item 6).
+pub fn check_options() -> Options {
+    Options {
+        rolling_detection_allowance: wb_queue::speed::ROLLING_DETECTION_ALLOWANCE,
+        ..Options::default()
+    }
+}
+
 /// Which check is running, and the flag that cancels it.
 #[derive(Default)]
 pub struct CheckState {
@@ -265,14 +276,36 @@ pub async fn start_recording(
 /// recorder starts without waiting for anything else.
 pub fn start_with_mode(
     app: &AppHandle,
-    request: SessionRequest,
+    mut request: SessionRequest,
 ) -> Result<crate::state::SessionInfo, String> {
-    let languages = request
+    let listed = request
         .base
         .expected_languages
         .clone()
         .filter(|l| !l.is_empty())
         .unwrap_or_else(|| vec!["en".into(), "hi".into()]);
+    // English plus at most one of Hindi or Urdu (owner, 24 Nov 2026). A list that breaks the rule (the day plan, an
+    // old folder, a hand-edited programme) never blocks the recording: it is loaded with Hindi in Devanagari and a
+    // warning that names the session. The recorder receives the normalised list.
+    let normal = wb_queue::languages::session_languages(
+        &request.base.title,
+        &listed,
+        request.hindi_urdu_script.as_deref(),
+    );
+    if let Some(warning) = &normal.warning {
+        tracing::warn!("{warning}");
+        let _ = app
+            .state::<AppState>()
+            .events
+            .send(wb_recorder::events::Notice::event(
+                wb_recorder::events::NoticeLevel::Warning,
+                "languages",
+                warning.clone(),
+            ));
+    }
+    let languages = normal.languages;
+    request.base.expected_languages = Some(languages.clone());
+    request.hindi_urdu_script = normal.script.map(str::to_owned);
     let mode = match request.mode.as_deref() {
         None | Some("record_post") => "record_post",
         Some("live_post") => {
@@ -471,7 +504,7 @@ pub fn start_check(app: &AppHandle, kind: CheckKind) -> Result<(), String> {
         rankings: rankings::from_manifest(&manifest),
         manifest,
         manifest_hash,
-        options: Options::default(),
+        options: check_options(),
         started_at: now_iso(),
     };
     let handle = app.clone();
@@ -662,6 +695,18 @@ pub fn live_allowed(
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
+
+    /// Phase 5, item 6: the check hands the rules the queue's detection allowance (the same constant), so that the
+    /// verdict can warn about a bilingual session; with the defaults alone the rules know no allowance.
+    #[test]
+    fn the_check_gives_the_rules_the_queues_detection_allowance() {
+        assert_eq!(
+            check_options().rolling_detection_allowance,
+            wb_queue::speed::ROLLING_DETECTION_ALLOWANCE
+        );
+        assert!(check_options().rolling_detection_allowance > 1.3);
+        assert_eq!(Options::default().rolling_detection_allowance, 1.0);
+    }
 
     /// Owner, 17 Nov 2026: the queue may keep the hardware reading for at most 30 seconds; it expires, and a new
     /// check clears it so the next read is a new one.

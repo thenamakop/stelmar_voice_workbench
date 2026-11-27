@@ -166,5 +166,33 @@ class EstimateBar(unittest.TestCase):
         self.assertNotIn("day", dr.ESTIMATE_INFO_NOTE)
 
 
+class ScoredInTheSessionsOwnScript(unittest.TestCase):
+    """Hindi and Urdu are one language written in the session's own script (owner, 24 Nov 2026). The Panel of 21 Nov 2026
+    scored 67.3% because Devanagari references were scored against Urdu-script output: 84% of its word errors."""
+
+    HINDI = "यह एक परीक्षण वाक्य है"
+    URDU = "یہ ایک آزمائشی جملہ ہے"
+
+    def test_the_script_is_found_from_the_letters(self):
+        self.assertEqual(dr.reference_script(self.HINDI), "devanagari")
+        self.assertEqual(dr.reference_script(self.URDU), "arabic")
+        self.assertEqual(dr.reference_script("a test sentence"), "latin")
+        self.assertIsNone(dr.reference_script("123 ..."))
+
+    def test_a_devanagari_reference_is_not_scored_against_a_nastaliq_session(self):
+        self.assertFalse(dr.scoreable(self.HINDI, "nastaliq"))
+        self.assertTrue(dr.scoreable(self.HINDI, "devanagari"))
+        self.assertTrue(dr.scoreable(self.HINDI, None))
+
+    def test_an_urdu_reference_is_not_scored_against_a_devanagari_session(self):
+        self.assertFalse(dr.scoreable(self.URDU, "devanagari"))
+        self.assertFalse(dr.scoreable(self.URDU, None))
+        self.assertTrue(dr.scoreable(self.URDU, "nastaliq"))
+
+    def test_english_is_scored_in_every_session(self):
+        for script in (None, "devanagari", "nastaliq"):
+            self.assertTrue(dr.scoreable("an english sentence", script))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

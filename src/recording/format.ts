@@ -55,6 +55,35 @@ export function languages(codes: string[]): string {
   return codes.map((c) => c.toUpperCase()).join(" · ");
 }
 
+/**
+ * A session's languages under the one-language rule (owner, 24 Nov 2026): English plus at most one of Hindi or Urdu.
+ * A list that names both (an old session folder, the day plan) shows Hindi, as the queue decodes it
+ * (`wb_queue::languages::session_languages`).
+ */
+export function sessionLanguages(codes: string[]): string[] {
+  const out: string[] = [];
+  const hindiUrdu = codes.includes("hi") ? "hi" : codes.includes("ur") ? "ur" : null;
+  for (const c of codes) {
+    const mapped = c === "hi" || c === "ur" ? hindiUrdu : c;
+    if (mapped !== null && !out.includes(mapped)) out.push(mapped);
+  }
+  return out;
+}
+
+/** The Start Session dialog's starting choice from a programme entry: one Hindi or Urdu, Hindi when it names both. */
+export function initialChoice(listed?: string[]): {
+  english: boolean;
+  hindiUrdu: boolean;
+  script: "devanagari" | "nastaliq";
+} {
+  const codes = listed && listed.length > 0 ? sessionLanguages(listed) : ["en", "hi"];
+  return {
+    english: codes.includes("en"),
+    hindiUrdu: codes.includes("hi") || codes.includes("ur"),
+    script: codes.includes("ur") ? "nastaliq" : "devanagari",
+  };
+}
+
 /** File name of part n: part-0001.wav. */
 export function partFile(n: number): string {
   return `part-${String(n).padStart(4, "0")}.wav`;

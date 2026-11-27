@@ -23,6 +23,10 @@ from wbeval import manifest  # noqa: E402
 from wbeval.common import MODELS_DIR, REPO  # noqa: E402
 
 OUT = MODELS_DIR / "manifest.json"
+# Models that exist on the Legion but are not shipped: the app lists every manifest entry and marks a missing file, so these stay
+# out of the committed manifest. hinglish-f16: dropped from the night wiring and the pack (owner, 27 Nov 2026, option A). hinglish-q5_0: removed from the shipped
+# manifest and the pack (owner, 27 Nov 2026: WER 36.2 on the held-out chunks against 23.4 for q8_0, nothing measures it).
+NOT_SHIPPED = {"hinglish-f16", "hinglish-q5_0"}
 KEEP = ("id", "file", "sha256", "bytes", "kind", "base", "quant", "languages", "candidate_roles",
         "validated_roles", "provisional_rank", "licence")
 
@@ -56,7 +60,8 @@ def build() -> dict:
                      "English: large-v3-turbo-q5_0 is listed first and medium second although the gap is within "
                      "noise (FLEURS English 4.38 against 4.90 WER on 20 clips); turbo goes first because its file is "
                      "smaller at equal speed (owner's decision, 13 Nov 2026), so quality_unverified stays false.",
-            "models": sorted((entry_for(m) for m in local["models"]), key=lambda e: e["id"])}
+            "models": sorted((entry_for(m) for m in local["models"] if m["id"] not in NOT_SHIPPED),
+                             key=lambda e: e["id"])}
 
 
 def main() -> int:

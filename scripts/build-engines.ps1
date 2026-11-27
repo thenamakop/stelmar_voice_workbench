@@ -223,7 +223,8 @@ try {
     if ($Rebuild -and (Test-Path -LiteralPath $target)) { Remove-Item -LiteralPath $target -Recurse -Force }
     $started = Get-Date
     Write-Host "== $v : building (flags: $(($plan.Flags.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join ' '))"
-    $cargoArgs = @('build', '--release', '-p', 'wb-engine', '--target-dir', $target) + $plan.Features
+    $features = $plan.Features
+    $cargoArgs = @('build', '--release', '-p', 'wb-engine', '--target-dir', $target) + $features
     # cargo writes progress to stderr: collect everything as text (no native-stderr redirect).
     $res = Invoke-WbNative -FilePath 'cargo' -ArgumentList $cargoArgs
     $res.Output + $res.Error | Set-Content -LiteralPath $log -Encoding utf8

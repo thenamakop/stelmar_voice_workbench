@@ -1,0 +1,20 @@
+Ear check of the chunk labels (10 random chunks of the tuning clips; seed 24112026); marks by the owner, 2026-11-26; written by eval/label_chunks.py ear-check from coshe-tune-ear-check.json.
+main = the language that leads the chunk; pure = one language only; mixed = both languages.
+A mark of disagree sets the chunk's label to what the owner heard; where the owner did not change the main language, the main language stays.
+
+n | clip | start | end | proposed (main, kind) | latin share | mark | owner's label (main, kind)
+1 | audio_1203 | 00:17.59 | 00:23.09 | hi, pure | 0.1 | agree | hi, pure
+2 | audio_1469 | 00:09.53 | 00:22.46 | en, mixed | 0.6 | agree | en, mixed
+3 | audio_1521 | 00:49.72 | 00:57.30 | hi, mixed | 0.269 | agree | hi, mixed
+4 | audio_1668 | 00:37.34 | 00:48.20 | hi, pure | 0.0 | agree | hi, pure
+5 | audio_187 | 00:37.82 | 00:51.37 | hi, mixed | 0.378 | agree | hi, mixed
+6 | audio_1892 | 00:37.28 | 00:49.91 | en, pure | 1.0 | agree | en, pure
+7 | audio_1918 | 00:22.75 | 00:35.10 | en, pure | 1.0 | agree | en, pure
+8 | audio_1971 | 00:26.20 | 00:40.33 | hi, pure | 0.0 | agree | hi, pure
+9 | audio_355 | 00:54.88 | 00:58.50 | en, pure | 0.875 | disagree | en, mixed
+10 | audio_834 | 00:24.66 | 00:38.34 | en, mixed | 0.75 | agree | en, mixed
+
+main language agrees 10 of 10; pure against mixed agrees 9 of 10
+pass bar: 9 of 10 on main and 8 of 10 on pure against mixed: PASS
+label file coshe-tune-chunks.json: 1 chunk(s) carry the owner's label (`build` keeps the corrections)
+disagreement 9: the labeller said pure (0.875 Latin share, so the smaller share was 0.125, under the 15% limit) and the owner hears mixed

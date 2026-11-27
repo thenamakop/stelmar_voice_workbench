@@ -1,0 +1,10 @@
+Language-rule experiment switch against the engines on disk (D:\Projects\stelmar_voice_workbench\src-tauri\binaries). Written by scripts/check-engine-no-experiments.ps1.
+Looked for: WB_LANG_EXPERIMENT, lang-experiments, lang::experiment, always_both, DETECT_WITH_HINDI_MODEL, each as ASCII and as UTF-16.
+self-test: the scan finds 10 of 10 needle encodings in a probe file that holds all of them
+
+engine  wb-engine-avx2-x86_64-pc-windows-msvc.exe  3.6 MB  3f13ee3a69f63c30  clean: none of the strings
+engine  wb-engine-avx512-x86_64-pc-windows-msvc.exe  3.6 MB  81d33e2c401df632  clean: none of the strings
+engine  wb-engine-cuda-x86_64-pc-windows-msvc.exe  69.5 MB  4d624519760842ee  clean: none of the strings
+engine  wb-engine-vulkan-x86_64-pc-windows-msvc.exe  46.7 MB  cd037a6a4e0b5713  clean: none of the strings
+
+RESULT: PASS: the scan finds every probe string and no engine contains the switch.

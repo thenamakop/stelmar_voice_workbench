@@ -145,6 +145,10 @@ impl Device {
 /// A unit that fails this many times on one device moves to the other device (Phase 4 step 7).
 pub const ATTEMPTS_PER_DEVICE: u32 = 3;
 
+/// The queue position of the first-ranked night job: the night pass ranks the sessions' night jobs from here (the manager
+/// takes the lowest `(priority, position)` across sessions). The positions of ordinary jobs stay below it.
+pub const NIGHT_RANK_BASE: i64 = 1_000_000;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct NewJob {
     pub session: String,
@@ -330,10 +334,13 @@ impl Store {
 
     pub fn create_job(&mut self, new: &NewJob) -> Result<i64> {
         let tx = self.conn.transaction()?;
-        let position: i64 =
-            tx.query_row("SELECT COALESCE(MAX(position), 0) + 1 FROM jobs", [], |r| {
-                r.get(0)
-            })?;
+        // The ranked night jobs sit at `NIGHT_RANK_BASE` and above: a job created after one (a later kind of job) must not
+        // count them, or it would sort among the night ranks (auditor, 27 Nov 2026).
+        let position: i64 = tx.query_row(
+            "SELECT COALESCE(MAX(position), 0) + 1 FROM jobs WHERE position < ?1",
+            [NIGHT_RANK_BASE],
+            |r| r.get(0),
+        )?;
         tx.execute(
             "INSERT INTO jobs (session, kind, models_by_lang, languages, revision, state, position, created_ms)
              VALUES (?1, ?2, ?3, ?4, ?5, 'queued', ?6, ?7)",
@@ -399,6 +406,30 @@ impl Store {
             )
             .optional()?;
         row.map(Self::finish_job).transpose()
+    }
+
+    /// Sets the models of a job if it is still queued or running with no unit started: the check and the change
+    /// are one statement, so a unit cannot be claimed in between. Returns whether the models were changed.
+    pub fn set_models_if_unstarted(
+        &mut self,
+        id: i64,
+        models_by_lang: &serde_json::Value,
+    ) -> Result<bool> {
+        let n = self.conn.execute(
+            "UPDATE jobs SET models_by_lang = ?2 WHERE id = ?1 AND state IN ('queued', 'running')
+             AND NOT EXISTS (SELECT 1 FROM units WHERE job = ?1 AND state != 'pending')",
+            params![id, serde_json::to_string(models_by_lang)?],
+        )?;
+        Ok(n > 0)
+    }
+
+    /// Sets the queue position of a job (the night pass ranks the sessions' night jobs against each other with it).
+    pub fn set_job_position(&mut self, id: i64, position: i64) -> Result<()> {
+        self.conn.execute(
+            "UPDATE jobs SET position = ?2 WHERE id = ?1",
+            params![id, position],
+        )?;
+        Ok(())
     }
 
     /// Every job in queue order (position).
@@ -819,6 +850,17 @@ mod tests {
         s.mark_revision_complete("post-2").unwrap();
         s.set_default_revision("post-2").unwrap();
         assert_eq!(s.default_revision().unwrap().as_deref(), Some("post-2"));
+    }
+
+    /// Auditor, second run: a job created after a ranked night job must not take a position among the night ranks.
+    #[test]
+    fn a_job_created_after_a_ranked_night_job_keeps_an_ordinary_position() {
+        let mut s = Store::open_in_memory().unwrap();
+        let night = new_job(&mut s, JobKind::Night);
+        s.set_job_position(night, NIGHT_RANK_BASE + 3).unwrap();
+        let later = new_job(&mut s, JobKind::Translate);
+        let p = s.job(later).unwrap().unwrap().position;
+        assert!(p < NIGHT_RANK_BASE, "{p}");
     }
 
     #[test]
