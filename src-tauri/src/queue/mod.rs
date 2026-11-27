@@ -1274,6 +1274,7 @@ impl Queue {
             }
             return;
         }
+        let mut switched_count = 0usize;
         for name in &check.switch {
             let Some(s) = open.iter().find(|s| &s.name == name) else {
                 continue;
@@ -1297,6 +1298,7 @@ impl Queue {
             match changed {
                 Ok(false) => continue,
                 Ok(true) => {
+                    switched_count += 1;
                     self.core.push_log(format!(
                         "night safety switch: {name} goes back to today's night models (the Hinglish night pass: {reason}); best finished on a faster machine"
                     ));
@@ -1315,7 +1317,7 @@ impl Queue {
         self.core.push_log(format!(
             "night safety switch: with {} night job(s) dropped and {} session(s) back on today's models the rest needs about {:.1} h (the night needed {:.1} h)",
             dropped_count,
-            check.switch.len(),
+            switched_count,
             check.needed_after_s / 3600.0,
             check.needed_s / 3600.0
         ));

@@ -590,7 +590,7 @@ mod tests {
         // At the planned speed the Hinglish night still finishes: nothing changes.
         assert_eq!(recheck(&p, six_pm(), &jobs, 1.0), None);
         // The first units showed 1.6 times the profile's speed: sessions that have not started go back to today's models, one
-        // at a time (the lowest priority first, the later of equal ranks as listed) until the rest fits; the running first
+        // at a time (the lowest priority first; equal ranks in the order listed) until the rest fits; the running first
         // stays. One goes back here, which is enough (auditor, third run: not every unstarted job at once).
         let r =
             recheck(&p, six_pm(), &jobs, 1.6).expect("the Hinglish night would end after 08:00");
