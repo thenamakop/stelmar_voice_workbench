@@ -1170,9 +1170,16 @@ impl Queue {
         else {
             return;
         };
-        let hinglish_model = profile.hinglish_night_model().map(str::to_owned);
         let now = clock_ms();
         let open = plock(&self.open);
+        // As `night_step`: a session that fell back is judged with the redo profile (the Hinglish model is its night model,
+        // on the card or, after a failure in this run, on the processor where it was measured).
+        let profile = if open.iter().any(|s| s.fell_back) {
+            profile.for_redo(self.manager.gpu_abandoned())
+        } else {
+            profile
+        };
+        let hinglish_model = profile.hinglish_night_model().map(str::to_owned);
         let mut jobs: Vec<night_route::NightJob> = Vec::new();
         for s in open.iter() {
             let q = plock(&s.handle.queue);
@@ -1279,6 +1286,10 @@ impl Queue {
                 continue;
             };
             drop(q);
+            // A job that already decodes with exactly these models has nothing to go back to: no change, no marker.
+            if job.models_by_lang == models_json(&models) {
+                continue;
+            }
             // One statement checks that no unit has started and changes the models: a job that started in between keeps the
             // model it started with.
             let changed =

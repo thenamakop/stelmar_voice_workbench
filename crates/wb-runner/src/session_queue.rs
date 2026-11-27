@@ -653,7 +653,6 @@ impl SessionQueue {
         Ok(self.transcript.store_mut().move_up(job)?)
     }
 
-    /// Change Model: the remaining units use the new models; committed units keep what decoded them.
     /// Changes the models of a job only if no unit of it has started (one statement: a unit cannot be claimed in between).
     /// True when the models were changed.
     pub fn change_models_if_unstarted(
@@ -667,6 +666,7 @@ impl SessionQueue {
             .set_models_if_unstarted(job, models_by_lang)?)
     }
 
+    /// Change Model: the remaining units use the new models; committed units keep what decoded them.
     pub fn change_models(&mut self, job: i64, models_by_lang: &serde_json::Value) -> Result<()> {
         Ok(self
             .transcript

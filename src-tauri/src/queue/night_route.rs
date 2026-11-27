@@ -350,8 +350,15 @@ pub fn recheck(
     // accurate (owner, 27 Nov 2026: large-v3 q5_0 27.9 against Hinglish q8_0 11.4 on Kathbath), and the session keeps its
     // rolling transcript, marked for a faster machine.
     let mut switch = Vec::new();
-    if finish_of(left) > deadline {
-        for j in jobs.iter().filter(|j| !j.started && j.hinglish) {
+    // The lowest priority first, and only as many as the deadline needs (a dropped job loses its whole night pass).
+    let mut hinglish_left: Vec<&NightJob> =
+        jobs.iter().filter(|j| !j.started && j.hinglish).collect();
+    hinglish_left.sort_by_key(|j| std::cmp::Reverse(j.rank));
+    {
+        for j in hinglish_left {
+            if finish_of(left) <= deadline {
+                break;
+            }
             let english_too = j.languages.iter().any(|l| l == "en");
             if english_too && today_s(j) < hinglish_s(j) {
                 left += today_s(j) - hinglish_s(j);
@@ -582,10 +589,13 @@ mod tests {
         ];
         // At the planned speed the Hinglish night still finishes: nothing changes.
         assert_eq!(recheck(&p, six_pm(), &jobs, 1.0), None);
-        // The first units showed 1.6 times the profile's speed: the second and third go back; the running first stays.
+        // The first units showed 1.6 times the profile's speed: sessions that have not started go back to today's models, one
+        // at a time (the lowest priority first, the later of equal ranks as listed) until the rest fits; the running first
+        // stays. One goes back here, which is enough (auditor, third run: not every unstarted job at once).
         let r =
             recheck(&p, six_pm(), &jobs, 1.6).expect("the Hinglish night would end after 08:00");
-        assert_eq!(r.switch, vec!["second".to_string(), "third".to_string()]);
+        assert_eq!(r.switch, vec!["second".to_string()], "{r:?}");
+        assert!(r.needed_after_s / 3600.0 < 14.0, "{}", r.needed_after_s);
         assert!(r.finish_ms > r.deadline_ms);
         assert!(r.needed_s / 3600.0 > 14.0, "{}", r.needed_s);
         assert!(r.needed_after_s < r.needed_s);
@@ -696,13 +706,39 @@ mod tests {
         assert!(r.switch.is_empty(), "never switched to large-v3: {r:?}");
         assert_eq!(
             r.drop,
-            vec!["hindi-a".to_string(), "hindi-b".to_string()],
-            "{r:?}"
+            vec!["hindi-b".to_string(), "hindi-a".to_string()],
+            "the lowest priority first: {r:?}"
         );
         // A started Hindi job stays, and nothing else is touched.
         let jobs = [hindi("hindi-a", true, 0), hindi("hindi-b", false, 1)];
         let r = recheck(&p, six_pm(), &jobs, 3.0).expect("far too slow");
         assert_eq!(r.drop, vec!["hindi-b".to_string()], "{r:?}");
+    }
+
+    /// Auditor, third run: only as many Hinglish jobs are dropped as the deadline needs, the lowest priority first. Three
+    /// Hindi jobs of 4 h at 1.69 times real time need 20.3 h at the profile's speed; dropping the last one leaves 13.5 h.
+    #[test]
+    fn only_as_many_hinglish_jobs_are_dropped_as_the_deadline_needs_and_the_lowest_priority_goes_first()
+     {
+        let p = with_large_night(profile(true, 1.69, false));
+        let hindi = |name: &str, rank: usize| NightJob {
+            name: name.into(),
+            languages: vec!["hi".into()],
+            remaining_ms_by_lang: BTreeMap::from([("hi".to_owned(), 240 * 60_000)]),
+            started: false,
+            hinglish: true,
+            rank,
+        };
+        // Listed in an order that is not the rank order: the drop still goes by rank.
+        let jobs = [
+            hindi("hindi-b", 1),
+            hindi("hindi-c", 2),
+            hindi("hindi-a", 0),
+        ];
+        let r = recheck(&p, six_pm(), &jobs, 1.0).expect("20 h do not fit before 08:00");
+        assert_eq!(r.drop, vec!["hindi-c".to_string()], "{r:?}");
+        assert!(r.switch.is_empty());
+        assert!(r.needed_after_s / 3600.0 < 14.0, "{}", r.needed_after_s);
     }
 
     /// The night allowance reaches the Hinglish decision: three sessions that the earlier graphics-adapter allowance (1.25:

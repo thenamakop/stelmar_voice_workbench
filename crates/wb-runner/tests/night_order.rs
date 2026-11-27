@@ -148,7 +148,7 @@ fn the_nights_of_two_sessions_run_in_the_plans_order_not_the_recording_order() {
     let day = manager(&dir, exec.clone());
     day.add_session(first.clone());
     day.add_session(second.clone());
-    let _slot = day
+    let day_slot = day
         .start_slot(Slot {
             name: "cpu".into(),
             device: Device::Cpu,
@@ -158,6 +158,8 @@ fn the_nights_of_two_sessions_run_in_the_plans_order_not_the_recording_order() {
         all_done(&handles, wb_queue::store::JobKind::Rolling)
     });
     day.stop();
+    // The day's slot thread ends before the night jobs exist, so it cannot claim one of them.
+    day_slot.join().unwrap();
 
     // The night: planned for "second" then "first" (ranks 0 and 1), jobs created in the plan's order.
     for (rank, h) in [&second, &first].into_iter().enumerate() {
@@ -171,7 +173,7 @@ fn the_nights_of_two_sessions_run_in_the_plans_order_not_the_recording_order() {
         .unwrap();
         assert!(q.rank_night_job(rank).unwrap());
     }
-    let night_exec = Arc::new(Recorder::default());
+    let night_exec = exec.clone();
     let night = manager(&dir, night_exec.clone());
     night.add_session(first.clone());
     night.add_session(second.clone());
