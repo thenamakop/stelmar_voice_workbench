@@ -29,7 +29,7 @@ Live engine sessions started only from the Start Session dialog (or the Live cap
 
 ## Live model candidates from the Phase 5 measurements (owner, 27 Nov 2026; `docs/evidence/phase-5/item8-live-accuracy.txt`)
 - **Hindi live:** the only candidate is Hinglish q8_0, and only on a machine where it measures at most 0.35 times real time (RTF) there, short clips included (on the Legion card it measured 0.30 on FLEURS and 0.45 on the short Kathbath clips, so the bar is not met everywhere). Turbo q5_0, medium q5_0 and small q5_0 are rejected for Hindi live on accuracy (2.2 to 5.7 times the best rolling WER on the same clips).
-- **Urdu live:** turbo q5_0 or medium q5_0 (both within 1.5 times the best Urdu rolling WER; turbo is faster; small is out).
+- **Urdu live:** turbo q5_0 (within 1.5 times the best Urdu rolling WER, no truncated chunk). Medium q5_0 is within the WER bar but has one truncated near-live chunk on each set, which the capability rules treat as a block, so it is a candidate only if a re-run is clean; small is out. (Owner's wording of 27 Nov 2026: "turbo or medium".)
 - English live stays as the earlier ranking (small near-live, turbo streaming on tier G).
 - **Still to measure in this phase:** first-word latency and the share of segments revised after commit (`wb-engine live` reported speech boundaries only until now), and the 0.35 RTF bar on the room laptops. `validated_roles` stays empty until those are measured and the owner decides.
 

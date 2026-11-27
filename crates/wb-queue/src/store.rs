@@ -401,6 +401,15 @@ impl Store {
         row.map(Self::finish_job).transpose()
     }
 
+    /// Sets the queue position of a job (the night pass ranks the sessions' night jobs against each other with it).
+    pub fn set_job_position(&mut self, id: i64, position: i64) -> Result<()> {
+        self.conn.execute(
+            "UPDATE jobs SET position = ?2 WHERE id = ?1",
+            params![id, position],
+        )?;
+        Ok(())
+    }
+
     /// Every job in queue order (position).
     pub fn jobs(&self) -> Result<Vec<Job>> {
         let mut st = self.conn.prepare("SELECT * FROM jobs ORDER BY position")?;

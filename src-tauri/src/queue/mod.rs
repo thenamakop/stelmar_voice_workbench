@@ -1018,7 +1018,11 @@ impl Queue {
         let factor = wb_queue::speed::planning_factor(
             measured,
             wb_queue::speed::Pass::Night(profile.night_class()),
-            if multi { 2 } else { 1 },
+            // Every night is planned with the night allowance until one of its own units has finished, also a night of
+            // single-language sessions (owner, 27 Nov 2026: each priority tier is planned at the 1.5 allowance; the large
+            // model's English and Urdu nights have no measured night speed yet, and a plan that is too short is the
+            // dangerous error).
+            2,
         );
         // The Hinglish model decodes the night of the English + Hindi sessions when the plan made from the audio really
         // recorded finishes before 08:00; otherwise today's models run and those sessions are marked.
@@ -1045,7 +1049,7 @@ impl Queue {
                 estimate_s,
                 finish_ms,
             } => {
-                for name in &sessions {
+                for (rank, name) in sessions.iter().enumerate() {
                     let Some(s) = open.iter().find(|s| &s.name == name) else {
                         continue;
                     };
@@ -1065,9 +1069,36 @@ impl Queue {
                             "{}: the night pass could not be planned: {e}",
                             s.name
                         ));
-                    } else if s.night_cancelled {
-                        // Planned again: the held night job goes on from the units it has not committed.
-                        let _ = plock(&s.handle.queue).resume_night_job(now);
+                    } else {
+                        // The plan's order is the order the night runs in, across sessions (the Hinglish redos first).
+                        if let Err(e) = plock(&s.handle.queue).rank_night_job(rank) {
+                            self.core.push_log(format!(
+                                "{}: the night pass could not be ranked: {e}",
+                                s.name
+                            ));
+                        }
+                        if s.night_cancelled {
+                            // Planned again: the held night job goes on from the units it has not committed.
+                            let _ = plock(&s.handle.queue).resume_night_job(now);
+                        }
+                    }
+                }
+                // A session the priorities left out whose night job was held for a new session stays as it is, parked with the
+                // reason (what it committed stays; its rolling transcript is the default revision), not Paused for ever.
+                for &i in &candidates {
+                    if open[i].night_cancelled && !sessions.contains(&open[i].name) {
+                        let why = decision
+                            .dropped
+                            .iter()
+                            .find(|(n, _)| n == &open[i].name)
+                            .map_or_else(
+                                || {
+                                    "the night pass did not fit after the work with higher priority"
+                                        .to_owned()
+                                },
+                                |(_, w)| w.clone(),
+                            );
+                        let _ = plock(&open[i].handle.queue).park_held_night_job(&why, now);
                     }
                 }
                 let basis = match (measured, multi) {
@@ -1078,7 +1109,9 @@ impl Queue {
                     (None, true) => format!(
                         "provisional emu-low detection allowance x{factor:.2}: no unit of a session with several languages has finished"
                     ),
-                    (None, false) => "the profile's speed: no unit has finished yet".to_owned(),
+                    (None, false) => format!(
+                        "provisional night allowance x{factor:.2}: no night unit has finished yet"
+                    ),
                 };
                 self.core.push_log(format!(
                     "night pass planned for {} session(s), {} with the Hinglish model: about {:.1} h, ready by {} IST ({basis})",

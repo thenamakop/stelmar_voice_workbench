@@ -127,6 +127,9 @@ pub fn staged_path(dir: &Path, revision: &str, idx: u32) -> PathBuf {
 /// the Hinglish model (written by the app; the session is then redone at night or marked for a faster machine).
 pub const FALLBACK_UNITS_FILE: &str = "fallback-units.json";
 
+/// The queue position of the first-ranked night job; the positions of the other jobs of a session stay far below it.
+pub const NIGHT_RANK_BASE: i64 = 1_000_000;
+
 fn plan_path(dir: &Path) -> PathBuf {
     dir.join("work").join("plan.json")
 }
@@ -504,6 +507,27 @@ impl SessionQueue {
                 && j.state == JobState::Paused
                 && j.error.as_deref() == Some(Self::NIGHT_HELD_NOTE)
         }))
+    }
+
+    /// Ranks this session's night job among the sessions' night jobs (0 first): the manager takes the job with the
+    /// lowest `(priority, position)` across sessions, and every session's own queue numbers its jobs from 1, so without a
+    /// rank the night would run in recording order whatever the plan's priorities were (auditor, 27 Nov 2026). The
+    /// positions of the other kinds stay below [`NIGHT_RANK_BASE`]. True when the session has a night job.
+    pub fn rank_night_job(&mut self, rank: usize) -> Result<bool> {
+        let Some(night) = self
+            .transcript
+            .store()
+            .jobs()?
+            .into_iter()
+            .find(|j| j.kind == JobKind::Night)
+        else {
+            return Ok(false);
+        };
+        let position = NIGHT_RANK_BASE + i64::try_from(rank).unwrap_or(i64::MAX - NIGHT_RANK_BASE);
+        self.transcript
+            .store_mut()
+            .set_job_position(night.id, position)?;
+        Ok(true)
     }
 
     /// The night pass was held for a new session and the plan made after the last session does not run it (the
