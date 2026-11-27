@@ -963,3 +963,87 @@ dataset = "kathbath-hi"
 role = "rolling"
 engine = "wb-engine"
 limit = "eval/clips/phase3-kathbath-hi.txt"
+
+# ------------------------------------------------------------------ item 10, scoped (27 Nov 2026, night run 3): English-only and Urdu sessions
+# English-only: rolling settings (identical to the night settings in roles.toml, so the same WER is the night WER) on FLEURS-en (200 clips,
+# a spread over the set) and Svarah accented English (150 clips, a spread), four candidates. Urdu: large-v3 q5_0 on all of FLEURS-ur and the
+# Phase 3 Kathbath-ur list (the other candidates ran in item 8). Language given. Run with scripts/gates/eval-under-gate.ps1.
+
+[[run]]
+name = "item10-small-q5_0-fleurs-en"
+setup = "small-q5_0"
+dataset = "fleurs-en"
+role = "rolling"
+engine = "wb-engine"
+limit = 200
+
+[[run]]
+name = "item10-small-q5_0-svarah"
+setup = "small-q5_0"
+dataset = "svarah"
+role = "rolling"
+engine = "wb-engine"
+limit = 150
+
+[[run]]
+name = "item10-medium-q5_0-fleurs-en"
+setup = "medium-q5_0"
+dataset = "fleurs-en"
+role = "rolling"
+engine = "wb-engine"
+limit = 200
+
+[[run]]
+name = "item10-medium-q5_0-svarah"
+setup = "medium-q5_0"
+dataset = "svarah"
+role = "rolling"
+engine = "wb-engine"
+limit = 150
+
+[[run]]
+name = "item10-turbo-q5_0-fleurs-en"
+setup = "large-v3-turbo-q5_0"
+dataset = "fleurs-en"
+role = "rolling"
+engine = "wb-engine"
+limit = 200
+
+[[run]]
+name = "item10-turbo-q5_0-svarah"
+setup = "large-v3-turbo-q5_0"
+dataset = "svarah"
+role = "rolling"
+engine = "wb-engine"
+limit = 150
+
+[[run]]
+name = "item10-large-v3-q5_0-fleurs-en"
+setup = "large-v3-q5_0"
+dataset = "fleurs-en"
+role = "rolling"
+engine = "wb-engine"
+limit = 200
+
+[[run]]
+name = "item10-large-v3-q5_0-svarah"
+setup = "large-v3-q5_0"
+dataset = "svarah"
+role = "rolling"
+engine = "wb-engine"
+limit = 150
+
+[[run]]
+name = "item10-large-v3-q5_0-fleurs-ur"
+setup = "large-v3-q5_0"
+dataset = "fleurs-ur"
+role = "rolling"
+engine = "wb-engine"
+
+[[run]]
+name = "item10-large-v3-q5_0-kathbath-ur"
+setup = "large-v3-q5_0"
+dataset = "kathbath-ur"
+role = "rolling"
+engine = "wb-engine"
+limit = "eval/clips/phase3-kathbath-ur.txt"

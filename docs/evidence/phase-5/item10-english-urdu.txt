@@ -1,0 +1,36 @@
+English-only and Urdu sessions: rolling and night model choice (Phase 5, item 10 scoped); numbers only; written by eval/item10_report.py.
+machine: Legion (Intel(R) Core(TM) i9-14900HX); engine: wb-engine 0.1.0 (cuda, whisper.cpp v1.9.5 commit d1be6fde11ac tree e736b4c9a5be); device gpu:0; rolling settings (beam 5, temperature fallback, previous-text context, 15 s chunks; identical to the night settings in eval/roles.toml); language given; script-aware normalisation; gate lock held for every run. RTF = harness run time over audio time on the Legion card (model load included): it orders the candidates and is not a laptop figure.
+
+== English-only sessions
+model | dataset | clips | WER % | CER % | RTF | truncated | broken | wrong script %
+large-v3-q5_0 | fleurs-en | 200 | 4.7 | n/a | 0.186 | 0 | 0 | 0.0
+medium-q5_0 | fleurs-en | 200 | 4.9 | n/a | 0.132 | 0 | 0 | 0.0
+large-v3-turbo-q5_0 | fleurs-en | 200 | 5.2 | n/a | 0.114 | 0 | 0 | 0.0
+small-q5_0 | fleurs-en | 200 | 6.5 | n/a | 0.088 | 0 | 0 | 0.0
+large-v3-q5_0 | svarah | 150 | 7.1 | n/a | 0.300 | 4 | 0 | 0.0
+medium-q5_0 | svarah | 150 | 7.3 | n/a | 0.208 | 4 | 0 | 0.0
+large-v3-turbo-q5_0 | svarah | 150 | 7.7 | n/a | 0.189 | 5 | 0 | 0.0
+small-q5_0 | svarah | 150 | 9.5 | n/a | 0.138 | 5 | 0 | 0.0
+
+Lowest WER per set (night pick = lowest on the pooled sets; rolling pick = lowest among those fast enough):
+fleurs-en: lowest WER large-v3-q5_0 4.7; next medium-q5_0 4.9 (0.2 points behind)
+svarah: lowest WER large-v3-q5_0 7.1; next medium-q5_0 7.3 (0.1 points behind)
+
+== Urdu sessions (all candidates on the same clips)
+model | dataset | clips | WER % | CER % | RTF | truncated | broken | wrong script %
+large-v3-q5_0 | fleurs-ur | 299 | 20.7 | 7.3 | 0.268 | 0 | 0 | 0.0
+large-v3-turbo-q5_0 | fleurs-ur | 299 | 22.3 | 7.7 | 0.138 | 0 | 0 | 0.0
+medium-q5_0 | fleurs-ur | 299 | 27.9 | 9.7 | 0.201 | 0 | 0 | 0.0
+small-q5_0 | fleurs-ur | 299 | 38.5 | 14.5 | 0.128 | 0 | 0 | 0.1
+large-v3-q5_0 | kathbath-ur | 100 | 19.6 | 5.6 | 0.318 | 0 | 0 | 0.0
+large-v3-turbo-q5_0 | kathbath-ur | 100 | 20.6 | 6.0 | 0.190 | 0 | 0 | 0.1
+medium-q5_0 | kathbath-ur | 100 | 26.5 | 8.3 | 0.234 | 0 | 0 | 0.1
+small-q5_0 | kathbath-ur | 100 | 34.3 | 11.2 | 0.148 | 0 | 0 | 0.1
+
+Lowest WER per set:
+fleurs-ur: lowest WER large-v3-q5_0 20.7; next large-v3-turbo-q5_0 22.3 (1.6 points behind)
+kathbath-ur: lowest WER large-v3-q5_0 19.6; next large-v3-turbo-q5_0 20.6 (1.0 points behind)
+
+== Not decided here
+`defaults` and `validated_roles` in models/manifest.json are written by the owner's decision; this report only orders the candidates.
+Speed on the low-baseline laptop decides the rolling pick; until the laptops arrive the emu-low speed table (docs/evidence/phase-5/) is the provisional input.
