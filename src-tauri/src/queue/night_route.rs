@@ -267,10 +267,11 @@ pub struct Recheck {
     pub finish_ms: u64,
     pub deadline_ms: u64,
     /// The sessions whose night job has not started and is dropped, lowest priority first: no night pass, the rolling
-    /// transcript stands.
+    /// transcript stands. Hinglish jobs come last, and only when dropping the others was not enough and today's models are
+    /// no faster (or the session is Hindi only): they are marked for a faster machine.
     pub drop: Vec<String>,
-    /// The Hinglish sessions whose night job has not started and goes back to today's models (only when dropping the other
-    /// jobs was not enough): they are marked.
+    /// The English + Hindi sessions whose Hinglish night job has not started and goes back to today's faster models (only
+    /// when dropping the other jobs was not enough): they are marked.
     pub switch: Vec<String>,
     /// Seconds the work still needs once the dropped jobs are gone and the switched ones use today's models (the sessions
     /// that keep their model at its own speed, all at the measured factor).
@@ -293,7 +294,8 @@ impl Recheck {
 /// them. If the night jobs that are left will not finish before 08:00 IST at that speed:
 /// 1. the jobs that have not started are dropped from the lowest priority upwards (English, then Urdu; within a priority the
 ///    later in the plan first) until the rest finishes, and the rolling transcripts stand;
-/// 2. if that is not enough, the Hinglish jobs that have not started go back to today's models.
+/// 2. if that is not enough, the Hinglish jobs that have not started go back to today's models when those are faster
+///    (English + Hindi sessions), and are dropped otherwise (Hindi-only sessions, or models that are no faster).
 ///
 /// A job that has started is never touched. None when the night still finishes in time, or when no job is left.
 pub fn recheck(
@@ -343,12 +345,21 @@ pub fn recheck(
         left -= own_s(j);
         drop.push(j.name.clone());
     }
-    // Step 2: the Hinglish jobs that have not started go back to today's models when that is still not enough.
+    // Step 2: when that is still not enough, the Hinglish jobs that have not started go back to today's models if those are
+    // faster, and are dropped otherwise. A Hindi-only job is dropped, not switched: today's model for Hindi is far less
+    // accurate (owner, 27 Nov 2026: large-v3 q5_0 27.9 against Hinglish q8_0 11.4 on Kathbath), and the session keeps its
+    // rolling transcript, marked for a faster machine.
     let mut switch = Vec::new();
     if finish_of(left) > deadline {
         for j in jobs.iter().filter(|j| !j.started && j.hinglish) {
-            left += today_s(j) - hinglish_s(j);
-            switch.push(j.name.clone());
+            let english_too = j.languages.iter().any(|l| l == "en");
+            if english_too && today_s(j) < hinglish_s(j) {
+                left += today_s(j) - hinglish_s(j);
+                switch.push(j.name.clone());
+            } else {
+                left -= hinglish_s(j);
+                drop.push(j.name.clone());
+            }
         }
     }
     Some(Recheck {
@@ -661,6 +672,37 @@ mod tests {
         ];
         let r = recheck(&p, six_pm(), &started, 4.0).expect("far too slow");
         assert!(r.drop.is_empty() && r.switch.is_empty(), "{r:?}");
+    }
+
+    /// Auditor, second run: a Hindi-only Hinglish job that the night cannot finish is dropped (marked for a faster machine),
+    /// never switched to the large model whose Hindi the owner rejected; a job with English whose today's models are no faster
+    /// is dropped too, and the larger the night the fewer jobs it takes.
+    #[test]
+    fn a_hindi_only_hinglish_job_is_dropped_not_switched_when_the_night_cannot_finish() {
+        let mut p = with_large_night(profile(true, 1.69, false));
+        p.set_night_for_test("hi", "large-v3-q5_0");
+        p.set_cell_for_test("large-v3-q5_0", "hi", 0.6);
+        let hindi = |name: &str, started: bool, rank: usize| NightJob {
+            name: name.into(),
+            languages: vec!["hi".into()],
+            remaining_ms_by_lang: BTreeMap::from([("hi".to_owned(), 240 * 60_000)]),
+            started,
+            hinglish: true,
+            rank,
+        };
+        // Four hours of Hindi at 1.69 x 3 = 5.07: 20 h for one job; two jobs cannot finish whatever is done.
+        let jobs = [hindi("hindi-a", false, 0), hindi("hindi-b", false, 1)];
+        let r = recheck(&p, six_pm(), &jobs, 3.0).expect("far too slow");
+        assert!(r.switch.is_empty(), "never switched to large-v3: {r:?}");
+        assert_eq!(
+            r.drop,
+            vec!["hindi-a".to_string(), "hindi-b".to_string()],
+            "{r:?}"
+        );
+        // A started Hindi job stays, and nothing else is touched.
+        let jobs = [hindi("hindi-a", true, 0), hindi("hindi-b", false, 1)];
+        let r = recheck(&p, six_pm(), &jobs, 3.0).expect("far too slow");
+        assert_eq!(r.drop, vec!["hindi-b".to_string()], "{r:?}");
     }
 
     /// The night allowance reaches the Hinglish decision: three sessions that the earlier graphics-adapter allowance (1.25:

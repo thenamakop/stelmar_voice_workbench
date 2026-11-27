@@ -200,6 +200,26 @@ pub fn planning_factor(measured: Option<f64>, pass: Pass, languages: usize) -> f
     measured.unwrap_or_else(|| detection_allowance(pass, languages))
 }
 
+/// The factor the NIGHT plan multiplies the profile's night speeds by. Only night units say how fast the night runs (the
+/// day's rolling units ran another model, often at another speed: the profile promised 1.48 for a night unit that ran at
+/// 2.73 in the second smoke), so a finished rolling unit never counts here. A plan with several languages in it uses the
+/// factor of the night units of several languages; a plan of single-language sessions the one of its own kind, or else the
+/// several-language one. Until a night unit has finished: the night allowance of the device class, for every plan (owner,
+/// 27 Nov 2026), also one of single-language sessions.
+pub fn night_planning_factor(
+    night_multi: Option<f64>,
+    night_single: Option<f64>,
+    plan_has_several_languages: bool,
+    class: DeviceClass,
+) -> f64 {
+    let measured = if plan_has_several_languages {
+        night_multi
+    } else {
+        night_single.or(night_multi)
+    };
+    measured.unwrap_or_else(|| night_allowance(class))
+}
+
 /// What the estimates rest on, for the Queue screen's report and the smoke's evidence.
 pub fn basis_text(
     multi: Option<f64>,
@@ -513,6 +533,49 @@ mod tests {
         assert!((night - 1.6).abs() < 1e-9, "{night}");
         // The all-units median is still the day's 1.0: it would have hidden the slow night.
         assert!((log.factor_for(true).unwrap() - 1.0).abs() < 1e-9);
+    }
+
+    /// Auditor, 27 Nov 2026: a night of Urdu or English sessions was planned with the day's rolling factor (about 1.0) as soon as
+    /// one rolling unit had finished, not with the 1.5 allowance, because the plan read all finished units.
+    #[test]
+    fn the_night_plan_uses_the_allowance_until_a_night_unit_has_finished_whatever_the_day_showed() {
+        let mut log = SpeedLog::default();
+        log.record(UnitSpeed {
+            multi_language: false,
+            night: false,
+            ..unit(300, 300.0 * 1.0 * 2.0, 2.0)
+        });
+        assert!(
+            log.factor_for(false).is_some(),
+            "the day measured something"
+        );
+        let plan = night_planning_factor(
+            log.night_factor_for(true),
+            log.night_factor_for(false),
+            false,
+            DeviceClass::Gpu,
+        );
+        assert!((plan - NIGHT_ALLOWANCE_GPU).abs() < 1e-9, "{plan}");
+        // A night unit of one language has finished: single-language plans use it, a plan with several languages still waits.
+        log.record(UnitSpeed {
+            multi_language: false,
+            night: true,
+            ..unit(300, 300.0 * 1.2 * 2.0, 2.0)
+        });
+        let single = night_planning_factor(
+            log.night_factor_for(true),
+            log.night_factor_for(false),
+            false,
+            DeviceClass::Cpu,
+        );
+        assert!((single - 1.2).abs() < 1e-9, "{single}");
+        let multi = night_planning_factor(
+            log.night_factor_for(true),
+            log.night_factor_for(false),
+            true,
+            DeviceClass::Cpu,
+        );
+        assert!((multi - NIGHT_ALLOWANCE_CPU).abs() < 1e-9, "{multi}");
     }
 
     #[test]

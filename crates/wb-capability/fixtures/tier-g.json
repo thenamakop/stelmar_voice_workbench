@@ -295,7 +295,7 @@
       "load_s": 1.0,
       "peak_working_set_bytes": 927712935,
       "peak_commit_bytes": 1159641169,
-      "gpu_local_bytes": 2254857830,
+      "gpu_local_bytes": 2866890670,
       "truncated_chunks": 0,
       "live_standin": false
     },

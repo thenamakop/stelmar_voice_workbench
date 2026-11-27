@@ -127,8 +127,9 @@ pub fn staged_path(dir: &Path, revision: &str, idx: u32) -> PathBuf {
 /// the Hinglish model (written by the app; the session is then redone at night or marked for a faster machine).
 pub const FALLBACK_UNITS_FILE: &str = "fallback-units.json";
 
-/// The queue position of the first-ranked night job; the positions of the other jobs of a session stay far below it.
-pub const NIGHT_RANK_BASE: i64 = 1_000_000;
+/// The queue position of the first-ranked night job; the positions of the other jobs of a session stay below it
+/// (`Store::create_job` counts only positions under it).
+pub use wb_queue::store::NIGHT_RANK_BASE;
 
 fn plan_path(dir: &Path) -> PathBuf {
     dir.join("work").join("plan.json")
@@ -653,6 +654,19 @@ impl SessionQueue {
     }
 
     /// Change Model: the remaining units use the new models; committed units keep what decoded them.
+    /// Changes the models of a job only if no unit of it has started (one statement: a unit cannot be claimed in between).
+    /// True when the models were changed.
+    pub fn change_models_if_unstarted(
+        &mut self,
+        job: i64,
+        models_by_lang: &serde_json::Value,
+    ) -> Result<bool> {
+        Ok(self
+            .transcript
+            .store_mut()
+            .set_models_if_unstarted(job, models_by_lang)?)
+    }
+
     pub fn change_models(&mut self, job: i64, models_by_lang: &serde_json::Value) -> Result<()> {
         Ok(self
             .transcript
@@ -1901,6 +1915,59 @@ mod tests {
             Some("post-1"),
             "the rolling transcript stands"
         );
+    }
+
+    /// Auditor, second run: the models of a night job change only while no unit of it has started, in one statement.
+    #[test]
+    fn the_models_of_a_night_job_change_only_before_a_unit_has_started() {
+        let (mut q, job, _dir) = queue_with_units("night-models", 2);
+        for _ in 0..2 {
+            let c = q.claim(Device::Cpu, 1).unwrap().unwrap();
+            stage(
+                &c,
+                &[ev(
+                    c.unit.idx,
+                    0,
+                    c.unit.start_ms + 10,
+                    c.unit.end_ms - 10,
+                    "r",
+                )],
+            );
+            q.complete(&c, "t", 2).unwrap();
+        }
+        q.add_part(1, 0, 20_000, 48_000, &no_pauses()).unwrap();
+        q.plan_units(job, true).unwrap();
+        let night = q
+            .create_night_job("s", serde_json::json!({"hi": "big"}), vec!["hi".into()], 3)
+            .unwrap();
+        // A job created after the night job does not sort among the night ranks.
+        assert!(q.rank_night_job(2).unwrap());
+        let later = q
+            .transcript()
+            .store()
+            .jobs()
+            .unwrap()
+            .into_iter()
+            .map(|j| (j.kind, j.position))
+            .collect::<Vec<_>>();
+        assert!(
+            later
+                .iter()
+                .any(|(k, p)| *k == JobKind::Night && *p == NIGHT_RANK_BASE + 2),
+            "{later:?}"
+        );
+        assert!(
+            q.change_models_if_unstarted(night, &serde_json::json!({"hi": "other"}))
+                .unwrap()
+        );
+        let claim = q.claim(Device::Cpu, 4).unwrap().unwrap();
+        assert_eq!(claim.job.id, night);
+        assert!(
+            !q.change_models_if_unstarted(night, &serde_json::json!({"hi": "third"}))
+                .unwrap(),
+            "a job with a running unit keeps its models"
+        );
+        q.release(&claim).unwrap();
     }
 
     #[test]

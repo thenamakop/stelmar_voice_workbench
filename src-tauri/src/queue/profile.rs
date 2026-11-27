@@ -216,9 +216,13 @@ impl ProfileView {
             return BTreeMap::new();
         };
         let gpu = self.uses_gpu();
+        // The detector decodes the English chunks: a job without English (Hindi only) loads the model alone and runs at its
+        // own cell's speed, not the pair's.
+        let english = languages.iter().any(|l| l == "en");
         let pair = self
             .hinglish_night_detector
             .as_deref()
+            .filter(|_| english)
             .and_then(|d| self.pair_rtf(model, d, gpu));
         languages
             .iter()
@@ -954,6 +958,47 @@ mod tests {
             assert!(!v.may_use_hinglish_at_night(&other), "{other:?}");
             assert!(!v.lacks_hinglish(&other), "{other:?}");
         }
+    }
+
+    /// Auditor, second run: a Hindi-only job loads the Hinglish model alone (the detector decodes the English chunks), so its
+    /// night speed is the model's own cell, not the pair's.
+    #[test]
+    fn a_hindi_only_night_job_runs_at_the_models_own_speed_not_the_pairs() {
+        use wb_capability::Hinglish;
+        let mut cap = tier_g();
+        let mut single = cap.profile.measurements[0].clone();
+        single.model = "hinglish-q8_0".into();
+        single.lang = wb_capability::Lang::Hi;
+        single.mode = wb_capability::Mode::Rolling;
+        single.config = wb_capability::DeviceConfig::Gpu { index: 1 };
+        single.live_standin = false;
+        single.rtf = 0.20;
+        let mut pair = single.clone();
+        pair.detector = Some("small-q5_0".into());
+        pair.rtf = 0.30;
+        cap.profile
+            .measurements
+            .retain(|m| !m.model.starts_with("hinglish"));
+        cap.profile.measurements.extend([single, pair]);
+        cap.decision.config = Some(wb_capability::ConfigChoice {
+            config: wb_capability::DeviceConfig::Gpu { index: 1 },
+            cpu_threads: 4,
+            ..cap.decision.config.clone().unwrap()
+        });
+        cap.decision.hinglish = Hinglish {
+            ok: false,
+            rtf: Some(1.4),
+            source: "measured".into(),
+            model: Some("hinglish-q8_0".into()),
+            detector: Some("small-q5_0".into()),
+            night_ok: true,
+            night_hours: Some(3.0),
+        };
+        let v = ProfileView::from_capability(&cap, vec![]);
+        let hindi = v.hinglish_night_rtf(&["hi".to_string()]);
+        assert!((hindi["hi"] - 0.20).abs() < 1e-9, "{hindi:?}");
+        let both = v.hinglish_night_rtf(&["en".to_string(), "hi".to_string()]);
+        assert!((both["hi"] - 0.30).abs() < 1e-9, "{both:?}");
     }
 
     #[test]

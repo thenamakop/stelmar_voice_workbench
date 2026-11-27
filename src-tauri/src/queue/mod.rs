@@ -1014,16 +1014,21 @@ impl Queue {
         // allowance (the profile's bench does no language detection). One session with several languages among
         // the candidates puts the whole plan on the safe side (the speeds are per language, not per session).
         let multi = candidates.iter().any(|&i| open[i].languages.len() > 1);
-        let measured = self.manager.speed_factor(multi);
-        let factor = wb_queue::speed::planning_factor(
-            measured,
-            wb_queue::speed::Pass::Night(profile.night_class()),
-            // Every night is planned with the night allowance until one of its own units has finished, also a night of
-            // single-language sessions (owner, 27 Nov 2026: each priority tier is planned at the 1.5 allowance; the large
-            // model's English and Urdu nights have no measured night speed yet, and a plan that is too short is the
-            // dangerous error).
-            2,
+        // Only finished NIGHT units count (the day's rolling units ran another model); until one has finished every night
+        // plan uses the night allowance, also a night of single-language sessions (owner, 27 Nov 2026; auditor's second run).
+        let night_multi = self.manager.night_speed_factor(true);
+        let night_single = self.manager.night_speed_factor(false);
+        let factor = wb_queue::speed::night_planning_factor(
+            night_multi,
+            night_single,
+            multi,
+            profile.night_class(),
         );
+        let measured = if multi {
+            night_multi
+        } else {
+            night_single.or(night_multi)
+        };
         // The Hinglish model decodes the night of the English + Hindi sessions when the plan made from the audio really
         // recorded finishes before 08:00; otherwise today's models run and those sessions are marked.
         let decision = night_route::decide(&profile, now, &audio, factor);
@@ -1101,15 +1106,12 @@ impl Queue {
                         let _ = plock(&open[i].handle.queue).park_held_night_job(&why, now);
                     }
                 }
-                let basis = match (measured, multi) {
-                    (Some(f), _) => format!(
-                        "measured speed: {f:.2} times the profile's, from {} finished unit(s)",
-                        self.manager.speed_units(multi)
+                let basis = match measured {
+                    Some(f) => format!(
+                        "measured night speed: {f:.2} times the profile's, from {} finished night unit(s)",
+                        self.manager.night_speed_units(multi)
                     ),
-                    (None, true) => format!(
-                        "provisional emu-low detection allowance x{factor:.2}: no unit of a session with several languages has finished"
-                    ),
-                    (None, false) => format!(
+                    None => format!(
                         "provisional night allowance x{factor:.2}: no night unit has finished yet"
                     ),
                 };
@@ -1179,10 +1181,13 @@ impl Queue {
             }) else {
                 continue;
             };
-            let hinglish = hinglish_model.as_deref().is_some_and(|model| {
-                job.models_by_lang
-                    .as_object()
-                    .is_some_and(|m| m.values().any(|v| v.as_str() == Some(model)))
+            // A job decodes with the Hinglish model when any of its models is one the manifest lists as such (also when this
+            // profile no longer names a night model, as after a graphics failure whose redo uses the processor).
+            let hinglish = job.models_by_lang.as_object().is_some_and(|m| {
+                m.values().any(|v| {
+                    v.as_str()
+                        .is_some_and(|id| wb_capability::HINGLISH_MODELS.contains(&id))
+                })
             });
             let started = q
                 .units(job.id)
@@ -1214,25 +1219,47 @@ impl Queue {
             return;
         };
         let reason = check.reason();
+        let mut dropped_count = 0usize;
         for name in &check.drop {
             let Some(s) = open.iter().find(|s| &s.name == name) else {
                 continue;
             };
+            let was_hinglish = jobs.iter().any(|j| &j.name == name && j.hinglish);
             let why = format!(
                 "no night pass: {reason}; this session had not started and has the lowest priority left, so the rolling transcript stands"
             );
             let dropped = plock(&s.handle.queue).drop_unstarted_night_job(&why, now);
             match dropped {
-                Ok(true) => self.core.push_log(format!(
-                    "night safety switch: {name} is dropped from the night ({why})"
-                )),
+                Ok(true) => {
+                    dropped_count += 1;
+                    self.core.push_log(format!(
+                        "night safety switch: {name} is dropped from the night ({why})"
+                    ));
+                    // The operator sees it: the rolling transcript is what the session keeps.
+                    let _ = self.app.state::<AppState>().events.send(Notice::event(
+                        NoticeLevel::Warning,
+                        "queue",
+                        format!("{name}: no night pass, the night ran slower than planned; the rolling transcript stands"),
+                    ));
+                    if was_hinglish {
+                        let text =
+                            night::faster_machine_json(&reason, hinglish_model.as_deref(), now);
+                        if let Err(e) = std::fs::write(s.dir.join(night::FASTER_MACHINE_FILE), text)
+                        {
+                            self.core.push_log(format!(
+                                "{name}: the faster-machine note could not be written: {e}"
+                            ));
+                        }
+                    }
+                }
+                // The job started (or was parked) in between: it is not dropped and the log does not say it was.
                 Ok(false) => {}
                 Err(e) => self.core.push_log(format!(
                     "night safety switch: the night job of {name} could not be dropped: {e}"
                 )),
             }
         }
-        if check.switch.is_empty() && check.drop.is_empty() {
+        if check.switch.is_empty() && dropped_count == 0 {
             if !self.night_switch_said.swap(true, Ordering::SeqCst) {
                 self.core.push_log(format!(
                     "night safety switch: {reason}; every session has started, so none is dropped or goes back to today's models"
@@ -1251,19 +1278,14 @@ impl Queue {
             }) else {
                 continue;
             };
-            // The job may have started since the check began: then it keeps the model it started with.
-            let started = q
-                .units(job.id)
-                .unwrap_or_default()
-                .iter()
-                .any(|u| u.state != UnitState::Pending);
-            if started {
-                continue;
-            }
             drop(q);
-            let changed = plock(&s.handle.queue).change_models(job.id, &models_json(&models));
+            // One statement checks that no unit has started and changes the models: a job that started in between keeps the
+            // model it started with.
+            let changed =
+                plock(&s.handle.queue).change_models_if_unstarted(job.id, &models_json(&models));
             match changed {
-                Ok(()) => {
+                Ok(false) => continue,
+                Ok(true) => {
                     self.core.push_log(format!(
                         "night safety switch: {name} goes back to today's night models (the Hinglish night pass: {reason}); best finished on a faster machine"
                     ));
@@ -1281,7 +1303,7 @@ impl Queue {
         }
         self.core.push_log(format!(
             "night safety switch: with {} night job(s) dropped and {} session(s) back on today's models the rest needs about {:.1} h (the night needed {:.1} h)",
-            check.drop.len(),
+            dropped_count,
             check.switch.len(),
             check.needed_after_s / 3600.0,
             check.needed_s / 3600.0
