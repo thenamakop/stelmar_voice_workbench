@@ -747,3 +747,219 @@ lang_mode = "detect"
 langs = ["en", "hi"]
 limit = "eval/clips/phase5-tune-coshe.txt"
 needs = "phase-2"
+
+# ------------------------------------------------------------------ item 8 (27 Nov 2026, night run 2): accuracy of the Hindi and Urdu live models
+# Near-live settings (greedy, no previous-text context, 15 s chunks) against the rolling settings of the same model on the
+# same clips: the near-live bar is a WER no more than 1.5 times the rolling WER and an RTF at or under 0.35. Language given
+# (fixed). FLEURS hi and ur test (all clips) and the Kathbath test lists of Phase 3. Run with scripts/gates/eval-under-gate.ps1.
+# Hinglish q8_0 for Hindi only (it writes Devanagari: no Urdu run).
+
+[[run]]
+name = "item8-turbo-q5_0-fleurs-hi-near-live"
+setup = "large-v3-turbo-q5_0"
+dataset = "fleurs-hi"
+role = "near-live"
+engine = "wb-engine"
+
+[[run]]
+name = "item8-turbo-q5_0-fleurs-hi-rolling"
+setup = "large-v3-turbo-q5_0"
+dataset = "fleurs-hi"
+role = "rolling"
+engine = "wb-engine"
+
+[[run]]
+name = "item8-turbo-q5_0-kathbath-hi-near-live"
+setup = "large-v3-turbo-q5_0"
+dataset = "kathbath-hi"
+role = "near-live"
+engine = "wb-engine"
+limit = "eval/clips/phase3-kathbath-hi.txt"
+
+[[run]]
+name = "item8-turbo-q5_0-kathbath-hi-rolling"
+setup = "large-v3-turbo-q5_0"
+dataset = "kathbath-hi"
+role = "rolling"
+engine = "wb-engine"
+limit = "eval/clips/phase3-kathbath-hi.txt"
+
+[[run]]
+name = "item8-turbo-q5_0-fleurs-ur-near-live"
+setup = "large-v3-turbo-q5_0"
+dataset = "fleurs-ur"
+role = "near-live"
+engine = "wb-engine"
+
+[[run]]
+name = "item8-turbo-q5_0-fleurs-ur-rolling"
+setup = "large-v3-turbo-q5_0"
+dataset = "fleurs-ur"
+role = "rolling"
+engine = "wb-engine"
+
+[[run]]
+name = "item8-turbo-q5_0-kathbath-ur-near-live"
+setup = "large-v3-turbo-q5_0"
+dataset = "kathbath-ur"
+role = "near-live"
+engine = "wb-engine"
+limit = "eval/clips/phase3-kathbath-ur.txt"
+
+[[run]]
+name = "item8-turbo-q5_0-kathbath-ur-rolling"
+setup = "large-v3-turbo-q5_0"
+dataset = "kathbath-ur"
+role = "rolling"
+engine = "wb-engine"
+limit = "eval/clips/phase3-kathbath-ur.txt"
+
+[[run]]
+name = "item8-medium-q5_0-fleurs-hi-near-live"
+setup = "medium-q5_0"
+dataset = "fleurs-hi"
+role = "near-live"
+engine = "wb-engine"
+
+[[run]]
+name = "item8-medium-q5_0-fleurs-hi-rolling"
+setup = "medium-q5_0"
+dataset = "fleurs-hi"
+role = "rolling"
+engine = "wb-engine"
+
+[[run]]
+name = "item8-medium-q5_0-kathbath-hi-near-live"
+setup = "medium-q5_0"
+dataset = "kathbath-hi"
+role = "near-live"
+engine = "wb-engine"
+limit = "eval/clips/phase3-kathbath-hi.txt"
+
+[[run]]
+name = "item8-medium-q5_0-kathbath-hi-rolling"
+setup = "medium-q5_0"
+dataset = "kathbath-hi"
+role = "rolling"
+engine = "wb-engine"
+limit = "eval/clips/phase3-kathbath-hi.txt"
+
+[[run]]
+name = "item8-medium-q5_0-fleurs-ur-near-live"
+setup = "medium-q5_0"
+dataset = "fleurs-ur"
+role = "near-live"
+engine = "wb-engine"
+
+[[run]]
+name = "item8-medium-q5_0-fleurs-ur-rolling"
+setup = "medium-q5_0"
+dataset = "fleurs-ur"
+role = "rolling"
+engine = "wb-engine"
+
+[[run]]
+name = "item8-medium-q5_0-kathbath-ur-near-live"
+setup = "medium-q5_0"
+dataset = "kathbath-ur"
+role = "near-live"
+engine = "wb-engine"
+limit = "eval/clips/phase3-kathbath-ur.txt"
+
+[[run]]
+name = "item8-medium-q5_0-kathbath-ur-rolling"
+setup = "medium-q5_0"
+dataset = "kathbath-ur"
+role = "rolling"
+engine = "wb-engine"
+limit = "eval/clips/phase3-kathbath-ur.txt"
+
+[[run]]
+name = "item8-small-q5_0-fleurs-hi-near-live"
+setup = "small-q5_0"
+dataset = "fleurs-hi"
+role = "near-live"
+engine = "wb-engine"
+
+[[run]]
+name = "item8-small-q5_0-fleurs-hi-rolling"
+setup = "small-q5_0"
+dataset = "fleurs-hi"
+role = "rolling"
+engine = "wb-engine"
+
+[[run]]
+name = "item8-small-q5_0-kathbath-hi-near-live"
+setup = "small-q5_0"
+dataset = "kathbath-hi"
+role = "near-live"
+engine = "wb-engine"
+limit = "eval/clips/phase3-kathbath-hi.txt"
+
+[[run]]
+name = "item8-small-q5_0-kathbath-hi-rolling"
+setup = "small-q5_0"
+dataset = "kathbath-hi"
+role = "rolling"
+engine = "wb-engine"
+limit = "eval/clips/phase3-kathbath-hi.txt"
+
+[[run]]
+name = "item8-small-q5_0-fleurs-ur-near-live"
+setup = "small-q5_0"
+dataset = "fleurs-ur"
+role = "near-live"
+engine = "wb-engine"
+
+[[run]]
+name = "item8-small-q5_0-fleurs-ur-rolling"
+setup = "small-q5_0"
+dataset = "fleurs-ur"
+role = "rolling"
+engine = "wb-engine"
+
+[[run]]
+name = "item8-small-q5_0-kathbath-ur-near-live"
+setup = "small-q5_0"
+dataset = "kathbath-ur"
+role = "near-live"
+engine = "wb-engine"
+limit = "eval/clips/phase3-kathbath-ur.txt"
+
+[[run]]
+name = "item8-small-q5_0-kathbath-ur-rolling"
+setup = "small-q5_0"
+dataset = "kathbath-ur"
+role = "rolling"
+engine = "wb-engine"
+limit = "eval/clips/phase3-kathbath-ur.txt"
+
+[[run]]
+name = "item8-hinglish-q8_0-fleurs-hi-near-live"
+setup = "hinglish-q8_0"
+dataset = "fleurs-hi"
+role = "near-live"
+engine = "wb-engine"
+
+[[run]]
+name = "item8-hinglish-q8_0-fleurs-hi-rolling"
+setup = "hinglish-q8_0"
+dataset = "fleurs-hi"
+role = "rolling"
+engine = "wb-engine"
+
+[[run]]
+name = "item8-hinglish-q8_0-kathbath-hi-near-live"
+setup = "hinglish-q8_0"
+dataset = "kathbath-hi"
+role = "near-live"
+engine = "wb-engine"
+limit = "eval/clips/phase3-kathbath-hi.txt"
+
+[[run]]
+name = "item8-hinglish-q8_0-kathbath-hi-rolling"
+setup = "hinglish-q8_0"
+dataset = "kathbath-hi"
+role = "rolling"
+engine = "wb-engine"
+limit = "eval/clips/phase3-kathbath-hi.txt"
