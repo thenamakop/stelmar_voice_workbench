@@ -50,20 +50,15 @@ const HYBRID_CPU_LIMIT_FULL_S: u64 = 300;
 /// A cell whose warm-up runs slower than this gets one timed run only ("impractical: single run").
 const SINGLE_RUN_ABOVE_RTF: f64 = 2.0;
 const VAD_ID: &str = "silero-v6.2.0";
-/// The Hinglish model the check measures for rule (d2) (Phase 5, 25 Nov 2026: f16 is the candidate, and a file that was
-/// not measured is never chosen).
-const HINGLISH_CANDIDATE: &str = "hinglish-f16";
-/// The smaller Hinglish file, the one measured on a discrete card (owner, 26 Nov 2026): q8_0 with the small detector in front
-/// of it is the one accepted pair, for every card of 4 GB and up.
-const HINGLISH_SMALL_CANDIDATE: &str = "hinglish-q8_0";
+/// The one Hinglish file the check measures, on every configuration (owner, 27 Nov 2026, option A after step 3c): q8_0, with
+/// the small detector in front of it as the accepted pair on a discrete card. It finishes the night wherever f16 does and
+/// is about twice as fast on a processor; f16 is not measured, not chosen and not in the pack. A file that was not measured
+/// is never chosen.
+const HINGLISH_CANDIDATE: &str = "hinglish-q8_0";
 
-/// The Hinglish files the check measures on a configuration: q8_0 (and then its pair) on a discrete card, f16 elsewhere.
-fn hinglish_candidates(discrete: bool) -> &'static [&'static str] {
-    if discrete {
-        &[HINGLISH_SMALL_CANDIDATE]
-    } else {
-        &[HINGLISH_CANDIDATE]
-    }
+/// The Hinglish files the check measures on a configuration: q8_0 everywhere (and then its pair on a discrete card).
+fn hinglish_candidates(_discrete: bool) -> &'static [&'static str] {
+    &[HINGLISH_CANDIDATE]
 }
 /// The quick check measures the pair (a Hinglish model with a small detector in front of it) only when this many seconds
 /// of its target are left.
@@ -1521,8 +1516,8 @@ impl Run<'_> {
         }
     }
 
-    /// The Hinglish model on the alternating English/Hindi clip, so rule (d) rests on a measurement: f16, or on a discrete
-    /// card the q8_0 file followed by the pair with the small detector.
+    /// The Hinglish model on the alternating English/Hindi clip, so rule (d) rests on a measurement: the q8_0 file, and on a
+    /// discrete card then the pair with the small detector.
     fn hinglish(&mut self, config: DeviceConfig) -> Result<(), CheckError> {
         let discrete = wb_capability::discrete_card(&self.profile, config).is_some();
         let candidates = hinglish_candidates(discrete);
@@ -1722,12 +1717,13 @@ fn config_name(config: DeviceConfig) -> String {
 mod tests {
     use super::{extra_too_small, hinglish_candidates, hybrid_bound, safety_counts};
 
-    /// Owner, 26 Nov 2026: a discrete card is measured with the one accepted pair's file (q8_0), never with f16 and its own
-    /// f16 pair; configurations without a discrete card keep f16 (their night model is left as it is until step 3c).
+    /// Owner, 26 and 27 Nov 2026: every configuration is measured with the one accepted file (q8_0), never with f16: a
+    /// discrete card measures q8_0 and its pair, a computer without one measures q8_0 alone and it is the night model there
+    /// (step 3c: it finishes wherever f16 does and is about twice as fast on a processor).
     #[test]
-    fn a_discrete_card_measures_hinglish_q8_0_and_other_configurations_f16() {
+    fn every_configuration_measures_hinglish_q8_0_and_never_f16() {
         assert_eq!(hinglish_candidates(true), ["hinglish-q8_0"]);
-        assert_eq!(hinglish_candidates(false), ["hinglish-f16"]);
+        assert_eq!(hinglish_candidates(false), ["hinglish-q8_0"]);
         assert!(
             wb_capability::HINGLISH_PAIRS
                 .iter()

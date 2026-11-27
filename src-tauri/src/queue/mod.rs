@@ -1036,6 +1036,9 @@ impl Queue {
                 ));
             }
         }
+        for (name, why) in &decision.dropped {
+            self.core.push_log(format!("{name}: {why}"));
+        }
         match decision.routed.plan.clone() {
             Plan::Run {
                 sessions,

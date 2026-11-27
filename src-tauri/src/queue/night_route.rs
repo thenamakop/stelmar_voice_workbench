@@ -8,7 +8,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use wb_queue::night::{self, Plan, Route, Routed, SessionAudio, Speeds};
+use wb_queue::night::{self, Route, Routed, SessionAudio, SkipReason, Speeds, Tier};
 use wb_queue::speed::scaled;
 
 use super::profile::ProfileView;
@@ -32,6 +32,9 @@ pub struct NightDecision {
     pub hinglish: BTreeSet<String>,
     /// English + Hindi sessions left without the Hinglish model, with the reason: "best finished on a faster machine".
     pub marks: Vec<(String, String)>,
+    /// Sessions whose night job with the large model was left out because the sessions of higher priority need the time,
+    /// with the reason (written to the Queue log; the session keeps its rolling transcript).
+    pub dropped: Vec<(String, String)>,
 }
 
 fn prefixed(a: &SessionAudio) -> SessionAudio {
@@ -74,41 +77,61 @@ pub fn decide(
         .filter(|s| profile.may_use_hinglish_at_night(&s.languages))
         .map(|s| s.name.clone())
         .collect();
-    let plain: Vec<SessionAudio> = sessions.iter().map(|s| s.audio.clone()).collect();
-    let hinglish_input = if qualifying.is_empty() {
-        None
-    } else {
-        let mut speeds = today.clone();
-        let mut audio = Vec::new();
-        for s in sessions {
-            if qualifying.contains(&s.name) {
+    // Priority 1: the Hinglish redos of English + Hindi sessions (they fix translation), all or none of them.
+    let hinglish_tier = Tier {
+        sessions: sessions
+            .iter()
+            .filter(|s| qualifying.contains(&s.name))
+            .map(|s| prefixed(&s.audio))
+            .collect(),
+        speeds: {
+            let mut speeds = Speeds::default();
+            for s in sessions.iter().filter(|s| qualifying.contains(&s.name)) {
                 for (l, r) in scale(profile.hinglish_night_rtf(&s.languages)) {
                     speeds.night_rtf.insert(format!("{H}{l}"), r);
                     speeds.decode_rtf.insert(format!("{H}{l}"), r);
                 }
-                audio.push(prefixed(&s.audio));
-            } else {
-                audio.push(s.audio.clone());
             }
-        }
-        Some((audio, speeds))
+            speeds
+        },
+        all_or_nothing: true,
     };
-    let routed = night::route(
-        now_ms,
-        &plain,
-        hinglish_input.as_ref().map(|(a, s)| (a.as_slice(), s)),
-        &today,
-    );
-    let planned: BTreeSet<String> = match &routed.plan {
-        Plan::Run { sessions, .. } => sessions.iter().cloned().collect(),
-        Plan::Skip(_) => BTreeSet::new(),
+    // Priority 2: Urdu (and Hindi) sessions with the large model; priority 3: English sessions with it. A session that
+    // took the Hinglish night is not planned again; one that did not keeps today's models and competes here.
+    let class_of = |s: &NightSession| usize::from(!has_urdu_or_hindi(&s.languages));
+    let by_class = |class: usize| Tier {
+        sessions: sessions
+            .iter()
+            .filter(|s| class_of(s) == class)
+            .map(|s| s.audio.clone())
+            .collect(),
+        speeds: today.clone(),
+        all_or_nothing: false,
     };
-    let hinglish: BTreeSet<String> = if routed.route == Route::Hinglish {
-        qualifying.intersection(&planned).cloned().collect()
+    let tiers = [hinglish_tier, by_class(0), by_class(1)];
+    let tiered = night::plan_tiered(now_ms, &tiers);
+    let hinglish: BTreeSet<String> = tiered.planned[0].iter().cloned().collect();
+    let hinglish_skip = if qualifying.is_empty() || !hinglish.is_empty() {
+        None
     } else {
-        BTreeSet::new()
+        let hinglish_dropped: Vec<_> = tiered.dropped.iter().filter(|d| d.tier == 0).collect();
+        hinglish_dropped
+            .first()
+            .map(|first| SkipReason::DoesNotFit {
+                needed_s: hinglish_dropped.iter().map(|d| d.needed_s).sum(),
+                available_s: first.left_s,
+            })
     };
-    let why_not = match (&routed.hinglish_skip, hinglish_input.is_some()) {
+    let routed = Routed {
+        route: if hinglish.is_empty() {
+            Route::Today
+        } else {
+            Route::Hinglish
+        },
+        plan: tiered.plan.clone(),
+        hinglish_skip,
+    };
+    let why_not = match (&routed.hinglish_skip, !qualifying.is_empty()) {
         (Some(reason), _) => format!("the Hinglish night pass was not started: {}", reason.text()),
         (None, false) => "the Hinglish model was not measured on this computer, or it is too slow or too large for it".to_owned(),
         (None, true) => "the Hinglish night pass was not planned".to_owned(),
@@ -118,11 +141,50 @@ pub fn decide(
         .filter(|s| profile.lacks_hinglish(&s.languages) && !hinglish.contains(&s.name))
         .map(|s| (s.name.clone(), why_not.clone()))
         .collect();
+    // What the priorities left out (the large model's night for Urdu, Hindi or English sessions): no night job, the
+    // rolling transcript stands, and the reason is written down.
+    let dropped = tiered
+        .dropped
+        .iter()
+        .filter(|d| d.tier > 0)
+        .filter_map(|d| {
+            let s = sessions.iter().find(|s| s.name == d.session)?;
+            let night: BTreeSet<String> = profile
+                .night_models(&s.languages)
+                .into_iter()
+                .filter(|(l, _)| l != "*")
+                .map(|(_, m)| m)
+                .collect();
+            let rolling: BTreeSet<String> = profile
+                .rolling_models(&s.languages)
+                .into_iter()
+                .filter(|(l, _)| l != "*")
+                .map(|(_, m)| m)
+                .collect();
+            Some((
+                s.name.clone(),
+                format!(
+                    "no night pass with {}: it would need about {:.1} h and only {:.1} h are left before 08:00 IST after the work with higher priority (Hinglish redos first, then Urdu and Hindi sessions, then English); the rolling transcript made with {} stands",
+                    night.into_iter().collect::<Vec<_>>().join(" and "),
+                    d.needed_s / 3600.0,
+                    d.left_s / 3600.0,
+                    rolling.into_iter().collect::<Vec<_>>().join(" and ")
+                ),
+            ))
+        })
+        .collect();
     NightDecision {
         routed,
         hinglish,
         marks,
+        dropped,
     }
+}
+
+/// Urdu and Hindi sessions have the second priority (the large model's night for them gains 1 to 1.6 WER points for Urdu
+/// and is the only night model Hindi has); English-only sessions the third (0.5 to 0.6 points, at about twice the time).
+fn has_urdu_or_hindi(languages: &[String]) -> bool {
+    languages.iter().any(|l| l == "ur" || l == "hi")
 }
 
 /// What becomes of a session whose units were decoded on the processor without the Hinglish model after a graphics
@@ -270,6 +332,7 @@ mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use wb_capability::Hinglish;
+    use wb_queue::night::Plan;
 
     const DAY_MS: u64 = 86_400_000;
     const IST_OFFSET_MS: u64 = 19_800_000;
@@ -289,14 +352,14 @@ mod tests {
             ok: rolling_ok,
             rtf: Some(rtf_hi),
             source: "measured".into(),
-            model: Some("hinglish-f16".into()),
+            model: Some("hinglish-q8_0".into()),
             detector: None,
             night_ok,
             night_hours: Some(rtf_hi * 3.0),
         };
         let mut v = ProfileView::from_capability(&cap, vec![]);
-        v.set_cell_for_test("hinglish-f16", "hi", rtf_hi);
-        v.set_cell_for_test("hinglish-f16", "en", rtf_hi / 2.5);
+        v.set_cell_for_test("hinglish-q8_0", "hi", rtf_hi);
+        v.set_cell_for_test("hinglish-q8_0", "en", rtf_hi / 2.5);
         v
     }
 
@@ -305,11 +368,11 @@ mod tests {
     fn card_profile(processor_cells: Option<(f64, f64)>) -> ProfileView {
         let mut p = profile(false, 0.3, true);
         p.config = Some(wb_capability::DeviceConfig::Gpu { index: 0 });
-        p.set_cell_on_for_test("hinglish-f16", "hi", 0.3, true);
-        p.set_cell_on_for_test("hinglish-f16", "en", 0.12, true);
+        p.set_cell_on_for_test("hinglish-q8_0", "hi", 0.3, true);
+        p.set_cell_on_for_test("hinglish-q8_0", "en", 0.12, true);
         if let Some((hi, en)) = processor_cells {
-            p.set_cell_on_for_test("hinglish-f16", "hi", hi, false);
-            p.set_cell_on_for_test("hinglish-f16", "en", en, false);
+            p.set_cell_on_for_test("hinglish-q8_0", "hi", hi, false);
+            p.set_cell_on_for_test("hinglish-q8_0", "en", en, false);
         }
         p
     }
@@ -360,13 +423,13 @@ mod tests {
     fn the_job_models_tell_whether_the_processor_loses_the_hinglish_model() {
         let p = card_profile(None);
         let pair =
-            serde_json::json!({"en": "small-q5_0", "hi": "hinglish-f16", "*": "hinglish-f16"});
+            serde_json::json!({"en": "small-q5_0", "hi": "hinglish-q8_0", "*": "hinglish-q8_0"});
         assert!(p.job_decodes_with_hinglish(pair.as_object().unwrap()));
         let other = serde_json::json!({"en": "small-q5_0", "hi": "large-v3-turbo-q5_0"});
         assert!(!p.job_decodes_with_hinglish(other.as_object().unwrap()));
         assert!(!p.models_measured_on_processor(pair.as_object().unwrap(), false));
         let both = card_profile(Some((1.2, 0.5)));
-        let alone = serde_json::json!({"en": "hinglish-f16", "hi": "hinglish-f16"});
+        let alone = serde_json::json!({"en": "hinglish-q8_0", "hi": "hinglish-q8_0"});
         assert!(both.models_measured_on_processor(alone.as_object().unwrap(), false));
         assert!(
             !both.models_measured_on_processor(alone.as_object().unwrap(), true),
@@ -517,5 +580,115 @@ mod tests {
         let two = [session("a", 60, 30), session("b", 60, 30)];
         let ok = decide(&p, six_pm(), &two, wb_queue::speed::NIGHT_ALLOWANCE_GPU);
         assert_eq!(ok.routed.route, Route::Hinglish, "{ok:?}");
+    }
+    /// The profile of the Hinglish tests plus the large model as the night pick for English and Urdu (owner, 27 Nov 2026),
+    /// at 0.6 times real time here.
+    fn with_large_night(mut p: ProfileView) -> ProfileView {
+        for lang in ["en", "ur"] {
+            p.set_night_for_test(lang, "large-v3-q5_0");
+            p.set_cell_for_test("large-v3-q5_0", lang, 0.6);
+        }
+        p
+    }
+
+    fn one_language(name: &str, lang: &str, minutes: u64) -> NightSession {
+        NightSession {
+            name: name.into(),
+            languages: vec![lang.into()],
+            audio: SessionAudio {
+                id: name.into(),
+                audio_ms_by_lang: BTreeMap::from([(lang.to_owned(), minutes * 60_000)]),
+            },
+        }
+    }
+
+    /// Owner, 27 Nov 2026: night time is the scarcest resource. The Hinglish redo of an English + Hindi session comes first,
+    /// then Urdu with the large model, then English with it, and the English night is dropped when the Hinglish redo needs
+    /// the time (it keeps the rolling transcript; the reason is written down). Before this the Hinglish plan counted the
+    /// English session too, did not fit, and sent the Hinglish session to a faster machine.
+    #[test]
+    fn the_english_large_model_night_is_dropped_when_a_hinglish_redo_needs_the_time() {
+        // The Hinglish session: 4 h of English and 4 h of Hindi at 0.68 and 1.69 times real time, x1.25: about 11.8 h of
+        // the 14 h before 08:00. English-only, 4 h at 0.6 x 1.25: 3 h more, which does not fit.
+        let p = with_large_night(profile(true, 1.69, false));
+        let hall = session("hall-a", 240, 240);
+        let english = one_language("english-hall", "en", 240);
+        let d = decide(&p, six_pm(), &[hall, english], 1.25);
+        assert_eq!(d.routed.route, Route::Hinglish, "{d:?}");
+        assert!(d.hinglish.contains("hall-a"));
+        let Plan::Run { sessions, .. } = &d.routed.plan else {
+            panic!("{d:?}")
+        };
+        assert_eq!(sessions, &["hall-a"], "only the Hinglish redo runs");
+        assert!(
+            d.marks.is_empty(),
+            "the Hinglish session is not marked: {:?}",
+            d.marks
+        );
+        assert_eq!(d.dropped.len(), 1, "{:?}", d.dropped);
+        assert_eq!(d.dropped[0].0, "english-hall");
+        assert!(
+            d.dropped[0].1.contains("higher priority"),
+            "{}",
+            d.dropped[0].1
+        );
+        assert!(
+            d.dropped[0].1.contains("large-v3-q5_0"),
+            "{}",
+            d.dropped[0].1
+        );
+    }
+
+    #[test]
+    fn urdu_with_the_large_model_comes_before_english_and_both_run_when_the_night_has_room() {
+        let p = with_large_night(profile(true, 1.69, false));
+        let sessions = [
+            one_language("english-hall", "en", 90),
+            one_language("urdu-hall", "ur", 90),
+            session("hall-a", 90, 90),
+        ];
+        let d = decide(&p, six_pm(), &sessions, 1.25);
+        let Plan::Run { sessions, .. } = &d.routed.plan else {
+            panic!("{d:?}")
+        };
+        assert_eq!(
+            sessions,
+            &["hall-a", "urdu-hall", "english-hall"],
+            "Hinglish redo, then Urdu, then English"
+        );
+        assert!(d.dropped.is_empty(), "{:?}", d.dropped);
+        // Short of time, Urdu stays and English goes: 4 h of Hinglish content (11.8 h) leaves 2.2 h; Urdu 90 min x 0.6 x 1.25
+        // is 1.1 h, English 150 min is 1.9 h.
+        let tight = [
+            session("hall-a", 240, 240),
+            one_language("english-hall", "en", 150),
+            one_language("urdu-hall", "ur", 90),
+        ];
+        let d = decide(&p, six_pm(), &tight, 1.25);
+        let Plan::Run { sessions, .. } = &d.routed.plan else {
+            panic!("{d:?}")
+        };
+        assert_eq!(sessions, &["hall-a", "urdu-hall"]);
+        assert_eq!(d.dropped.len(), 1);
+        assert_eq!(d.dropped[0].0, "english-hall");
+    }
+
+    /// A Hinglish class that cannot finish is dropped whole (as before) and the large-model sessions then use the night.
+    #[test]
+    fn when_the_hinglish_redo_cannot_finish_the_urdu_and_english_nights_still_run() {
+        let p = with_large_night(profile(true, 9.0, false));
+        let sessions = [
+            session("hall-a", 90, 90),
+            one_language("urdu-hall", "ur", 90),
+        ];
+        let d = decide(&p, six_pm(), &sessions, 1.25);
+        assert_eq!(d.routed.route, Route::Today);
+        assert!(d.hinglish.is_empty());
+        assert_eq!(d.marks.len(), 1, "{:?}", d.marks);
+        assert!(d.marks[0].1.contains("was not started"), "{}", d.marks[0].1);
+        let Plan::Run { sessions, .. } = &d.routed.plan else {
+            panic!("{d:?}")
+        };
+        assert!(sessions.contains(&"urdu-hall".to_string()), "{sessions:?}");
     }
 }

@@ -3,8 +3,8 @@
 **Status: PROVISIONAL.** Every number below was measured on the Legion (i9-14900HX, RTX 4070 Laptop 8 GB) with `wb-engine`
 (whisper.cpp v1.9.5 commit d1be6fde11ac, portable builds), the language given unless a table says "detect". Speed on the room
 laptops is not measured (the test laptops arrive from 17 November 2026 on; until then `emu-low` and `emu-mid` stand in, see
-`docs/LEGION-FIRST.md`). Nothing here sets `validated_roles` or `defaults` in `models/manifest.json`: the choices in "Proposed
-choices" are for the owner to decide. All WER and CER are in percent with the script-aware normaliser (`eval/normalize.py`; the
+`docs/LEGION-FIRST.md`). `validated_roles` and `defaults` in `models/manifest.json` are not set. The owner's decisions of 27 Nov 2026 are in section 6
+(night model without a discrete card, night ranks, Phase 7 live candidates). All WER and CER are in percent with the script-aware normaliser (`eval/normalize.py`; the
 nukta is kept for Hindi). Every table is written from `eval/results/*/summary.json` by a script; the evidence files named in each
 section are the scripts' own output (`docs/evidence/phase-5/`).
 
@@ -43,8 +43,8 @@ The model is the Hinglish fine-tune of large-v3 (converted by `scripts/models/`;
 marked "independence unknown" in `TABLES.md`; the held-out chunks are the only evidence that is clean of tuning.
 
 Night speed of the Hinglish files on a computer without a discrete card (`night-q8.txt`, emu-low and emu-mid): q8_0 is 1.7 to
-2 times faster than f16 on the processor and 7 to 10% slower on the integrated card; it finishes wherever f16 does. The choice
-of the night model for such machines is the owner's (proposal in the handoff).
+2 times faster than f16 on the processor and 7 to 10% slower on the integrated card; it finishes wherever f16 does. **Decision (owner,
+27 Nov 2026, option A): Hinglish q8_0 is the night model on every machine; f16 is not measured, chosen or shipped.**
 
 ## 3. Hindi alone and the near-live role
 
@@ -95,18 +95,18 @@ The first three are within 0.5 FLEURS and 0.6 Svarah WER points of each other. S
 the 3-point limit the owner set for choosing it on speed in a pure English session. The English near-live model is small (FLEURS
 the non-quantised small model scored 5.4 on 20 FLEURS clips in Phase 3 with rolling settings; the near-live setting was not re-measured here).
 
-## 6. Proposed choices (not applied; `models/manifest.json` is unchanged)
+## 6. Choices (owner's decisions of 27 Nov 2026 where marked; the rest provisional)
 
 | Role | English only | English + Hindi | Urdu (with or without English) |
 | --- | --- | --- | --- |
-| Rolling | turbo q5_0 (current rank 1; large-v3 q5_0 is 0.5 points better and slower) | Hinglish pair chosen by the system check (small q5_0 detector + Hinglish q8_0 or f16, measured on the machine) | turbo q5_0 (current rank 1) |
-| Night | large-v3 q5_0 where the night window allows it (0.5 points better than turbo; the manifest has no night rank for English yet) | the Hinglish model (q8_0 or f16 by the owner's decision) | large-v3 q5_0 (1.0 to 1.6 points better than turbo; no night rank for Urdu yet) |
-| Near-live | small | Hinglish q8_0 passes on accuracy and on speed for FLEURS only; needs the laptops | turbo q5_0 (relative bar met) |
+| Rolling | turbo q5_0 (rank 1; large-v3 q5_0 is 0.5 points better and about twice as slow) | Hinglish pair chosen by the system check (small q5_0 detector + Hinglish q8_0, measured on the machine) | turbo q5_0 |
+| Night | large-v3 q5_0, third priority (manifest night rank 1, approved) | Hinglish q8_0 redo, first priority (option A: q8_0 everywhere, f16 dropped) | large-v3 q5_0, second priority (approved) |
+| Near-live (Phase 7) | small | Hinglish q8_0 only where it measures at most 0.35 RTF there, short clips included; turbo, medium, small rejected for Hindi | turbo q5_0 or medium q5_0 |
 
-Consequences if the owner accepts the night rows: `provisional_rank` for large-v3 q5_0 gets night entries for `en` and `ur`
-(today `hi` only), which changes the night model of English-only and Urdu sessions and needs the night speed measured on the laptops
-(large-v3 q5_0 is about twice as slow as turbo on the Legion card). `src-tauri/src/syscheck/rankings.rs` has a test that asserts night
-English is empty; it would change with the manifest.
+Night priority order (night time is the scarcest resource; `wb_queue::night::plan_tiered`): 1 Hinglish redos of English + Hindi
+sessions, 2 Urdu and Hindi sessions with large-v3, 3 English sessions with large-v3, each only if everything above still finishes by 08:00
+IST with the 1.5 allowance; what does not fit keeps its rolling transcript and the Queue log says why. The night speed of large-v3 q5_0
+on the laptops is still to be measured (the system check measures it; the gate pack records it).
 
 ## 7. Not measured, and why
 

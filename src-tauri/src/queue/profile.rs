@@ -147,6 +147,12 @@ impl ProfileView {
         });
     }
 
+    /// A night pick for the tests: `lang` has `model` as its night model.
+    #[cfg(test)]
+    pub fn set_night_for_test(&mut self, lang: &str, model: &str) {
+        self.night.insert(lang.to_owned(), model.to_owned());
+    }
+
     /// Whether the night pass may decode a session with these languages with the Hinglish model: English and Hindi
     /// together, a measured model that fits the night, and the recording was not already decoded with it.
     pub fn may_use_hinglish_at_night(&self, languages: &[String]) -> bool {
@@ -818,7 +824,7 @@ mod tests {
             ok: false,
             rtf: Some(1.4),
             source: "measured".into(),
-            model: Some("hinglish-f16".into()),
+            model: Some("hinglish-q8_0".into()),
             detector: None,
             night_ok: false,
             night_hours: None,
@@ -829,7 +835,7 @@ mod tests {
             !kept
                 .rolling_models(&langs)
                 .values()
-                .any(|m| m == "hinglish-f16")
+                .any(|m| m == "hinglish-q8_0")
         );
         // The proxy never chooses it: `ok` without its own cell has no model.
         cap.decision.hinglish = Hinglish {
@@ -847,7 +853,7 @@ mod tests {
             ok: true,
             rtf: Some(0.4),
             source: "measured".into(),
-            model: Some("hinglish-f16".into()),
+            model: Some("hinglish-q8_0".into()),
             detector: None,
             night_ok: false,
             night_hours: None,
@@ -856,7 +862,10 @@ mod tests {
         assert!(v.uses_hinglish(&langs));
         let rolling = v.rolling_models(&langs);
         assert_eq!(rolling.len(), 3, "{rolling:?}");
-        assert!(rolling.values().all(|m| m == "hinglish-f16"), "{rolling:?}");
+        assert!(
+            rolling.values().all(|m| m == "hinglish-q8_0"),
+            "{rolling:?}"
+        );
         assert_eq!(v.night_models(&langs), rolling, "no night model beats it");
         // English only, Hindi only and English + Urdu keep their own picks.
         for other in [
@@ -868,7 +877,7 @@ mod tests {
             assert!(
                 !v.rolling_models(&other)
                     .values()
-                    .any(|m| m == "hinglish-f16"),
+                    .any(|m| m == "hinglish-q8_0"),
                 "{other:?}"
             );
         }

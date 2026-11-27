@@ -76,6 +76,42 @@ pub fn deadline_ms(now_ms: u64) -> u64 {
     deadline - IST_OFFSET_MS
 }
 
+/// A language the job decodes but neither map knows counts at the slowest speed known, not for free.
+fn slowest_speed(night_rtf: &BTreeMap<String, f64>, decode_rtf: &BTreeMap<String, f64>) -> f64 {
+    decode_rtf
+        .values()
+        .chain(night_rtf.values())
+        .copied()
+        .fold(1.0, f64::max)
+}
+
+/// A session gets a night job when it has audio in a language that has a night model.
+fn has_night_audio(s: &SessionAudio, night_rtf: &BTreeMap<String, f64>) -> bool {
+    s.audio_ms_by_lang
+        .iter()
+        .any(|(lang, ms)| *ms > 0 && night_rtf.contains_key(lang))
+}
+
+/// The seconds the night job of a session needs: the whole audio at the speed of the model it decodes each language with.
+fn session_seconds(
+    s: &SessionAudio,
+    night_rtf: &BTreeMap<String, f64>,
+    decode_rtf: &BTreeMap<String, f64>,
+    slowest: f64,
+) -> f64 {
+    s.audio_ms_by_lang
+        .iter()
+        .map(|(lang, ms)| {
+            let rtf = decode_rtf
+                .get(lang)
+                .or_else(|| night_rtf.get(lang))
+                .copied()
+                .unwrap_or(slowest);
+            *ms as f64 / 1000.0 * rtf
+        })
+        .sum()
+}
+
 /// Plans the night pass. `night_rtf` holds, per language that has a night model, its RTF in the chosen
 /// configuration: a session gets a night job when it has audio in one of those languages. `decode_rtf` holds, per
 /// language, the RTF of the model the night job uses for it (the night model, or the rolling model for a language
@@ -92,36 +128,15 @@ pub fn plan(
     if night_rtf.is_empty() {
         return Plan::Skip(SkipReason::NoNightModel);
     }
-    // A language the job decodes but neither map knows counts at the slowest speed known, not for free.
-    let slowest = decode_rtf
-        .values()
-        .chain(night_rtf.values())
-        .copied()
-        .fold(1.0, f64::max);
+    let slowest = slowest_speed(night_rtf, decode_rtf);
     let mut planned = Vec::new();
     let mut needed_s = 0.0;
     for s in sessions {
-        let has_night_audio = s
-            .audio_ms_by_lang
-            .iter()
-            .any(|(lang, ms)| *ms > 0 && night_rtf.contains_key(lang));
-        if !has_night_audio {
+        if !has_night_audio(s, night_rtf) {
             continue;
         }
-        let secs: f64 = s
-            .audio_ms_by_lang
-            .iter()
-            .map(|(lang, ms)| {
-                let rtf = decode_rtf
-                    .get(lang)
-                    .or_else(|| night_rtf.get(lang))
-                    .copied()
-                    .unwrap_or(slowest);
-                *ms as f64 / 1000.0 * rtf
-            })
-            .sum();
         planned.push(s.id.clone());
-        needed_s += secs;
+        needed_s += session_seconds(s, night_rtf, decode_rtf, slowest);
     }
     if planned.is_empty() {
         return Plan::Skip(SkipReason::NothingToDo);
@@ -216,6 +231,114 @@ pub fn route(
             &today.decode_rtf,
         ),
         hinglish_skip,
+    }
+}
+
+/// One priority class of the night's work: its sessions and the speeds they decode at.
+#[derive(Debug, Clone)]
+pub struct Tier {
+    pub sessions: Vec<SessionAudio>,
+    pub speeds: Speeds,
+    /// The whole class goes or none of it (the Hinglish redos: a night that cannot finish them must not start them).
+    /// Otherwise each session is taken in order if it still fits.
+    pub all_or_nothing: bool,
+}
+
+/// A session that did not get a night job in a tiered plan.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Dropped {
+    pub session: String,
+    /// The index of its tier.
+    pub tier: usize,
+    pub needed_s: f64,
+    /// The seconds that were left when it was tried (after the sessions of higher priority).
+    pub left_s: f64,
+}
+
+/// A night plan made tier by tier.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Tiered {
+    pub plan: Plan,
+    /// The sessions planned from each tier.
+    pub planned: Vec<Vec<String>>,
+    pub dropped: Vec<Dropped>,
+}
+
+/// Plans the night by priority (owner, 27 Nov 2026: night time is the scarcest resource): the sessions of the first tier
+/// are planned first, then those of the second with the time that is left, and so on. A session that does not fit keeps
+/// its rolling transcript (it gets no night job) and is listed in `dropped`; a session planned in an earlier tier is not
+/// planned again. The order of `Plan::Run::sessions` is the priority order, so the night job queue works through it in that
+/// order.
+pub fn plan_tiered(start_ms: u64, tiers: &[Tier]) -> Tiered {
+    let deadline = deadline_ms(start_ms);
+    let available_s = deadline.saturating_sub(start_ms) as f64 / 1000.0;
+    let mut used_s = 0.0;
+    let mut planned: Vec<Vec<String>> = vec![Vec::new(); tiers.len()];
+    let mut dropped = Vec::new();
+    let mut taken: Vec<String> = Vec::new();
+    let mut any_model = false;
+    let mut any_candidate = false;
+    for (t, tier) in tiers.iter().enumerate() {
+        let night_rtf = &tier.speeds.night_rtf;
+        let decode_rtf = &tier.speeds.decode_rtf;
+        any_model |= !night_rtf.is_empty();
+        let slowest = slowest_speed(night_rtf, decode_rtf);
+        let candidates: Vec<(&SessionAudio, f64)> = tier
+            .sessions
+            .iter()
+            .filter(|s| !taken.contains(&s.id) && has_night_audio(s, night_rtf))
+            .map(|s| (s, session_seconds(s, night_rtf, decode_rtf, slowest)))
+            .collect();
+        any_candidate |= !candidates.is_empty();
+        let total: f64 = candidates.iter().map(|(_, secs)| secs).sum();
+        let whole_fits = used_s + total <= available_s;
+        for (s, secs) in &candidates {
+            let fits = if tier.all_or_nothing {
+                whole_fits
+            } else {
+                used_s + secs <= available_s
+            };
+            if fits {
+                // An all-or-nothing tier adds its total once, below; a per-session tier adds as it goes.
+                if !tier.all_or_nothing {
+                    used_s += secs;
+                }
+                planned[t].push(s.id.clone());
+                taken.push(s.id.clone());
+            } else {
+                dropped.push(Dropped {
+                    session: s.id.clone(),
+                    tier: t,
+                    needed_s: *secs,
+                    left_s: (available_s - used_s).max(0.0),
+                });
+            }
+        }
+        if tier.all_or_nothing && whole_fits {
+            used_s += total;
+        }
+    }
+    let sessions: Vec<String> = planned.iter().flatten().cloned().collect();
+    let plan = if !sessions.is_empty() {
+        Plan::Run {
+            sessions,
+            estimate_s: used_s,
+            finish_ms: start_ms + (used_s * 1000.0).round() as u64,
+        }
+    } else if !any_model {
+        Plan::Skip(SkipReason::NoNightModel)
+    } else if !any_candidate {
+        Plan::Skip(SkipReason::NothingToDo)
+    } else {
+        Plan::Skip(SkipReason::DoesNotFit {
+            needed_s: dropped.iter().map(|d| d.needed_s).sum(),
+            available_s,
+        })
+    };
+    Tiered {
+        plan,
+        planned,
+        dropped,
     }
 }
 
@@ -757,13 +880,136 @@ mod tests {
     fn the_marker_file_says_why_and_which_model_was_tried() {
         let text = faster_machine_json(
             "it would need about 27.0 h and only 14.0 h are left",
-            Some("hinglish-f16"),
+            Some("hinglish-q8_0"),
             42,
         );
         let v: serde_json::Value = serde_json::from_str(&text).expect("json");
         assert_eq!(v["version"], 1);
-        assert_eq!(v["model"], "hinglish-f16");
+        assert_eq!(v["model"], "hinglish-q8_0");
         assert!(v["reason"].as_str().is_some_and(|r| r.contains("27.0 h")));
         assert_eq!(FASTER_MACHINE_FILE, "faster-machine.json");
+    }
+    fn speeds_of(rtf: &[(&str, f64)]) -> Speeds {
+        let m: BTreeMap<String, f64> = rtf.iter().map(|(l, r)| ((*l).to_owned(), *r)).collect();
+        Speeds {
+            night_rtf: m.clone(),
+            decode_rtf: m,
+        }
+    }
+
+    fn one_lang(id: &str, lang: &str, minutes: u64) -> SessionAudio {
+        SessionAudio {
+            id: id.into(),
+            audio_ms_by_lang: BTreeMap::from([(lang.to_owned(), minutes * 60_000)]),
+        }
+    }
+
+    #[test]
+    fn the_night_is_planned_by_priority_and_what_does_not_fit_is_dropped_not_started() {
+        // 14 h are left at 18:00. Hinglish redos: 2 h of audio at 4.0 = 8 h. Urdu: 1 h at 3.0 = 3 h. English: 1 h at 3.0
+        // = 3 h (14 h in all), and a second English hour would make 17 h: dropped.
+        let tiers = [
+            Tier {
+                sessions: vec![one_lang("hall-a", "hi", 120)],
+                speeds: speeds_of(&[("hi", 4.0)]),
+                all_or_nothing: true,
+            },
+            Tier {
+                sessions: vec![one_lang("urdu", "ur", 60)],
+                speeds: speeds_of(&[("ur", 3.0)]),
+                all_or_nothing: false,
+            },
+            Tier {
+                sessions: vec![one_lang("en-1", "en", 60), one_lang("en-2", "en", 60)],
+                speeds: speeds_of(&[("en", 3.0)]),
+                all_or_nothing: false,
+            },
+        ];
+        let t = plan_tiered(at(18, 0), &tiers);
+        let Plan::Run {
+            sessions,
+            estimate_s,
+            ..
+        } = &t.plan
+        else {
+            panic!("{t:?}")
+        };
+        assert_eq!(sessions, &["hall-a", "urdu", "en-1"], "priority order");
+        assert!((estimate_s / 3600.0 - 14.0).abs() < 1e-9, "{estimate_s}");
+        assert_eq!(t.dropped.len(), 1);
+        assert_eq!(t.dropped[0].session, "en-2");
+        assert_eq!(t.dropped[0].tier, 2);
+        assert!(t.dropped[0].left_s < t.dropped[0].needed_s);
+    }
+
+    #[test]
+    fn a_hinglish_class_that_does_not_fit_is_dropped_whole_and_the_lower_priorities_use_the_time() {
+        // Two Hinglish sessions of 8 h each do not fit in 14 h together: neither starts; the English one runs.
+        let tiers = [
+            Tier {
+                sessions: vec![one_lang("a", "hi", 120), one_lang("b", "hi", 120)],
+                speeds: speeds_of(&[("hi", 4.0)]),
+                all_or_nothing: true,
+            },
+            Tier {
+                sessions: vec![one_lang("en-1", "en", 60)],
+                speeds: speeds_of(&[("en", 3.0)]),
+                all_or_nothing: false,
+            },
+        ];
+        let t = plan_tiered(at(18, 0), &tiers);
+        assert_eq!(t.planned[0], Vec::<String>::new());
+        assert_eq!(t.planned[1], ["en-1"]);
+        assert_eq!(t.dropped.len(), 2);
+        assert!(t.dropped.iter().all(|d| d.tier == 0));
+    }
+
+    #[test]
+    fn a_session_planned_in_an_earlier_tier_is_not_planned_again_and_an_empty_night_says_why() {
+        let x = one_lang("x", "hi", 30);
+        let tiers = [
+            Tier {
+                sessions: vec![x.clone()],
+                speeds: speeds_of(&[("hi", 1.0)]),
+                all_or_nothing: true,
+            },
+            Tier {
+                sessions: vec![x],
+                speeds: speeds_of(&[("hi", 1.0)]),
+                all_or_nothing: false,
+            },
+        ];
+        let t = plan_tiered(at(18, 0), &tiers);
+        assert_eq!(t.planned, vec![vec!["x".to_string()], Vec::<String>::new()]);
+        assert!(t.dropped.is_empty());
+        let tier = |sessions: Vec<SessionAudio>, speeds: Speeds| Tier {
+            sessions,
+            speeds,
+            all_or_nothing: false,
+        };
+        let none = plan_tiered(
+            at(18, 0),
+            &[tier(vec![one_lang("x", "en", 30)], Speeds::default())],
+        );
+        assert_eq!(none.plan, Plan::Skip(SkipReason::NoNightModel));
+        let nothing = plan_tiered(
+            at(18, 0),
+            &[tier(
+                vec![one_lang("x", "en", 30)],
+                speeds_of(&[("hi", 1.0)]),
+            )],
+        );
+        assert_eq!(nothing.plan, Plan::Skip(SkipReason::NothingToDo));
+        let late = plan_tiered(
+            at(18, 0),
+            &[tier(
+                vec![one_lang("x", "en", 600)],
+                speeds_of(&[("en", 3.0)]),
+            )],
+        );
+        assert!(matches!(
+            late.plan,
+            Plan::Skip(SkipReason::DoesNotFit { .. })
+        ));
     }
 }

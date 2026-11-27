@@ -125,7 +125,9 @@ mod tests {
     fn the_committed_manifest_gives_the_approved_ranking() {
         // The ranking the app decides with is the committed manifest's (owner, 13 Nov 2026): large-v3-turbo
         // q5_0 first for rolling in English, Hindi and Urdu, medium second, small third for English only;
-        // the night pass is large-v3 q5_0 for Hindi only; nothing is validated for near-live yet.
+        // the night pass is large-v3 q5_0 for Hindi and, since 27 Nov 2026 (item 10: lowest WER in every set, 0.5 to 0.6
+        // points ahead of turbo in English, 1.0 to 1.6 in Urdu), for English and Urdu too, the night planner ordering the
+        // work by priority; nothing is validated for near-live yet.
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../models/manifest.json");
         let m = Manifest::load(&path).unwrap();
         let r = from_manifest(&m);
@@ -143,12 +145,10 @@ mod tests {
             !r.rolling[&Lang::Hi][0].quality_unverified,
             "the Kathbath comparison backs it"
         );
-        let night_hi: Vec<_> = r.night[&Lang::Hi]
-            .iter()
-            .map(|x| x.model.as_str())
-            .collect();
-        assert_eq!(night_hi, ["large-v3-q5_0"]);
-        assert!(r.night.get(&Lang::En).is_none_or(Vec::is_empty));
+        for lang in [Lang::En, Lang::Hi, Lang::Ur] {
+            let night: Vec<_> = r.night[&lang].iter().map(|x| x.model.as_str()).collect();
+            assert_eq!(night, ["large-v3-q5_0"], "{lang:?}");
+        }
         for lang in Lang::ALL {
             assert!(
                 r.near_live
