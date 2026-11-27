@@ -107,7 +107,7 @@ foreach ($v in $Variants) {
 foreach ($k in $Extra.Keys) { Copy-Into ([string]$Extra[$k]) ([string]$k) }
 
 # ---- Models (each is a public model; the list is the speed table's) ----
-$models = @('ggml-small.bin', 'ggml-medium.bin', 'ggml-large-v3-turbo-q5_0.bin', 'ggml-large-v3-q5_0.bin', 'converted\ggml-hinglish-q5_0.bin', 'ggml-silero-v6.2.0.bin')
+$models = @('ggml-small.bin', 'ggml-medium.bin', 'ggml-large-v3-turbo-q5_0.bin', 'ggml-large-v3-q5_0.bin', 'converted\ggml-hinglish-q8_0.bin', 'ggml-silero-v6.2.0.bin')
 Copy-Into (Join-Path $repo 'models\manifest.json') 'models\manifest.json'
 if (-not $SkipModels) { foreach ($m in $models) { Copy-Into (Join-Path $art ('models\' + $m)) ('models\' + $m) } }
 

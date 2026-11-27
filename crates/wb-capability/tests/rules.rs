@@ -1181,7 +1181,7 @@ fn the_f16_model_is_gone_it_is_never_chosen_even_if_its_cell_is_in_the_file() {
     // measures and the manifest lists (`HINGLISH_MODELS`) are, and the pairs `HINGLISH_PAIRS` lists. The earlier code took
     // any id that started with "hinglish".
     assert_eq!(HINGLISH_PAIRS, &[("hinglish-q8_0", "small-q5_0")]);
-    assert_eq!(HINGLISH_MODELS, &["hinglish-q5_0", "hinglish-q8_0"]);
+    assert_eq!(HINGLISH_MODELS, &["hinglish-q8_0"]);
     let mut p = legion_with_card(8.0, Some(("hinglish-f16", 4.01)));
     p.measurements.push(pair_cell("hinglish-f16", 0.25, 4.5));
     let d = decide_with(&p, false);
@@ -1194,9 +1194,12 @@ fn the_f16_model_is_gone_it_is_never_chosen_even_if_its_cell_is_in_the_file() {
         None,
         "an f16 pair alone gives nothing"
     );
-    // An id that merely starts with "hinglish" is not a model of the manifest either.
-    let p = legion_with_card(8.0, Some(("hinglish-new", 2.0)));
-    assert_eq!(decide_with(&p, false).hinglish.chosen_model(), None);
+    // An id that merely starts with "hinglish" is not a model of the manifest either, and neither is the q5_0 file that left
+    // the shipped manifest on 27 Nov 2026.
+    for id in ["hinglish-new", "hinglish-q5_0"] {
+        let p = legion_with_card(8.0, Some((id, 2.0)));
+        assert_eq!(decide_with(&p, false).hinglish.chosen_model(), None, "{id}");
+    }
 }
 
 #[test]

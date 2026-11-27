@@ -3,40 +3,6 @@
   "_note": "Metadata only: ids, files, sizes, SHA-256, licences, sources and how a file was made. The model files are never committed and never downloaded by the app; it refuses a file whose SHA-256 differs from this list. Written by scripts/models/write_manifest.py. provisional_rank is the order the system check tries models in, provisional until Phase 5. English: large-v3-turbo-q5_0 is listed first and medium second although the gap is within noise (FLEURS English 4.38 against 4.90 WER on 20 clips); turbo goes first because its file is smaller at equal speed (owner's decision, 13 Nov 2026), so quality_unverified stays false.",
   "models": [
     {
-      "id": "hinglish-q5_0",
-      "file": "converted/ggml-hinglish-q5_0.bin",
-      "sha256": "ec99a44643648ae7a4c0da658af838b8923a6372e1e06c080e527fe694e07e6e",
-      "bytes": 1081140203,
-      "kind": "whisper",
-      "base": "large-v3",
-      "quant": "q5_0",
-      "languages": [
-        "hi",
-        "en"
-      ],
-      "candidate_roles": [
-        "rolling",
-        "night",
-        "live"
-      ],
-      "validated_roles": [],
-      "licence": "Apache-2.0",
-      "source": {
-        "repo": "Trelis/whisper-hinglish-preview",
-        "revision": "eab1188fd2d0e91f2584229b32b3bfe1901c896c"
-      },
-      "conversion": {
-        "script": "whisper-quantize",
-        "settings": {
-          "type": "q5_0",
-          "input": "f16"
-        },
-        "input_sha256": "e8e126837031c14c86848db0aa9f50b3340382dc647dd3bd7d35294e4d91ea5a",
-        "whisper_cpp_commit": "d1be6fde11ac6e0407606b4e42fe72d34add8037",
-        "deterministic": true
-      }
-    },
-    {
       "id": "hinglish-q8_0",
       "file": "converted/ggml-hinglish-q8_0.bin",
       "sha256": "5217487dcd6dedb99bb1643e6ce2956bf75b20e8f3bd30c95e1c48c7f8dca990",

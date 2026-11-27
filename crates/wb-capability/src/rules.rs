@@ -683,13 +683,12 @@ fn live_decision(
 /// 3.2 GiB, so it was removed.
 pub const HINGLISH_PAIRS: &[(&str, &str)] = &[("hinglish-q8_0", "small-q5_0")];
 
-/// The Hinglish models the manifest lists (owner, 27 Nov 2026: only ids of the manifest are accepted; `hinglish-f16` is not
-/// shipped). A cell of any other id, also one that starts with "hinglish", is never used, so a `capability.json` from an
-/// earlier build cannot choose a model the manifest no longer lists. The system check measures only `hinglish-q8_0`;
-/// `hinglish-q5_0` (the Phase 2 candidate) is listed and shipped but nothing measures it today. The test
-/// `every_hinglish_id_of_the_manifest_is_accepted_by_the_rules_and_only_those` in the app crate keeps this list equal to
-/// the manifest.
-pub const HINGLISH_MODELS: &[&str] = &["hinglish-q5_0", "hinglish-q8_0"];
+/// The Hinglish models the manifest lists (owner, 27 Nov 2026: only ids of the manifest are accepted; `hinglish-f16` and
+/// `hinglish-q5_0` are not shipped). A cell of any other id, also one that starts with "hinglish", is never used, so a
+/// `capability.json` from an earlier build cannot choose a model the manifest no longer lists. The system check measures
+/// only `hinglish-q8_0`. The test `every_hinglish_id_of_the_manifest_is_accepted_by_the_rules_and_only_those` in the app
+/// crate keeps this list equal to the manifest.
+pub const HINGLISH_MODELS: &[&str] = &["hinglish-q8_0"];
 
 /// Whether a Hinglish cell may be used: a model of `HINGLISH_MODELS`, alone or in a pair that `HINGLISH_PAIRS` lists.
 fn hinglish_cell_allowed(m: &Measurement) -> bool {

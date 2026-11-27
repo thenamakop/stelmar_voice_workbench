@@ -1753,6 +1753,13 @@ mod tests {
         let mut accepted: Vec<&str> = wb_capability::HINGLISH_MODELS.to_vec();
         accepted.sort_unstable();
         assert_eq!(in_manifest, accepted, "the manifest and the rules disagree");
+        // Owner, 27 Nov 2026: f16 and q5_0 are not shipped; this fails if either comes back into the manifest.
+        for gone in ["hinglish-f16", "hinglish-q5_0"] {
+            assert!(
+                !in_manifest.contains(&gone),
+                "{gone} must not be in the shipped manifest"
+            );
+        }
         assert!(
             hinglish_candidates(true)
                 .iter()

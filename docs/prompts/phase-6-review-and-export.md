@@ -16,6 +16,7 @@ A Sessions screen seeded from the STELMAR programme, a Review editor synced with
 7. Backup check: compare primary and mirror trees by SHA-256 and show differences on the Settings screen.
 8. Carried over from the Phase 5 design review (owner, 27 Nov 2026), done with the Sessions screen:
    - **Wire `initialLanguages` of `StartSessionDialog`.** The prop exists (Phase 5, groundwork) and nothing passes it: the Record screen has no programme entry, so an Urdu session would still open on English + Hindi in Devanagari. The Sessions screen opens the dialog from a programme row and passes that row's languages and script. Test: a row listed in Urdu opens the dialog with Urdu selected.
+   - **The Start Session dialog's "ready after Stop" estimate and the capability verdict still describe Hindi with turbo's speed** (`plan_session` in `crates/wb-capability/src/session.rs`, `hinglish_line` in `rules.rs`: "English and Hindi sessions"), while the queue now decodes Hindi-only sessions, and English + Hindi sessions, with Hinglish q8_0 (agreed deferral, owner, 27 Nov 2026). Make the estimate follow the models the queue will use for the ticked languages, and the verdict name Hindi-only sessions. Test: a Hindi-only and an English + Hindi session show the Hinglish model's ready time.
    - A second like-for-like 1536x864 screenshot of the Start Session dialog, opened from a Sessions row, beside its mockup.
    - The Speed row in the Transcription card wraps: keep it on one line at 1536x864.
    - Counts on the Transcript and Bookmarks tabs, as in the mockup.
