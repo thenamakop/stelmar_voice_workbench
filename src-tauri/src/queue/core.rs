@@ -78,6 +78,13 @@ impl Core {
         #[cfg(feature = "gate-hooks")]
         super::gate_hooks::queue_log(&text);
         let at_ms = self.readings.now_ms();
+        // The same line goes to `app.log` with the IST time it was written at (the Queue screen shows only the newest
+        // lines, and a person checking the night reads this file, not a screenshot).
+        tracing::info!(
+            "scheduler: {} {}",
+            wb_queue::estimate::format_ist_stamp(at_ms),
+            text
+        );
         let mut log = lock(&self.log);
         log.push(LogEntry { at_ms, text });
         // The app log keeps everything; the screen needs the recent lines.
@@ -453,5 +460,61 @@ mod tests {
         core.set_operator_paused(false);
         core.evaluate();
         assert!(g.paused().is_none());
+    }
+
+    /// A writer the test reads back: what `tracing` would write to `app.log`.
+    #[derive(Clone, Default)]
+    struct Captured(Arc<Mutex<Vec<u8>>>);
+
+    impl std::io::Write for Captured {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            lock(&self.0).extend_from_slice(buf);
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    /// 28 Nov 2026: the scheduler's lines were kept in memory only, and the Queue screen shows the newest eight, so a person
+    /// checking the night's switches had nothing to read afterwards. Every line is also written to `app.log`, stamped with the
+    /// IST time it was written at.
+    #[test]
+    fn every_queue_log_line_is_also_written_to_the_app_log_with_its_ist_time() {
+        let captured = Captured::default();
+        let writer = captured.clone();
+        let subscriber = tracing_subscriber::fmt()
+            .with_writer(move || writer.clone())
+            .with_ansi(false)
+            .with_target(false)
+            .finish();
+        let fake = Fake::new(Some(tier_g()));
+        // 2026-11-28 20:05:13 IST is 14:35:13 UTC.
+        let at_ms = 1_795_876_513_000u64;
+        fake.now.store(at_ms, Ordering::SeqCst);
+        let (core, _g) = gate(&fake);
+        tracing::subscriber::with_default(subscriber, || {
+            core.push_log("night safety switch: S3 is dropped from the night".into());
+            core.push_log("night job of S1 is held".into());
+        });
+        let written = String::from_utf8(lock(&captured.0).clone()).unwrap();
+        let stamp = wb_queue::estimate::format_ist_stamp(at_ms);
+        assert!(stamp.ends_with("IST") && stamp.contains(':'), "{stamp}");
+        assert!(
+            written.contains(&format!(
+                "scheduler: {stamp} night safety switch: S3 is dropped from the night"
+            )),
+            "{written}"
+        );
+        assert!(
+            written.contains(&format!("scheduler: {stamp} night job of S1 is held")),
+            "{written}"
+        );
+        // The screen's memory still has the lines too.
+        assert!(
+            core.log()
+                .iter()
+                .any(|l| l.text.starts_with("night job of S1"))
+        );
     }
 }
