@@ -1,0 +1,24 @@
+Release binary checks (written by scripts/ ... release-checks; nobody edits this file)
+commit: 3318625b0a895a5c3999632b701fb4fff62c74b8
+machine: Legion (RTX 4070 Laptop GPU); checked 2026-11-28 14:53 local
+
+stelmar-voice-workbench.exe  16067584 bytes  built 2026-11-28 14:53  sha256 65268856710365ec2e27602d75903e1263511173ad8b74b826e4400f0d4026c0
+wb-engine-avx2-x86_64-pc-windows-msvc.exe  3762688 bytes  built 2026-11-28 05:04  sha256 d7c5a8e667ecbbfbdaceee6668aeb5a78febaf20c8f1b4c15b67f982d8641b5e
+wb-engine-avx512-x86_64-pc-windows-msvc.exe  3802112 bytes  built 2026-11-28 05:05  sha256 e2afa6c3e5bfda1a4d24cc9c8dd6f13e43098126fbaf09effba1eb924bee9c10
+wb-engine-vulkan-x86_64-pc-windows-msvc.exe  48921088 bytes  built 2026-11-28 05:06  sha256 76c1e924c1532d142d11e14690c3ccc0f5ec07049df99eefcaef5b427306579e
+wb-engine-cuda-x86_64-pc-windows-msvc.exe  72892416 bytes  built 2026-11-26 04:53  sha256 4d624519760842ee1644cf4d36f34e9f89127c3dc9ed4d2aa92cb943eea5bb3b
+
+WB_GATE_ strings in the app exe: 0 (PASS)
+WB_GATE_ strings in wb-engine-avx2-x86_64-pc-windows-msvc.exe: 0
+WB_GATE_ strings in wb-engine-avx512-x86_64-pc-windows-msvc.exe: 0
+WB_GATE_ strings in wb-engine-vulkan-x86_64-pc-windows-msvc.exe: 0
+WB_GATE_ strings in wb-engine-cuda-x86_64-pc-windows-msvc.exe: 0
+
+Static PE import check (network DLLs ws2_32, wsock32, mswsock, winhttp, wininet); positive control seen: @{Path=C:\WINDOWS\System32\netstat.exe; Dlls=System.Object[]; ImportCount=24}
+  stelmar-voice-workbench.exe: 30 imported DLLs; network DLLs: none
+  wb-engine-avx2-x86_64-pc-windows-msvc.exe: 21 imported DLLs; network DLLs: none
+  wb-engine-avx512-x86_64-pc-windows-msvc.exe: 21 imported DLLs; network DLLs: none
+  wb-engine-vulkan-x86_64-pc-windows-msvc.exe: 22 imported DLLs; network DLLs: none
+  wb-engine-cuda-x86_64-pc-windows-msvc.exe: 22 imported DLLs; network DLLs: none
+
+VERDICT: PASS
