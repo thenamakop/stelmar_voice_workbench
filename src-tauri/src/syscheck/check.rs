@@ -70,6 +70,47 @@ const HINGLISH_QUICK_MIN_S: f64 = 120.0;
 /// measurement when even this ratio puts the model over the bar; it never skips one that would have fitted.
 const HINGLISH_MIN_SLOWDOWN: f64 = 1.5;
 
+/// The optional steps that follow the recorder safety test.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TailStep {
+    Hinglish,
+    NearLive,
+    LiveStandin,
+    Night,
+}
+
+impl TailStep {
+    /// The name of the step in `Profile::skipped` (the Hinglish one is read by the verdict).
+    fn step_name(self) -> &'static str {
+        match self {
+            TailStep::Hinglish => wb_capability::SKIPPED_HINGLISH,
+            TailStep::NearLive => "near-live speed on the processor",
+            TailStep::LiveStandin => "live stand-in on the graphics card",
+            TailStep::Night => "night model speed",
+        }
+    }
+}
+
+/// The least time limit of a Hinglish cell in the quick check, however little of the time target is left.
+const HINGLISH_CELL_MIN_S: f64 = 30.0;
+
+/// The time limit of a Hinglish cell started `elapsed_s` seconds into a quick check.
+fn hinglish_cell_cap_s(elapsed_s: f64) -> f64 {
+    (QUICK_TARGET_S - elapsed_s).max(HINGLISH_CELL_MIN_S)
+}
+
+/// The order of the optional steps. The Hinglish model decides which model every English + Hindi session is decoded with
+/// (a wrong choice writes Hindi speech as English text), so it comes before the steps that only add information. In the
+/// pack proof runs of 28 Nov 2026 the mandatory steps took 187 s and near-live and the night model 67 s more; the Hinglish
+/// step then had 106 s left of its 360 s target and was skipped, so a machine with a discrete card chose
+/// large-v3-turbo-q5_0 for English + Hindi without the pair ever being measured.
+const TAIL_ORDER: [TailStep; 4] = [
+    TailStep::Hinglish,
+    TailStep::NearLive,
+    TailStep::LiveStandin,
+    TailStep::Night,
+];
+
 #[derive(Debug, thiserror::Error)]
 pub enum CheckError {
     #[error("The system check was cancelled.")]
@@ -139,6 +180,9 @@ struct Run<'a> {
     cache: Cache,
     excerpts: HashMap<String, PathBuf>,
     partial: bool,
+    /// True while the Hinglish step runs: its cells then stop at the quick check's time target instead of running on to the
+    /// 480 s bar, so that near-live, the live stand-in and the night model, which come after it, are not starved.
+    hinglish_running: bool,
 }
 
 /// Stops a safety run that is cut short and deletes its test recording; its result is not used.
@@ -178,6 +222,7 @@ pub fn run(
         cache: Cache::load(&env.model_cache),
         excerpts: HashMap::new(),
         partial: false,
+        hinglish_running: false,
     };
 
     // 1. Engines and hardware.
@@ -379,7 +424,7 @@ impl Run<'_> {
             return true;
         }
         let elapsed = self.started.elapsed().as_secs_f64();
-        if QUICK_TARGET_S - elapsed >= seconds {
+        if target_allows(elapsed, seconds) {
             return true;
         }
         self.partial = true;
@@ -390,6 +435,13 @@ impl Run<'_> {
             ),
         );
         false
+    }
+
+    /// The time limit of a Hinglish cell in the quick check: what is left of the time target (at least `HINGLISH_CELL_MIN_S`),
+    /// so a slow processor cannot carry the Hinglish step on to the 480 s bar and leave nothing for the steps after it.
+    fn hinglish_cap_s(&self) -> Option<f64> {
+        (self.kind == CheckKind::Quick && self.hinglish_running)
+            .then(|| hinglish_cell_cap_s(self.started.elapsed().as_secs_f64()))
     }
 
     /// The measured speed of a rolling cell, if there is one.
@@ -601,6 +653,9 @@ impl Run<'_> {
                 return Ok(None);
             }
             limit_s = limit_s.min(left);
+        }
+        if let Some(cap) = self.hinglish_cap_s() {
+            limit_s = limit_s.min(cap);
         }
         let cell = Cell {
             exe: &exe,
@@ -850,23 +905,36 @@ impl Run<'_> {
         } else if self.fits(HYBRID_SAFETY_MIN_S) {
             self.hybrid_and_safety(false)?;
         }
-        // Near-live on the CPU.
-        if !self.over_budget() {
-            self.near_live()?;
-        }
-        // The live stand-in on a discrete GPU.
-        if !self.over_budget() {
-            self.live_standin()?;
-        }
-        // The night model on the configuration the rules choose now.
-        if !self.over_budget() {
-            self.night()?;
-        }
-        // Rule (d2): the Hinglish model itself, on the configuration the rules choose now.
-        if !self.over_budget()
-            && let Some(config) = self.best_config()
-        {
-            self.hinglish_step(config)?;
+        // The optional steps that follow, in `TAIL_ORDER`.
+        for (i, step) in TAIL_ORDER.into_iter().enumerate() {
+            if self.over_budget() {
+                // The quick check's bar passed: every step that did not run is left for the full check, and the profile says so.
+                for left_out in &TAIL_ORDER[i..] {
+                    self.skip(
+                        left_out.step_name(),
+                        "left for the full check: the quick check's time ran out before this step"
+                            .into(),
+                    );
+                }
+                break;
+            }
+            match step {
+                // Rule (d2): the Hinglish model (and its pair), on the configuration the rules choose now.
+                TailStep::Hinglish => {
+                    if let Some(config) = self.best_config() {
+                        self.hinglish_running = true;
+                        let done = self.hinglish_step(config);
+                        self.hinglish_running = false;
+                        done?;
+                    }
+                }
+                // Near-live on the CPU.
+                TailStep::NearLive => self.near_live()?,
+                // The live stand-in on a discrete GPU.
+                TailStep::LiveStandin => self.live_standin()?,
+                // The night model on the configuration the rules choose now.
+                TailStep::Night => self.night()?,
+            }
         }
         Ok(())
     }
@@ -1499,7 +1567,7 @@ impl Run<'_> {
         match hi_rtf {
             Some(r) if r * HINGLISH_MIN_SLOWDOWN > bar => {
                 self.skip(
-                    "Hinglish model speed",
+                    wb_capability::SKIPPED_HINGLISH,
                     format!(
                         "not measured: Hindi already runs at {r:.2}x real time with the rolling model, and the Hinglish model is at least {HINGLISH_MIN_SLOWDOWN} times slower, over the {bar:.2} bar"
                     ),
@@ -1507,7 +1575,7 @@ impl Run<'_> {
                 Ok(())
             }
             _ => {
-                if self.fits_target(HINGLISH_QUICK_MIN_S, "Hinglish model speed") {
+                if self.fits_target(HINGLISH_QUICK_MIN_S, wb_capability::SKIPPED_HINGLISH) {
                     self.hinglish(config)
                 } else {
                     Ok(())
@@ -1539,10 +1607,30 @@ impl Run<'_> {
                 break;
             }
         }
-        if let Some(h) = measured
-            && discrete
-        {
-            self.hinglish_pair(config, &h)?;
+        if measured.is_none() {
+            // The cell did not complete: the model is unusable here, does not fit the memory or the card (the cell records
+            // that itself too), failed, or ran past its time limit. A Full Check does not change that.
+            self.skip(
+                wb_capability::SKIPPED_HINGLISH,
+                format!(
+                    "{}{}",
+                    wb_capability::SKIPPED_NOT_COMPLETED,
+                    config_name(config)
+                ),
+            );
+        }
+        if let Some(h) = measured {
+            if discrete {
+                self.hinglish_pair(config, &h)?;
+            } else {
+                self.skip(
+                    wb_capability::SKIPPED_HINGLISH_PAIR,
+                    format!(
+                        "not measured: the pair (a small model in front of the Hinglish model) is only offered on a discrete graphics card, and this computer transcribes on {}",
+                        config_name(config)
+                    ),
+                );
+            }
         }
         Ok(())
     }
@@ -1560,7 +1648,7 @@ impl Run<'_> {
             return Ok(());
         };
         if self.over_budget()
-            || !self.fits_target(PAIR_QUICK_MIN_S, "Hinglish model with a language detector")
+            || !self.fits_target(PAIR_QUICK_MIN_S, wb_capability::SKIPPED_HINGLISH_PAIR)
         {
             return Ok(());
         }
@@ -1608,6 +1696,9 @@ impl Run<'_> {
                 return Ok(());
             }
             limit_s = limit_s.min(left);
+        }
+        if let Some(cap) = self.hinglish_cap_s() {
+            limit_s = limit_s.min(cap);
         }
         let request = BatchRequest {
             source: Source::File {
@@ -1677,6 +1768,12 @@ impl Run<'_> {
         });
         Ok(())
     }
+}
+
+/// Whether an optional step of the quick check that needs `seconds` at the least can still start in time for the
+/// `QUICK_TARGET_S` target when `elapsed_s` seconds have passed.
+fn target_allows(elapsed_s: f64, seconds: f64) -> bool {
+    QUICK_TARGET_S - elapsed_s >= seconds
 }
 
 /// Whether a CPU that adds `extra` (a fraction of the graphics adapter's speed) at the most cannot reach the
@@ -1828,6 +1925,60 @@ mod tests {
             cell_excerpt_seconds(CheckKind::Full, Lang::En, gpu, 2),
             60.0
         );
+    }
+
+    #[test]
+    fn a_hinglish_cell_stops_at_the_time_target_and_never_starves_the_steps_after_it() {
+        use super::{HINGLISH_CELL_MIN_S, QUICK_BAR_S, QUICK_TARGET_S, hinglish_cell_cap_s};
+        // Started where the proof run's mandatory steps ended: until the target.
+        assert_eq!(hinglish_cell_cap_s(187.0), QUICK_TARGET_S - 187.0);
+        // Started late: the least limit, well inside the bar.
+        assert_eq!(hinglish_cell_cap_s(350.0), HINGLISH_CELL_MIN_S);
+        assert!(350.0 + hinglish_cell_cap_s(350.0) < QUICK_BAR_S);
+    }
+
+    #[test]
+    fn every_tail_step_has_its_own_skip_name() {
+        use super::TAIL_ORDER;
+        let names: std::collections::BTreeSet<&str> =
+            TAIL_ORDER.iter().map(|s| s.step_name()).collect();
+        assert_eq!(names.len(), TAIL_ORDER.len());
+        assert!(names.contains(wb_capability::SKIPPED_HINGLISH));
+    }
+
+    #[test]
+    fn the_hinglish_step_runs_before_the_steps_that_only_add_information() {
+        use super::{TAIL_ORDER, TailStep};
+        let at = |s: TailStep| TAIL_ORDER.iter().position(|t| *t == s);
+        let hinglish = at(TailStep::Hinglish);
+        assert!(hinglish.is_some());
+        for later in [TailStep::NearLive, TailStep::LiveStandin, TailStep::Night] {
+            assert!(
+                hinglish < at(later),
+                "{later:?} must come after the Hinglish step"
+            );
+        }
+    }
+
+    /// The first pack proof runs (28 Nov 2026, the Legion, quick check, graphics card): the mandatory steps ended at 187 s and
+    /// near-live with the night model took 67 s more, so the Hinglish step started at 254 s with 106 s of the 360 s target
+    /// left, needed 120 s, and was skipped: turbo was chosen for English + Hindi and the pair was never measured. In the
+    /// new order the step starts at 187 s and the pair step (90 s) still fits after the model's own cell.
+    #[test]
+    fn the_hinglish_model_and_its_pair_fit_the_quick_target_where_the_proof_run_skipped_them() {
+        use super::{HINGLISH_QUICK_MIN_S, PAIR_QUICK_MIN_S, target_allows};
+        let (mandatory_end_s, near_live_and_night_s, own_cell_s) = (187.0, 67.0, 30.0);
+        // The old order: the Hinglish step came last.
+        assert!(!target_allows(
+            mandatory_end_s + near_live_and_night_s,
+            HINGLISH_QUICK_MIN_S
+        ));
+        // The new order: it comes first, and the pair step follows the model's own cell.
+        assert!(target_allows(mandatory_end_s, HINGLISH_QUICK_MIN_S));
+        assert!(target_allows(
+            mandatory_end_s + own_cell_s,
+            PAIR_QUICK_MIN_S
+        ));
     }
 
     #[test]

@@ -1058,7 +1058,12 @@ pub fn decide(p: &Profile, r: &Rankings, o: &Options) -> Decision {
         || Lang::ALL.iter().take(2).any(|l| !picks.contains_key(l))
         || safety.is_none();
     let detection = detection_notes(&languages, o, &b);
-    let mut verdict = verdict_lines(&tier, &cfg, &languages, &hing, partial, provisional, &b);
+    let not_measured = NotMeasured::of(p);
+    let flags = VerdictFlags {
+        partial,
+        provisional,
+    };
+    let mut verdict = verdict_lines(&tier, &cfg, &languages, (&hing, &not_measured), &flags, &b);
     verdict.extend(detection);
     // A model that does not fit the discrete card's memory (and a pair that does not fit it together) is said so.
     verdict.extend(vram_notes(p, config, o));
@@ -1090,7 +1095,12 @@ pub fn decide(p: &Profile, r: &Rankings, o: &Options) -> Decision {
 
 /// What the verdict says about the Hinglish model: the one that every English + Hindi chunk is decoded with when it
 /// was measured on this computer and meets the rolling bar; otherwise what the sessions keep, and why.
-fn hinglish_line(languages: &BTreeMap<Lang, LangDecision>, h: &Hinglish, b: &Bars) -> String {
+fn hinglish_line(
+    languages: &BTreeMap<Lang, LangDecision>,
+    h: &Hinglish,
+    b: &Bars,
+    nm: &NotMeasured<'_>,
+) -> String {
     const FASTER: &str = "A session that cannot be finished with it here is marked \"best finished on a faster machine\"; if the night runs slower than planned, the sessions not yet started go back to today's models and are marked the same way.";
     let mut kept: Vec<String> = Vec::new();
     for lang in [Lang::En, Lang::Hi] {
@@ -1138,13 +1148,24 @@ fn hinglish_line(languages: &BTreeMap<Lang, LangDecision>, h: &Hinglish, b: &Bar
             b.rolling_rtf
         ),
         (None, Some(_), None) => format!(
-            "The code-switching (Hinglish) model was not measured on this computer (only a model of its size was); English and Hindi \
-             sessions keep {kept}, which can write a Hindi sentence as English text. Run the full system check to measure it."
+            "The code-switching (Hinglish) model was not measured on this computer{} (only a model of its size was); English and Hindi \
+             sessions keep {kept}, which can write a Hindi sentence as English text.{}",
+            nm.model_why(),
+            nm.advice()
         ),
         _ => format!(
-            "The code-switching (Hinglish) model has not been measured on this computer; English and Hindi sessions keep {kept}, \
-             which can write a Hindi sentence as English text. Run the full system check to measure it."
+            "The code-switching (Hinglish) model has not been measured on this computer{}; English and Hindi sessions keep {kept}, \
+             which can write a Hindi sentence as English text.{}",
+            nm.model_why(),
+            nm.advice()
         ),
+    };
+    let line = match nm.pair {
+        Some(why) if h.chosen_detector().is_none() => format!(
+            "{line} The pair (the small model {} in front of it) was not measured: {why}.",
+            HINGLISH_PAIRS.first().map_or("a small model", |(_, d)| *d)
+        ),
+        _ => line,
     };
     if h.chosen_model().is_some() {
         line
@@ -1153,15 +1174,68 @@ fn hinglish_line(languages: &BTreeMap<Lang, LangDecision>, h: &Hinglish, b: &Bar
     }
 }
 
+/// The steps of the Hinglish model that the check left out, with the reason it recorded (`Profile::skipped`).
+#[derive(Debug, Default)]
+struct NotMeasured<'a> {
+    /// The Hinglish model's own step.
+    model: Option<&'a str>,
+    /// The step with the small detector in front of it.
+    pair: Option<&'a str>,
+    /// The Hinglish measurement began and did not complete (`SKIPPED_NOT_COMPLETED`): a Full Check would not change that.
+    did_not_complete: bool,
+}
+
+impl<'a> NotMeasured<'a> {
+    fn of(p: &'a Profile) -> Self {
+        let why = |step: &str| {
+            p.skipped
+                .iter()
+                .find(|s| s.step == step)
+                .map(|s| s.reason.strip_prefix("not measured: ").unwrap_or(&s.reason))
+        };
+        NotMeasured {
+            model: why(SKIPPED_HINGLISH),
+            pair: why(SKIPPED_HINGLISH_PAIR),
+            did_not_complete: p
+                .skipped
+                .iter()
+                .any(|s| s.step == SKIPPED_HINGLISH && s.reason.starts_with(SKIPPED_NOT_COMPLETED)),
+        }
+    }
+
+    /// What the organiser can do about a Hinglish model that was not measured: the Full Check measures it on every
+    /// configuration, which enables the Hinglish night pass (owner, 28 Nov 2026). Nothing is said where the measurement was
+    /// tried and did not complete: the Full Check would not change that.
+    fn advice(&self) -> &'static str {
+        if self.did_not_complete {
+            ""
+        } else {
+            " Run the Full Check once before the event on this machine (about 95 minutes) to enable the Hinglish night pass."
+        }
+    }
+
+    /// ": the reason" for the sentence about the model, or nothing when the check recorded none.
+    fn model_why(&self) -> String {
+        self.model
+            .map_or_else(String::new, |why| format!(": {why}"))
+    }
+}
+
+/// Whether the verdict is partial and whether the model choice is still provisional.
+struct VerdictFlags {
+    partial: bool,
+    provisional: bool,
+}
+
 fn verdict_lines(
     tier: &Tier,
     cfg: &ConfigChoice,
     languages: &BTreeMap<Lang, LangDecision>,
-    hinglish: &Hinglish,
-    partial: bool,
-    provisional: bool,
+    hinglish: (&Hinglish, &NotMeasured<'_>),
+    flags: &VerdictFlags,
     b: &Bars,
 ) -> Vec<String> {
+    let (hinglish, not_measured) = hinglish;
     let mut v = Vec::new();
     v.push(match tier {
         Tier::G => {
@@ -1213,11 +1287,11 @@ fn verdict_lines(
             ));
         }
     }
-    v.push(hinglish_line(languages, hinglish, b));
-    if partial {
+    v.push(hinglish_line(languages, hinglish, b, not_measured));
+    if flags.partial {
         v.push("Some measurements are still to come: this verdict is partial.".to_string());
     }
-    if provisional {
+    if flags.provisional {
         v.push(
             "The model choice is provisional until the models have been checked for accuracy."
                 .to_string(),

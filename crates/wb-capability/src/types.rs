@@ -257,6 +257,16 @@ pub struct Profile {
     pub skipped: Vec<Skipped>,
 }
 
+/// The name of the step in `Skipped` when the check did not measure the Hinglish model itself.
+pub const SKIPPED_HINGLISH: &str = "Hinglish model speed";
+/// The start of the reason `Skipped` records when a measurement of the Hinglish model began but did not complete (the model
+/// is unusable here, does not fit the memory or the card, failed, or ran past its time limit). Running the Full Check does
+/// not change that, so the verdict does not ask for it.
+pub const SKIPPED_NOT_COMPLETED: &str = "not measured: the measurement did not complete on ";
+
+/// The name of the step in `Skipped` when the check did not measure the Hinglish model with a small detector in front of it.
+pub const SKIPPED_HINGLISH_PAIR: &str = "Hinglish model with a language detector";
+
 /// A step the check did not run. Shown in the evidence; never an error.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Skipped {

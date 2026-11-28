@@ -41,6 +41,37 @@ Check 'the tier and the per-language numbers are read out' ((($v.Lines -join "`n
 $v = Get-QuickCheckVerdict -Report $report -Capability (New-Cap -Duration 520) -Cells $cells
 Check 'a check over the 480 s bar is FAIL and says so' ($v.Status -eq 'FAIL' -and $v.Headline -match '520 s' -and $v.Headline -match '480')
 
+# The Hinglish pair on a machine with a discrete card (28 Nov 2026): the first pack proof run chose turbo for English + Hindi on
+# the RTX without measuring the pair. That is a FAIL; a measured pair passes; an integrated card is not asked for it.
+function New-DiscreteCap([bool]$Pair) {
+  $c = New-Cap
+  $c.decision.config.config = [pscustomobject]@{ kind = 'gpu'; index = 1 }
+  $c | Add-Member -NotePropertyName hardware -NotePropertyValue ([pscustomobject]@{ gpus = @(
+        [pscustomobject]@{ index = 0; kind = 'integrated' }, [pscustomobject]@{ index = 1; kind = 'discrete' }) })
+  $c | Add-Member -NotePropertyName skipped -NotePropertyValue @([pscustomobject]@{ step = 'Hinglish model speed'; reason = 'left for the full check: 254 s had passed' })
+  if ($Pair) { $c.measurements = @($c.measurements) + @([pscustomobject]@{ model = 'hinglish-q8_0'; lang = 'hi'; config = [pscustomobject]@{ kind = 'gpu'; index = 1 }; rtf = 0.25; detector = 'small-q5_0' }) }
+  $c
+}
+$v = Get-QuickCheckVerdict -Report $report -Capability (New-DiscreteCap $false) -Cells $cells
+Check 'a discrete card without a measured Hinglish pair is FAIL and says why it was left out' ($v.Status -eq 'FAIL' -and $v.Headline -match 'Hinglish pair' -and $v.Headline -match '254 s had passed')
+$v = Get-QuickCheckVerdict -Report $report -Capability (New-DiscreteCap $true) -Cells $cells
+Check 'a discrete card with a measured Hinglish pair is PASS and the pair speed is read out' ($v.Status -eq 'PASS' -and (($v.Lines -join "`n") -match 'Hinglish pair on the discrete card: measured, RTF 0.250'))
+# A hybrid configuration on the discrete card is asked for the pair too, and the pair must be on that card.
+$hy = New-DiscreteCap $false
+$hy.decision.config.config = [pscustomobject]@{ kind = 'hybrid'; gpu = 1 }
+$v = Get-QuickCheckVerdict -Report $report -Capability $hy -Cells $cells
+Check 'a hybrid configuration on a discrete card without a measured pair is FAIL' ($v.Status -eq 'FAIL' -and $v.Headline -match 'Hinglish pair')
+$hy = New-DiscreteCap $true
+$hy.decision.config.config = [pscustomobject]@{ kind = 'hybrid'; gpu = 1 }
+$v = Get-QuickCheckVerdict -Report $report -Capability $hy -Cells $cells
+Check 'a hybrid configuration with the pair measured on its card is PASS' ($v.Status -eq 'PASS')
+$other = New-DiscreteCap $true
+$other.measurements[-1].config = [pscustomobject]@{ kind = 'gpu'; index = 0 }
+$v = Get-QuickCheckVerdict -Report $report -Capability $other -Cells $cells
+Check 'a pair measured on another adapter than the chosen card does not count' ($v.Status -eq 'FAIL' -and $v.Headline -match 'Hinglish pair')
+$v = Get-QuickCheckVerdict -Report $report -Capability (New-Cap) -Cells $cells
+Check 'an integrated card is not asked for the Hinglish pair' ($v.Status -eq 'PASS' -and -not (($v.Lines -join "`n") -match 'Hinglish pair'))
+
 $v = Get-QuickCheckVerdict -Report $report -Capability (New-Cap -Passed $false) -Cells $cells
 Check 'a failed recorder safety run is FAIL' ($v.Status -eq 'FAIL' -and $v.Headline -match 'recorder safety')
 
