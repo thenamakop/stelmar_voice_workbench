@@ -25,6 +25,8 @@ param(
   [string]$Python,
   [int]$TimeoutMin = 45,
   [string]$Only,
+  # The engine of Part V (video memory on the RTX): cuda (development only) or vulkan (the engine the release bundle ships).
+  [ValidateSet('cuda', 'vulkan')] [string]$VramEngine = 'cuda',
   [switch]$ReportOnly
 )
 $ErrorActionPreference = 'Stop'
@@ -51,10 +53,10 @@ function Write-Evidence {
          "date: $($rows[0].when) to $($rows[-1].when) (IST); machine: Legion (RTX 4070 Laptop 8 GB, driver $($rows[0].driver)); written by scripts/gates/fit-and-fallback.ps1",
          'method: wb-engine batch over a 120 s English + Hindi clip (FLEURS test utterances alternating with 0.8 s of silence; 60 s for the Hinglish rows under emulation), default rolling settings (beam 5, temperature fallback, 15 s chunks, sentence split). RTF = decode seconds / audio seconds from the engine done event; load time is not in it.',
          'bars (system check): rolling RTF <= 1.00, times 0.75 under emulation = 0.75; the night pass fits when RTF x 3 h <= 12 h (RTF <= 4.00). Emulation is optimistic for CPU and pessimistic for the integrated GPU (the UHD rows are a floor).',
-         '', '== Part V: video memory on the RTX 4070 (CUDA engine, 8 CPU threads, native; nvidia-smi memory.used peak minus idle, sampled every 200 ms)')
-  $L += 'models loaded | peak video memory MiB (above idle) | idle MiB | RTF | engine sha256 (first 16)'
+         '', '== Part V: video memory on the RTX 4070 (the engine named in each row, 8 CPU threads, native; nvidia-smi memory.used peak minus idle, sampled every 200 ms)')
+  $L += 'models loaded | engine | peak video memory MiB (above idle) | idle MiB | RTF | engine sha256 (first 16)'
   foreach ($r in @($rows | Where-Object { $_.part -eq 'V' })) {
-    $L += "$($r.label) | $($r.vram_peak_mib) | $($r.vram_idle_mib) | $(if ($r.status -eq 'ok') { $r.rtf.ToString('F3', $inv) } else { $r.status }) | $($r.engine_sha)"
+    $L += "$($r.label) | $($r.engine) | $($r.vram_peak_mib) | $($r.vram_idle_mib) | $(if ($r.status -eq 'ok') { $r.rtf.ToString('F3', $inv) } else { $r.status }) | $($r.engine_sha)"
   }
   $L += ''
   $L += '== Part R: rolling RTF under emulation (rule (a) = today, rule (c) = both ways, Hinglish = rule (d2))'
@@ -175,7 +177,7 @@ function Invoke-Batch([string]$Key, [string]$Part, [string]$Profile, [string]$En
   $done = $ev | Where-Object { $_.event -eq 'done' } | Select-Object -First 1
   $err = $ev | Where-Object { $_.event -eq 'error' } | Select-Object -First 1
   $stats = @($ev | Where-Object { $_.event -eq 'stats' })
-  $rec = [ordered]@{ key = $Key; part = $Part; profile = $Profile; device = $(if ($Device -eq 'cpu') { 'CPU avx2' } elseif ($Profile -eq 'native') { 'RTX 4070 (CUDA)' } else { 'Intel UHD (Vulkan)' })
+  $rec = [ordered]@{ key = $Key; part = $Part; profile = $Profile; device = $(if ($Device -eq 'cpu') { 'CPU avx2' } elseif ($Profile -eq 'native') { "RTX 4070 ($(if ($Engine -like 'cuda*') { 'CUDA' } else { 'Vulkan' }))" } else { 'Intel UHD (Vulkan)' })
     rule = $Rule; label = $Label; threads = $Threads; engine = $Engine; engine_sha = $E.Sha; when = (Get-Date).ToString('yyyy-MM-dd HH:mm', $inv); driver = $driver
     exit = $r.Exit; peak_ws = $r.PeakWs; vram_idle_mib = $idle; vram_peak_mib = $(if ($Vram) { $r.VramPeak - $idle } else { $null }) }
   if ($done -and $r.Exit -eq 0) {
@@ -219,8 +221,10 @@ function Get-GpuIndex([string]$Profile, [string]$Engine, [string]$Match) {
 
 function Invoke-All {
   # ---- Part V: video memory on the RTX
-  $cudaIdx = Get-GpuIndex 'native' 'cuda' 'NVIDIA|RTX'
-  if ($null -eq $cudaIdx) { throw 'no CUDA device found' }
+  $cudaIdx = Get-GpuIndex 'native' $VramEngine 'NVIDIA|RTX'
+  if ($null -eq $cudaIdx) { throw "no $VramEngine device found on the RTX" }
+  # Rows of the Vulkan engine are keyed apart from the CUDA rows already saved.
+  $vkey = $(if ($VramEngine -eq 'vulkan') { 'V|vulkan|' } else { 'V|' })
   $turbo = 'large-v3-turbo-q5_0'
   $combos = @(
     @{ id = 'turbo'; label = "$turbo alone (reference)"; models = "en=$turbo,hi=$turbo" },
@@ -231,7 +235,7 @@ function Invoke-All {
     @{ id = 'q8+small'; label = 'hinglish-q8_0 + small-q5_0 loaded together (26 Nov 2026, step 4: the small detector)'; models = 'en=small-q5_0,hi=hinglish-q8_0' },
     @{ id = 'f16+small'; label = 'hinglish-f16 + small-q5_0 loaded together (26 Nov 2026, step 4a: the small detector for 6 and 8 GB cards)'; models = 'en=small-q5_0,hi=hinglish-f16' }
   )
-  foreach ($c in $combos) { Invoke-Batch "V|$($c.id)" 'V' 'native' 'cuda' "gpu:$cudaIdx" 'd2' $c.label $c.models 8 'bilingual-120.wav' -Vram }
+  foreach ($c in $combos) { Invoke-Batch "$vkey$($c.id)" 'V' 'native' $VramEngine "gpu:$cudaIdx" 'd2' $c.label $c.models 8 'bilingual-120.wav' -Vram }
 
   # ---- Part R: rule (a) vs (c) and the Hinglish model under emulation
   $profiles = @(@{ p = 'emu-low'; th = 4; gth = 2 }, @{ p = 'emu-mid'; th = 12; gth = 6 })

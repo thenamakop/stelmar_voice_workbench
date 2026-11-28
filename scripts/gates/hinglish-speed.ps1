@@ -17,7 +17,7 @@
 #>
 [CmdletBinding()]
 param(
-  [ValidateSet('A', 'B', 'C')] [string[]]$Tables = @('A', 'B', 'C'),
+  [ValidateSet('A', 'B', 'C', 'V')] [string[]]$Tables = @('A', 'B', 'C'),
   [string]$Work = 'D:\STELMAR-Gate\speed-hinglish',
   [string]$OutDir,
   [string]$Emulate,
@@ -54,6 +54,8 @@ $tableDefs = @{
   A = @{ Profile = 'emu-low'; Cpu = @(4); NearLive = 2; Gpu = @(@{ Variant = 'vulkan'; Match = 'Intel|UHD'; Label = 'vulkan on the UHD'; NearLive = $false }); Headroom = $true }
   B = @{ Profile = 'emu-mid'; Cpu = @(12); NearLive = 6; Gpu = @(@{ Variant = 'vulkan'; Match = 'Intel|UHD'; Label = 'vulkan on the UHD'; NearLive = $false }); Headroom = $true }
   C = @{ Profile = 'native'; Cpu = @(); NearLive = 0; Gpu = @(@{ Variant = 'cuda'; Match = 'NVIDIA|RTX'; Label = 'cuda on the RTX'; NearLive = $true }); Headroom = $false }
+  # 28 Nov 2026: the engine the release bundle ships for a discrete card (no CUDA engine is shipped). Only the shipped model.
+  V = @{ Profile = 'native'; Cpu = @(); NearLive = 0; Gpu = @(@{ Variant = 'vulkan'; Match = 'NVIDIA|RTX'; Label = 'vulkan on the RTX'; NearLive = $true }); Headroom = $false; Only = @('hinglish-q8_0') }
 }
 
 New-Item -ItemType Directory -Force -Path $Work | Out-Null
@@ -217,6 +219,7 @@ function Invoke-Table([string]$Table) {
     if ($null -eq $idx) { Write-Host "skip $($g.Label): no matching device under $profile"; continue }
     $th = $(if ($profile -eq 'native') { 8 } else { 2 })
     for ($i = 0; $i -lt $models.Count; $i++) {
+      if ($def.Only -and $models[$i].Id -notin $def.Only) { continue }
       foreach ($l in @('en', 'hi')) { Invoke-Cell $Table $def "$($g.Label) (device $idx), $th CPU threads" $order $g.Variant @{ kind = 'gpu'; index = $idx } $th 'rolling' $models[$i] $l $i }
       if ($g.NearLive) { Invoke-Cell $Table $def "$($g.Label) (device $idx), $th CPU threads, near-live (live stand-in)" ($order + 1) $g.Variant @{ kind = 'gpu'; index = $idx } $th 'near_live' $models[$i] 'hi' $i }
     }

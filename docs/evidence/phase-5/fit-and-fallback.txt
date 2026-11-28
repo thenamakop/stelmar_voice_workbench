@@ -1,17 +1,24 @@
 Hinglish model: graphics memory fit and the day fallbacks (Phase 5, Hinglish rollout, steps 3 and 4)
-date: 2026-11-26 05:27 to 2026-11-26 22:44 (IST); machine: Legion (RTX 4070 Laptop 8 GB, driver 621.14); written by scripts/gates/fit-and-fallback.ps1
+date: 2026-11-26 05:27 to 2026-11-28 07:49 (IST); machine: Legion (RTX 4070 Laptop 8 GB, driver 621.14); written by scripts/gates/fit-and-fallback.ps1
 method: wb-engine batch over a 120 s English + Hindi clip (FLEURS test utterances alternating with 0.8 s of silence; 60 s for the Hinglish rows under emulation), default rolling settings (beam 5, temperature fallback, 15 s chunks, sentence split). RTF = decode seconds / audio seconds from the engine done event; load time is not in it.
 bars (system check): rolling RTF <= 1.00, times 0.75 under emulation = 0.75; the night pass fits when RTF x 3 h <= 12 h (RTF <= 4.00). Emulation is optimistic for CPU and pessimistic for the integrated GPU (the UHD rows are a floor).
 
-== Part V: video memory on the RTX 4070 (CUDA engine, 8 CPU threads, native; nvidia-smi memory.used peak minus idle, sampled every 200 ms)
-models loaded | peak video memory MiB (above idle) | idle MiB | RTF | engine sha256 (first 16)
-large-v3-turbo-q5_0 alone (reference) | 999 | 405 | 0.058 | 4d624519760842ee
-hinglish-f16 alone | 4115 | 405 | 0.158 | 4d624519760842ee
-hinglish-q8_0 alone | 2731 | 405 | 0.150 | 4d624519760842ee
-hinglish-f16 + large-v3-turbo-q5_0 loaded together | 4983 | 405 | 0.152 | 4d624519760842ee
-hinglish-q8_0 + large-v3-turbo-q5_0 loaded together | 3601 | 405 | 0.148 | 4d624519760842ee
-hinglish-q8_0 + small-q5_0 loaded together (26 Nov 2026, step 4: the small detector) | 3255 | 455 | 0.139 | 4d624519760842ee
-hinglish-f16 + small-q5_0 loaded together (26 Nov 2026, step 4a: the small detector for 6 and 8 GB cards) | 4637 | 0 | 0.151 | 4d624519760842ee
+== Part V: video memory on the RTX 4070 (the engine named in each row, 8 CPU threads, native; nvidia-smi memory.used peak minus idle, sampled every 200 ms)
+models loaded | engine | peak video memory MiB (above idle) | idle MiB | RTF | engine sha256 (first 16)
+large-v3-turbo-q5_0 alone (reference) | cuda | 999 | 405 | 0.058 | 4d624519760842ee
+hinglish-f16 alone | cuda | 4115 | 405 | 0.158 | 4d624519760842ee
+hinglish-q8_0 alone | cuda | 2731 | 405 | 0.150 | 4d624519760842ee
+hinglish-f16 + large-v3-turbo-q5_0 loaded together | cuda | 4983 | 405 | 0.152 | 4d624519760842ee
+hinglish-q8_0 + large-v3-turbo-q5_0 loaded together | cuda | 3601 | 405 | 0.148 | 4d624519760842ee
+hinglish-q8_0 + small-q5_0 loaded together (26 Nov 2026, step 4: the small detector) | cuda | 3255 | 455 | 0.139 | 4d624519760842ee
+hinglish-f16 + small-q5_0 loaded together (26 Nov 2026, step 4a: the small detector for 6 and 8 GB cards) | cuda | 4637 | 0 | 0.151 | 4d624519760842ee
+large-v3-turbo-q5_0 alone (reference) | vulkan | 907 | 499 | 0.182 | 76c1e924c1532d14
+hinglish-f16 alone | vulkan | 4024 | 499 | 0.322 | 76c1e924c1532d14
+hinglish-q8_0 alone | vulkan | 2651 | 499 | 0.216 | 76c1e924c1532d14
+hinglish-f16 + large-v3-turbo-q5_0 loaded together | vulkan | 4920 | 499 | 0.196 | 76c1e924c1532d14
+hinglish-q8_0 + large-v3-turbo-q5_0 loaded together | vulkan | 3536 | 499 | 0.167 | 76c1e924c1532d14
+hinglish-q8_0 + small-q5_0 loaded together (26 Nov 2026, step 4: the small detector) | vulkan | 3180 | 499 | 0.170 | 76c1e924c1532d14
+hinglish-f16 + small-q5_0 loaded together (26 Nov 2026, step 4a: the small detector for 6 and 8 GB cards) | vulkan | 4563 | 499 | 0.180 | 76c1e924c1532d14
 
 == Part R: rolling RTF under emulation (rule (a) = today, rule (c) = both ways, Hinglish = rule (d2))
 profile | device | rule | models | threads | audio s | RTF | bar | meets bar | night hours for 3 h of audio | chunks | detections | both ways | peak working set GiB | engine sha256 (first 16)

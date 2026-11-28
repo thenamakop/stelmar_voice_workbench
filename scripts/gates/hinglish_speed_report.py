@@ -23,7 +23,7 @@ HEADROOM = 0.75
 DAY_AUDIO_H = 3.0
 NIGHT_WINDOW_H = 12.0
 UNTIL_0800_H = 14.5  # last session of the programme ends 17:30 (docs/programme.json)
-PROFILES = {"A": "emu-low", "B": "emu-mid", "C": "native"}
+PROFILES = {"A": "emu-low", "B": "emu-mid", "C": "native", "V": "native"}
 
 
 def gib(v) -> str:
