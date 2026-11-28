@@ -194,11 +194,12 @@ impl ProfileView {
         !self.uses_hinglish(languages) && Self::hinglish_session(languages)
     }
 
-    /// Whether the check measured a Hinglish model on this computer.
+    /// Why the Hinglish model (or the pair) has no measurement, as the check recorded it.
     pub fn hinglish_gap(&self) -> Option<&wb_capability::HinglishGap> {
         self.hinglish_gap.as_ref()
     }
 
+    /// Whether the check measured a Hinglish model on this computer.
     pub fn hinglish_measured(&self) -> bool {
         self.hinglish_measured
     }

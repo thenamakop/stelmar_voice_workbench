@@ -1584,8 +1584,11 @@ impl Run<'_> {
                 .get(&lang)
                 .cloned()
                 .unwrap_or_default();
+            self.cut_by_time = false;
+            let mut any = false;
+            let had_list = !list.is_empty();
             for rk in list {
-                self.measure(Spec {
+                let m = self.measure(Spec {
                     model: &rk.model,
                     lang,
                     mode: Mode::Rolling,
@@ -1594,9 +1597,13 @@ impl Run<'_> {
                     excerpt_s: excerpt_seconds(self.kind),
                     standin: false,
                 })?;
+                any |= m.is_some();
                 if !self.full() {
                     break;
                 }
+            }
+            if had_list && !any {
+                self.skip_not_measured(&format!("night model speed ({})", lang.name()), config);
             }
         }
         Ok(())
