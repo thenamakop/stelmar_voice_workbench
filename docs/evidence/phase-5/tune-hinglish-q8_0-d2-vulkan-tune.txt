@@ -1,0 +1,14 @@
+Tuning-clip score of tune-hinglish-q8_0-d2-vulkan (Phase 5, items 4 and 5). Numbers only; written by eval/score_tune.py.
+engine: wb-engine 0.1.0 (vulkan, whisper.cpp v1.9.5 commit d1be6fde11ac tree e736b4c9a5be); device gpu:1; setup hinglish-q8_0 models {'*': 'hinglish-q8_0'}; threads 8; machine Legion; languages ['en', 'hi']; clips 70
+labels: 339 chunks from tune-turbo-q5_0-a (derived from the reference script; not hand labels)
+
+class | chunks | language matches | translated | nothing decoded
+mixed, English-led | 46 | 0 | 0 | 0
+mixed, Hindi-led | 89 | 89 | 0 | 0
+pure English | 133 | 101 | 0 | 0
+pure Hindi | 71 | 71 | 0 | 0
+
+all labelled chunks: 339; language matches 261; translated 0; nothing decoded 0
+WER 17.6%; CER 13.1%; truncated utterances 1
+English (Latin) reference words 5950: kept in Latin 4817, written in Devanagari 741 (12.5%), deleted 392
+decode time 1117.47 s for 3690.8 s of audio: RTF 0.3028

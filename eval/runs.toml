@@ -1047,3 +1047,28 @@ dataset = "kathbath-ur"
 role = "rolling"
 engine = "wb-engine"
 limit = "eval/clips/phase3-kathbath-ur.txt"
+
+# 28 Nov 2026 (follow-up of Phase 5): the release bundle ships the avx2, avx512 and vulkan engines and no CUDA, but every figure
+# above was decoded with the CUDA engine. The same two runs with the shipped Vulkan engine on the RTX 4070 (Vulkan device 1 on the
+# Legion; device 0 is the Intel UHD): scripts/gates/eval-under-gate.ps1 -Engine src-tauri\binaries\wb-engine-vulkan-x86_64-pc-windows-msvc.exe -Device gpu:1
+[[run]]
+name = "tune-small-detect-q8_0-vulkan"
+setup = "en=small-q5_0,hi=hinglish-q8_0"
+dataset = "coshe-eval"
+role = "rolling"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["en", "hi"]
+limit = "eval/clips/phase5-tune-coshe.txt"
+needs = "phase-2"
+
+[[run]]
+name = "tune-hinglish-q8_0-d2-vulkan"
+setup = "hinglish-q8_0"
+dataset = "coshe-eval"
+role = "rolling"
+engine = "wb-engine"
+lang_mode = "detect"
+langs = ["en", "hi"]
+limit = "eval/clips/phase5-tune-coshe.txt"
+needs = "phase-2"

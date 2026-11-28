@@ -108,6 +108,36 @@ function Get-QuickCheckVerdict {
     }
   }
 
+  # The Hinglish pair on a machine with a discrete card (28 Nov 2026). The pack proof runs found a quick check that chose
+  # large-v3-turbo-q5_0 for English + Hindi on the RTX without ever measuring the pair; Hindi speech is then written as English.
+  if ($null -ne $Capability -and $null -ne $decision) {
+    # A graphics-only configuration has the card in "index", a hybrid one (card + processor) in "gpu".
+    $chosen = Get-QProp (Get-QProp $decision 'config') 'config'
+    $cardIndex = $null
+    if ((Get-QProp $chosen 'kind') -eq 'gpu') { $cardIndex = Get-QProp $chosen 'index' }
+    elseif ((Get-QProp $chosen 'kind') -eq 'hybrid') { $cardIndex = Get-QProp $chosen 'gpu' }
+    $onDiscrete = $false
+    if ($null -ne $cardIndex) {
+      foreach ($g in @(Get-QProp (Get-QProp $Capability 'hardware') 'gpus' @())) {
+        if ((Get-QProp $g 'index') -eq $cardIndex -and (Get-QProp $g 'kind') -eq 'discrete') { $onDiscrete = $true }
+      }
+    }
+    if ($onDiscrete) {
+      # The pair must have been measured on that card.
+      $pairs = @(@(Get-QProp $Capability 'measurements' @()) | Where-Object {
+          $cfg = Get-QProp $_ 'config'
+          $idx = $(if ((Get-QProp $cfg 'kind') -eq 'hybrid') { Get-QProp $cfg 'gpu' } else { Get-QProp $cfg 'index' })
+          ([string](Get-QProp $_ 'model')) -like 'hinglish*' -and (Get-QProp $_ 'detector') -and $idx -eq $cardIndex })
+      if ($pairs.Count -eq 0) {
+        $why = ''
+        foreach ($sk in @(Get-QProp $Capability 'skipped' @())) { if ((Get-QProp $sk 'step') -like 'Hinglish*') { $why = ' (' + (Get-QProp $sk 'reason') + ')' } }
+        $problems.Add(('the Hinglish pair (small detector + Hinglish model) was not measured although the chosen configuration is a discrete card' + $why))
+      } else {
+        $lines.Add(('Hinglish pair on the discrete card: measured, RTF {0}' -f (Format-QNumber (Get-QProp $pairs[0] 'rtf') '0.000')))
+      }
+    }
+  }
+
   # What the laptop decided: information.
   if ($null -ne $decision) {
     $label = Get-QProp (Get-QProp $decision 'config') 'label'

@@ -55,6 +55,11 @@ pub struct ProfileView {
     hinglish_detector: Option<String>,
     /// The same for the night model (`Hinglish::night_detector`).
     hinglish_night_detector: Option<String>,
+    /// The system check measured a Hinglish model of the manifest on this computer (whether or not it keeps up or fits the
+    /// night). False after a quick check that left it out: the night routing then says so and asks for the Full Check.
+    hinglish_measured: bool,
+    /// Why the Hinglish model (or, where the model alone was measured, the pair) has no measurement, as the check recorded it.
+    hinglish_gap: Option<wb_capability::HinglishGap>,
     peaks: Vec<Peak>,
 }
 
@@ -120,6 +125,20 @@ impl ProfileView {
             hinglish_night: d.hinglish.night_model().map(str::to_owned),
             hinglish_detector: d.hinglish.chosen_detector().map(str::to_owned),
             hinglish_night_detector: d.hinglish.night_detector().map(str::to_owned),
+            hinglish_measured: d.hinglish.model.is_some(),
+            hinglish_gap: {
+                // A model that was measured has no gap of its own; only a pair cut by time or failed counts.
+                let skipped: Vec<wb_capability::Skipped> = cap
+                    .profile
+                    .skipped
+                    .iter()
+                    .filter(|s| {
+                        !(d.hinglish.model.is_some() && s.step == wb_capability::SKIPPED_HINGLISH)
+                    })
+                    .cloned()
+                    .collect();
+                wb_capability::HinglishGap::of_profile(&skipped)
+            },
             peaks,
         }
     }
@@ -173,6 +192,16 @@ impl ProfileView {
     /// night pass turns out to run the Hinglish model).
     pub fn lacks_hinglish(&self, languages: &[String]) -> bool {
         !self.uses_hinglish(languages) && Self::hinglish_session(languages)
+    }
+
+    /// Why the Hinglish model (or the pair) has no measurement, as the check recorded it.
+    pub fn hinglish_gap(&self) -> Option<&wb_capability::HinglishGap> {
+        self.hinglish_gap.as_ref()
+    }
+
+    /// Whether the check measured a Hinglish model on this computer.
+    pub fn hinglish_measured(&self) -> bool {
+        self.hinglish_measured
     }
 
     /// The name of the Hinglish model the night pass may use (for the log and the marker).

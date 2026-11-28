@@ -6,6 +6,7 @@
 | [`LEGION-FIRST.md`](LEGION-FIRST.md) | Work from 8 to 17 November 2026, before the test laptops arrive: day-by-day plan, Legion emulation profiles, gate statuses |
 | [`GATES.md`](GATES.md) | The gate ledger: every machine-named Verification item and its status |
 | [`SETUP.md`](SETUP.md) | Build tools for the Legion and what `scripts/setup-legion.ps1` checks |
+| [`LAPTOP-SETUP.md`](LAPTOP-SETUP.md) | Setting up a room laptop: Quick Check, and the Full Check for a laptop without a discrete card |
 | [`TEST-AUDIO.md`](TEST-AUDIO.md) | Why and how to record and transcribe the local test sets (scheduled after Phase 4) |
 | [`programme.json`](programme.json) | The STELMAR 2027 programme that seeds the Sessions screen |
 | [`../AGENTS.md`](../AGENTS.md) | Rules every agent and contributor follows |

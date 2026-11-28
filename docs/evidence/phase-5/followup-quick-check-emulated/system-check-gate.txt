@@ -1,0 +1,98 @@
+﻿date: 2026-11-28 08:54 (IST on the Legion)
+command: powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\gates\system-check-gate.ps1
+ -Runs quick-emu-low,quick-emu-mid
+machine: Legion (the RTX 4070 Laptop GPU and the Intel UHD, emulation per run below); the gate build target\gate\stelmar-voice-workbench.exe runs the app's own system check through the WB_GATE_CHECK hook
+display drivers: at the start Intel(R) UHD Graphics=32.0.101.6881; NVIDIA GeForce RTX 4070 Laptop GPU=32.0.16.2114; at the end Intel(R) UHD Graphics=32.0.101.6881; NVIDIA GeForce RTX 4070 Laptop GPU=32.0.16.2114
+source: de0f5a7
+build: stelmar-voice-workbench.exe sha256 50f19b5a44be6b437ce99d2ad46d32994797a5267af019f74a7669fbd66d9985
+
+== quick-emu-low ==
+report written: 2026-11-28 08:49
+emulation: emu-low; kind quick; excerpt 30 s; partial True
+check time: 409 s measured by the check, 409 s wall clock from launch to exit; quick-check bar 480 s (within the bar; the bar is for the real low laptop, so this is PROVISIONAL)
+quick-check target 360 s: NOT met (409 s)
+tier C; provisional True; partial True; saved profile fingerprint 4AC0-C282
+skipped: hybrid test: predicted, not measured: large-v3-turbo-q5_0 Hindi (Devanagari): the processor engine (1 threads) did not finish a warm-up and one timed decode of 10 s of audio in 120 s beside the recorder test (RTF above about 6.0); the graphics adapter runs at 0.69, so the processor could add 12% at the most (the rule needs 15%); the hybrid configuration is not chosen
+skipped: Hinglish model speed: not measured: Hindi already runs at 0.69x real time with the rolling model, and the Hinglish model is at least 1.5 times slower, over the 0.75 bar
+skipped: near-live speed on the processor (English): not measured: no validated near-live model
+skipped: night model speed: left for the full check: the quick check aims to end by 360 s and 409 s had passed
+chosen configuration: Intel(R) UHD Graphics (Vulkan) (gpu:0); CPU threads 2; recorder safety passed True
+  why: The graphics card measured fastest for the rolling models.
+  verdict: Record + post-process. Live text is off by default and not offered on this machine.
+  verdict: Transcribing runs on Intel(R) UHD Graphics (Vulkan).
+  verdict: English: large-v3-turbo-q5_0, about 6 minutes after Stop.
+  verdict: Hindi (Devanagari): large-v3-turbo-q5_0. It is within the 25% safety margin of real time (0.93×, needs 0.75); about 9 minutes after Stop.
+  verdict: Urdu (Nastaliq): large-v3-turbo-q5_0. It is within the 25% safety margin of real time (0.86×, needs 0.75); about 9 minutes after Stop.
+  verdict: The code-switching (Hinglish) model has not been measured on this computer: Hindi already runs at 0.69x real time with the rolling model, and the Hinglish model is at least 1.5 times slower, over the 0.75 bar; English and Hindi sessions keep large-v3-turbo-q5_0, which can write a Hindi sentence as English text. Run the Full Check once before the event on this machine (about 95 minutes) to enable the Hinglish night pass. A session that cannot be finished with it here is marked "best finished on a faster machine"; if the night runs slower than planned, the sessions not yet started go back to today's models and are marked the same way.
+  verdict: Some measurements are still to come: this verdict is partial.
+  verdict: The model choice is provisional until the models have been checked for accuracy.
+  verdict: Hindi (Devanagari): large-v3-turbo-q5_0 meets the bar on one language (0.69×) but not in a session with several languages, where the engine detects the language of every chunk and runs about 34% slower (0.93×, the bar is 0.75), so the day's processing will fall behind the recording and the night pass catches up. The factor is an emulated figure until the laptops are measured.
+  verdict: Urdu (Nastaliq): large-v3-turbo-q5_0 meets the bar on one language (0.64×) but not in a session with several languages, where the engine detects the language of every chunk and runs about 34% slower (0.86×, the bar is 0.75), so the day's processing will fall behind the recording and the night pass catches up. The factor is an emulated figure until the laptops are measured.
+  en: rolling large-v3-turbo-q5_0 RTF 0.462 (bar 0.75) meets True; k_max 1; lags False; ready after stop 6.2 min
+  en: live offered False; hard reasons 1; soft reasons 0
+  hi: rolling large-v3-turbo-q5_0 RTF 0.691 (bar 0.75) meets False; k_max 0; lags False; ready after stop 9.3 min
+  hi: live offered False; hard reasons 1; soft reasons 0
+  ur: rolling large-v3-turbo-q5_0 RTF 0.642 (bar 0.75) meets False; k_max 0; lags False; ready after stop 8.6 min
+  ur: live offered False; hard reasons 1; soft reasons 0
+hybrid test: none recorded (predicted, not measured: large-v3-turbo-q5_0 Hindi (Devanagari): the processor engine (1 threads) did not finish a warm-up and one timed decode of 10 s of audio in 120 s beside the recorder test (RTF above about 6.0); the graphics adapter runs at 0.69, so the processor could add 12% at the most (the rule needs 15%); the hybrid configuration is not chosen); the verdict chose hybrid False: CONSISTENT
+recorder safety hybrid:0: 207 s, overruns 0, driver xruns 0, passed True
+recorder safety gpu:0: 207 s, overruns 0, driver xruns 0, passed True
+measurements (model / language / mode / device / threads: RTF, peak commit, truncated, method):
+  large-v3-turbo-q5_0    en rolling   gpu:0      2 thr  RTF 0.462  commit 1.49 GiB  truncated 0  bench clip bench-en.wav, first 30 s, rolling settings, warm-up + 1 run(s), single run above RTF 2, 2 threads
+  large-v3-turbo-q5_0    hi rolling   gpu:0      2 thr  RTF 0.691  commit 1.50 GiB  truncated 0  bench clip bench-hi.wav, first 60 s, rolling settings, warm-up + 1 run(s), single run above RTF 2, 2 threads
+  large-v3-turbo-q5_0    ur rolling   gpu:0      2 thr  RTF 0.642  commit 1.49 GiB  truncated 0  bench clip bench-ur.wav, first 60 s, rolling settings, warm-up + 1 run(s), single run above RTF 2, 2 threads
+
+== quick-emu-mid ==
+report written: 2026-11-28 08:54
+emulation: emu-mid; kind quick; excerpt 30 s; partial True
+check time: 327 s measured by the check, 327 s wall clock from launch to exit; quick-check bar 480 s (within the bar; the bar is for the real low laptop, so this is PROVISIONAL)
+quick-check target 360 s: met (327 s)
+tier C; provisional True; partial True; saved profile fingerprint 860D-F174
+skipped: Hinglish model speed: left for the full check: the quick check aims to end by 360 s and 327 s had passed
+skipped: near-live speed on the processor (English): not measured: no validated near-live model
+skipped: night model speed: left for the full check: the quick check aims to end by 360 s and 327 s had passed
+chosen configuration: CPU + Intel(R) UHD Graphics (hybrid) (hybrid:0); CPU threads 7; recorder safety passed True
+  why: Running the CPU and the graphics card together measured 25% faster than the best single device.
+  verdict: Record + post-process. Live text is off by default and not offered on this machine.
+  verdict: Transcribing runs on CPU + Intel(R) UHD Graphics (hybrid).
+  verdict: English: large-v3-turbo-q5_0, about 6 minutes after Stop.
+  verdict: Hindi (Devanagari): large-v3-turbo-q5_0, about 6 minutes after Stop.
+  verdict: Urdu (Nastaliq): large-v3-turbo-q5_0. It is within the 25% safety margin of real time (0.79×, needs 0.75); about 8 minutes after Stop.
+  verdict: The code-switching (Hinglish) model has not been measured on this computer: left for the full check: the quick check aims to end by 360 s and 327 s had passed; English and Hindi sessions keep large-v3-turbo-q5_0, which can write a Hindi sentence as English text. Run the Full Check once before the event on this machine (about 95 minutes) to enable the Hinglish night pass. A session that cannot be finished with it here is marked "best finished on a faster machine"; if the night runs slower than planned, the sessions not yet started go back to today's models and are marked the same way.
+  verdict: Some measurements are still to come: this verdict is partial.
+  verdict: The model choice is provisional until the models have been checked for accuracy.
+  verdict: Urdu (Nastaliq): large-v3-turbo-q5_0 meets the bar on one language (0.59×) but not in a session with several languages, where the engine detects the language of every chunk and runs about 34% slower (0.79×, the bar is 0.75), so the day's processing will fall behind the recording and the night pass catches up. The factor is an emulated figure until the laptops are measured.
+  en: rolling large-v3-turbo-q5_0 RTF 0.449 (bar 0.75) meets True; k_max 1; lags False; ready after stop 6.0 min
+  en: live offered False; hard reasons 1; soft reasons 0
+  hi: rolling large-v3-turbo-q5_0 RTF 0.477 (bar 0.75) meets True; k_max 1; lags False; ready after stop 6.4 min
+  hi: live offered False; hard reasons 1; soft reasons 0
+  ur: rolling large-v3-turbo-q5_0 RTF 0.586 (bar 0.75) meets False; k_max 0; lags False; ready after stop 7.9 min
+  ur: live offered False; hard reasons 1; soft reasons 0
+hybrid test: large-v3-turbo-q5_0 hi, GPU RTF 0.752 with CPU RTF 2.033 at the same time; combined 1.821 audio/s against best single 1.462: +24.6%; recorder safe True
+  rule (at least +15% and recorder-safe) says hybrid True; the verdict chose hybrid True: CONSISTENT
+recorder safety hybrid:0: 148 s, overruns 0, driver xruns 0, passed True
+recorder safety gpu:0: 148 s, overruns 0, driver xruns 0, passed True
+measurements (model / language / mode / device / threads: RTF, peak commit, truncated, method):
+  large-v3-turbo-q5_0    en rolling   gpu:0      2 thr  RTF 0.449  commit 1.49 GiB  truncated 0  bench clip bench-en.wav, first 30 s, rolling settings, warm-up + 1 run(s), single run above RTF 2, 2 threads
+  large-v3-turbo-q5_0    hi rolling   gpu:0      2 thr  RTF 0.594  commit 1.50 GiB  truncated 0  bench clip bench-hi.wav, first 60 s, rolling settings, warm-up + 1 run(s), single run above RTF 2, 2 threads
+  large-v3-turbo-q5_0    ur rolling   gpu:0      2 thr  RTF 0.586  commit 1.49 GiB  truncated 0  bench clip bench-ur.wav, first 60 s, rolling settings, warm-up + 1 run(s), single run above RTF 2, 2 threads
+
+== quick-native ==
+report written: no report
+not run
+
+== full-emu-low ==
+report written: no report
+not run
+
+== quick check (short excerpts) against full check (whole bench clips), emu-low ==
+not compared: one of the two runs is missing
+
+reports written: start-during-check-emu-low no report, view-same-emu-low no report, view-changed-emu-low no report
+
+== Start pressed during a quick check (emu-low): the check is cancelled, the recording starts ==
+not run
+
+== fingerprint-change hook (WB_TEST_FINGERPRINT_CHANGE), emu-low ==
+unchanged machine: not run
+hook set: not run

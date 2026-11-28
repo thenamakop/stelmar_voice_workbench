@@ -257,11 +257,122 @@ pub struct Profile {
     pub skipped: Vec<Skipped>,
 }
 
+/// The name of the step in `Skipped` when the check did not measure the Hinglish model itself.
+pub const SKIPPED_HINGLISH: &str = "Hinglish model speed";
+/// The start of the reason `Skipped` records when a measurement of the Hinglish model began but did not complete (the model
+/// is unusable here, does not fit the memory or the card, failed, or ran past its time limit). Running the Full Check does
+/// not change that, so the verdict does not ask for it.
+pub const SKIPPED_NOT_COMPLETED: &str = "not measured: the measurement did not complete on ";
+
+/// The name of the step in `Skipped` when the check did not measure the Hinglish model with a small detector in front of it.
+pub const SKIPPED_HINGLISH_PAIR: &str = "Hinglish model with a language detector";
+
 /// A step the check did not run. Shown in the evidence; never an error.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Skipped {
     pub step: String,
     pub reason: String,
+}
+
+/// The start of every reason `Skipped` records for a step the quick check left for the full check because its time ran out
+/// (the target passed before the step could start, or the step itself was cut by the time limit).
+pub const LEFT_FOR_FULL_CHECK: &str = "left for the full check";
+
+/// What the verdict and the night mark say when the quick check's time ran out before the Hinglish model could be measured
+/// (owner, 28 Nov 2026). Both read it from here, so the two never disagree.
+pub const HINGLISH_TIME_RAN_OUT: &str =
+    "The Hinglish model could not be measured in the Quick Check (time ran out).";
+/// The same for the small model in front of it (the pair).
+pub const HINGLISH_PAIR_TIME_RAN_OUT: &str = "The Hinglish model with the small model in front of it could not be measured in the Quick Check (time ran out).";
+/// What to do about it.
+pub const HINGLISH_RUN_FULL_CHECK: &str =
+    "Run the Full Check once on this machine (about 95 minutes) to enable it.";
+/// What to do where the model was never started and not ruled out by a failed measurement (the quick check does not measure it
+/// there: no discrete card, or Hindi already too slow for it).
+pub const HINGLISH_UNMEASURED_ADVICE: &str = "Run the Full Check once before the event on this machine (about 95 minutes) to enable the Hinglish night pass.";
+/// The night mark's reason in that case.
+pub const HINGLISH_UNMEASURED_WHY: &str = "the Hinglish model was not measured on this computer. Run the Full Check once before the event on this machine (about 95 minutes) to enable the Hinglish night pass";
+
+/// Why the Hinglish model, or the pair, has no measurement, read from what the check recorded.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HinglishGap {
+    /// The quick check's time ran out before the step ran or while it ran: the Full Check measures it.
+    TimeRanOut { pair: bool },
+    /// The measurement began and did not complete (the model is unusable here, did not fit, or failed): the Full Check would
+    /// not change that. `detail` is the recorded reason.
+    DidNotComplete { pair: bool, detail: String },
+    /// Never started: the quick check does not measure it here (no discrete card, or Hindi already too slow for it).
+    Unmeasured,
+}
+
+impl HinglishGap {
+    /// Reads one recorded reason.
+    pub fn of_reason(reason: &str, pair: bool) -> Self {
+        if reason.starts_with(LEFT_FOR_FULL_CHECK) {
+            HinglishGap::TimeRanOut { pair }
+        } else if reason.starts_with(SKIPPED_NOT_COMPLETED) {
+            HinglishGap::DidNotComplete {
+                pair,
+                detail: reason
+                    .strip_prefix("not measured: ")
+                    .unwrap_or(reason)
+                    .to_owned(),
+            }
+        } else {
+            HinglishGap::Unmeasured
+        }
+    }
+
+    /// The gap of the Hinglish model itself (`SKIPPED_HINGLISH`), else of the pair when it was cut by time or failed.
+    /// `None` when the check recorded neither.
+    pub fn of_profile(skipped: &[Skipped]) -> Option<Self> {
+        let find = |step: &str| skipped.iter().find(|s| s.step == step);
+        if let Some(s) = find(SKIPPED_HINGLISH) {
+            return Some(Self::of_reason(&s.reason, false));
+        }
+        let s = find(SKIPPED_HINGLISH_PAIR)?;
+        match Self::of_reason(&s.reason, true) {
+            Self::Unmeasured => None,
+            gap => Some(gap),
+        }
+    }
+
+    /// The sentence the verdict opens with when the time ran out, ready to use; `None` for the other two.
+    pub fn time_ran_out_sentence(&self) -> Option<&'static str> {
+        match self {
+            HinglishGap::TimeRanOut { pair: false } => Some(HINGLISH_TIME_RAN_OUT),
+            HinglishGap::TimeRanOut { pair: true } => Some(HINGLISH_PAIR_TIME_RAN_OUT),
+            _ => None,
+        }
+    }
+
+    /// The reason a session's night mark gives ("best finished on a faster machine: {reason}").
+    pub fn night_why(&self) -> String {
+        match self {
+            HinglishGap::TimeRanOut { pair } => {
+                let first = if *pair {
+                    HINGLISH_PAIR_TIME_RAN_OUT
+                } else {
+                    HINGLISH_TIME_RAN_OUT
+                };
+                let mut chars = first.chars();
+                let lower = chars
+                    .next()
+                    .map(|c| c.to_lowercase().collect::<String>() + chars.as_str())
+                    .unwrap_or_default();
+                format!("{lower} {}", HINGLISH_RUN_FULL_CHECK.trim_end_matches('.'))
+            }
+            HinglishGap::DidNotComplete { pair, detail } => format!(
+                "the Hinglish model{} was tried on this computer and did not complete ({detail}); a Full Check would not change that",
+                if *pair {
+                    " with the small model in front of it"
+                } else {
+                    ""
+                }
+            ),
+            HinglishGap::Unmeasured => HINGLISH_UNMEASURED_WHY.to_owned(),
+        }
+    }
 }
 
 /// One ranked candidate of a language and role (from `provisional_rank` in `models/manifest.json`).

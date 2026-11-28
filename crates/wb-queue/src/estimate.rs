@@ -82,6 +82,18 @@ pub fn format_ist_hhmm(epoch_ms: u64) -> String {
     format!("{:02}:{:02}", local / 3_600_000, local / 60_000 % 60)
 }
 
+/// `2026-11-28 19:40:05 IST` for an epoch time in milliseconds: the stamp of a line in `app.log`.
+pub fn format_ist_stamp(epoch_ms: u64) -> String {
+    let local = (epoch_ms + IST_OFFSET_MS) % DAY_MS;
+    format!(
+        "{} {:02}:{:02}:{:02} IST",
+        crate::night::ist_date(epoch_ms),
+        local / 3_600_000,
+        local / 60_000 % 60,
+        local / 1000 % 60
+    )
+}
+
 /// "All transcripts ready by 19:40 IST", or the words for a queue with nothing to do.
 pub fn ready_text(now_ms: u64, job_seconds: &[f64]) -> String {
     if job_seconds.iter().all(|s| !(s.is_finite() && *s > 0.0)) {
@@ -132,6 +144,19 @@ mod tests {
         // 600 x 0.5 + 600 x 1.0 + 100 x 0.8 (default) + 3 x 10.
         let t = job_seconds(&rem, &rtf, 0.8, 3, 10.0);
         assert!((t - (300.0 + 600.0 + 80.0 + 30.0)).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_log_stamp_is_the_ist_date_and_time_to_the_second() {
+        // 2026-11-28 14:35:13 UTC = 2026-11-28 20:05:13 IST; 18:30 UTC is already the next day in IST.
+        assert_eq!(
+            format_ist_stamp(1_795_876_513_000),
+            "2026-11-28 20:05:13 IST"
+        );
+        assert_eq!(
+            format_ist_stamp(1_795_876_513_000 + 4 * 3_600_000 - 5 * 60_000 - 13_000),
+            "2026-11-29 00:00:00 IST"
+        );
     }
 
     #[test]

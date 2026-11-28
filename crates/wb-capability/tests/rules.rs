@@ -1164,6 +1164,151 @@ fn a_pair_that_meets_the_bar_and_fits_the_card_is_chosen_over_the_model_alone() 
     assert_eq!(d.hinglish.chosen_detector(), None);
 }
 
+/// 28 Nov 2026, the pack proof runs: a Legion check in which the Hinglish step was skipped chose large-v3-turbo-q5_0 for
+/// English + Hindi and the verdict only said "not measured". The verdict now names the model the sessions keep and the
+/// reason the check recorded for leaving the step out.
+#[test]
+fn the_verdict_names_the_kept_model_and_why_the_hinglish_model_was_not_measured() {
+    let mut p = legion_with_card(8.0, None);
+    p.skipped.push(Skipped {
+        step: SKIPPED_HINGLISH.to_string(),
+        reason:
+            "left for the full check: the quick check aims to end by 360 s and 254 s had passed"
+                .to_string(),
+    });
+    let d = decide_with(&p, false);
+    assert_eq!(d.hinglish.chosen_model(), None);
+    assert!(
+        d.verdict
+            .iter()
+            .any(|l| l.contains("The Hinglish model could not be measured in the Quick Check (time ran out).")
+                && l.contains("English+Hindi sessions use medium and large-v3-turbo-q5_0, which can translate Hindi into English.")
+                && l.contains("Run the Full Check once on this machine (about 95 minutes) to enable it.")),
+        "{:#?}",
+        d.verdict
+    );
+    // Without a recorded reason the sentence is the old one: no empty colon.
+    let d = decide_with(&legion_with_card(8.0, None), false);
+    assert!(
+        d.verdict
+            .iter()
+            .any(|l| l.contains("not measured on this computer (only a model of its size was)")),
+        "{:#?}",
+        d.verdict
+    );
+}
+
+#[test]
+fn the_verdict_says_why_the_pair_was_not_measured_when_the_model_alone_was() {
+    // No discrete card: the model alone was measured and is too slow for the recording; the pair was left out.
+    let mut p = legion_with_card(8.0, Some(("hinglish-q8_0", 2.67)));
+    p.measurements
+        .iter_mut()
+        .filter(|m| m.model == "hinglish-q8_0")
+        .for_each(|m| m.rtf = 5.0);
+    p.skipped.push(Skipped {
+        step: SKIPPED_HINGLISH_PAIR.to_string(),
+        reason: "not measured: the pair is only offered on a discrete graphics card".to_string(),
+    });
+    let d = decide_with(&p, false);
+    assert!(
+        d.verdict.iter().any(|l| l.contains("too slow")
+            && l.contains("The pair (the small model small-q5_0 in front of it) was not measured: the pair is only offered on a discrete graphics card")),
+        "{:#?}",
+        d.verdict
+    );
+    // A measurement that began and did not complete says so, and does not send the organiser to a Full Check that cannot help.
+    let mut p = legion_with_card(8.0, None);
+    p.skipped.push(Skipped {
+        step: SKIPPED_HINGLISH.to_string(),
+        reason: format!("{}the graphics card", SKIPPED_NOT_COMPLETED),
+    });
+    let d = decide_with(&p, false);
+    assert!(
+        d.verdict.iter().any(|l| l
+            .contains("the measurement did not complete on the graphics card")
+            && !l.contains("Run the Full Check")),
+        "{:#?}",
+        d.verdict
+    );
+    // A model left for the Full Check is told to run it.
+    let mut p = legion_with_card(8.0, None);
+    p.skipped.push(Skipped {
+        step: SKIPPED_HINGLISH.to_string(),
+        reason: "left for the full check: 254 s had passed".to_string(),
+    });
+    let d = decide_with(&p, false);
+    assert!(
+        d.verdict.iter().any(|l| l.contains(
+            "The Hinglish model could not be measured in the Quick Check (time ran out). English+Hindi sessions use"
+        ) && l.contains("Run the Full Check once on this machine (about 95 minutes) to enable it.")),
+        "{:#?}",
+        d.verdict
+    );
+    // Never started (no discrete card, or Hindi already too slow for it): the advice before the event.
+    let mut p = legion_with_card(8.0, None);
+    p.skipped.push(Skipped {
+        step: SKIPPED_HINGLISH.to_string(),
+        reason: "not measured: Hindi already runs at 0.69x real time with the rolling model, and the Hinglish model is at least 1.5 times slower, over the 0.75 bar".to_string(),
+    });
+    let d = decide_with(&p, false);
+    assert!(
+        d.verdict.iter().any(|l| l.contains(
+            "Run the Full Check once before the event on this machine (about 95 minutes) to enable the Hinglish night pass"
+        ) && !l.contains("time ran out")),
+        "{:#?}",
+        d.verdict
+    );
+    // A pair cut by the quick check's cap (a slower laptop card): the operator is told, and told what to do, and the
+    // laptop is not left silently on a model that translates.
+    let mut p = legion_with_card(8.0, Some(("hinglish-q8_0", 2.67)));
+    p.measurements
+        .iter_mut()
+        .filter(|m| m.model == "hinglish-q8_0")
+        .for_each(|m| m.rtf = 5.0);
+    p.skipped.push(Skipped {
+        step: SKIPPED_HINGLISH_PAIR.to_string(),
+        reason: "left for the full check: the quick check's time ran out while this step was measured on NVIDIA GeForce (Vulkan)".to_string(),
+    });
+    let d = decide_with(&p, false);
+    assert!(
+        d.verdict.iter().any(|l| l.contains("too slow")
+            && l.contains("The Hinglish model with the small model in front of it could not be measured in the Quick Check (time ran out). Run the Full Check once on this machine (about 95 minutes) to enable it.")),
+        "{:#?}",
+        d.verdict
+    );
+    // A pair that began and did not complete says why and does not ask for the Full Check.
+    let mut p = legion_with_card(8.0, Some(("hinglish-q8_0", 2.67)));
+    p.measurements
+        .iter_mut()
+        .filter(|m| m.model == "hinglish-q8_0")
+        .for_each(|m| m.rtf = 5.0);
+    p.skipped.push(Skipped {
+        step: SKIPPED_HINGLISH_PAIR.to_string(),
+        reason: format!("{}the graphics card", SKIPPED_NOT_COMPLETED),
+    });
+    let d = decide_with(&p, false);
+    assert!(
+        d.verdict.iter().any(|l| l.contains("The pair (the small model small-q5_0 in front of it) was not measured: the measurement did not complete on the graphics card")
+            && !l.contains("time ran out")),
+        "{:#?}",
+        d.verdict
+    );
+    // A pair that was measured and chosen is not described as unmeasured.
+    let mut p = legion_with_card(8.0, Some(("hinglish-q8_0", 2.67)));
+    p.measurements.push(pair_cell("hinglish-q8_0", 0.25, 3.18));
+    p.skipped.push(Skipped {
+        step: SKIPPED_HINGLISH_PAIR.to_string(),
+        reason: "stale".to_string(),
+    });
+    let d = decide_with(&p, false);
+    assert!(
+        !d.verdict.iter().any(|l| l.contains("was not measured")),
+        "{:#?}",
+        d.verdict
+    );
+}
+
 #[test]
 fn a_pair_that_does_not_fit_the_card_is_not_chosen() {
     // q8_0 with the detector peaks at 3.18 GiB: with the headroom it needs 3.68 GiB, so a 3 GB card cannot take it.
