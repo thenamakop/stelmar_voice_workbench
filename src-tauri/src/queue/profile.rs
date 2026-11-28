@@ -58,6 +58,8 @@ pub struct ProfileView {
     /// The system check measured a Hinglish model of the manifest on this computer (whether or not it keeps up or fits the
     /// night). False after a quick check that left it out: the night routing then says so and asks for the Full Check.
     hinglish_measured: bool,
+    /// Why the Hinglish model (or, where the model alone was measured, the pair) has no measurement, as the check recorded it.
+    hinglish_gap: Option<wb_capability::HinglishGap>,
     peaks: Vec<Peak>,
 }
 
@@ -124,6 +126,19 @@ impl ProfileView {
             hinglish_detector: d.hinglish.chosen_detector().map(str::to_owned),
             hinglish_night_detector: d.hinglish.night_detector().map(str::to_owned),
             hinglish_measured: d.hinglish.model.is_some(),
+            hinglish_gap: {
+                // A model that was measured has no gap of its own; only a pair cut by time or failed counts.
+                let skipped: Vec<wb_capability::Skipped> = cap
+                    .profile
+                    .skipped
+                    .iter()
+                    .filter(|s| {
+                        !(d.hinglish.model.is_some() && s.step == wb_capability::SKIPPED_HINGLISH)
+                    })
+                    .cloned()
+                    .collect();
+                wb_capability::HinglishGap::of_profile(&skipped)
+            },
             peaks,
         }
     }
@@ -180,6 +195,10 @@ impl ProfileView {
     }
 
     /// Whether the check measured a Hinglish model on this computer.
+    pub fn hinglish_gap(&self) -> Option<&wb_capability::HinglishGap> {
+        self.hinglish_gap.as_ref()
+    }
+
     pub fn hinglish_measured(&self) -> bool {
         self.hinglish_measured
     }

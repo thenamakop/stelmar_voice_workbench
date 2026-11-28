@@ -1181,9 +1181,9 @@ fn the_verdict_names_the_kept_model_and_why_the_hinglish_model_was_not_measured(
     assert!(
         d.verdict
             .iter()
-            .any(|l| l.contains("not measured on this computer")
-                && l.contains("keep medium and large-v3-turbo-q5_0")
-                && l.contains("the quick check aims to end by 360 s and 254 s had passed")),
+            .any(|l| l.contains("The Hinglish model could not be measured in the Quick Check (time ran out).")
+                && l.contains("English+Hindi sessions use medium and large-v3-turbo-q5_0, which can translate Hindi into English.")
+                && l.contains("Run the Full Check once on this machine (about 95 minutes) to enable it.")),
         "{:#?}",
         d.verdict
     );
@@ -1240,8 +1240,57 @@ fn the_verdict_says_why_the_pair_was_not_measured_when_the_model_alone_was() {
     let d = decide_with(&p, false);
     assert!(
         d.verdict.iter().any(|l| l.contains(
+            "The Hinglish model could not be measured in the Quick Check (time ran out). English+Hindi sessions use"
+        ) && l.contains("Run the Full Check once on this machine (about 95 minutes) to enable it.")),
+        "{:#?}",
+        d.verdict
+    );
+    // Never started (no discrete card, or Hindi already too slow for it): the advice before the event.
+    let mut p = legion_with_card(8.0, None);
+    p.skipped.push(Skipped {
+        step: SKIPPED_HINGLISH.to_string(),
+        reason: "not measured: Hindi already runs at 0.69x real time with the rolling model, and the Hinglish model is at least 1.5 times slower, over the 0.75 bar".to_string(),
+    });
+    let d = decide_with(&p, false);
+    assert!(
+        d.verdict.iter().any(|l| l.contains(
             "Run the Full Check once before the event on this machine (about 95 minutes) to enable the Hinglish night pass"
-        )),
+        ) && !l.contains("time ran out")),
+        "{:#?}",
+        d.verdict
+    );
+    // A pair cut by the quick check's cap (a slower laptop card): the operator is told, and told what to do, and the
+    // laptop is not left silently on a model that translates.
+    let mut p = legion_with_card(8.0, Some(("hinglish-q8_0", 2.67)));
+    p.measurements
+        .iter_mut()
+        .filter(|m| m.model == "hinglish-q8_0")
+        .for_each(|m| m.rtf = 5.0);
+    p.skipped.push(Skipped {
+        step: SKIPPED_HINGLISH_PAIR.to_string(),
+        reason: "left for the full check: the quick check's time ran out while this step was measured on NVIDIA GeForce (Vulkan)".to_string(),
+    });
+    let d = decide_with(&p, false);
+    assert!(
+        d.verdict.iter().any(|l| l.contains("too slow")
+            && l.contains("The Hinglish model with the small model in front of it could not be measured in the Quick Check (time ran out). Run the Full Check once on this machine (about 95 minutes) to enable it.")),
+        "{:#?}",
+        d.verdict
+    );
+    // A pair that began and did not complete says why and does not ask for the Full Check.
+    let mut p = legion_with_card(8.0, Some(("hinglish-q8_0", 2.67)));
+    p.measurements
+        .iter_mut()
+        .filter(|m| m.model == "hinglish-q8_0")
+        .for_each(|m| m.rtf = 5.0);
+    p.skipped.push(Skipped {
+        step: SKIPPED_HINGLISH_PAIR.to_string(),
+        reason: format!("{}the graphics card", SKIPPED_NOT_COMPLETED),
+    });
+    let d = decide_with(&p, false);
+    assert!(
+        d.verdict.iter().any(|l| l.contains("The pair (the small model small-q5_0 in front of it) was not measured: the measurement did not complete on the graphics card")
+            && !l.contains("time ran out")),
         "{:#?}",
         d.verdict
     );

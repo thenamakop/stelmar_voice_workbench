@@ -91,6 +91,20 @@ impl TailStep {
     }
 }
 
+/// The reason recorded for a step that has no result: the quick check's time cut it (the Full Check measures it), or it
+/// began and did not complete on `config` (the Full Check would not change that). The verdict and the night mark read the
+/// first word of it (`wb_capability::HinglishGap`).
+fn not_measured_reason(cut_by_time: bool, config: &str) -> String {
+    if cut_by_time {
+        format!(
+            "{}: the quick check's time ran out while this step was measured on {config}",
+            wb_capability::LEFT_FOR_FULL_CHECK
+        )
+    } else {
+        format!("{}{config}", wb_capability::SKIPPED_NOT_COMPLETED)
+    }
+}
+
 /// The least time limit of a Hinglish cell in the quick check, however little of the time target is left.
 const HINGLISH_CELL_MIN_S: f64 = 30.0;
 
@@ -183,6 +197,9 @@ struct Run<'a> {
     /// True while the Hinglish step runs: its cells then stop at the quick check's time target instead of running on to the
     /// 480 s bar, so that near-live, the live stand-in and the night model, which come after it, are not starved.
     hinglish_running: bool,
+    /// Set when a measurement of the step in hand was cut by the quick check's time (its limit, or less than 15 s left); the
+    /// step then records "left for the full check", not "did not complete". Each optional step clears it before it starts.
+    cut_by_time: bool,
 }
 
 /// Stops a safety run that is cut short and deletes its test recording; its result is not used.
@@ -223,6 +240,7 @@ pub fn run(
         excerpts: HashMap::new(),
         partial: false,
         hinglish_running: false,
+        cut_by_time: false,
     };
 
     // 1. Engines and hardware.
@@ -435,6 +453,16 @@ impl Run<'_> {
             ),
         );
         false
+    }
+
+    /// Records a step whose measurement did not produce a result: cut by the quick check's time (left for the full check,
+    /// and the profile is partial), or begun and not completed.
+    fn skip_not_measured(&mut self, step: &str, config: DeviceConfig) {
+        if self.cut_by_time {
+            self.partial = true;
+        }
+        let reason = not_measured_reason(self.cut_by_time, &config_name(config));
+        self.skip(step, reason);
     }
 
     /// The time limit of a Hinglish cell in the quick check: what is left of the time target (at least `HINGLISH_CELL_MIN_S`),
@@ -650,6 +678,7 @@ impl Run<'_> {
         if let Some(left) = self.remaining_s() {
             if left < 15.0 {
                 self.partial = true;
+                self.cut_by_time = true;
                 return Ok(None);
             }
             limit_s = limit_s.min(left);
@@ -669,6 +698,10 @@ impl Run<'_> {
             Err(BenchError::Cancelled) => return Err(CheckError::Cancelled),
             Err(e) => {
                 tracing::warn!(model = model_id, "system check: {e}");
+                // In the quick check every limit is the time's: the cap, what is left of the bar, or the cell's own.
+                if self.kind == CheckKind::Quick && matches!(e, BenchError::Timeout(_)) {
+                    self.cut_by_time = true;
+                }
                 return Ok(None);
             }
         };
@@ -1439,7 +1472,8 @@ impl Run<'_> {
                 continue;
             }
             if let Some(rk) = list.iter().find(|rk| rk.validated) {
-                self.measure(Spec {
+                self.cut_by_time = false;
+                let done = self.measure(Spec {
                     model: &rk.model,
                     lang,
                     mode: Mode::NearLive,
@@ -1448,6 +1482,12 @@ impl Run<'_> {
                     excerpt_s,
                     standin: false,
                 })?;
+                if done.is_none() {
+                    self.skip_not_measured(
+                        &format!("near-live speed on the processor ({})", lang.name()),
+                        DeviceConfig::Cpu,
+                    );
+                }
             }
         }
         Ok(())
@@ -1473,6 +1513,9 @@ impl Run<'_> {
                 .get(&lang)
                 .cloned()
                 .unwrap_or_default();
+            self.cut_by_time = false;
+            let mut any = false;
+            let had_list = !list.is_empty();
             for rk in list {
                 let m = self.measure(Spec {
                     model: &rk.model,
@@ -1483,9 +1526,16 @@ impl Run<'_> {
                     excerpt_s: excerpt_seconds(self.kind).min(30.0),
                     standin: true,
                 })?;
+                any |= m.is_some();
                 if m.is_some_and(|m| m.rtf <= bar) {
                     break;
                 }
+            }
+            if had_list && !any {
+                self.skip_not_measured(
+                    &format!("live stand-in on the graphics card ({})", lang.name()),
+                    DeviceConfig::Gpu { index: gpu },
+                );
             }
         }
         Ok(())
@@ -1589,6 +1639,7 @@ impl Run<'_> {
     fn hinglish(&mut self, config: DeviceConfig) -> Result<(), CheckError> {
         let discrete = wb_capability::discrete_card(&self.profile, config).is_some();
         let candidates = hinglish_candidates(discrete);
+        self.cut_by_time = false;
         let mut measured = None;
         for id in candidates {
             if self.env.manifest.find(id).is_err() {
@@ -1608,16 +1659,9 @@ impl Run<'_> {
             }
         }
         if measured.is_none() {
-            // The cell did not complete: the model is unusable here, does not fit the memory or the card (the cell records
-            // that itself too), failed, or ran past its time limit. A Full Check does not change that.
-            self.skip(
-                wb_capability::SKIPPED_HINGLISH,
-                format!(
-                    "{}{}",
-                    wb_capability::SKIPPED_NOT_COMPLETED,
-                    config_name(config)
-                ),
-            );
+            // The cell gave no result: cut by the quick check's time (the Full Check measures it), or the model is unusable
+            // here, does not fit the memory or the card, or failed (a Full Check would not change that).
+            self.skip_not_measured(wb_capability::SKIPPED_HINGLISH, config);
         }
         if let Some(h) = measured {
             if discrete {
@@ -1641,19 +1685,36 @@ impl Run<'_> {
     /// (a little above the true peak, never below it). The cell is stored with `detector` set; the rules choose it only
     /// if it meets the bar and fits the card beside the live model.
     fn hinglish_pair(&mut self, config: DeviceConfig, h: &Measurement) -> Result<(), CheckError> {
+        self.cut_by_time = false;
+        if !self.hinglish_pair_run(config, h)? {
+            // Every way out without a stored cell leaves a record (the step is recorded once, the first reason stays).
+            self.skip_not_measured(wb_capability::SKIPPED_HINGLISH_PAIR, config);
+        }
+        Ok(())
+    }
+
+    /// Runs the pair; `false` when no cell was stored.
+    fn hinglish_pair_run(
+        &mut self,
+        config: DeviceConfig,
+        h: &Measurement,
+    ) -> Result<bool, CheckError> {
         let Some((_, detector)) = wb_capability::HINGLISH_PAIRS
             .iter()
             .find(|(m, _)| *m == h.model)
         else {
-            return Ok(());
+            // A model with no pair defined has nothing to record.
+            return Ok(true);
         };
-        if self.over_budget()
-            || !self.fits_target(PAIR_QUICK_MIN_S, wb_capability::SKIPPED_HINGLISH_PAIR)
-        {
-            return Ok(());
+        if self.over_budget() {
+            self.cut_by_time = true;
+            return Ok(false);
+        }
+        if !self.fits_target(PAIR_QUICK_MIN_S, wb_capability::SKIPPED_HINGLISH_PAIR) {
+            return Ok(false);
         }
         if self.env.manifest.find(detector).is_err() {
-            return Ok(());
+            return Ok(false);
         }
         // The detector's own cell (memory and load time); it is not stored: the speed table of the rankings is not changed.
         let Some(d) = self.measure(Spec {
@@ -1666,7 +1727,7 @@ impl Run<'_> {
             standin: false,
         })?
         else {
-            return Ok(());
+            return Ok(false);
         };
         self.profile.measurements.pop();
         let (Some((hinglish_ref, _)), Some((detector_ref, _)), Some(vad)) = (
@@ -1674,10 +1735,10 @@ impl Run<'_> {
             self.model_ref(detector),
             self.vad_ref(),
         ) else {
-            return Ok(());
+            return Ok(false);
         };
         let Some((_, exe)) = self.exe_for(config).cloned() else {
-            return Ok(());
+            return Ok(false);
         };
         let excerpt_s = excerpt_seconds(self.kind);
         let clip = self.clip("bench-codeswitch.wav", 0.0, excerpt_s)?;
@@ -1693,7 +1754,8 @@ impl Run<'_> {
         if let Some(left) = self.remaining_s() {
             if left < 15.0 {
                 self.partial = true;
-                return Ok(());
+                self.cut_by_time = true;
+                return Ok(false);
             }
             limit_s = limit_s.min(left);
         }
@@ -1733,7 +1795,10 @@ impl Run<'_> {
             Err(BenchError::Cancelled) => return Err(CheckError::Cancelled),
             Err(e) => {
                 tracing::warn!(model = %h.model, "system check: pair with {detector}: {e}");
-                return Ok(());
+                if self.kind == CheckKind::Quick && matches!(e, BenchError::Timeout(_)) {
+                    self.cut_by_time = true;
+                }
+                return Ok(false);
             }
         };
         self.cells += 1;
@@ -1766,7 +1831,7 @@ impl Run<'_> {
             live_standin: false,
             detector: Some((*detector).to_string()),
         });
-        Ok(())
+        Ok(true)
     }
 }
 
@@ -1935,6 +2000,31 @@ mod tests {
         // Started late: the least limit, well inside the bar.
         assert_eq!(hinglish_cell_cap_s(350.0), HINGLISH_CELL_MIN_S);
         assert!(350.0 + hinglish_cell_cap_s(350.0) < QUICK_BAR_S);
+    }
+
+    #[test]
+    fn a_step_cut_by_the_time_is_left_for_the_full_check_and_one_that_failed_is_not() {
+        use super::not_measured_reason;
+        use wb_capability::HinglishGap;
+        let cut = not_measured_reason(true, "NVIDIA GeForce (Vulkan)");
+        assert_eq!(
+            HinglishGap::of_reason(&cut, true),
+            HinglishGap::TimeRanOut { pair: true },
+            "{cut}"
+        );
+        let failed = not_measured_reason(false, "NVIDIA GeForce (Vulkan)");
+        assert!(matches!(
+            HinglishGap::of_reason(&failed, false),
+            HinglishGap::DidNotComplete { pair: false, .. }
+        ));
+        // The reasons the quick check already wrote for the target and the bar are the time's too.
+        assert_eq!(
+            HinglishGap::of_reason(
+                "left for the full check: the quick check aims to end by 360 s and 327 s had passed",
+                false
+            ),
+            HinglishGap::TimeRanOut { pair: false }
+        );
     }
 
     #[test]

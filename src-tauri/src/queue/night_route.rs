@@ -24,7 +24,7 @@ pub struct NightSession {
 /// Why a session is marked "best finished on a faster machine" when the check never measured the Hinglish model here (the
 /// quick check does not measure it without a discrete card: the model cannot keep up while recording on shared graphics or the
 /// processor). The Full Check measures it on every configuration; the night pass only uses a measured model (owner, 28 Nov 2026).
-pub const UNMEASURED_WHY: &str = "the Hinglish model was not measured on this computer. Run the Full Check once before the event on this machine (about 95 minutes) to enable the Hinglish night pass";
+pub const UNMEASURED_WHY: &str = wb_capability::HINGLISH_UNMEASURED_WHY;
 
 /// The prefix of the languages of a session planned with the Hinglish model (so that one plan can hold both kinds of
 /// session on a day that has both).
@@ -139,8 +139,13 @@ pub fn decide(
     };
     let why_not = match (&routed.hinglish_skip, !qualifying.is_empty()) {
         (Some(reason), _) => format!("the Hinglish night pass was not started: {}", reason.text()),
-        (None, false) if !profile.hinglish_measured() => UNMEASURED_WHY.to_owned(),
-        (None, false) => "the Hinglish model is too slow or too large for this computer".to_owned(),
+        // The mark says what happened: the quick check ran out of time, the measurement began and did not complete, or it was
+        // never started. The wording is the verdict's (`wb_capability::HinglishGap`).
+        (None, false) => match profile.hinglish_gap() {
+            Some(gap) => gap.night_why(),
+            None if !profile.hinglish_measured() => UNMEASURED_WHY.to_owned(),
+            None => "the Hinglish model is too slow or too large for this computer".to_owned(),
+        },
         (None, true) => "the Hinglish night pass was not planned".to_owned(),
     };
     let marks = sessions
@@ -550,15 +555,25 @@ mod tests {
     /// A profile of a computer whose quick check never measured the Hinglish model (no discrete card, or the step was left
     /// for the Full Check).
     fn unmeasured_profile() -> ProfileView {
+        unmeasured_profile_with(Vec::new(), None)
+    }
+
+    /// A profile whose Hinglish model has no measurement (`model` None) or only the model alone (`Some`), with what the check
+    /// recorded as skipped.
+    fn unmeasured_profile_with(
+        skipped: Vec<wb_capability::Skipped>,
+        model_alone: Option<&str>,
+    ) -> ProfileView {
         let mut cap = wb_capability::parse_capability(include_str!(
             "../../../crates/wb-capability/fixtures/tier-g.json"
         ))
         .unwrap();
+        cap.profile.skipped = skipped;
         cap.decision.hinglish = Hinglish {
             ok: false,
             rtf: None,
             source: "unmeasured".into(),
-            model: None,
+            model: model_alone.map(str::to_owned),
             detector: None,
             night_ok: false,
             night_hours: None,
@@ -596,6 +611,78 @@ mod tests {
         en_only.languages = vec!["en".into()];
         let d = decide(&p, six_pm(), &[en_only], 1.25);
         assert!(d.marks.is_empty(), "{:?}", d.marks);
+    }
+
+    /// The mark says what happened (owner, 28 Nov 2026): the quick check ran out of time, the measurement began and did not
+    /// complete, the model was never started. A pair cut by the cap on a slower card is told the same way.
+    #[test]
+    fn the_night_mark_says_what_happened_to_the_hinglish_measurement() {
+        use wb_capability::{
+            SKIPPED_HINGLISH, SKIPPED_HINGLISH_PAIR, SKIPPED_NOT_COMPLETED, Skipped,
+        };
+        let marks_of = |p: &ProfileView| -> Vec<String> {
+            decide(p, six_pm(), &[session("hall-a", 90, 90)], 1.25)
+                .marks
+                .into_iter()
+                .map(|(_, why)| why)
+                .collect()
+        };
+        let skip = |step: &str, reason: &str| Skipped {
+            step: step.to_owned(),
+            reason: reason.to_owned(),
+        };
+        // Time ran out before the model was measured.
+        let p = unmeasured_profile_with(
+            vec![skip(
+                SKIPPED_HINGLISH,
+                "left for the full check: the quick check aims to end by 360 s and 327 s had passed",
+            )],
+            None,
+        );
+        assert_eq!(
+            marks_of(&p),
+            [
+                "the Hinglish model could not be measured in the Quick Check (time ran out). Run the Full Check once on this machine (about 95 minutes) to enable it"
+            ]
+        );
+        // The measurement began and did not complete: no advice to run the Full Check.
+        let p = unmeasured_profile_with(
+            vec![skip(
+                SKIPPED_HINGLISH,
+                &format!("{SKIPPED_NOT_COMPLETED}NVIDIA GeForce (Vulkan)"),
+            )],
+            None,
+        );
+        let marks = marks_of(&p);
+        assert_eq!(marks.len(), 1);
+        assert!(
+            marks[0].contains("did not complete") && !marks[0].contains("Run the Full Check"),
+            "{marks:?}"
+        );
+        // Never started (the ratio rule): the advice before the event.
+        let p = unmeasured_profile_with(
+            vec![skip(
+                SKIPPED_HINGLISH,
+                "not measured: Hindi already runs at 0.69x real time with the rolling model, and the Hinglish model is at least 1.5 times slower, over the 0.75 bar",
+            )],
+            None,
+        );
+        assert_eq!(marks_of(&p), [UNMEASURED_WHY]);
+        // The model alone was measured and is too slow; the pair was cut by the cap on a slower card.
+        let p = unmeasured_profile_with(
+            vec![skip(
+                SKIPPED_HINGLISH_PAIR,
+                "left for the full check: the quick check's time ran out while this step was measured on NVIDIA GeForce (Vulkan)",
+            )],
+            Some("hinglish-q8_0"),
+        );
+        assert!(p.hinglish_measured());
+        assert_eq!(
+            marks_of(&p),
+            [
+                "the Hinglish model with the small model in front of it could not be measured in the Quick Check (time ran out). Run the Full Check once on this machine (about 95 minutes) to enable it"
+            ]
+        );
     }
 
     #[test]

@@ -1147,6 +1147,9 @@ fn hinglish_line(
              English and Hindi sessions keep {kept}, which can write a Hindi sentence as English text; the organiser decides what to do.",
             b.rolling_rtf
         ),
+        _ if nm.time_ran_out_line(&kept).is_some() => {
+            nm.time_ran_out_line(&kept).unwrap_or_default()
+        }
         (None, Some(_), None) => format!(
             "The code-switching (Hinglish) model was not measured on this computer{} (only a model of its size was); English and Hindi \
              sessions keep {kept}, which can write a Hindi sentence as English text.{}",
@@ -1160,8 +1163,16 @@ fn hinglish_line(
             nm.advice()
         ),
     };
-    let line = match nm.pair {
-        Some(why) if h.chosen_detector().is_none() => format!(
+    let line = match (&nm.pair_gap, nm.pair) {
+        (Some(gap), _)
+            if h.chosen_detector().is_none() && gap.time_ran_out_sentence().is_some() =>
+        {
+            format!(
+                "{line} {} {HINGLISH_RUN_FULL_CHECK}",
+                gap.time_ran_out_sentence().unwrap_or_default()
+            )
+        }
+        (_, Some(why)) if h.chosen_detector().is_none() => format!(
             "{line} The pair (the small model {} in front of it) was not measured: {why}.",
             HINGLISH_PAIRS.first().map_or("a small model", |(_, d)| *d)
         ),
@@ -1181,8 +1192,10 @@ struct NotMeasured<'a> {
     model: Option<&'a str>,
     /// The step with the small detector in front of it.
     pair: Option<&'a str>,
-    /// The Hinglish measurement began and did not complete (`SKIPPED_NOT_COMPLETED`): a Full Check would not change that.
-    did_not_complete: bool,
+    /// Why the Hinglish model itself has no measurement.
+    model_gap: Option<HinglishGap>,
+    /// Why the pair has none, where that is something the organiser can act on (time ran out, or it failed).
+    pair_gap: Option<HinglishGap>,
 }
 
 impl<'a> NotMeasured<'a> {
@@ -1196,21 +1209,36 @@ impl<'a> NotMeasured<'a> {
         NotMeasured {
             model: why(SKIPPED_HINGLISH),
             pair: why(SKIPPED_HINGLISH_PAIR),
-            did_not_complete: p
+            model_gap: p
                 .skipped
                 .iter()
-                .any(|s| s.step == SKIPPED_HINGLISH && s.reason.starts_with(SKIPPED_NOT_COMPLETED)),
+                .find(|s| s.step == SKIPPED_HINGLISH)
+                .map(|s| HinglishGap::of_reason(&s.reason, false)),
+            pair_gap: p
+                .skipped
+                .iter()
+                .find(|s| s.step == SKIPPED_HINGLISH_PAIR)
+                .map(|s| HinglishGap::of_reason(&s.reason, true))
+                .filter(|g| *g != HinglishGap::Unmeasured),
         }
+    }
+
+    /// The whole sentence for a Hinglish model the quick check ran out of time for: what happened, what the sessions use
+    /// meanwhile, and what to do (owner, 28 Nov 2026). `None` for every other case.
+    fn time_ran_out_line(&self, kept: &str) -> Option<String> {
+        let first = self.model_gap.as_ref()?.time_ran_out_sentence()?;
+        Some(format!(
+            "{first} English+Hindi sessions use {kept}, which can translate Hindi into English. {HINGLISH_RUN_FULL_CHECK}"
+        ))
     }
 
     /// What the organiser can do about a Hinglish model that was not measured: the Full Check measures it on every
     /// configuration, which enables the Hinglish night pass (owner, 28 Nov 2026). Nothing is said where the measurement was
     /// tried and did not complete: the Full Check would not change that.
-    fn advice(&self) -> &'static str {
-        if self.did_not_complete {
-            ""
-        } else {
-            " Run the Full Check once before the event on this machine (about 95 minutes) to enable the Hinglish night pass."
+    fn advice(&self) -> String {
+        match &self.model_gap {
+            Some(HinglishGap::DidNotComplete { .. }) => String::new(),
+            _ => format!(" {HINGLISH_UNMEASURED_ADVICE}"),
         }
     }
 
